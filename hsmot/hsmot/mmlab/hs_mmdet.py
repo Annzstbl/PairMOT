@@ -6,7 +6,7 @@ import torch
 import functools
 from hsmot.mmlab.hs_mmcv import DataContainer as DC
 from collections.abc import Sequence
-import mmcv
+from hsmot.mmlab import hs_mmcv as mmcv
 import os.path as osp
 try:
     import pycocotools.mask as maskUtils
@@ -14,7 +14,7 @@ except ImportError:
     pass
 from numpy import random
 import warnings
-import mmengine
+from hsmot.util.typing_utils import is_list_of
 
 
 class Compose:
@@ -621,7 +621,7 @@ class Resize:
                 self.img_scale = img_scale
             else:
                 self.img_scale = [img_scale]
-            assert mmengine.is_list_of(self.img_scale, tuple)
+            assert is_list_of(self.img_scale, tuple)
 
         if ratio_range is not None:
             # mode 1: given a scale and a range of image ratio
@@ -652,7 +652,7 @@ class Resize:
                 ``scale_idx`` is the selected index in the given candidates.
         """
 
-        assert mmengine.is_list_of(img_scales, tuple)
+        assert is_list_of(img_scales, tuple)
         scale_idx = np.random.randint(len(img_scales))
         img_scale = img_scales[scale_idx]
         return img_scale, scale_idx
@@ -672,7 +672,7 @@ class Resize:
                 to be consistent with :func:`random_select`.
         """
 
-        assert mmengine.is_list_of(img_scales, tuple) and len(img_scales) == 2
+        assert is_list_of(img_scales, tuple) and len(img_scales) == 2
         img_scale_long = [max(s) for s in img_scales]
         img_scale_short = [min(s) for s in img_scales]
         long_edge = np.random.randint(
@@ -900,7 +900,7 @@ class RandomFlip:
 
     def __init__(self, flip_ratio=None, direction='horizontal'):
         if isinstance(flip_ratio, list):
-            assert mmengine.is_list_of(flip_ratio, float)
+            assert is_list_of(flip_ratio, float)
             assert 0 <= sum(flip_ratio) <= 1
         elif isinstance(flip_ratio, float):
             assert 0 <= flip_ratio <= 1
@@ -915,7 +915,7 @@ class RandomFlip:
         if isinstance(direction, str):
             assert direction in valid_directions
         elif isinstance(direction, list):
-            assert mmengine.is_list_of(direction, str)
+            assert is_list_of(direction, str)
             assert set(direction).issubset(set(valid_directions))
         else:
             raise ValueError('direction must be either str or list of str')

@@ -54,17 +54,11 @@ def probiou(
     a2, b2, c2 = get_covariance_matrix(obb2)
 
     denom = (a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps
-    t1 = (
-        ((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / denom
-    ) * 0.25
+    t1 = (((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / denom) * 0.25
     t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / denom) * 0.5
     det1 = (a1 * b1 - c1.pow(2)).clamp(min=0)
     det2 = (a2 * b2 - c2.pow(2)).clamp(min=0)
-    t3 = (
-        ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2))
-        / (4 * (det1 * det2).sqrt() + eps)
-        + eps
-    ).log() * 0.5
+    t3 = (((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2)) / (4 * (det1 * det2).sqrt() + eps) + eps).log() * 0.5
     bd = (t1 + t2 + t3).clamp(min=eps, max=100.0)
     hd = (1.0 - (-bd).exp() + eps).sqrt()
     iou = 1 - hd
@@ -111,17 +105,11 @@ def batch_probiou(
     c2 = c2.squeeze(-1)[None]
 
     denom = (a1 + a2) * (b1 + b2) - (c1 + c2).pow(2) + eps
-    t1 = (
-        ((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / denom
-    ) * 0.25
+    t1 = (((a1 + a2) * (y1 - y2).pow(2) + (b1 + b2) * (x1 - x2).pow(2)) / denom) * 0.25
     t2 = (((c1 + c2) * (x2 - x1) * (y1 - y2)) / denom) * 0.5
     det1 = (a1 * b1 - c1.pow(2)).clamp(min=0)
     det2 = (a2 * b2 - c2.pow(2)).clamp(min=0)
-    t3 = (
-        ((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2))
-        / (4 * (det1 * det2).sqrt() + eps)
-        + eps
-    ).log() * 0.5
+    t3 = (((a1 + a2) * (b1 + b2) - (c1 + c2).pow(2)) / (4 * (det1 * det2).sqrt() + eps) + eps).log() * 0.5
     bd = (t1 + t2 + t3).clamp(min=eps, max=100.0)
     hd = (1.0 - (-bd).exp() + eps).sqrt()
     return 1 - hd

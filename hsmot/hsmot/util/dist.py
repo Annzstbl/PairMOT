@@ -1,29 +1,27 @@
-
-
-
-from typing import Callable, List, Optional, Tuple
-import torch
 import math
+
+import torch
+
 from hsmot.datasets.pipelines.channel import version_index_to_str
-from hsmot.loss.prob_iou_loss import probiou, batch_probiou
-from mmcv.ops import box_iou_rotated
+from hsmot.loss.prob_iou_loss import batch_probiou, probiou
 
 Tensor = torch.Tensor
 
+
 def l1_dist_rotate(x1: Tensor, x2: Tensor, aligned=False, cal_sum=True, angle_cycle=False):
     r"""
-        计算 x1 和 x2 的旋转 L1 距离，角度使用周期形式计算。
+    计算 x1 和 x2 的旋转 L1 距离，角度使用周期形式计算。
 
-        Args:
-        x1 (Tensor): 输入张量，形状为 [N, 5]。
-        x2 (Tensor): 输入张量，形状为 [M, 5]。
+    Args:
+    x1 (Tensor): 输入张量，形状为 [N, 5]。
+    x2 (Tensor): 输入张量，形状为 [M, 5]。
 
-        角度取值范围[0,1]
+    角度取值范围[0,1]
 
-        aligned (bool): True时要求x1 x2形状相同, False时返回所有组合结果
-        
-        Returns:
-        Tensor: 每行的旋转 L1 距离，形状为 [N]。 或[N, M]
+    aligned (bool): True时要求x1 x2形状相同, False时返回所有组合结果
+
+    Returns:
+    Tensor: 每行的旋转 L1 距离，形状为 [N]。 或[N, M]
     """
     # 检查输入形状
     n, ch = x1.shape
@@ -78,42 +76,47 @@ def l1_dist_rotate(x1: Tensor, x2: Tensor, aligned=False, cal_sum=True, angle_cy
     return result
 
 
-def box_iou_rotated_norm_bboxes1(bboxes1: torch.Tensor,
-                                 bboxes2: torch.Tensor,
-                                 img_shape: torch.Tensor,
-                                 version: str = 'le135',
-                                 mode: str = 'iou',
-                                 aligned: bool = False,
-                                 clockwise: bool = True,
-                                 use_probiou: bool = True,
-                                 ) -> torch.Tensor:
-    """
-    计算旋转框 IoU。bboxes1 为归一化，bboxes2 为绝对 xywhr。
+def box_iou_rotated_norm_bboxes1(
+    bboxes1: torch.Tensor,
+    bboxes2: torch.Tensor,
+    img_shape: torch.Tensor,
+    version: str = "le135",
+    aligned: bool = False,
+    use_probiou: bool = True,
+) -> torch.Tensor:
+    """计算旋转框相似度（训练用，默认可微 ProbIoU）。
+
+    bboxes1 为归一化坐标，bboxes2 为绝对 xywhr。评测匹配请使用
+    ``hsmot.util.iou.box_iou_rotated``（几何 IoU）。
 
     Args:
-        use_probiou: True（默认）使用 Prob IoU；False 使用 mmcv box_iou_rotated。
-        mode, clockwise: 仅当 use_probiou=False 时生效。
+        bboxes1: (N, 5) 归一化预测框。
+        bboxes2: (N, 5) 或 (M, 5) 绝对 GT 框。
+        img_shape: (h, w) 图像尺寸，用于反归一化 bboxes1。
+        version: ``le135`` / ``le90`` 角度编码。
+        aligned: 是否逐对计算。
+        use_probiou: 保留兼容；当前仅实现 ProbIoU 路径。
     """
-    if type(version) != str:
+    if not isinstance(version, str):
         version = version_index_to_str(version)
-    if version == 'oc':
+    if version == "oc":
         raise NotImplementedError
-    elif version == 'le135':
+    elif version == "le135":
         angle_range = 1
-        angle_offset = -1/4
-    elif version == 'le90':
+        angle_offset = -1 / 4
+    elif version == "le90":
         angle_range = 1
-        angle_offset = -1/2
+        angle_offset = -1 / 2
     angle_range *= math.pi
     angle_offset *= math.pi
     h, w = img_shape
-    bboxes1 = bboxes1 * torch.as_tensor([w, h, w, h, angle_range], dtype=bboxes1.dtype, device=bboxes1.device) + torch.as_tensor([0, 0, 0, 0, angle_offset], dtype=bboxes1.dtype, device=bboxes1.device)
+    bboxes1 = bboxes1 * torch.as_tensor(
+        [w, h, w, h, angle_range], dtype=bboxes1.dtype, device=bboxes1.device
+    ) + torch.as_tensor([0, 0, 0, 0, angle_offset], dtype=bboxes1.dtype, device=bboxes1.device)
 
-    if use_probiou:
-        if aligned:
-            ious = probiou(bboxes1, bboxes2, CIoU=False, eps=1e-7)
-        else:
-            ious = batch_probiou(bboxes1, bboxes2, eps=1e-7)
+    del use_probiou
+    if aligned:
+        ious = probiou(bboxes1, bboxes2, CIoU=False, eps=1e-7)
     else:
-        ious = box_iou_rotated(bboxes1, bboxes2, mode, aligned, clockwise)
+        ious = batch_probiou(bboxes1, bboxes2, eps=1e-7)
     return ious

@@ -1,10 +1,23 @@
-from mmcv.ops import box_iou_rotated
+import os
+from pathlib import Path
+
 import numpy as np
 import torch
-from pathlib import Path
-import os
-from hsmot.mmlab.hs_mmrotate import poly2obb, obb2poly
 from tqdm import tqdm
+
+from hsmot.mmlab.hs_mmrotate import poly2obb
+from hsmot.util.iou import box_iou_rotated
+
+
+def plot_pr_curve(*args, **kwargs):
+    """Optional plotting hook; no-op unless a plotting backend is wired in."""
+    del args, kwargs
+
+
+def plot_mc_curve(*args, **kwargs):
+    """Optional plotting hook; no-op unless a plotting backend is wired in."""
+    del args, kwargs
+
 
 class SimpleClass:
     """
@@ -232,14 +245,12 @@ class Metric(SimpleClass):
         ]
 
 
-
 def smooth(y, f=0.05):
     """Box filter of fraction f."""
     nf = round(len(y) * f * 2) // 2 + 1  # number of filter elements (must be odd)
     p = np.ones(nf // 2)  # ones padding
     yp = np.concatenate((p * y[0], y, p * y[-1]), 0)  # y padded
     return np.convolve(yp, np.ones(nf) / nf, mode="valid")  # y-smoothed
-
 
 
 def compute_ap(recall, precision):
@@ -272,6 +283,7 @@ def compute_ap(recall, precision):
         ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve
 
     return ap, mpre, mrec
+
 
 def ap_per_class(
     tp, conf, pred_cls, target_cls, plot=False, on_plot=None, save_dir=Path(), names={}, eps=1e-16, prefix=""
@@ -464,11 +476,7 @@ class DetMetrics(SimpleClass):
         return self.box.curves_results
 
 
-
-
-
 class PredictValidator:
-
     def __init__(self, nc, names, save_dir=None, pbar=None, args=None):
         # self.args = get_cfg(overrides=args)
         # self.dataloader = dataloader
@@ -488,10 +496,10 @@ class PredictValidator:
         self.speed = {"preprocess": 0.0, "inference": 0.0, "loss": 0.0, "postprocess": 0.0}
         self.nc = nc
         self.names = names
-        self.save_dir = save_dir# or get_save_dir(self.args)
+        self.save_dir = save_dir  # or get_save_dir(self.args)
         # (self.save_dir / "labels" if self.args.save_txt else self.save_dir).mkdir(parents=True, exist_ok=True)
         # if self.args.conf is None:
-            # self.args.conf = 0.001  # default conf=0.001
+        # self.args.conf = 0.001  # default conf=0.001
         # self.args.imgsz = check_imgsz(self.args.imgsz, max_dim=1)
 
         self.plots = {}
@@ -500,16 +508,18 @@ class PredictValidator:
         self.niou = self.iouv.numel()
         self.stats = dict(tp=[], conf=[], pred_cls=[], target_cls=[], target_img=[])
         self.metrics = DetMetrics(save_dir=self.save_dir)
-        self.seen=0
-
+        self.seen = 0
 
     def update_metrics(self, preds, gts):
-        '''
-            preds: [m, 6] # x, y, w, h, \theta, cls, score
-            gts: [nm 5] #x, y, w, h, \theta, cls
-        '''
-        self.seen+=1
-        iou = box_iou_rotated(gts[:, :5], preds[:, :5], )
+        """
+        preds: [m, 6] # x, y, w, h, \theta, cls, score
+        gts: [nm 5] #x, y, w, h, \theta, cls
+        """
+        self.seen += 1
+        iou = box_iou_rotated(
+            gts[:, :5],
+            preds[:, :5],
+        )
         pred_cls = preds[:, 5].view(-1)
         gt_cls = gts[:, 5].view(-1)
         npr = len(preds)
@@ -528,27 +538,24 @@ class PredictValidator:
                 for k in self.stats.keys():
                     self.stats[k].append(stat[k])
 
-
         # Predictions
         stat["conf"] = preds[:, 6]
         stat["pred_cls"] = pred_cls
         if nl:
             stat["tp"] = self.match_predictions(pred_cls, gt_cls, iou, use_scipy=True)
-        
+
         for k in self.stats.keys():
             self.stats[k].append(stat[k])
-    
 
     def final(self):
-        stats = self.get_stats()
+        self.get_stats()
         self.finalize_metrics()
-        return self.print_results()# str_lines
+        return self.print_results()  # str_lines
 
     def finalize_metrics(self, *args, **kwargs):
         """Set final values for metrics speed and confusion matrix."""
         self.metrics.speed = self.speed
         self.metrics.confusion_matrix = self.confusion_matrix
-
 
     def get_stats(self):
         """Returns metrics statistics and results dictionary."""
@@ -569,12 +576,14 @@ class PredictValidator:
         str.append(pf % ("all", self.seen, self.nt_per_class.sum(), *self.metrics.mean_results()))
         # LOGGER.info(pf % ("all", self.seen, self.nt_per_class.sum(), *self.metrics.mean_results()))
         if self.nt_per_class.sum() == 0:
-            # LOGGER.warning(f"WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels")
-            str.append(f"WARNING ⚠️ no labels found in {self.args.task} set, can not compute metrics without labels")
+            warn_msg = f"WARNING no labels found in {self.args.task} set, can not compute metrics without labels"
+            str.append(warn_msg)
 
         if self.nc > 1 and len(self.stats):
             for i, c in enumerate(self.metrics.ap_class_index):
-                str.append(pf % (self.names[c], self.nt_per_image[c], self.nt_per_class[c], *self.metrics.class_result(i)))
+                str.append(
+                    pf % (self.names[c], self.nt_per_image[c], self.nt_per_class[c], *self.metrics.class_result(i))
+                )
         for s in str:
             print(s)
         return str
@@ -591,7 +600,6 @@ class PredictValidator:
         #             save_dir=self.save_dir, names=self.names.values(), normalize=normalize, on_plot=self.on_plot
         #         )
 
-        
     def match_predictions(self, pred_classes, true_classes, iou, use_scipy=False):
         """
         Matches predictions to ground truth objects (pred_classes, true_classes) using IoU.
@@ -633,21 +641,41 @@ class PredictValidator:
                         matches = matches[np.unique(matches[:, 0], return_index=True)[1]]
                     correct[matches[:, 1].astype(int), i] = True
         return torch.tensor(correct, dtype=torch.bool, device=pred_classes.device)
-    
+
+
 def read_txt(txt):
-    with open(txt, 'r') as f:
+    with open(txt, "r") as f:
         lines = f.readlines()
     results = {}
     for line in lines:
-        frame_id, track_id, x1, y1, x2, y2, x3, y3, x4, y4, score, cls, _ = line.split(',')
+        frame_id, track_id, x1, y1, x2, y2, x3, y3, x4, y4, score, cls, _ = line.split(",")
         frame_id = int(frame_id)
         if frame_id not in results:
             results[frame_id] = []
-        results[frame_id].append([float(x1), float(y1), float(x2), float(y2), float(x3), float(y3), float(x4), float(y4), float(cls), float(score)])
+        results[frame_id].append(
+            [
+                float(x1),
+                float(y1),
+                float(x2),
+                float(y2),
+                float(x3),
+                float(y3),
+                float(x4),
+                float(y4),
+                float(cls),
+                float(score),
+            ]
+        )
     return results
-    
-def val_folder(gt_folder, pred_folder, nc=8, names=['car','bike','ped','van', 'truck','bus','tricycle','awning-bike']):
-    print(f'Start validating folder, Detection! gt_folder: {gt_folder}, pred_folder: {pred_folder}, nc: {nc}, names: {names}')
+
+
+def val_folder(
+    gt_folder, pred_folder, nc=8, names=["car", "bike", "ped", "van", "truck", "bus", "tricycle", "awning-bike"]
+):
+    print(
+        "Start validating folder, Detection! "
+        f"gt_folder: {gt_folder}, pred_folder: {pred_folder}, nc: {nc}, names: {names}"
+    )
     gt_files = os.listdir(gt_folder)
     pred_files = os.listdir(pred_folder)
     gt_files = [os.path.join(gt_folder, f) for f in gt_files]
@@ -655,16 +683,18 @@ def val_folder(gt_folder, pred_folder, nc=8, names=['car','bike','ped','van', 't
     gt_files = sorted(gt_files)
     pred_files = sorted(pred_files)
     pre_validator = PredictValidator(nc, names)
-    for gt_file, pred_file in tqdm(zip(gt_files, pred_files),):
-        assert gt_file.split('/')[-1] == pred_file.split('/')[-1]
+    for gt_file, pred_file in tqdm(
+        zip(gt_files, pred_files),
+    ):
+        assert gt_file.split("/")[-1] == pred_file.split("/")[-1]
         gt_dict = read_txt(gt_file)
         pred_dict = read_txt(pred_file)
         # 把 gt_dict和pred_dict的keys合并
         keys = set(gt_dict.keys()) | set(pred_dict.keys())
         keys = sorted(list(keys))
         for key in keys:
-            preds = torch.tensor(pred_dict[key],dtype=torch.float32) if key in pred_dict else torch.zeros(0, 10)
-            gts = torch.tensor(gt_dict[key],dtype=torch.float32) if key in gt_dict else torch.zeros(0, 10)
+            preds = torch.tensor(pred_dict[key], dtype=torch.float32) if key in pred_dict else torch.zeros(0, 10)
+            gts = torch.tensor(gt_dict[key], dtype=torch.float32) if key in gt_dict else torch.zeros(0, 10)
 
             preds_xywha = poly2obb(preds[:, :8])
             preds = torch.cat([preds_xywha, preds[:, 8:]], dim=1)
@@ -677,22 +707,22 @@ def val_folder(gt_folder, pred_folder, nc=8, names=['car','bike','ped','van', 't
 
 
 if __name__ == "__main__":
-    lines = val_folder('/data/users/litianhao/data/HSMOT/test/mot', '/data3/litianhao/hsmot/motip_99/joint_10lrconv_distill/track1/submit')
-    print('\n'.join(lines))
+    lines = val_folder(
+        "/data/users/litianhao/data/HSMOT/test/mot",
+        "/data3/litianhao/hsmot/motip_99/joint_10lrconv_distill/track1/submit",
+    )
+    print("\n".join(lines))
     # from hsmot.mmlab.hs_mmrotate import poly2obb, obb2poly
 
     # # 以文件尝试
     # gt_txt = '/data/users/litianhao/data/HSMOT/test/mot/data30-10.txt'
-    # # pred_txt = '/data3/litianhao/hsmot/motip/pretrain_10lrfconv_distill/train/eval_during_train/test/epoch_1/submit/data30-10.txt'
+    # pred_txt example:
+    # /data3/.../motip/pretrain_10lrfconv_distill/train/eval_during_train/test/epoch_1/submit/data30-10.txt
     # pred_txt = '/data3/litianhao/hsmot/motip_99/joint_10lrconv_distill/track1/submit/data30-10.txt'
 
-
-    
     # gt_dict = read_txt(gt_txt)
     # pred_dict = read_txt(pred_txt)
     # pre_validator = PredictValidator(8, ['car','bike','ped','van', 'truck','bus','tricycle','awning-bike'])
-
-
 
     # # 把 gt_dict和pred_dict的keys合并
     # keys = set(gt_dict.keys()) | set(pred_dict.keys())
@@ -708,8 +738,6 @@ if __name__ == "__main__":
     #     gts = torch.cat([gts_xywha, gts[:, 8:9]], dim=1)
     #     pre_validator.update_metrics(preds, gts)
     # lines = pre_validator.final()
-
-        
 
 
 #     lines =     '''1,1,976,904,976,858,859,858,859,904,-1,0,1

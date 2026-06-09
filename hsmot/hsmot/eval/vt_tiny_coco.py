@@ -114,9 +114,7 @@ def load_vt_tiny_coco_gt(
         scene = parse_scene_from_file_name(img["file_name"])
         frame_id = parse_frame_id(img)
         x, y, w, h = ann["bbox"]
-        labels_full[scene][frame_id].append(
-            np.array([x, y, w, h, ann["category_id"]], dtype=np.float32)
-        )
+        labels_full[scene][frame_id].append(np.array([x, y, w, h, ann["category_id"]], dtype=np.float32))
 
     if skipped:
         print(f"[VT-Tiny det eval] skipped {skipped} annotations with unresolved image_id in {ann_path}")
@@ -138,11 +136,7 @@ def build_submit_frame_to_mot_id(
     if not osp.isdir(rgb_dir):
         raise FileNotFoundError(f"VT-Tiny RGB dir not found: {rgb_dir}")
 
-    image_paths = sorted(
-        osp.join(rgb_dir, name)
-        for name in os.listdir(rgb_dir)
-        if name.endswith(".jpg")
-    )
+    image_paths = sorted(osp.join(rgb_dir, name) for name in os.listdir(rgb_dir) if name.endswith(".jpg"))
     file_id_to_mot_id = {fid: mot_id for mot_id, fid in frame_file_ids.get(scene, {}).items()}
     mapping: Dict[int, int] = {}
     for idx, img_path in enumerate(image_paths):
@@ -286,9 +280,7 @@ def val_vt_tiny_coco_det(
         f"split_dir={data_split_dir}, ann_mode={ann_mode}"
     )
 
-    labels_full, frame_file_ids = load_vt_tiny_coco_gt(
-        gt_coco_ann, ann_mode=ann_mode, ir_ann_path=ir_ann_path
-    )
+    labels_full, frame_file_ids = load_vt_tiny_coco_gt(gt_coco_ann, ann_mode=ann_mode, ir_ann_path=ir_ann_path)
     validator = RectPredictValidator(nc=nc, names=names)
 
     scenes = sorted(labels_full.keys())
@@ -302,11 +294,7 @@ def val_vt_tiny_coco_det(
             gts_list = labels_full[scene].get(mot_frame_id, [])
             preds_list = pred_by_submit_frame.get(submit_frame, [])
 
-            gts = (
-                torch.tensor(gts_list, dtype=torch.float32)
-                if gts_list
-                else torch.zeros((0, 5), dtype=torch.float32)
-            )
+            gts = torch.tensor(gts_list, dtype=torch.float32) if gts_list else torch.zeros((0, 5), dtype=torch.float32)
             preds = (
                 torch.tensor(preds_list, dtype=torch.float32)
                 if preds_list

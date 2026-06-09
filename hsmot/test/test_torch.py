@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 
-
 # print inforamtion of torch
 print(torch.__version__)
 print(torch.cuda.is_available())
@@ -17,7 +16,7 @@ y_cpu = conv1(x)
 print(y_cpu.shape)
 
 # to cuda
-x=x.cuda()
+x = x.cuda()
 conv1.cuda()
 
 try:

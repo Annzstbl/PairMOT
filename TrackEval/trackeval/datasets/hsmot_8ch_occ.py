@@ -7,7 +7,7 @@ from ..utils import TrackEvalException
 from ._base_dataset import _BaseDataset
 from .. import utils
 from .. import _timing
-from mmcv.ops.box_iou_rotated import box_iou_rotated
+from hsmot.util.iou import box_iou_rotated
 from hsmot.mmlab.hs_mmrotate import poly2obb
 
 import torch

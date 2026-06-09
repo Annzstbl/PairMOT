@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 import torch
 from hsmot.mmlab.hs_mmdet import Resize, RandomFlip, RandomCrop
-from mmcv.ops import box_iou_rotated
+from hsmot.util.iou import box_iou_rotated
 
 def bbox_flip(bboxes, img_shape, direction='horizontal'):
     """Flip bboxes horizontally or vertically.

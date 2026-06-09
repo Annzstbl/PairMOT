@@ -1,0 +1,15 @@
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [
+    "hsmot/mmlab/hs_mmdet.py",
+    "hsmot/mmlab/hs_mmrotate.py",
+    "hsmot/datasets/pipelines/channel.py",
+    "hsmot/util/experimental/diff_iou_rotated_util.py",
+]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["test"]

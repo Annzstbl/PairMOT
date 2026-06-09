@@ -1,15 +1,17 @@
-'''这是一个实验性文件，还没有验证'''
+"""可微几何旋转框 IoU 实验实现（未纳入主路径）。
 
+主路径分工：
+- 评测 / 数据过滤：``hsmot.util.iou.box_iou_rotated``（OpenCV 几何 IoU）
+- 训练 loss：``hsmot.loss.prob_iou_loss.probiou``（ProbIoU）
 
+本模块含 matplotlib 调试代码，仅供研究对比，使用前需自行验证。
+"""
 
 from typing import Tuple
 
+import numpy as np
 import torch
 from torch import Tensor
-from torch.autograd import Function
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 
 EPSILON = 1e-8
 
@@ -17,11 +19,12 @@ eps_parallel = 1e-12
 tol_seg = 1e-9
 eps_abs = 1e-9
 eps_rel = 1e-9
-tol_len=1e-6
+tol_len = 1e-6
+
 
 def deduplicate_vertices_mask(
     vertices: Tensor,  # (B,N,K,2)
-    mask: Tensor,      # (B,N,K)
+    mask: Tensor,  # (B,N,K)
 ) -> Tensor:
     """
     Returns:
@@ -31,21 +34,21 @@ def deduplicate_vertices_mask(
     m = mask.bool()
 
     # pairwise squared distance
-    diff = v.unsqueeze(3) - v.unsqueeze(2)            # (B,N,K,K,2)
-    dist2 = (diff * diff).sum(dim=-1)                 # (B,N,K,K)
+    diff = v.unsqueeze(3) - v.unsqueeze(2)  # (B,N,K,K,2)
+    dist2 = (diff * diff).sum(dim=-1)  # (B,N,K,K)
     same = dist2 <= (tol_len * tol_len)
 
     # only compare among valid points
     same = same & m.unsqueeze(3) & m.unsqueeze(2)
 
     # suppress duplicates: if i<j and same, drop j
-    upper = torch.triu(same, diagonal=1)              # keep only i<j
-    drop = upper.any(dim=2)                           # (B,N,K): whether j has any i<j same
+    upper = torch.triu(same, diagonal=1)  # keep only i<j
+    drop = upper.any(dim=2)  # (B,N,K): whether j has any i<j same
     new_mask = m & (~drop)
     return new_mask
 
-def box_intersection(corners1: Tensor,
-                     corners2: Tensor) -> Tuple[Tensor, Tensor]:
+
+def box_intersection(corners1: Tensor, corners2: Tensor) -> Tuple[Tensor, Tensor]:
     """Find intersection points of rectangles.
     Convention: if two edges are collinear, there is no intersection point.
 
@@ -71,7 +74,6 @@ def box_intersection(corners1: Tensor,
     # math: https://en.wikipedia.org/wiki/Line%E2%80%93line_intersection
     numerator = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
 
-
     # parallel / nearly-parallel lines
     parallel = numerator.abs() < eps_parallel
 
@@ -91,12 +93,12 @@ def box_intersection(corners1: Tensor,
     # intersection points (only meaningful for mask=True)
     ix = x1 + t * (x2 - x1)
     iy = y1 + t * (y2 - y1)
-    intersections = torch.stack([ix, iy], dim=-1) 
-    intersections = intersections.squeeze(-2)      
+    intersections = torch.stack([ix, iy], dim=-1)
+    intersections = intersections.squeeze(-2)
 
-    mask2 = mask.squeeze(-1)                       
+    mask2 = mask.squeeze(-1)
     intersections = intersections * mask2.to(intersections.dtype).unsqueeze(-1)
-    
+
     return intersections, mask
 
 
@@ -153,9 +155,9 @@ def box_in_box(corners1: Tensor, corners2: Tensor) -> Tuple[Tensor, Tensor]:
     return c1_in_2, c2_in_1
 
 
-def build_vertices(corners1: Tensor, corners2: Tensor, c1_in_2: Tensor,
-                   c2_in_1: Tensor, intersections: Tensor,
-                   valid_mask: Tensor) -> Tuple[Tensor, Tensor]:
+def build_vertices(
+    corners1: Tensor, corners2: Tensor, c1_in_2: Tensor, c2_in_1: Tensor, intersections: Tensor, valid_mask: Tensor
+) -> Tuple[Tensor, Tensor]:
     """Find vertices of intersection area.
 
     Args:
@@ -177,16 +179,13 @@ def build_vertices(corners1: Tensor, corners2: Tensor, c1_in_2: Tensor,
     B = corners1.size()[0]
     N = corners1.size()[1]
     # (B, N, 4 + 4 + 16, 2)
-    vertices = torch.cat(
-        [corners1, corners2,
-         intersections.view([B, N, -1, 2])], dim=2)
+    vertices = torch.cat([corners1, corners2, intersections.view([B, N, -1, 2])], dim=2)
     # Bool (B, N, 4 + 4 + 16)
     mask = torch.cat([c1_in_2, c2_in_1, valid_mask.view([B, N, -1])], dim=2)
     return vertices, mask
 
 
-
-def sort_vertices(vertices:Tensor, mask:Tensor):
+def sort_vertices(vertices: Tensor, mask: Tensor):
     """
 
     Args:
@@ -195,35 +194,36 @@ def sort_vertices(vertices:Tensor, mask:Tensor):
 
     Returns:
         sorted vertices: (B, N, 9, 2)
-    
+
     Note:
         why 9? the polygon has maximal 8 vertices. +1 to duplicate the first element.
         the index should have following structure:
-            (A, B, C, ... , A, X, X, X) 
-        and X indicates the index of arbitary elements in the last 16 (intersections not corners) with 
+            (A, B, C, ... , A, X, X, X)
+        and X indicates the index of arbitary elements in the last 16 (intersections not corners) with
         value 0 and mask False. (cause they have zero value and zero gradient)
     """
     # 先做近似去重（强烈建议）
     mask = deduplicate_vertices_mask(vertices, mask)
 
-    num_valid = torch.sum(mask.int(), dim=2).int()      # (B, N)
-    mean = torch.sum(vertices * mask.type(vertices.dtype).unsqueeze(-1), dim=2, keepdim=True) / num_valid.unsqueeze(-1).unsqueeze(-1)
-    vertices_normalized = vertices - mean       # normalization makes sorting easier
+    num_valid = torch.sum(mask.int(), dim=2).int()  # (B, N)
+    mean = torch.sum(vertices * mask.type(vertices.dtype).unsqueeze(-1), dim=2, keepdim=True) / num_valid.unsqueeze(
+        -1
+    ).unsqueeze(-1)
+    vertices_normalized = vertices - mean  # normalization makes sorting easier
     idx_sorted = sort_vertice_th(vertices_normalized, mask, num_valid.long()).long()
-    
-    idx_ext = idx_sorted.unsqueeze(-1).repeat([1,1,1,2])
+
+    idx_ext = idx_sorted.unsqueeze(-1).repeat([1, 1, 1, 2])
     selected = torch.gather(vertices, 2, idx_ext)
-    
+
     # zero padding for invalid vertices
-    m = _generate_mask(selected.size(-2), num_valid+1, dtype=vertices.dtype, device=vertices.device)
+    m = _generate_mask(selected.size(-2), num_valid + 1, dtype=vertices.dtype, device=vertices.device)
     selected = selected * m.unsqueeze(-1)
-    
+
     # set zero of too few vertices
     m = num_valid >= 3
     selected = selected * m.type(selected.dtype).unsqueeze(-1).unsqueeze(-1)
-    
+
     return selected
-    
 
 
 def calculate_area(selected):
@@ -232,19 +232,19 @@ def calculate_area(selected):
     Args:
         idx_sorted (Tensor): (B, N, 9)
         vertices (Tensor): (B, N, 24, 2)
-    
+
     return:
         area: (B, N), area of intersection
-        selected: (B, N, 9, 2), vertices of polygon with zero padding 
+        selected: (B, N, 9, 2), vertices of polygon with zero padding
     """
-    total = selected[:, :, 0:-1, 0]*selected[:, :, 1:, 1] - selected[:, :, 0:-1, 1]*selected[:, :, 1:, 0]
+    total = selected[:, :, 0:-1, 0] * selected[:, :, 1:, 1] - selected[:, :, 0:-1, 1] * selected[:, :, 1:, 0]
     total = torch.sum(total, dim=2)
     area = torch.abs(total) / 2
     return area, selected
 
 
-def oriented_box_intersection_2d(corners1:Tensor, corners2:Tensor):
-    """calculate intersection area of 2d rectangles 
+def oriented_box_intersection_2d(corners1: Tensor, corners2: Tensor):
+    """calculate intersection area of 2d rectangles
 
     Args:
         corners1 (Tensor): (B, N, 4, 2)
@@ -258,19 +258,19 @@ def oriented_box_intersection_2d(corners1:Tensor, corners2:Tensor):
     intersections, valid_mask = box_intersection(corners1, corners2)
     c12, c21 = box_in_box(corners1, corners2)
     c12, c21 = check_overlap(corners1, corners2, c12, c21)
-    vertices, mask = build_vertices(corners1, corners2, c12, c21,
-                                    intersections, valid_mask)
+    vertices, mask = build_vertices(corners1, corners2, c12, c21, intersections, valid_mask)
 
     vertices_gathered = sort_vertices(vertices, mask)
 
     return calculate_area(vertices_gathered)
 
+
 @torch.no_grad()
-def check_overlap(corners1:Tensor, corners2:Tensor, cond12:Tensor, cond21:Tensor):
-    """check if corners are overlapped and update the conditions. 
-    useful to avoid incorrect intersection calculation. 
-    Without this check, the intersection would have duplicated vertices, which makes the 
-    shoelace-formula broken. 
+def check_overlap(corners1: Tensor, corners2: Tensor, cond12: Tensor, cond21: Tensor):
+    """check if corners are overlapped and update the conditions.
+    useful to avoid incorrect intersection calculation.
+    Without this check, the intersection would have duplicated vertices, which makes the
+    shoelace-formula broken.
 
     Args:
         corners1 (Tensor): (B, N, 4, 2)
@@ -292,8 +292,9 @@ def check_overlap(corners1:Tensor, corners2:Tensor, cond12:Tensor, cond21:Tensor
         cd_roll[crit] = False
     return cond12, cd_roll
 
+
 @torch.no_grad()
-def sort_vertice_th(vertices_normalized:Tensor, mask:Tensor, num_valid:Tensor):
+def sort_vertice_th(vertices_normalized: Tensor, mask: Tensor, num_valid: Tensor):
     """_summary_
 
     Args:
@@ -306,15 +307,15 @@ def sort_vertice_th(vertices_normalized:Tensor, mask:Tensor, num_valid:Tensor):
     """
     x = vertices_normalized[..., 0]
     y = vertices_normalized[..., 1]
-    
+
     # sorting
     x[~mask] = -1e6
     y[~mask] = 1e-6
     ang = torch.atan2(y, x)
     index = torch.argsort(ang, dim=-1)  # (B, N, 24)
-    
+
     # duplicate the first
-    temp = index[..., :1].clone()   # (B, N, 1)
+    temp = index[..., :1].clone()  # (B, N, 1)
     index.scatter_(dim=-1, index=num_valid.unsqueeze(-1), src=temp.expand(-1, -1, index.size(-1)))
     return index[..., :9]
 
@@ -326,9 +327,16 @@ def _generate_mask(num: int, valid_num: Tensor, dtype, device):
     mask = ar < valid_num.unsqueeze(-1)
     # NOTE: this expression doesn't work some earlier PyTorch version:
     # arr = torch.where(mask, 1., 0.)
-    ar = torch.where(mask, torch.ones((1,)).expand_as(mask).to(device), torch.zeros(1,).expand_as(mask).to(device))
+    ar = torch.where(
+        mask,
+        torch.ones((1,)).expand_as(mask).to(device),
+        torch.zeros(
+            1,
+        )
+        .expand_as(mask)
+        .to(device),
+    )
     return ar
-
 
 
 def box2corners(box: Tensor) -> Tensor:
@@ -363,7 +371,8 @@ def diff_iou_rotated_2d(box1: Tensor, box2: Tensor) -> Tensor:
     iou, corners1, corners2, u = cal_iou(box1, box2)
     return iou
 
-def cal_iou(box1:Tensor, box2:Tensor):
+
+def cal_iou(box1: Tensor, box2: Tensor):
     """Calculate differentiable iou of rotated 2d boxes.
 
     Args:
@@ -375,16 +384,15 @@ def cal_iou(box1:Tensor, box2:Tensor):
     """
     corners1 = box2corners(box1)
     corners2 = box2corners(box2)
-    intersection, _ = oriented_box_intersection_2d(corners1,
-                                                   corners2)  # (B, N)
+    intersection, _ = oriented_box_intersection_2d(corners1, corners2)  # (B, N)
     area1 = box1[:, :, 2] * box1[:, :, 3]
     area2 = box2[:, :, 2] * box2[:, :, 3]
     union = area1 + area2 - intersection
     iou = intersection / union
-    return iou, corners1, corners2,  union
+    return iou, corners1, corners2, union
 
 
-def diff_diou_rotated_2d(box1:Tensor, box2:Tensor, enclosing_type:str="smallest"):
+def diff_diou_rotated_2d(box1: Tensor, box2: Tensor, enclosing_type: str = "smallest"):
     """calculate diou loss
 
     Args:
@@ -393,26 +401,25 @@ def diff_diou_rotated_2d(box1:Tensor, box2:Tensor, enclosing_type:str="smallest"
     """
     iou, corners1, corners2, u = cal_iou(box1, box2)
     w, h = enclosing_box(corners1, corners2, enclosing_type)
-    c2 = w*w + h*h      # (B, N)
-    x_offset = box1[...,0] - box2[..., 0]
-    y_offset = box1[...,1] - box2[..., 1]
-    d2 = x_offset*x_offset + y_offset*y_offset
+    c2 = w * w + h * h  # (B, N)
+    x_offset = box1[..., 0] - box2[..., 0]
+    y_offset = box1[..., 1] - box2[..., 1]
+    d2 = x_offset * x_offset + y_offset * y_offset
     # diou_loss = 1. - iou + d2/c2
-    diou = iou - d2/c2
+    diou = iou - d2 / c2
     return diou
 
 
-def diff_giou_rotated_2d(box1:Tensor, box2:Tensor, enclosing_type:str="smallest"):
+def diff_giou_rotated_2d(box1: Tensor, box2: Tensor, enclosing_type: str = "smallest"):
     iou, corners1, corners2, u = cal_iou(box1, box2)
     w, h = enclosing_box(corners1, corners2, enclosing_type)
-    area_c =  w*h
+    area_c = w * h
     # giou_loss = 1. - iou + ( area_c - u )/area_c
-    giou = iou - ( area_c - u )/area_c
+    giou = iou - (area_c - u) / area_c
     return giou
 
 
-    
-def enclosing_box(corners1:Tensor, corners2:Tensor, enclosing_type:str="smallest"):
+def enclosing_box(corners1: Tensor, corners2: Tensor, enclosing_type: str = "smallest"):
     if enclosing_type == "aligned":
         return enclosing_box_aligned(corners1, corners2)
     elif enclosing_type == "pca":
@@ -423,24 +430,24 @@ def enclosing_box(corners1:Tensor, corners2:Tensor, enclosing_type:str="smallest
         ValueError("Unknow type enclosing. Supported: aligned, pca, smallest")
 
 
-def enclosing_box_aligned(corners1:Tensor, corners2:Tensor):
+def enclosing_box_aligned(corners1: Tensor, corners2: Tensor):
     """calculate the smallest enclosing box (axis-aligned)
 
     Args:
         corners1 (Tensor): (B, N, 4, 2)
         corners2 (Tensor): (B, N, 4, 2)
-    
+
     Returns:
         w (Tensor): (B, N)
         h (Tensor): (B, N)
     """
-    x1_max = torch.max(corners1[..., 0], dim=2)[0]     # (B, N)
-    x1_min = torch.min(corners1[..., 0], dim=2)[0]     # (B, N)
+    x1_max = torch.max(corners1[..., 0], dim=2)[0]  # (B, N)
+    x1_min = torch.min(corners1[..., 0], dim=2)[0]  # (B, N)
     y1_max = torch.max(corners1[..., 1], dim=2)[0]
     y1_min = torch.min(corners1[..., 1], dim=2)[0]
-    
-    x2_max = torch.max(corners2[..., 0], dim=2)[0]     # (B, N)
-    x2_min = torch.min(corners2[..., 0], dim=2)[0]    # (B, N)
+
+    x2_max = torch.max(corners2[..., 0], dim=2)[0]  # (B, N)
+    x2_min = torch.min(corners2[..., 0], dim=2)[0]  # (B, N)
     y2_max = torch.max(corners2[..., 1], dim=2)[0]
     y2_min = torch.min(corners2[..., 1], dim=2)[0]
 
@@ -449,52 +456,52 @@ def enclosing_box_aligned(corners1:Tensor, corners2:Tensor):
     y_max = torch.max(y1_max, y2_max)
     y_min = torch.min(y1_min, y2_min)
 
-    w = x_max - x_min       # (B, N)
+    w = x_max - x_min  # (B, N)
     h = y_max - y_min
     return w, h
 
 
-def enclosing_box_pca(corners1:Tensor, corners2:Tensor):
+def enclosing_box_pca(corners1: Tensor, corners2: Tensor):
     """calculate the rotated smallest enclosing box using PCA
 
     Args:
         corners1 (Tensor): (B, N, 4, 2)
         corners2 (Tensor): (B, N, 4, 2)
-    
+
     Returns:
         w (Tensor): (B, N)
         h (Tensor): (B, N)
     """
     B = corners1.size()[0]
-    c = torch.cat([corners1, corners2], dim=2)      # (B, N, 8, 2)
-    c = c - torch.mean(c, dim=2, keepdim=True)      # normalization
-    c = c.view([-1, 8, 2])                          # (B*N, 8, 2)
-    ct = c.transpose(1, 2)                          # (B*N, 2, 8)
-    ctc = torch.bmm(ct, c)                          # (B*N, 2, 2)
+    c = torch.cat([corners1, corners2], dim=2)  # (B, N, 8, 2)
+    c = c - torch.mean(c, dim=2, keepdim=True)  # normalization
+    c = c.view([-1, 8, 2])  # (B*N, 8, 2)
+    ct = c.transpose(1, 2)  # (B*N, 2, 8)
+    ctc = torch.bmm(ct, c)  # (B*N, 2, 2)
     # NOTE: the build in symeig is slow!
     # _, v = ctc.symeig(eigenvectors=True)
-    # v1 = v[:, 0, :].unsqueeze(1)                   
+    # v1 = v[:, 0, :].unsqueeze(1)
     # v2 = v[:, 1, :].unsqueeze(1)
     v1, v2 = eigenvector_22(ctc)
-    v1 = v1.unsqueeze(1)                            # (B*N, 1, 2), eigen value
+    v1 = v1.unsqueeze(1)  # (B*N, 1, 2), eigen value
     v2 = v2.unsqueeze(1)
-    p1 = torch.sum(c * v1, dim=-1)                  # (B*N, 8), first principle component
-    p2 = torch.sum(c * v2, dim=-1)                  # (B*N, 8), second principle component
-    w = p1.max(dim=-1)[0] - p1.min(dim=-1)[0]       # (B*N, ),  width of rotated enclosing box
-    h = p2.max(dim=-1)[0] - p2.min(dim=-1)[0]       # (B*N, ),  height of rotated enclosing box
+    p1 = torch.sum(c * v1, dim=-1)  # (B*N, 8), first principle component
+    p2 = torch.sum(c * v2, dim=-1)  # (B*N, 8), second principle component
+    w = p1.max(dim=-1)[0] - p1.min(dim=-1)[0]  # (B*N, ),  width of rotated enclosing box
+    h = p2.max(dim=-1)[0] - p2.min(dim=-1)[0]  # (B*N, ),  height of rotated enclosing box
     return w.view([B, -1]), h.view([B, -1])
 
 
-def eigenvector_22(x:Tensor):
+def eigenvector_22(x: Tensor):
     """return eigenvector of 2x2 symmetric matrix using closed form
-    
+
     https://math.stackexchange.com/questions/8672/eigenvalues-and-eigenvectors-of-2-times-2-matrix
-    
+
     The calculation is done by using double precision
 
     Args:
         x (Tensor): (..., 2, 2), symmetric, semi-definite
-    
+
     Return:
         v1 (Tensor): (..., 2)
         v2 (Tensor): (..., 2)
@@ -502,21 +509,19 @@ def eigenvector_22(x:Tensor):
     # NOTE: must use doule precision here! with float the back-prop is very unstable
     a = x[..., 0, 0].double()
     c = x[..., 0, 1].double()
-    b = x[..., 1, 1].double()                                # (..., )
-    delta = torch.sqrt(a*a + 4*c*c - 2*a*b + b*b)
-    v1 = (a - b - delta) / 2. /c
-    v1 = torch.stack([v1, torch.ones_like(v1, dtype=torch.double, device=v1.device)], dim=-1)    # (..., 2)
-    v2 = (a - b + delta) / 2. /c
-    v2 = torch.stack([v2, torch.ones_like(v2, dtype=torch.double, device=v2.device)], dim=-1)    # (..., 2)
-    n1 = torch.sum(v1*v1, keepdim=True, dim=-1).sqrt()
-    n2 = torch.sum(v2*v2, keepdim=True, dim=-1).sqrt()
+    b = x[..., 1, 1].double()  # (..., )
+    delta = torch.sqrt(a * a + 4 * c * c - 2 * a * b + b * b)
+    v1 = (a - b - delta) / 2.0 / c
+    v1 = torch.stack([v1, torch.ones_like(v1, dtype=torch.double, device=v1.device)], dim=-1)  # (..., 2)
+    v2 = (a - b + delta) / 2.0 / c
+    v2 = torch.stack([v2, torch.ones_like(v2, dtype=torch.double, device=v2.device)], dim=-1)  # (..., 2)
+    n1 = torch.sum(v1 * v1, keepdim=True, dim=-1).sqrt()
+    n2 = torch.sum(v2 * v2, keepdim=True, dim=-1).sqrt()
     v1 = v1 / n1
     v2 = v2 / n2
     return v1.type(x.dtype), v2.type(x.dtype)
 
 
-
-    
 def generate_table():
     """generate candidates of hull polygon edges and the the other 6 points
 
@@ -524,7 +529,7 @@ def generate_table():
         lines: (24, 2)
         points: (24, 6)
     """
-    skip = [[0,2], [1,3], [5,7], [4,6]]     # impossible hull edge
+    skip = [[0, 2], [1, 3], [5, 7], [4, 6]]  # impossible hull edge
     line = []
     points = []
 
@@ -536,7 +541,7 @@ def generate_table():
         return a
 
     for i in range(8):
-        for j in range(i+1, 8):
+        for j in range(i + 1, 8):
             if [i, j] not in skip:
                 line.append([i, j])
                 points.append(all_except_two(i, j))
@@ -548,92 +553,92 @@ LINES = np.array(LINES).astype(int)
 POINTS = np.array(POINTS).astype(int)
 
 
-def gather_lines_points(corners:Tensor):
+def gather_lines_points(corners: Tensor):
     """get hull edge candidates and the rest points using the index
 
     Args:
         corners (Tensor): (..., 8, 2)
-    
-    Return: 
+
+    Return:
         lines (Tensor): (..., 24, 2, 2)
         points (Tensor): (..., 24, 6, 2)
         idx_lines (Tensor): Long (..., 24, 2, 2)
         idx_points (Tensor): Long (..., 24, 6, 2)
     """
     dim = corners.dim()
-    idx_lines = torch.LongTensor(LINES).to(corners.device).unsqueeze(-1)      # (24, 2, 1)
-    idx_points = torch.LongTensor(POINTS).to(corners.device).unsqueeze(-1)    # (24, 6, 1)
-    idx_lines = idx_lines.repeat(1,1,2)                                       # (24, 2, 2)
-    idx_points = idx_points.repeat(1,1,2)                                     # (24, 6, 2)
+    idx_lines = torch.LongTensor(LINES).to(corners.device).unsqueeze(-1)  # (24, 2, 1)
+    idx_points = torch.LongTensor(POINTS).to(corners.device).unsqueeze(-1)  # (24, 6, 1)
+    idx_lines = idx_lines.repeat(1, 1, 2)  # (24, 2, 2)
+    idx_points = idx_points.repeat(1, 1, 2)  # (24, 6, 2)
     if dim > 2:
-        for _ in range(dim-2):
+        for _ in range(dim - 2):
             idx_lines = torch.unsqueeze(idx_lines, 0)
             idx_points = torch.unsqueeze(idx_points, 0)
-        idx_points = idx_points.repeat(*corners.size()[:-2], 1, 1, 1)           # (..., 24, 2, 2)
-        idx_lines = idx_lines.repeat(*corners.size()[:-2], 1, 1, 1)             # (..., 24, 6, 2)
-    corners_ext = corners.unsqueeze(-3).repeat( *([1]*(dim-2)), 24, 1, 1)       # (..., 24, 8, 2)
-    lines = torch.gather(corners_ext, dim=-2, index=idx_lines)                  # (..., 24, 2, 2)
-    points = torch.gather(corners_ext, dim=-2, index=idx_points)                # (..., 24, 6, 2)
+        idx_points = idx_points.repeat(*corners.size()[:-2], 1, 1, 1)  # (..., 24, 2, 2)
+        idx_lines = idx_lines.repeat(*corners.size()[:-2], 1, 1, 1)  # (..., 24, 6, 2)
+    corners_ext = corners.unsqueeze(-3).repeat(*([1] * (dim - 2)), 24, 1, 1)  # (..., 24, 8, 2)
+    lines = torch.gather(corners_ext, dim=-2, index=idx_lines)  # (..., 24, 2, 2)
+    points = torch.gather(corners_ext, dim=-2, index=idx_points)  # (..., 24, 6, 2)
 
     return lines, points, idx_lines, idx_points
 
 
-def point_line_distance_range(lines:Tensor, points:Tensor):
+def point_line_distance_range(lines: Tensor, points: Tensor):
     """calculate the maximal distance between the points in the direction perpendicular to the line
     methode: point-line-distance
 
     Args:
         lines (Tensor): (..., 24, 2, 2)
         points (Tensor): (..., 24, 6, 2)
-    
+
     Return:
         Tensor: (..., 24)
     """
-    x1 = lines[..., 0:1, 0]       # (..., 24, 1)
-    y1 = lines[..., 0:1, 1]       # (..., 24, 1)
-    x2 = lines[..., 1:2, 0]       # (..., 24, 1)
-    y2 = lines[..., 1:2, 1]       # (..., 24, 1)
-    x = points[..., 0]            # (..., 24, 6)
-    y = points[..., 1]            # (..., 24, 6)
-    den = (y2-y1)*x - (x2-x1)*y + x2*y1 - y2*x1
+    x1 = lines[..., 0:1, 0]  # (..., 24, 1)
+    y1 = lines[..., 0:1, 1]  # (..., 24, 1)
+    x2 = lines[..., 1:2, 0]  # (..., 24, 1)
+    y2 = lines[..., 1:2, 1]  # (..., 24, 1)
+    x = points[..., 0]  # (..., 24, 6)
+    y = points[..., 1]  # (..., 24, 6)
+    den = (y2 - y1) * x - (x2 - x1) * y + x2 * y1 - y2 * x1
     # NOTE: the backward pass of torch.sqrt(x) generates NaN if x==0
-    num = torch.sqrt( (y2-y1).square() + (x2-x1).square() + 1e-14 )
-    d = den/num         # (..., 24, 6)
-    d_max = d.max(dim=-1)[0]       # (..., 24)
-    d_min = d.min(dim=-1)[0]       # (..., 24)
-    d1 = d_max - d_min             # suppose points on different side
-    d2 = torch.max(d.abs(), dim=-1)[0]      # or, all points are on the same side
+    num = torch.sqrt((y2 - y1).square() + (x2 - x1).square() + 1e-14)
+    d = den / num  # (..., 24, 6)
+    d_max = d.max(dim=-1)[0]  # (..., 24)
+    d_min = d.min(dim=-1)[0]  # (..., 24)
+    d1 = d_max - d_min  # suppose points on different side
+    d2 = torch.max(d.abs(), dim=-1)[0]  # or, all points are on the same side
     # NOTE: if x1 = x2 and y1 = y2, this will return 0
     return torch.max(d1, d2)
 
 
-def point_line_projection_range(lines:Tensor, points:Tensor):
+def point_line_projection_range(lines: Tensor, points: Tensor):
     """calculate the maximal distance between the points in the direction parallel to the line
     methode: point-line projection
 
     Args:
         lines (Tensor): (..., 24, 2, 2)
         points (Tensor): (..., 24, 6, 2)
-    
+
     Return:
         Tensor: (..., 24)
     """
-    x1 = lines[..., 0:1, 0]       # (..., 24, 1)
-    y1 = lines[..., 0:1, 1]       # (..., 24, 1)
-    x2 = lines[..., 1:2, 0]       # (..., 24, 1)
-    y2 = lines[..., 1:2, 1]       # (..., 24, 1)
-    k = (y2 - y1)/(x2 - x1 + 1e-8)      # (..., 24, 1)
+    x1 = lines[..., 0:1, 0]  # (..., 24, 1)
+    y1 = lines[..., 0:1, 1]  # (..., 24, 1)
+    x2 = lines[..., 1:2, 0]  # (..., 24, 1)
+    y2 = lines[..., 1:2, 1]  # (..., 24, 1)
+    k = (y2 - y1) / (x2 - x1 + 1e-8)  # (..., 24, 1)
     vec = torch.cat([torch.ones_like(k, dtype=k.dtype, device=k.device), k], dim=-1)  # (..., 24, 2)
-    vec = vec.unsqueeze(-2)             # (..., 24, 1, 2)
-    points_ext = torch.cat([lines, points], dim=-2)         # (..., 24, 8), consider all 8 points
-    den = torch.sum(points_ext * vec, dim=-1)               # (..., 24, 8) 
-    proj = den / torch.norm(vec, dim=-1, keepdim=False)     # (..., 24, 8)
-    proj_max = proj.max(dim=-1)[0]       # (..., 24)
-    proj_min = proj.min(dim=-1)[0]       # (..., 24)
+    vec = vec.unsqueeze(-2)  # (..., 24, 1, 2)
+    points_ext = torch.cat([lines, points], dim=-2)  # (..., 24, 8), consider all 8 points
+    den = torch.sum(points_ext * vec, dim=-1)  # (..., 24, 8)
+    proj = den / torch.norm(vec, dim=-1, keepdim=False)  # (..., 24, 8)
+    proj_max = proj.max(dim=-1)[0]  # (..., 24)
+    proj_min = proj.min(dim=-1)[0]  # (..., 24)
     return proj_max - proj_min
 
 
-def smallest_bounding_box(corners:Tensor, verbose=False):
+def smallest_bounding_box(corners: Tensor, verbose=False):
     """return width and length of the smallest bouding box which encloses two boxes.
 
     Args:
@@ -647,16 +652,16 @@ def smallest_bounding_box(corners:Tensor, verbose=False):
         (Tensor): index of candiatae (..., )
     """
     lines, points, _, _ = gather_lines_points(corners)
-    proj = point_line_projection_range(lines, points)   # (..., 24)
-    dist = point_line_distance_range(lines, points)     # (..., 24)
+    proj = point_line_projection_range(lines, points)  # (..., 24)
+    dist = point_line_distance_range(lines, points)  # (..., 24)
     area = proj * dist
     # remove area with 0 when the two points of the line have the same coordinates
     zero_mask = (area == 0).type(corners.dtype)
-    fake = torch.ones_like(zero_mask, dtype=corners.dtype, device=corners.device)* 1e8 * zero_mask
-    area += fake        # add large value to zero_mask
-    area_min, idx = torch.min(area, dim=-1, keepdim=True)     # (..., 1)
+    fake = torch.ones_like(zero_mask, dtype=corners.dtype, device=corners.device) * 1e8 * zero_mask
+    area += fake  # add large value to zero_mask
+    area_min, idx = torch.min(area, dim=-1, keepdim=True)  # (..., 1)
     w = torch.gather(proj, dim=-1, index=idx)
-    h = torch.gather(dist, dim=-1, index=idx)          # (..., 1)
+    h = torch.gather(dist, dim=-1, index=idx)  # (..., 1)
     w = w.squeeze(-1).type(corners.dtype)
     h = h.squeeze(-1).type(corners.dtype)
     area_min = area_min.squeeze(-1).type(corners.dtype)
@@ -666,16 +671,16 @@ def smallest_bounding_box(corners:Tensor, verbose=False):
         return w, h
 
 
-
 if __name__ == "__main__":
-    
 
-
-    import os
     # (339.15, 230.95, 308.218364151133, 33.12346705650146, 1.5331517813945545)
-    box1 = torch.tensor([[[339.15, 230.95, 308.218364151133, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64)
+    box1 = torch.tensor(
+        [[[339.15, 230.95, 308.218364151133, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64
+    )
     # box2 = torch.tensor([[[339.15, 230.95, 310.218364151133, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64)
-    box2 = torch.tensor([[[259.15, 230.95, 73.9724073962719, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64)
+    box2 = torch.tensor(
+        [[[259.15, 230.95, 73.9724073962719, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64
+    )
     # box2 = torch.tensor([[[339.15, 230.95, 308.218364151133, 33.12346705650146, 1.5331517813945545]]], dtype=torch.float64)
 
     g_iou = diff_giou_rotated_2d(box1, box2)
@@ -686,28 +691,28 @@ if __name__ == "__main__":
 
     iou = diff_iou_rotated_2d(box1, box2)
     print(f"IOU: {iou.item():.6f}")
-    
+
     # # 转换为corners用于可视化
     # corners1 = box2corners(box1)
     # corners2 = box2corners(box2)
-    
+
     # # 计算IoU并可视化
     # print("计算IoU...")
     # iou = diff_iou_rotated_2d(box1, box2)
     # print(f"IoU: {iou.item():.6f}")
-    
+
     # # 可视化交集计算过程
     # print("生成可视化...")
     # save_dir = "debug_visualization"
     # os.makedirs(save_dir, exist_ok=True)
     # save_path = os.path.join(save_dir, "intersection_visualization.png")
-    
+
     # # 调用可视化函数
     # intersection_area, vertices = oriented_box_intersection_2d(
-    #     corners1, corners2, 
-    #     visualize=True, 
+    #     corners1, corners2,
+    #     visualize=True,
     #     save_path=save_path
     # )
-    
+
     # print(f"交集面积: {intersection_area.item():.6f}")
     # print(f"可视化已保存到: {save_path}")

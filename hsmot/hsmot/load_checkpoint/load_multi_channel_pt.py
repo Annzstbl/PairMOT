@@ -1,19 +1,26 @@
-
-import torch
-import torch
-import torch.nn as nn
 import math
 
+import torch
+import torch.nn as nn
 
-def load_multi_channel_pt(path, ch_num, dst_path, version='RGBRGB'):
-    '''
-        读一个模型, 把第一个conv层复制
-    '''
+
+def load_multi_channel_pt(path, ch_num, dst_path, version="RGBRGB"):
+    """将单模型 checkpoint 的首层 Conv2d 扩展为多通道输入并另存。
+
+    典型场景：RGB 预训练权重迁移到 8 通道 MOT 输入，通过重复 RGB 权重
+    初始化额外通道。
+
+    Args:
+        path: 源 ``.pt`` 路径（含 ``model`` 键的 YOLO 风格权重）。
+        ch_num: 目标输入通道数。
+        dst_path: 输出路径。
+        version: 通道复制策略，默认 ``RGBRGB``（按 3 通道周期重复）。
+    """
 
     # 假设你的pt文件存储的是一个nn.Module模型
     # 读取模型
     pt = torch.load(path)
-    model = pt['model']
+    model = pt["model"]
 
     # 修改第一个卷积层的输入层数
     # 找到第一个卷积层
@@ -29,32 +36,33 @@ def load_multi_channel_pt(path, ch_num, dst_path, version='RGBRGB'):
     # 确保原始输入通道是3
     assert original_weight.shape[1] == 3, "The first convolutional layer does not have 3 input channels."
 
-    if version == 'RGBRGB':
+    if version == "RGBRGB":
         # 扩展输入通道至9
-        expanded_weight = original_weight.repeat(1, math.ceil(ch_num/3), 1, 1)  # 在输入通道维度上重复3次
-
+        expanded_weight = original_weight.repeat(1, math.ceil(ch_num / 3), 1, 1)  # 在输入通道维度上重复3次
 
         # 创建新的卷积层
-        new_conv = nn.Conv2d(in_channels=ch_num,
-                            out_channels=first_conv.out_channels,
-                            kernel_size=first_conv.kernel_size,
-                            stride=first_conv.stride,
-                            padding=first_conv.padding,
-                            dilation=first_conv.dilation,
-                            groups=first_conv.groups,
-                            bias=(first_conv.bias is not None))
+        new_conv = nn.Conv2d(
+            in_channels=ch_num,
+            out_channels=first_conv.out_channels,
+            kernel_size=first_conv.kernel_size,
+            stride=first_conv.stride,
+            padding=first_conv.padding,
+            dilation=first_conv.dilation,
+            groups=first_conv.groups,
+            bias=(first_conv.bias is not None),
+        )
 
         # 复制原始权重到新的卷积层
         new_conv.weight.data = expanded_weight[:, :ch_num, :, :]
 
-    elif version == 'interpolate':
+    elif version == "interpolate":
         assert ch_num == 8, "Only 8 channels are supported."
 
         R_band = 700.0
         G_band = 546.1
         B_band = 435.8
         # if output_dim == 16:
-            #  bands = [465, 546, 586, 630, 474, 534, 578, 624, 485, 522, 562, 608, 496, 510, 548, 600]
+        #  bands = [465, 546, 586, 630, 474, 534, 578, 624, 485, 522, 562, 608, 496, 510, 548, 600]
         # elif output_dim == 8:
         bands = [422.5, 487.5, 550, 602.5, 660, 725, 785, 887.5]
 
@@ -74,15 +82,17 @@ def load_multi_channel_pt(path, ch_num, dst_path, version='RGBRGB'):
         expanded_weight = weight_concat
 
         # 创建新的卷积层
-        new_conv = nn.Conv2d(in_channels=ch_num,
-                            out_channels=first_conv.out_channels,
-                            kernel_size=first_conv.kernel_size,
-                            stride=first_conv.stride,
-                            padding=first_conv.padding,
-                            dilation=first_conv.dilation,
-                            groups=first_conv.groups,
-                            bias=(first_conv.bias is not None))
-        
+        new_conv = nn.Conv2d(
+            in_channels=ch_num,
+            out_channels=first_conv.out_channels,
+            kernel_size=first_conv.kernel_size,
+            stride=first_conv.stride,
+            padding=first_conv.padding,
+            dilation=first_conv.dilation,
+            groups=first_conv.groups,
+            bias=(first_conv.bias is not None),
+        )
+
         # 复制原始权重到新的卷积层
         new_conv.weight.data = expanded_weight
 
@@ -97,22 +107,23 @@ def load_multi_channel_pt(path, ch_num, dst_path, version='RGBRGB'):
             break
 
     # 保存新的模型
-    pt['model'] = model
+    pt["model"] = model
     torch.save(pt, dst_path)
     return dst_path
 
-def load_multi_channel_pt_deformableDetr(path, ch_num, dst_path, version='RGBRGB'):
-    '''
-        读一个模型, 把第一个conv层复制
-    '''
+
+def load_multi_channel_pt_deformableDetr(path, ch_num, dst_path, version="RGBRGB"):
+    """
+    读一个模型, 把第一个conv层复制
+    """
 
     # 假设你的pt文件存储的是一个nn.Module模型
     # 读取模型
     pt = torch.load(path)
-    model = pt['model']
+    model = pt["model"]
 
     # 第一个卷积层的名字是 'backbone.0.body.conv1.weight
-    original_weight = model['backbone.0.body.conv1.weight']
+    original_weight = model["backbone.0.body.conv1.weight"]
 
     # 修改第一个卷积层的输入层数
 
@@ -122,21 +133,21 @@ def load_multi_channel_pt_deformableDetr(path, ch_num, dst_path, version='RGBRGB
     # 确保原始输入通道是3
     assert original_weight.shape[1] == 3, "The first convolutional layer does not have 3 input channels."
 
-    if version == 'RGBRGB':
+    if version == "RGBRGB":
         # 扩展输入通道至9
-        expanded_weight = original_weight.repeat(1, math.ceil(ch_num/3), 1, 1)  # 在输入通道维度上重复3次
+        expanded_weight = original_weight.repeat(1, math.ceil(ch_num / 3), 1, 1)  # 在输入通道维度上重复3次
 
         # 复制原始权重到新的卷积层
         new_conv_weight = expanded_weight[:, :ch_num, :, :]
 
-    elif version == 'interpolate':
+    elif version == "interpolate":
         assert ch_num == 8, "Only 8 channels are supported."
 
         R_band = 700.0
         G_band = 546.1
         B_band = 435.8
         # if output_dim == 16:
-            #  bands = [465, 546, 586, 630, 474, 534, 578, 624, 485, 522, 562, 608, 496, 510, 548, 600]
+        #  bands = [465, 546, 586, 630, 474, 534, 578, 624, 485, 522, 562, 608, 496, 510, 548, 600]
         # elif output_dim == 8:
         bands = [422.5, 487.5, 550, 602.5, 660, 725, 785, 887.5]
 
@@ -155,12 +166,11 @@ def load_multi_channel_pt_deformableDetr(path, ch_num, dst_path, version='RGBRGB
         weight_concat = torch.cat(weight_list, dim=1)
         expanded_weight = weight_concat
 
-        
         # 复制原始权重到新的卷积层
         new_conv_weight = expanded_weight
 
     # 替换
-    model['backbone.0.body.conv1.weight'] = new_conv_weight
+    model["backbone.0.body.conv1.weight"] = new_conv_weight
     # # 如果原始层有bias，则复制bias
     # if first_conv.bias is not None:
     #     new_conv.bias.data = first_conv.bias.data
@@ -172,7 +182,7 @@ def load_multi_channel_pt_deformableDetr(path, ch_num, dst_path, version='RGBRGB
     #         break
 
     # 保存新的模型
-    pt['model'] = model
+    pt["model"] = model
     torch.save(pt, dst_path)
     return dst_path
 
@@ -182,10 +192,10 @@ def load_convhsi_pt_deformableDetr(path, ch_num, dst_path):
     # 假设你的pt文件存储的是一个nn.Module模型
     # 读取模型
     pt = torch.load(path)
-    model = pt['model']
+    model = pt["model"]
 
     # 第一个卷积层的名字是 'backbone.0.body.conv1.weight
-    original_weight = model['backbone.0.body.conv1.weight']
+    original_weight = model["backbone.0.body.conv1.weight"]
 
     weight_3d = original_weight.unsqueeze(1)
     # 修改第一个卷积层的输入层数
@@ -197,8 +207,8 @@ def load_convhsi_pt_deformableDetr(path, ch_num, dst_path):
     assert original_weight.shape[1] == 3, "The first convolutional layer does not have 3 input channels."
 
     # 替换
-    model['backbone.0.body.conv1.conv3d.weight'] = weight_3d
-    del model['backbone.0.body.conv1.weight']
+    model["backbone.0.body.conv1.conv3d.weight"] = weight_3d
+    del model["backbone.0.body.conv1.weight"]
     # # 如果原始层有bias，则复制bias
     # if first_conv.bias is not None:
     #     new_conv.bias.data = first_conv.bias.data
@@ -210,11 +220,13 @@ def load_convhsi_pt_deformableDetr(path, ch_num, dst_path):
     #         break
 
     # 保存新的模型
-    pt['model'] = model
+    pt["model"] = model
     torch.save(pt, dst_path)
     return dst_path
-#main
-if __name__ == '__main__':
+
+
+# main
+if __name__ == "__main__":
     # src_path = '/data3/litianhao/hsmot/motr/r50_deformable_detr_plus_iterative_bbox_refinement-checkpoint.pth'
     # dst_path = src_path.replace('.pth', '_8ch_interpolate.pth')
     # ch_num = 8
@@ -244,6 +256,6 @@ if __name__ == '__main__':
     # print(f'save pth to {dst_path}')
 
     src_path = "/data3/litianhao/hsmot/motip99/rebuttal/pretrain_dota/checkpoint_57.pth"
-    dst_path = src_path.replace('.pth', '_convmsi_8ch.pth')
-    load_convhsi_pt_deformableDetr(src_path, 8,  dst_path)
-    print(f'save pth to {dst_path}')
+    dst_path = src_path.replace(".pth", "_convmsi_8ch.pth")
+    load_convhsi_pt_deformableDetr(src_path, 8, dst_path)
+    print(f"save pth to {dst_path}")

@@ -1,10 +1,13 @@
-from hsmot.mmlab.hs_mmdet import DefaultFormatBundle, Collect, to_tensor, DC
-from hsmot.mmlab.hs_mmcv import imdenormalize
-import cv2
-from datetime import datetime
 import os
-from hsmot.mmlab.hs_mmrotate import obb2poly_np
+from datetime import datetime
+
+import cv2
 import numpy as np
+
+from hsmot.mmlab.hs_mmcv import imdenormalize
+from hsmot.mmlab.hs_mmdet import DC, Collect, DefaultFormatBundle, to_tensor
+from hsmot.mmlab.hs_mmrotate import obb2poly_np
+
 
 class MotDefaultFormatBundle(DefaultFormatBundle):
     """Default formatting bundle.
@@ -31,10 +34,8 @@ class MotDefaultFormatBundle(DefaultFormatBundle):
             will be set to 0 by default, which should be 255.
     """
 
-    def __init__(self,
-                 img_to_float=True,
-                 pad_val=dict(img=0, masks=0, seg=255)):
-        super(MotDefaultFormatBundle, self).__init__(img_to_float=img_to_float,pad_val=pad_val)
+    def __init__(self, img_to_float=True, pad_val=dict(img=0, masks=0, seg=255)):
+        super(MotDefaultFormatBundle, self).__init__(img_to_float=img_to_float, pad_val=pad_val)
 
     def __call__(self, results_list):
         """Call function to transform and format common fields in results.
@@ -47,8 +48,8 @@ class MotDefaultFormatBundle(DefaultFormatBundle):
                 default bundle.
         """
         for results in results_list:
-            if 'img' in results:
-                img = results['img']
+            if "img" in results:
+                img = results["img"]
                 if self.img_to_float is True and img.dtype == np.uint8:
                     # Normally, image is of uint8 type without normalization.
                     # At this time, it needs to be forced to be converted to
@@ -71,22 +72,17 @@ class MotDefaultFormatBundle(DefaultFormatBundle):
                     img = to_tensor(img)
                 else:
                     img = to_tensor(img).permute(2, 0, 1).contiguous()
-                results['img'] = DC(
-                    img, padding_value=self.pad_val['img'], stack=True)
-            for key in ['proposal_scores', 'proposals', 'gt_bboxes', 'gt_bboxes_ignore', 'gt_labels', 'gt_trackids']:
+                results["img"] = DC(img, padding_value=self.pad_val["img"], stack=True)
+            for key in ["proposal_scores", "proposals", "gt_bboxes", "gt_bboxes_ignore", "gt_labels", "gt_trackids"]:
                 if key not in results:
                     continue
                 results[key] = DC(to_tensor(results[key]))
-            if 'gt_masks' in results:
-                results['gt_masks'] = DC(
-                    results['gt_masks'],
-                    padding_value=self.pad_val['masks'],
-                    cpu_only=True)
-            if 'gt_semantic_seg' in results:
-                results['gt_semantic_seg'] = DC(
-                    to_tensor(results['gt_semantic_seg'][None, ...]),
-                    padding_value=self.pad_val['seg'],
-                    stack=True)
+            if "gt_masks" in results:
+                results["gt_masks"] = DC(results["gt_masks"], padding_value=self.pad_val["masks"], cpu_only=True)
+            if "gt_semantic_seg" in results:
+                results["gt_semantic_seg"] = DC(
+                    to_tensor(results["gt_semantic_seg"][None, ...]), padding_value=self.pad_val["seg"], stack=True
+                )
         return results_list
 
     def _add_default_meta_keys(self, results):
@@ -103,6 +99,7 @@ class MotDefaultFormatBundle(DefaultFormatBundle):
             results (dict): Updated result dict contains the data to convert.
         """
         return super(MotDefaultFormatBundle, self)._add_default_meta_keys(results=results)
+
 
 class MotCollect(Collect):
     """Collect data from the loader relevant to the specific task.
@@ -143,11 +140,22 @@ class MotCollect(Collect):
             'img_norm_cfg')``
     """
 
-    def __init__(self,
-                 keys,
-                 meta_keys=('filename', 'ori_filename', 'ori_shape',
-                            'img_shape', 'pad_shape', 'scale_factor', 'flip',
-                            'flip_direction', 'img_norm_cfg','crop_size')):
+    def __init__(
+        self,
+        keys,
+        meta_keys=(
+            "filename",
+            "ori_filename",
+            "ori_shape",
+            "img_shape",
+            "pad_shape",
+            "scale_factor",
+            "flip",
+            "flip_direction",
+            "img_norm_cfg",
+            "crop_size",
+        ),
+    ):
         super(MotCollect, self).__init__(keys=keys, meta_keys=meta_keys)
 
     def __call__(self, results_list):
@@ -168,9 +176,11 @@ class MotCollect(Collect):
             data_list.append(super(MotCollect, self).__call__(results))
         return data_list
 
-class MotShow():
 
-    def __init__(self, save_path,  mean=None, std=None, to_bgr=True, version='le135', img_name_tail = None, show_proposals=False):
+class MotShow:
+    def __init__(
+        self, save_path, mean=None, std=None, to_bgr=True, version="le135", img_name_tail=None, show_proposals=False
+    ):
         """
         初始化类。
         :param save_path: 图像保存路径。
@@ -202,73 +212,124 @@ class MotShow():
 
         for img_index, results in enumerate(results_list):
             # 提取图像和标注信息
-            img = results['img']
-            gt_bboxes = results.get('gt_bboxes', [])
-            gt_labels = results.get('gt_labels', [])
-            gt_trackids = results.get('gt_trackids', [])
-            
+            img = results["img"]
+            gt_bboxes = results.get("gt_bboxes", [])
+            gt_labels = results.get("gt_labels", [])
+            gt_trackids = results.get("gt_trackids", [])
+
             multi_spec_img = img.shape[2] > 3
-            
+
             # 反归一化
-            if img.dtype == np.uint8:                         
+            if img.dtype == np.uint8:
                 img = img.copy().astype(np.float32)
             img = imdenormalize(img, self.mean, self.std, to_bgr=self.to_bgr)
-            
+
             # 如果是多光谱, 随机选取三通道
             if multi_spec_img:
                 random_3_channels = np.random.choice(range(img.shape[2]), 3, replace=False)
                 img = np.ascontiguousarray(img[:, :, random_3_channels])
-                            
+
             if self.show_proposals:
-                for i, (bbox, score) in enumerate(zip(results['proposals'], results['proposal_scores'])):
+                for i, (bbox, score) in enumerate(zip(results["proposals"], results["proposal_scores"])):
                     color = (0, 0, 255)
-                    bbox = np.concatenate([bbox, np.array([score])])    
+                    bbox = np.concatenate([bbox, np.array([score])])
                     bbox = bbox[None, :]
                     four_points = obb2poly_np(bbox, self.version)[0].astype(np.int16)
                     # 绘制边框
-                    cv2.line(img, (four_points[0], four_points[1]), (four_points[2],four_points[3]), color=color,thickness=1)
-                    cv2.line(img, (four_points[2], four_points[3]), (four_points[4],four_points[5]), color=color,thickness=1)
-                    cv2.line(img, (four_points[4], four_points[5]), (four_points[6],four_points[7]), color=color,thickness=1)
-                    cv2.line(img, (four_points[6], four_points[7]), (four_points[0],four_points[1]), color=color,thickness=1)
+                    cv2.line(
+                        img,
+                        (four_points[0], four_points[1]),
+                        (four_points[2], four_points[3]),
+                        color=color,
+                        thickness=1,
+                    )
+                    cv2.line(
+                        img,
+                        (four_points[2], four_points[3]),
+                        (four_points[4], four_points[5]),
+                        color=color,
+                        thickness=1,
+                    )
+                    cv2.line(
+                        img,
+                        (four_points[4], four_points[5]),
+                        (four_points[6], four_points[7]),
+                        color=color,
+                        thickness=1,
+                    )
+                    cv2.line(
+                        img,
+                        (four_points[6], four_points[7]),
+                        (four_points[0], four_points[1]),
+                        color=color,
+                        thickness=1,
+                    )
                     # 显示得分
                     text = f"Score: {score:.2f}"
-                    cv2.putText(img, text, (four_points[0], four_points[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                    cv2.putText(
+                        img, text, (four_points[0], four_points[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1
+                    )
 
             # 绘制每个目标框
             for i, bbox in enumerate(gt_bboxes):
-                x,y,w,h,a = map(float, bbox)
-                label = gt_labels[i] if i < len(gt_labels) else 'N/A'
-                track_id = gt_trackids[i] if i < len(gt_trackids) else 'N/A'
+                x, y, w, h, a = map(float, bbox)
+                label = gt_labels[i] if i < len(gt_labels) else "N/A"
+                track_id = gt_trackids[i] if i < len(gt_trackids) else "N/A"
                 color = (0, 255, 0)  # 绘制框的颜色
-                
+
                 # 转四点坐标
-                '''
+                """
                     obb2poly_np要求输入带score
-                '''
+                """
                 bbox = bbox[None, :]
                 bbox_with_score = np.hstack([bbox, np.ones((bbox.shape[0], 1)) * 1.0])  # 添加 score，默认为 1.0
                 four_points = obb2poly_np(bbox_with_score, self.version)[0].astype(np.int16)
                 # 绘制边框
-                cv2.line(img, (four_points[0], four_points[1]), (four_points[2],four_points[3]), color=color,)
-                cv2.line(img, (four_points[2], four_points[3]), (four_points[4],four_points[5]), color=color,)
-                cv2.line(img, (four_points[4], four_points[5]), (four_points[6],four_points[7]), color=color,)
-                cv2.line(img, (four_points[6], four_points[7]), (four_points[0],four_points[1]), color=color,)             
+                cv2.line(
+                    img,
+                    (four_points[0], four_points[1]),
+                    (four_points[2], four_points[3]),
+                    color=color,
+                )
+                cv2.line(
+                    img,
+                    (four_points[2], four_points[3]),
+                    (four_points[4], four_points[5]),
+                    color=color,
+                )
+                cv2.line(
+                    img,
+                    (four_points[4], four_points[5]),
+                    (four_points[6], four_points[7]),
+                    color=color,
+                )
+                cv2.line(
+                    img,
+                    (four_points[6], four_points[7]),
+                    (four_points[0], four_points[1]),
+                    color=color,
+                )
                 # 显示标签和跟踪ID
                 text = f"Label: {label}, ID: {track_id}"
                 cv2.putText(img, text, (four_points[0], four_points[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-            
+
             if multi_spec_img:
-                img_name = f"{timestamp}_ch{('|').join([str(v) for v in random_3_channels])}_{('_').join(results['img_info']['filename'].split(os.sep)[-2:])}".replace('npy', 'jpg')
+                ch_str = "|".join(str(v) for v in random_3_channels)
+                fname_parts = "_".join(results["img_info"]["filename"].split(os.sep)[-2:])
+                img_name = f"{timestamp}_ch{ch_str}_{fname_parts}".replace("npy", "jpg")
             else:
-                img_name = f"{timestamp}_{('_').join(results['img_info']['filename'].split(os.sep)[-2:])}".replace('npy', 'jpg')
-                
+                img_name = f"{timestamp}_{('_').join(results['img_info']['filename'].split(os.sep)[-2:])}".replace(
+                    "npy", "jpg"
+                )
+
             if self.img_name_tail is not None:
-                img_name = img_name.replace('.png', f"_{self.img_name_tail}.png").replace('.jpg', f"_{self.img_name_tail}.jpg")
-                
+                img_name = img_name.replace(".png", f"_{self.img_name_tail}.png").replace(
+                    ".jpg", f"_{self.img_name_tail}.jpg"
+                )
+
             save_file = os.path.join(self.save_path, img_name)
-            
+
             # 保存图像
             cv2.imwrite(save_file, img)
             print(f"Image saved at: {save_file}")
         return results_list
-        

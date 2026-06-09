@@ -1,13 +1,14 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 
-from hsmot.mmlab.hs_mmdet import Compose
-from typing import List, Optional, Union, Dict
-import mmengine
+from typing import Dict, List, Optional
+
 import numpy as np
-import time
+
+from hsmot.mmlab.hs_mmdet import Compose
+from hsmot.util.typing_utils import is_seq_of
+
 
 class MotCompose(Compose):
- 
     def __call__(self, data):
         """Call function to apply transforms sequentially.
 
@@ -30,7 +31,8 @@ class MotCompose(Compose):
 
         return data
 
-class MotRandomChoice():
+
+class MotRandomChoice:
     """Process data with a randomly chosen transform from given candidates.
 
     Args:
@@ -51,16 +53,15 @@ class MotRandomChoice():
         >>>         ]
         >>>     )
         >>> ]
-    """          
-    def __init__(self,
-                 transforms: List,
-                 prob: Optional[List[float]] = None):
+    """
+
+    def __init__(self, transforms: List, prob: Optional[List[float]] = None):
 
         if prob is not None:
-            assert mmengine.is_seq_of(prob, float)
-            assert len(transforms) == len(prob), \
-                '``transforms`` and ``prob`` must have same lengths. ' \
-                f'Got {len(transforms)} vs {len(prob)}.'
+            assert is_seq_of(prob, float)
+            assert len(transforms) == len(prob), (
+                f"``transforms`` and ``prob`` must have same lengths. Got {len(transforms)} vs {len(prob)}."
+            )
             assert sum(prob) == 1
 
         self.prob = prob
@@ -73,7 +74,7 @@ class MotRandomChoice():
         """Return a random transform index."""
         indices = np.arange(len(self.transforms))
         return np.random.choice(indices, p=self.prob)
-    
+
     def transform(self, results: Dict) -> Optional[Dict]:
         """Randomly choose a transform to apply."""
         idx = self.random_pipeline_index()
@@ -81,10 +82,10 @@ class MotRandomChoice():
 
     def __repr__(self) -> str:
         repr_str = self.__class__.__name__
-        repr_str += f'(transforms = {self.transforms}'
-        repr_str += f'prob = {self.prob})'
+        repr_str += f"(transforms = {self.transforms}"
+        repr_str += f"prob = {self.prob})"
         return repr_str
-    
+
     def __call__(self, results_list):
         pipline_index = self.random_pipeline_index()
         results_list = self.transforms[pipline_index](results_list)
