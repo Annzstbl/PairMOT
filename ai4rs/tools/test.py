@@ -3,11 +3,18 @@ import argparse
 import os
 import os.path as osp
 
+try:
+    import torchvision
+    torchvision.disable_beta_transforms_warning()
+except ImportError:
+    pass
+
 from mmdet.utils import register_all_modules as register_all_modules_mmdet
 from mmengine.config import Config, DictAction
 from mmengine.evaluator import DumpResults
 from mmengine.registry import RUNNERS
 from mmengine.runner import Runner
+from mmengine.utils import import_modules_from_strings
 
 from mmrotate.utils import register_all_modules
 
@@ -106,13 +113,14 @@ def main():
     if args.show or args.show_dir:
         cfg = trigger_visualization_hook(cfg, args)
 
+    # Lazy-import configs (with read_base) skip custom_imports in fromfile.
+    if cfg.get('custom_imports', None):
+        import_modules_from_strings(**cfg.custom_imports)
+
     # build the runner from config
     if 'runner_type' not in cfg:
-        # build the default runner
         runner = Runner.from_cfg(cfg)
     else:
-        # build customized runner from the registry
-        # if 'runner_type' is set in the cfg
         runner = RUNNERS.build(cfg)
 
     # add `DumpResults` dummy metric

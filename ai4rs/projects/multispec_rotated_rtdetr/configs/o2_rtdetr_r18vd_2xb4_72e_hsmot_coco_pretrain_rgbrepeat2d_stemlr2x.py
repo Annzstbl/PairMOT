@@ -1,0 +1,11 @@
+"""R18 2D rgb-repeat COCO pretrain with a higher first-stem LR."""
+from mmengine.config import read_base
+
+with read_base():
+    from .o2_rtdetr_r18vd_2xb4_72e_hsmot_coco_pretrain_rgbrepeat2d import *
+
+custom_keys['backbone.stem.0'] = dict(lr_mult=2.0)
+optim_wrapper.paramwise_cfg = dict(
+    custom_keys=custom_keys,
+    norm_decay_mult=0,
+    bypass_duplicate=True)

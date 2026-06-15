@@ -1,4 +1,7 @@
 from .loading import LoadPatchFromNDArray
+from .loading_hsmot import (HSMOTLoadAnnotations,
+                            LoadMultichannelImageFrom3JPG,
+                            LoadMultichannelImageFromNpy)
 from .transforms import (ConvertBoxType, ConvertMask2BoxType,
                          RandomChoiceRotate, RandomRotate, Rotate,
                          ConvertWeakSupervision, RegularizeRotatedBox,
@@ -18,6 +21,8 @@ from .formatting_cd import MultiImgPackSegInputs
 
 __all__ = [
     'LoadPatchFromNDArray',
+    'LoadMultichannelImageFromNpy', 'LoadMultichannelImageFrom3JPG',
+    'HSMOTLoadAnnotations',
 
     'Rotate', 'RandomRotate',
     'RandomChoiceRotate', 'ConvertBoxType', 'ConvertMask2BoxType',

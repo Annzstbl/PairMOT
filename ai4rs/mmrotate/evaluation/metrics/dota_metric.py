@@ -105,6 +105,30 @@ class DOTAMetric(BaseMetric):
 
         self.use_07_metric = True if eval_mode == '11points' else False
 
+    @staticmethod
+    def _append_classwise_metrics(eval_results: OrderedDict,
+                                  dataset_name: Sequence[str],
+                                  cls_results: Sequence[dict]) -> None:
+        recalls = []
+        for cls_name, cls_result in zip(dataset_name, cls_results):
+            safe_name = str(cls_name).replace('/', '_')
+            ap = cls_result['ap']
+            if isinstance(ap, np.ndarray):
+                ap = ap[0]
+            eval_results[f'{safe_name}_AP'] = round(float(ap), 3)
+
+            recall = cls_result['recall']
+            if recall.size > 0:
+                recall_val = float(np.array(recall, ndmin=2)[0, -1])
+            else:
+                recall_val = 0.0
+            eval_results[f'{safe_name}_recall'] = round(recall_val, 3)
+            recalls.append(recall_val)
+
+        if recalls:
+            eval_results['mean_recall'] = round(float(np.mean(recalls)), 3)
+            eval_results.move_to_end('mean_recall', last=False)
+
     def merge_results(self, results: Sequence[dict],
                       outfile_prefix: str) -> str:
         """Merge patches' predictions into full image's results and generate a

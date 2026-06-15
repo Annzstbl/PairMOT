@@ -1,6 +1,12 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from multiprocessing import get_context
 
+try:
+    import torchvision
+    torchvision.disable_beta_transforms_warning()
+except ImportError:
+    pass
+
 import numpy as np
 import torch
 from mmcv.ops import box_iou_quadri, box_iou_rotated
@@ -117,6 +123,173 @@ def tpfp_default(det_bboxes,
     return tp, fp
 
 
+def tpfp_multi_iou(det_bboxes,
+                   gt_bboxes,
+                   gt_bboxes_ignore=None,
+                   iou_thrs=(0.5, ),
+                   box_type='rbox',
+                   area_ranges=None):
+    """Check if detected bboxes are TP or FP at multiple IoU thresholds.
+
+    IoU is computed once; matching is repeated per threshold.
+
+    Returns:
+        tuple[np.ndarray]: (tp, fp) with shape
+        (num_iou_thrs, num_scales, num_dets).
+    """
+    det_bboxes = np.array(det_bboxes)
+    iou_thrs = [iou_thrs] if isinstance(iou_thrs, float) else list(iou_thrs)
+    num_iou_thrs = len(iou_thrs)
+
+    gt_ignore_inds = np.concatenate(
+        (np.zeros(gt_bboxes.shape[0],
+                  dtype=bool), np.ones(gt_bboxes_ignore.shape[0], dtype=bool)))
+    gt_bboxes = np.vstack((gt_bboxes, gt_bboxes_ignore))
+
+    num_dets = det_bboxes.shape[0]
+    num_gts = gt_bboxes.shape[0]
+    if area_ranges is None:
+        area_ranges = [(None, None)]
+    num_scales = len(area_ranges)
+    tp = np.zeros((num_iou_thrs, num_scales, num_dets), dtype=np.float32)
+    fp = np.zeros((num_iou_thrs, num_scales, num_dets), dtype=np.float32)
+
+    if gt_bboxes.shape[0] == 0:
+        if area_ranges == [(None, None)]:
+            fp[...] = 1
+        else:
+            raise NotImplementedError
+        return tp, fp
+
+    if box_type == 'rbox':
+        ious = box_iou_rotated(
+            torch.from_numpy(det_bboxes).float(),
+            torch.from_numpy(gt_bboxes).float()).numpy()
+    elif box_type == 'qbox':
+        ious = box_iou_quadri(
+            torch.from_numpy(det_bboxes).float(),
+            torch.from_numpy(gt_bboxes).float()).numpy()
+    else:
+        raise NotImplementedError
+
+    ious_max = ious.max(axis=1)
+    ious_argmax = ious.argmax(axis=1)
+    sort_inds = np.argsort(-det_bboxes[:, -1])
+
+    for thr_idx, iou_thr in enumerate(iou_thrs):
+        for k, (min_area, max_area) in enumerate(area_ranges):
+            gt_covered = np.zeros(num_gts, dtype=bool)
+            if min_area is None:
+                gt_area_ignore = np.zeros_like(gt_ignore_inds, dtype=bool)
+            else:
+                raise NotImplementedError
+            for i in sort_inds:
+                if ious_max[i] >= iou_thr:
+                    matched_gt = ious_argmax[i]
+                    if not (gt_ignore_inds[matched_gt]
+                            or gt_area_ignore[matched_gt]):
+                        if not gt_covered[matched_gt]:
+                            gt_covered[matched_gt] = True
+                            tp[thr_idx, k, i] = 1
+                        else:
+                            fp[thr_idx, k, i] = 1
+                elif min_area is None:
+                    fp[thr_idx, k, i] = 1
+                else:
+                    if box_type == 'rbox':
+                        bbox = det_bboxes[i, :5]
+                        area = bbox[2] * bbox[3]
+                    elif box_type == 'qbox':
+                        bbox = det_bboxes[i, :8]
+                        pts = bbox.reshape(*bbox.shape[:-1], 4, 2)
+                        roll_pts = torch.roll(pts, 1, dims=-2)
+                        xyxy = torch.sum(
+                            pts[..., 0] * roll_pts[..., 1] -
+                            roll_pts[..., 0] * pts[..., 1],
+                            dim=-1)
+                        area = 0.5 * torch.abs(xyxy)
+                    else:
+                        raise NotImplementedError
+                    if area >= min_area and area < max_area:
+                        fp[thr_idx, k, i] = 1
+    return tp, fp
+
+
+def _compute_cls_ap_from_tpfp(tp,
+                              fp,
+                              cls_dets,
+                              cls_gts,
+                              num_scales,
+                              area_ranges,
+                              box_type,
+                              use_07_metric):
+    """Aggregate per-image tp/fp into class-level AP results."""
+    num_gts = np.zeros(num_scales, dtype=int)
+    for bbox in cls_gts:
+        if area_ranges is None:
+            num_gts[0] += bbox.shape[0]
+        else:
+            if box_type == 'rbox':
+                gt_areas = bbox[:, 2] * bbox[:, 3]
+            elif box_type == 'qbox':
+                pts = bbox.reshape(*bbox.shape[:-1], 4, 2)
+                roll_pts = torch.roll(pts, 1, dims=-2)
+                xyxy = torch.sum(
+                    pts[..., 0] * roll_pts[..., 1] -
+                    roll_pts[..., 0] * pts[..., 1],
+                    dim=-1)
+                gt_areas = 0.5 * torch.abs(xyxy)
+            else:
+                raise NotImplementedError
+            for k, (min_area, max_area) in enumerate(area_ranges):
+                num_gts[k] += np.sum((gt_areas >= min_area)
+                                     & (gt_areas < max_area))
+
+    cls_dets = np.vstack(cls_dets)
+    num_dets = cls_dets.shape[0]
+    sort_inds = np.argsort(-cls_dets[:, -1])
+    tp = np.hstack(tp)[:, sort_inds]
+    fp = np.hstack(fp)[:, sort_inds]
+    tp = np.cumsum(tp, axis=1)
+    fp = np.cumsum(fp, axis=1)
+    eps = np.finfo(np.float32).eps
+    recalls = tp / np.maximum(num_gts[:, np.newaxis], eps)
+    precisions = tp / np.maximum((tp + fp), eps)
+    if area_ranges is None:
+        recalls = recalls[0, :]
+        precisions = precisions[0, :]
+        num_gts = num_gts.item()
+    mode = 'area' if not use_07_metric else '11points'
+    ap = average_precision(recalls, precisions, mode)
+    return {
+        'num_gts': num_gts,
+        'num_dets': num_dets,
+        'recall': recalls,
+        'precision': precisions,
+        'ap': ap
+    }
+
+
+def _mean_ap_from_cls_results(eval_results, num_scales, scale_ranges):
+    if scale_ranges is not None:
+        all_ap = np.vstack([cls_result['ap'] for cls_result in eval_results])
+        all_num_gts = np.vstack(
+            [cls_result['num_gts'] for cls_result in eval_results])
+        mean_ap = []
+        for i in range(num_scales):
+            if np.any(all_num_gts[:, i] > 0):
+                mean_ap.append(all_ap[all_num_gts[:, i] > 0, i].mean())
+            else:
+                mean_ap.append(0.0)
+        return mean_ap
+
+    aps = []
+    for cls_result in eval_results:
+        if cls_result['num_gts'] > 0:
+            aps.append(cls_result['ap'])
+    return np.array(aps).mean().item() if aps else 0.0
+
+
 def get_cls_results(det_results, annotations, class_id, box_type):
     """Get det results and gt information of a certain class.
 
@@ -219,77 +392,113 @@ def eval_rbbox_map(det_results,
                 [box_type for _ in range(num_imgs)],
                 [area_ranges for _ in range(num_imgs)]))
         tp, fp = tuple(zip(*tpfp))
-        # calculate gt number of each scale
-        # ignored gts or gts beyond the specific scale are not counted
-        num_gts = np.zeros(num_scales, dtype=int)
-        for _, bbox in enumerate(cls_gts):
-            if area_ranges is None:
-                num_gts[0] += bbox.shape[0]
-            else:
-                if box_type == 'rbox':
-                    gt_areas = bbox[:, 2] * bbox[:, 3]
-                elif box_type == 'qbox':
-                    pts = bbox.reshape(*bbox.shape[:-1], 4, 2)
-                    roll_pts = torch.roll(pts, 1, dims=-2)
-                    xyxy = torch.sum(
-                        pts[..., 0] * roll_pts[..., 1] -
-                        roll_pts[..., 0] * pts[..., 1],
-                        dim=-1)
-                    gt_areas = 0.5 * torch.abs(xyxy)
-                else:
-                    raise NotImplementedError
-                for k, (min_area, max_area) in enumerate(area_ranges):
-                    num_gts[k] += np.sum((gt_areas >= min_area)
-                                         & (gt_areas < max_area))
-        # sort all det bboxes by score, also sort tp and fp
-        cls_dets = np.vstack(cls_dets)
-        num_dets = cls_dets.shape[0]
-        sort_inds = np.argsort(-cls_dets[:, -1])
-        tp = np.hstack(tp)[:, sort_inds]
-        fp = np.hstack(fp)[:, sort_inds]
-        # calculate recall and precision with tp and fp
-        tp = np.cumsum(tp, axis=1)
-        fp = np.cumsum(fp, axis=1)
-        eps = np.finfo(np.float32).eps
-        recalls = tp / np.maximum(num_gts[:, np.newaxis], eps)
-        precisions = tp / np.maximum((tp + fp), eps)
-        # calculate AP
-        if scale_ranges is None:
-            recalls = recalls[0, :]
-            precisions = precisions[0, :]
-            num_gts = num_gts.item()
-        mode = 'area' if not use_07_metric else '11points'
-        ap = average_precision(recalls, precisions, mode)
-        eval_results.append({
-            'num_gts': num_gts,
-            'num_dets': num_dets,
-            'recall': recalls,
-            'precision': precisions,
-            'ap': ap
-        })
+        eval_results.append(
+            _compute_cls_ap_from_tpfp(
+                tp,
+                fp,
+                cls_dets,
+                cls_gts,
+                num_scales,
+                area_ranges,
+                box_type,
+                use_07_metric))
     pool.close()
-    if scale_ranges is not None:
-        # shape (num_classes, num_scales)
-        all_ap = np.vstack([cls_result['ap'] for cls_result in eval_results])
-        all_num_gts = np.vstack(
-            [cls_result['num_gts'] for cls_result in eval_results])
-        mean_ap = []
-        for i in range(num_scales):
-            if np.any(all_num_gts[:, i] > 0):
-                mean_ap.append(all_ap[all_num_gts[:, i] > 0, i].mean())
-            else:
-                mean_ap.append(0.0)
-    else:
-        aps = []
-        for cls_result in eval_results:
-            if cls_result['num_gts'] > 0:
-                aps.append(cls_result['ap'])
-        mean_ap = np.array(aps).mean().item() if aps else 0.0
+    mean_ap = _mean_ap_from_cls_results(eval_results, num_scales,
+                                        scale_ranges)
 
     print_map_summary(
         mean_ap, eval_results, dataset, area_ranges, logger=logger)
 
     return mean_ap, eval_results
+
+
+def eval_rbbox_map_multi_iou(det_results,
+                             annotations,
+                             iou_thrs,
+                             scale_ranges=None,
+                             use_07_metric=True,
+                             box_type='rbox',
+                             dataset=None,
+                             logger=None,
+                             nproc=4,
+                             print_per_thr_summary=True):
+    """Evaluate mAP at multiple IoU thresholds in a single pass.
+
+    Compared with calling :func:`eval_rbbox_map` repeatedly, IoU matching
+    for each image is computed only once and reused across thresholds.
+
+    Args:
+        det_results (list[list]): Same as :func:`eval_rbbox_map`.
+        annotations (list[dict]): Same as :func:`eval_rbbox_map`.
+        iou_thrs (float | list[float]): IoU thresholds to evaluate.
+        scale_ranges (list[tuple], optional): Same as :func:`eval_rbbox_map`.
+        use_07_metric (bool): Same as :func:`eval_rbbox_map`.
+        box_type (str): Same as :func:`eval_rbbox_map`.
+        dataset (list[str] | str, optional): Same as :func:`eval_rbbox_map`.
+        logger (logging.Logger | str, optional): Same as :func:`eval_rbbox_map`.
+        nproc (int): Same as :func:`eval_rbbox_map`.
+        print_per_thr_summary (bool): Whether to print the per-threshold
+            class-wise summary table. Defaults to True.
+
+    Returns:
+        tuple: (mean_aps, cls_results_per_thr), where ``mean_aps`` is a list
+        aligned with ``iou_thrs`` and ``cls_results_per_thr`` is a list of
+        per-class result dicts for each threshold.
+    """
+    assert len(det_results) == len(annotations)
+    if isinstance(iou_thrs, float):
+        iou_thrs = [iou_thrs]
+    iou_thrs = list(iou_thrs)
+    num_iou_thrs = len(iou_thrs)
+
+    num_imgs = len(det_results)
+    num_scales = len(scale_ranges) if scale_ranges is not None else 1
+    num_classes = len(det_results[0])
+    area_ranges = ([(rg[0]**2, rg[1]**2) for rg in scale_ranges]
+                   if scale_ranges is not None else None)
+
+    pool = get_context('spawn').Pool(nproc)
+    all_eval_results = [[] for _ in range(num_iou_thrs)]
+    for i in range(num_classes):
+        cls_dets, cls_gts, cls_gts_ignore = get_cls_results(
+            det_results, annotations, i, box_type)
+
+        tpfp = pool.starmap(
+            tpfp_multi_iou,
+            zip(cls_dets, cls_gts, cls_gts_ignore,
+                [iou_thrs for _ in range(num_imgs)],
+                [box_type for _ in range(num_imgs)],
+                [area_ranges for _ in range(num_imgs)]))
+        tp_list, fp_list = zip(*tpfp)
+        for thr_idx in range(num_iou_thrs):
+            tp = [img_tp[thr_idx] for img_tp in tp_list]
+            fp = [img_fp[thr_idx] for img_fp in fp_list]
+            all_eval_results[thr_idx].append(
+                _compute_cls_ap_from_tpfp(
+                    tp,
+                    fp,
+                    cls_dets,
+                    cls_gts,
+                    num_scales,
+                    area_ranges,
+                    box_type,
+                    use_07_metric))
+    pool.close()
+
+    mean_aps = []
+    for thr_idx, iou_thr in enumerate(iou_thrs):
+        eval_results = all_eval_results[thr_idx]
+        mean_ap = _mean_ap_from_cls_results(eval_results, num_scales,
+                                            scale_ranges)
+        mean_aps.append(mean_ap)
+        if print_per_thr_summary:
+            if logger is not None:
+                print_log(f'\n{"-" * 15}iou_thr: {iou_thr}{"-" * 15}',
+                          logger=logger)
+            print_map_summary(
+                mean_ap, eval_results, dataset, area_ranges, logger=logger)
+
+    return mean_aps, all_eval_results
 
 
 def print_map_summary(mean_ap,

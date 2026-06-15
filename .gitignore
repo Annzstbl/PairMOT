@@ -181,9 +181,12 @@ dataset/**/*.png
 dataset/**/*.csv
 dataset/**/*.pkl
 /debug
+/tmp/
 
 # RT-DETR (vendored)
 RT-DETR/rtdetr_pytorch/output/
 RT-DETR/rtdetr_pytorch/dataset/
 RT-DETR/rtdetrv2_pytorch/output/
 RT-DETR/rtdetrv2_pytorch/dataset/
+
+/pretrained_weights
