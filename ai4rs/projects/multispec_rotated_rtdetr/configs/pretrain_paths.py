@@ -16,3 +16,8 @@ O2_R34_DOTA_E72 = (
     f'{PRETRAIN_ROOT}/o2_rtdetr_r34vd_2xb4_72e_dota_epoch_72.pth')
 O2_R50_DOTA_E72 = (
     f'{PRETRAIN_ROOT}/o2_rtdetr_r50vd_2xb4_72e_dota_epoch_72.pth')
+
+# HSMOT single-frame O2-RTDETR (3D-SE reduction=2, COCO-backbone pretrain, 72e).
+O2_R18_HSMOT_3DSE_R2_E72 = (
+    f'{_PAIRMMOT_ROOT}/workdir/'
+    f'o2_rtdetr_r18vd_2xb4_72e_hsmot_coco_pretrain_3dse_reduction2/epoch_72.pth')

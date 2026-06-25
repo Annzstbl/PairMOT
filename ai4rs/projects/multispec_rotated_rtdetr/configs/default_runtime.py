@@ -21,7 +21,13 @@ visualizer = dict(
     type='RotLocalVisualizer', vis_backends=vis_backends, name='visualizer')
 log_processor = dict(type='LogProcessor', window_size=50, by_epoch=True)
 
+# File + console logging (see MultispecMMLogger / MultispecRunner).
+# Omit console_log_level / file_log_level to mirror stock MMLogger behaviour.
 log_level = 'INFO'
+# file_log_level = None
+# console_log_level = None
+# console_suppress_patterns = []
+
 load_from = None
 resume = False
 

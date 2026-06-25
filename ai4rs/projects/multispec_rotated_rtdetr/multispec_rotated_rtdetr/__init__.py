@@ -1,5 +1,6 @@
 from . import runner  # noqa: F401
 from .data_preprocessor import MultispecDetDataPreprocessor
+from .logger import MultispecMMLogger
 from .visualization_hook import HSMOTVisualizationHook
 from .pretrain_utils import (HSMOT_SPECTRAL_BANDS, adapt_state_dict_in_channels,
                              adapt_state_dict_stem_conv3d_se,
@@ -10,6 +11,7 @@ from .stem_conv3d_se import MultispecStemConv3dSE
 
 __all__ = [
     'HSMOTVisualizationHook',
+    'MultispecMMLogger',
     'MultispecDetDataPreprocessor',
     'MultispecResNetV1dPaddle',
     'MultispecResNetV1dPaddle3DSE',
