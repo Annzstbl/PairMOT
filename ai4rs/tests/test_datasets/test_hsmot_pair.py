@@ -304,6 +304,39 @@ class TestHSMOTPairPipeline(unittest.TestCase):
         results = rotate.transform(results)
         self.assertEqual(results['img'][0].shape, results['img'][1].shape)
 
+    def test_rotate_filters_outside_pair_rows(self):
+        results = self._make_results()
+        results['instances_prev'].append({
+            'track_id': 9,
+            'bbox': _qbox(62, 62, 4, 4),
+            'bbox_label': 0,
+            'ignore_flag': 0,
+        })
+        results['instances_curr'].append({
+            'track_id': 9,
+            'bbox': _qbox(62, 62, 4, 4),
+            'bbox_label': 0,
+            'ignore_flag': 0,
+        })
+        results['img'] = [
+            np.zeros((64, 64, 8), dtype=np.uint8),
+            np.zeros((64, 64, 8), dtype=np.uint8),
+        ]
+        results['img_shape'] = (64, 64)
+        results['ori_shape'] = (64, 64)
+        results = HSMOTPairLoadAnnotations().transform(results)
+        results = ConvertPairBoxType(dst_box_type='rbox').transform(results)
+
+        rotate = PairSharedRandomRotate(prob=1.0, angle_range=45)
+        rotate._pick_angle = lambda _: 45.0
+        results = rotate.transform(results)
+
+        self.assertNotIn(9, results['pair_track_ids'].tolist())
+        self.assertEqual(len(results['pair_track_ids']),
+                         len(results['gt_bboxes_prev']))
+        self.assertEqual(len(results['pair_track_ids']),
+                         len(results['gt_bboxes_curr']))
+
     def test_visualize_runs(self):
         img = np.zeros((64, 64, 8), dtype=np.uint8)
         bboxes_prev = RotatedBoxes(torch.tensor([[32., 32., 16., 16., 0.]]))

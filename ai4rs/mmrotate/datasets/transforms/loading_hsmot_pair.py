@@ -179,7 +179,8 @@ class PackHSMOTPairInputs(BaseTransform):
         self,
         meta_keys=('img_id', 'img_path', 'img_path_prev', 'ori_shape',
                    'img_shape', 'scale_factor', 'flip', 'flip_direction',
-                   'video_id', 'seq_name', 'frame_id', 'frame_id_prev')):
+                   'video_id', 'seq_name', 'frame_id', 'frame_id_prev',
+                   'frame_gap', 'anchor_frame_id')):
         self.meta_keys = meta_keys
 
     def transform(self, results: dict) -> dict:

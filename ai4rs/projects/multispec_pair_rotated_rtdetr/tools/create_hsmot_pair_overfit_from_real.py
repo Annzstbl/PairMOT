@@ -140,6 +140,9 @@ def _collect_windows(
     ann_file: str,
     img_subdir: str,
     num_frames: int,
+    source_frame_interval: int,
+    source_seq: str | None = None,
+    source_start_frame: int | None = None,
 ) -> List[dict]:
     mot_dir = osp.join(src_root, 'mot')
     img_root = osp.join(src_root, img_subdir)
@@ -147,6 +150,8 @@ def _collect_windows(
     windows: List[dict] = []
 
     for seq_name in seq_list:
+        if source_seq is not None and seq_name != source_seq:
+            continue
         ann_path = osp.join(mot_dir, f'{seq_name}.txt')
         if not osp.isfile(ann_path):
             continue
@@ -155,12 +160,20 @@ def _collect_windows(
         valid_frames = sorted(
             fid for fid in frame_anns.keys()
             if _frame_has_images(img_seq_dir, fid))
-        if len(valid_frames) < num_frames:
+        required_span = (num_frames - 1) * source_frame_interval
+        if len(valid_frames) <= required_span:
             continue
 
-        for start_idx in range(len(valid_frames) - num_frames + 1):
-            src_ids = valid_frames[start_idx:start_idx + num_frames]
-            if src_ids[-1] - src_ids[0] != num_frames - 1:
+        for start_idx in range(len(valid_frames) - required_span):
+            src_ids = valid_frames[
+                start_idx:start_idx + required_span + 1:source_frame_interval]
+            if len(src_ids) != num_frames:
+                continue
+            if (source_start_frame is not None
+                    and src_ids[0] != source_start_frame):
+                continue
+            if any(b - a != source_frame_interval
+                   for a, b in zip(src_ids, src_ids[1:])):
                 continue
             if not all(_frame_has_images(img_seq_dir, fid) for fid in src_ids):
                 continue
@@ -194,21 +207,30 @@ def create_hsmot_pair_overfit_from_real(
     ann_file: str,
     img_subdir: str = 'npy2jpg',
     num_frames: int = 10,
+    source_frame_interval: int = 1,
+    source_seq: str | None = None,
+    source_start_frame: int | None = None,
     seed: int = 42,
     seq_name: str = DEFAULT_SEQ_NAME,
 ) -> str:
-    """Build one ``num_frames``-frame clip under ``dst_root/train``."""
+    """Build a sampled ``num_frames``-frame clip under ``dst_root/train``."""
     register_all_modules()
 
     if num_frames < 2:
         raise ValueError(f'num_frames must be >= 2, got {num_frames}')
+    if source_frame_interval < 1:
+        raise ValueError(
+            'source_frame_interval must be >= 1, got '
+            f'{source_frame_interval}')
 
     if not osp.isabs(ann_file):
         ann_file = osp.abspath(osp.join(_AI4RS_ROOT, ann_file))
     if not osp.isabs(src_root):
         src_root = osp.abspath(osp.join(_AI4RS_ROOT, src_root))
 
-    windows = _collect_windows(src_root, ann_file, img_subdir, num_frames)
+    windows = _collect_windows(
+        src_root, ann_file, img_subdir, num_frames, source_frame_interval,
+        source_seq, source_start_frame)
     chosen = _pick_window(windows, seed)
 
     src_seq = chosen['source_seq']
@@ -285,6 +307,9 @@ def create_hsmot_pair_overfit_from_real(
         'seq_name': seq_name,
         'num_frames': num_frames,
         'num_pairs': num_pairs,
+        'source_frame_interval': source_frame_interval,
+        'requested_source_seq': source_seq,
+        'requested_source_start_frame': source_start_frame,
         'seed': seed,
         'source_seq': src_seq,
         'source_frame_ids': src_frame_ids,
@@ -298,8 +323,9 @@ def create_hsmot_pair_overfit_from_real(
 
     print(
         f'Created real overfit clip: {dst_root} '
-        f'({num_frames} frames, {num_pairs} pairs, seq={seq_name})')
-    print(f'  source: {src_seq} frames {src_frame_ids[0]}..{src_frame_ids[-1]}')
+        f'({num_frames} sampled frames, {num_pairs} pairs, seq={seq_name})')
+    print(f'  source: {src_seq} frames {src_frame_ids[0]}..{src_frame_ids[-1]} '
+          f'(gap={source_frame_interval})')
     print('  pair categories:', dict(Counter(p['category'] for p in pair_manifest)))
     return dst_root
 
@@ -324,7 +350,18 @@ def parse_args():
         '--num-frames',
         type=int,
         default=10,
-        help='Contiguous frames in one sequence (pairs = num_frames - 1)')
+        help='Sampled frames in one sequence (pairs = num_frames - 1)')
+    parser.add_argument(
+        '--source-frame-interval',
+        type=int,
+        default=1,
+        help='Original-sequence frame gap between consecutive sampled frames')
+    parser.add_argument(
+        '--source-seq', help='Optionally pin the original HSMOT sequence')
+    parser.add_argument(
+        '--source-start-frame',
+        type=int,
+        help='Optionally pin the first original frame of the sampled clip')
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument(
         '--seq-name',
@@ -341,6 +378,9 @@ def main():
         ann_file=args.ann_file,
         img_subdir=args.img_subdir,
         num_frames=args.num_frames,
+        source_frame_interval=args.source_frame_interval,
+        source_seq=args.source_seq,
+        source_start_frame=args.source_start_frame,
         seed=args.seed,
         seq_name=args.seq_name,
     )

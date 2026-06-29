@@ -133,6 +133,27 @@ class TestMultispecPairRotatedRTDETREquivalence(unittest.TestCase):
         self.assertEqual(prev_coord[0].shape[-1], 5)
         self.assertEqual(curr_coord[0].shape[-1], 5)
 
+    def test_pair_extract_feat_groups_prev_then_curr(self):
+        """Flattened pair batches must match the later memory[:B] split."""
+
+        class EchoBackbone(torch.nn.Module):
+
+            def forward(self, x):
+                return (x, )
+
+        pair_model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(pair_model)
+        pair_model.backbone = EchoBackbone()
+        pair_model.debug_shapes = False
+
+        pair_input = torch.arange(4 * 2, dtype=torch.float32).reshape(
+            4, 2, 1, 1, 1)
+        feats = pair_model.extract_feat(pair_input)
+        flat = feats[0].flatten().tolist()
+
+        self.assertEqual(flat[:4], [0.0, 2.0, 4.0, 6.0])
+        self.assertEqual(flat[4:], [1.0, 3.0, 5.0, 7.0])
+
 
 class TestMultispecPairRotatedRTDETRDebugShapes(unittest.TestCase):
 

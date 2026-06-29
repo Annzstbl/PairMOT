@@ -7,22 +7,25 @@ from .pair_match_cost import (
     PairGDCost,
     PairPresenceBCECost,
 )
-from .pair_overfit_metric import HSMOTPairOverfitMetric
+from .pair_overfit_metric import HSMOTPairAPMetric, HSMOTPairOverfitMetric
 from .pair_rotated_rtdetr_head import PairRotatedRTDETRHead
 from .pair_rotated_rtdetr_layers import (
     PairRotatedRTDETRTransformerDecoder,
     PairRotatedRTDETRTransformerDecoderLayer,
 )
 from .pair_component_timer_hook import PairComponentTimerHook
+from .pair_dataset_epoch_hook import PairDatasetEpochHook
 from .pair_val_visualization_hook import HSMOTPairValVisualizationHook
 from .single_val_visualization_hook import HSMOTSingleValVisualizationHook
 from .timed_rotated_rtdetr import TimedRotatedRTDETR
 
 __all__ = [
     'HSMOTPairOverfitMetric',
+    'HSMOTPairAPMetric',
     'HSMOTPairValVisualizationHook',
     'HSMOTSingleValVisualizationHook',
     'PairComponentTimerHook',
+    'PairDatasetEpochHook',
     'MultispecPairRotatedRTDETR',
     'PairChamferCost',
     'PairGDCost',

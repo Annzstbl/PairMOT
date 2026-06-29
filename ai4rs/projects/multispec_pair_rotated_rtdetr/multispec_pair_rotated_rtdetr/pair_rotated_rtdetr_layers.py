@@ -28,6 +28,17 @@ from torch import Tensor, nn
 class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
     """Decoder layer: one self-attn + dual rotated cross-attn + linear fusion."""
 
+    @staticmethod
+    def _init_pair_average_fusion(linear: nn.Linear) -> None:
+        """Initialize ``[prev, curr] -> shared`` fusion as 0.5 identity sum."""
+        nn.init.zeros_(linear.weight)
+        nn.init.zeros_(linear.bias)
+        out_dim = linear.out_features
+        with torch.no_grad():
+            eye = torch.eye(out_dim, device=linear.weight.device)
+            linear.weight[:, :out_dim].copy_(0.5 * eye)
+            linear.weight[:, out_dim:out_dim * 2].copy_(0.5 * eye)
+
     def _init_layers(self) -> None:
         self.self_attn = MultiheadAttention(**self.self_attn_cfg)
         self.cross_attn_prev = RotatedMultiScaleDeformableAttention(
@@ -37,6 +48,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
         self.embed_dims = self.self_attn.embed_dims
         # fuse (bs, num_queries, 2*D) -> (bs, num_queries, D)
         self.cross_fusion = nn.Linear(self.embed_dims * 2, self.embed_dims)
+        self._init_pair_average_fusion(self.cross_fusion)
         self.ffn = FFN(**self.ffn_cfg)
         self.norms = ModuleList([
             build_norm_layer(self.norm_cfg, self.embed_dims)[1]
@@ -134,6 +146,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.ref_point_head = MLP(5, self.embed_dims * 2, self.embed_dims, 2)
         # Ordered prev→curr fusion for self-attn position encoding (2C -> C)
         self.pair_pos_fusion = nn.Linear(self.embed_dims * 2, self.embed_dims)
+        PairRotatedRTDETRTransformerDecoderLayer._init_pair_average_fusion(
+            self.pair_pos_fusion)
         self.norm = nn.Identity()
         # Content-independent learnable pair query / dual references (M3-1)
         self.query_embedding = nn.Embedding(self.num_queries, self.embed_dims)

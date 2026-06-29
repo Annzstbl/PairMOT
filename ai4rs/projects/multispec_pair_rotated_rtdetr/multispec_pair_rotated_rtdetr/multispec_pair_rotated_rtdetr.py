@@ -7,13 +7,14 @@ import torch
 from mmengine.logging import print_log
 from mmdet.structures import OptSampleList, SampleList
 from mmrotate.registry import MODELS
-from mmrotate.structures.bbox import qbox2rbox
+from mmrotate.structures.bbox import RotatedBoxes, qbox2rbox
 from torch import Tensor, nn
 
 from projects.rotated_rtdetr.rotated_rtdetr import RotatedRTDETR
 from projects.rotated_rtdetr.rotated_rtdetr.rtdetr_layers import RTDETRHybridEncoder
 
 from .pair_rotated_rtdetr_layers import PairRotatedRTDETRTransformerDecoder
+from .pair_cdn_query_generator import PairCdnQueryGenerator
 from .component_timer import CudaComponentTimer
 
 QueryInitMode = Literal['learned', 'gt_noised', 'dual_topk']
@@ -35,6 +36,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  pair_mode: bool = False,
                  query_init: QueryInitMode = 'learned',
                  gt_ref_noise_scale: float = 0.02,
+                 pair_dn_cfg: Optional[Dict] = None,
                  **kwargs) -> None:
         if query_init not in ('learned', 'gt_noised', 'dual_topk'):
             raise ValueError(
@@ -43,8 +45,17 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         self.pair_mode = pair_mode
         self.query_init = query_init
         self.gt_ref_noise_scale = gt_ref_noise_scale
+        self.pair_dn_cfg = pair_dn_cfg
         super().__init__(*args, **kwargs)
         self.debug_shapes = debug_shapes
+        self.pair_dn_query_generator = None
+        if self.pair_mode and pair_dn_cfg is not None:
+            self.pair_dn_query_generator = PairCdnQueryGenerator(
+                num_classes=self.bbox_head.num_classes,
+                embed_dims=self.decoder.embed_dims,
+                num_matching_queries=self.num_queries,
+                angle_factor=self.decoder.angle_factor,
+                **pair_dn_cfg)
         if self.pair_mode and self.query_init == 'learned':
             self._freeze_unused_learned_pair_params()
 
@@ -101,7 +112,10 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 raise ValueError(
                     f'Expected {self.PAIR_NUM_FRAMES} frames, got {num_frames}')
             self._log_shape('input_pair', batch_inputs)
-            batch_inputs = batch_inputs.reshape(b * num_frames, c, h, w)
+            # Keep all previous frames before all current frames.  The pair
+            # transformer later splits encoder memory as ``[:B]`` and ``[B:]``.
+            batch_inputs = batch_inputs.transpose(0, 1).reshape(
+                b * num_frames, c, h, w)
         elif batch_inputs.dim() != 4:
             raise ValueError(
                 'MultispecPairRotatedRTDETR expects input shape '
@@ -122,7 +136,13 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         memory_mask: Optional[Tensor],
         spatial_shapes: Tensor,
     ) -> Tuple[Tensor, Tensor, Tensor]:
-        """Top-K query from prev memory; dual references without DN."""
+        """Top-K pair queries with aligned prev/curr references.
+
+        A pair query is one object hypothesis shared by both frames, so both
+        box references must be anchored to the same top-k proposal.  Using an
+        independent curr top-k order mixes a prev query with an unrelated curr
+        reference and makes the curr branch harder to overfit.
+        """
         bs, _, c = memory_prev.shape
         num_layers = self.decoder.num_layers
 
@@ -142,12 +162,9 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
 
         output_memory_c, output_proposals_c = self.gen_encoder_output_proposals(
             memory_curr, memory_mask, spatial_shapes)
-        enc_cls_c = self.bbox_head.cls_branches[num_layers](output_memory_c)
-        topk_idx_c = torch.topk(
-            enc_cls_c.max(-1)[0], k=self.num_queries, dim=1)[1]
         topk_props_c = torch.gather(
             output_proposals_c, 1,
-            topk_idx_c.unsqueeze(-1).repeat(1, 1, 5))
+            topk_idx_p.unsqueeze(-1).repeat(1, 1, 5))
         ref_curr_unact = self.bbox_head.reg_branches_curr[num_layers](
             query) + topk_props_c
 
@@ -156,8 +173,12 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         return query, reference_prev, reference_curr
 
     @staticmethod
-    def _to_pair_rbox(bboxes: Tensor) -> Tensor:
+    def _to_pair_rbox(bboxes) -> Tensor:
         """Convert pair GT boxes to ``(N, 5)`` rbox tensor."""
+        if isinstance(bboxes, RotatedBoxes):
+            return bboxes.tensor
+        if hasattr(bboxes, 'tensor'):
+            bboxes = bboxes.tensor
         if bboxes.size(-1) == 8:
             return qbox2rbox(bboxes)
         return bboxes
@@ -230,25 +251,50 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         memory_mask: Optional[Tensor],
         spatial_shapes: Tensor,
         batch_data_samples: OptSampleList = None,
-    ) -> Tuple[Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
+    ) -> Tuple[Optional[Tensor], Optional[Tensor], Optional[Tensor],
+               Optional[Tensor], Optional[Dict]]:
         """Select pair query / dual reference init per ``query_init``."""
         if self.query_init == 'learned':
-            return None, None, None
-        if self.query_init == 'gt_noised':
-            return self._gt_noised_pair_queries(
+            query, reference_prev, reference_curr = None, None, None
+        elif self.query_init == 'gt_noised':
+            query, reference_prev, reference_curr = self._gt_noised_pair_queries(
                 batch_data_samples,
                 device=memory_prev.device,
                 dtype=memory_prev.dtype,
             )
-        if self.query_init == 'dual_topk':
+        elif self.query_init == 'dual_topk':
             query, reference_prev, reference_curr = self._topk_pair_queries(
                 memory_prev,
                 memory_curr,
                 memory_mask,
                 spatial_shapes,
             )
-            return query, reference_prev, reference_curr
-        raise RuntimeError(f'Unsupported query_init: {self.query_init!r}')
+        else:
+            raise RuntimeError(f'Unsupported query_init: {self.query_init!r}')
+
+        if (not self.training or self.pair_dn_query_generator is None
+                or batch_data_samples is None):
+            return query, reference_prev, reference_curr, None, None
+
+        (dn_query, dn_prev_unact, dn_curr_unact, self_attn_mask,
+         dn_meta) = self.pair_dn_query_generator(batch_data_samples)
+        if query is None:
+            query = self.decoder.query_embedding.weight.unsqueeze(0).expand(
+                dn_query.size(0), -1, -1).to(dtype=dn_query.dtype)
+        if reference_prev is None:
+            reference_prev = self.decoder.ref_prev_embedding.weight.sigmoid(
+            ).unsqueeze(0).expand(dn_query.size(0), -1, -1)
+        if reference_curr is None:
+            reference_curr = self.decoder.ref_curr_embedding.weight.sigmoid(
+            ).unsqueeze(0).expand(dn_query.size(0), -1, -1)
+        query = torch.cat([dn_query, query], dim=1)
+        reference_prev = torch.cat(
+            [dn_prev_unact, torch.logit(reference_prev.clamp(1e-4, 1 - 1e-4))],
+            dim=1).sigmoid()
+        reference_curr = torch.cat(
+            [dn_curr_unact, torch.logit(reference_curr.clamp(1e-4, 1 - 1e-4))],
+            dim=1).sigmoid()
+        return query, reference_prev, reference_curr, self_attn_mask, dn_meta
 
     def _pair_decoder_reg_branches(
         self,
@@ -269,6 +315,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         reference_curr: Tensor,
         spatial_shapes: Tensor,
         level_start_index: Tensor,
+        self_attn_mask: Optional[Tensor] = None,
     ) -> Dict:
         """Run ``PairRotatedRTDETRTransformerDecoder``."""
         reg_branches_prev, reg_branches_curr = self._pair_decoder_reg_branches()
@@ -282,6 +329,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             query=query,
             reference_prev=reference_prev,
             reference_curr=reference_curr,
+            self_attn_mask=self_attn_mask,
         )
         return dict(
             hidden_states=torch.stack(hidden_states),
@@ -378,7 +426,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             return dict(prev=head_prev, curr=head_curr)
 
         if timer is not None:
-            query, reference_prev, reference_curr = timer.record(
+            query, reference_prev, reference_curr, self_attn_mask, dn_meta = timer.record(
                 'query_init',
                 lambda: self._init_pair_decoder_queries(
                     memory_prev,
@@ -397,9 +445,10 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     reference_curr=reference_curr,
                     spatial_shapes=decoder_inputs_dict['spatial_shapes'],
                     level_start_index=decoder_inputs_dict['level_start_index'],
+                    self_attn_mask=self_attn_mask,
                 ))
         else:
-            query, reference_prev, reference_curr = self._init_pair_decoder_queries(
+            query, reference_prev, reference_curr, self_attn_mask, dn_meta = self._init_pair_decoder_queries(
                 memory_prev,
                 memory_curr,
                 encoder_outputs_dict['memory_mask'],
@@ -414,7 +463,9 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 reference_curr=reference_curr,
                 spatial_shapes=decoder_inputs_dict['spatial_shapes'],
                 level_start_index=decoder_inputs_dict['level_start_index'],
+                self_attn_mask=self_attn_mask,
             )
+        pair_decoder_out['dn_meta'] = dn_meta
         return pair_decoder_out
 
     def loss(self, batch_inputs: Tensor,

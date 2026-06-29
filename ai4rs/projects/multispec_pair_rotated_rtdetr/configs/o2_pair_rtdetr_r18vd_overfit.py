@@ -24,12 +24,13 @@ custom_imports = dict(
 load_from = O2_R18_HSMOT_3DSE_R2_E72
 pair_pretrain_adapt = True
 
-find_unused_parameters=False
+# dual_topk leaves learned query/ref embeddings unused under DDP.
+find_unused_parameters = True
 
 model.update(
     type='MultispecPairRotatedRTDETR',
     pair_mode=True,
-    query_init='learned',
+    query_init='dual_topk',
     num_queries=300,
     dn_cfg=None,
     data_preprocessor=dict(
@@ -86,7 +87,7 @@ model.bbox_head.update(
         use_sigmoid=True,
         loss_weight=1.0),
 )
-model.test_cfg = dict(max_per_img=50, rescale=False)
+model.test_cfg = dict(max_per_img=300, rescale=False)
 
 optim_wrapper = dict(
     type=OptimWrapper,
@@ -117,7 +118,11 @@ default_hooks = dict(
     timer=dict(type='IterTimerHook'),
     logger=dict(type='LoggerHook', interval=50),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=1000, max_keep_ckpts=2),
+    checkpoint=dict(
+        type='CheckpointHook',
+        by_epoch=False,
+        interval=1000,
+        max_keep_ckpts=2),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(
         type='HSMOTPairValVisualizationHook',

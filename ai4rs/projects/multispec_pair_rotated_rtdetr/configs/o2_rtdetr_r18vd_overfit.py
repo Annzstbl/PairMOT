@@ -37,7 +37,7 @@ model.backbone.norm_eval = False
 custom_keys['backbone.stem.0.conv3d'] = dict(lr_mult=1.0)
 custom_keys['backbone.stem.0.se_conv'] = dict(lr_mult=1.0)
 
-model.test_cfg = dict(max_per_img=50, rescale=False)
+model.test_cfg = dict(max_per_img=300, rescale=False)
 
 optim_wrapper = dict(
     type=OptimWrapper,
@@ -68,7 +68,11 @@ default_hooks = dict(
     timer=dict(type='IterTimerHook'),
     logger=dict(type='LoggerHook', interval=50),
     param_scheduler=dict(type='ParamSchedulerHook'),
-    checkpoint=dict(type='CheckpointHook', interval=1000, max_keep_ckpts=2),
+    checkpoint=dict(
+        type='CheckpointHook',
+        by_epoch=False,
+        interval=1000,
+        max_keep_ckpts=2),
     sampler_seed=dict(type='DistSamplerSeedHook'),
     visualization=dict(
         type='HSMOTSingleValVisualizationHook',

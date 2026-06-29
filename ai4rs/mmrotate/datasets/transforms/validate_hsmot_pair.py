@@ -82,27 +82,63 @@ def validate_id_alignment(results: dict) -> PairCheckResult:
         got_vc = got_vc.cpu().numpy()
 
     if not np.array_equal(expected['track_ids'], got_ids):
+        expected_set = set(expected['track_ids'].tolist())
+        got_list = got_ids.tolist()
+        if all(int(tid) in expected_set for tid in got_list) and got_list == sorted(got_list):
+            exp_index = {
+                int(tid): i
+                for i, tid in enumerate(expected['track_ids'].tolist())
+            }
+            exp_vp = np.asarray(
+                [expected['valid_prev'][exp_index[int(tid)]]
+                 for tid in got_list],
+                dtype=np.bool_)
+            exp_vc = np.asarray(
+                [expected['valid_curr'][exp_index[int(tid)]]
+                 for tid in got_list],
+                dtype=np.bool_)
+            if np.any(got_vp & ~exp_vp):
+                return PairCheckResult(
+                    'id_alignment', False,
+                    'valid_prev has true for raw-missing track')
+            if np.any(got_vc & ~exp_vc):
+                return PairCheckResult(
+                    'id_alignment', False,
+                    'valid_curr has true for raw-missing track')
+            n_filtered = len(expected['track_ids']) - len(got_ids)
+            n_new = int(np.sum(~got_vp & got_vc))
+            n_dis = int(np.sum(got_vp & ~got_vc))
+            n_persist = int(np.sum(got_vp & got_vc))
+            return PairCheckResult(
+                'id_alignment', True,
+                f'persist={n_persist} new={n_new} disappear={n_dis} '
+                f'total={len(got_ids)} geom_filtered={n_filtered}')
         return PairCheckResult(
             'id_alignment', False,
             f'track_ids mismatch exp={expected["track_ids"].tolist()} '
             f'got={got_ids.tolist()}')
-    if not np.array_equal(expected['valid_prev'], got_vp):
-        return PairCheckResult('id_alignment', False, 'valid_prev mismatch')
-    if not np.array_equal(expected['valid_curr'], got_vc):
-        return PairCheckResult('id_alignment', False, 'valid_curr mismatch')
+    if np.any(got_vp & ~expected['valid_prev']):
+        return PairCheckResult(
+            'id_alignment', False,
+            'valid_prev has true for raw-missing track')
+    if np.any(got_vc & ~expected['valid_curr']):
+        return PairCheckResult(
+            'id_alignment', False,
+            'valid_curr has true for raw-missing track')
 
     n_new = int(np.sum(~got_vp & got_vc))
     n_dis = int(np.sum(got_vp & ~got_vc))
     n_persist = int(np.sum(got_vp & got_vc))
+    n_filtered = int(np.sum(expected['valid_prev'] & ~got_vp) +
+                     np.sum(expected['valid_curr'] & ~got_vc))
     return PairCheckResult(
         'id_alignment', True,
-        f'persist={n_persist} new={n_new} disappear={n_dis} total={len(got_ids)}')
+        f'persist={n_persist} new={n_new} disappear={n_dis} '
+        f'total={len(got_ids)} geom_filtered_sides={n_filtered}')
 
 
 def validate_new_disappear_markers(results: dict) -> PairCheckResult:
-    """Invalid-side placeholders and raw instance membership."""
-    prev_ids = {int(i['track_id']) for i in results.get('instances_prev', [])}
-    curr_ids = {int(i['track_id']) for i in results.get('instances_curr', [])}
+    """Invalid-side placeholders stay zero after raw or geometric absence."""
     track_ids = results['pair_track_ids']
     vp = results['pair_valid_prev']
     vc = results['pair_valid_curr']
@@ -125,10 +161,6 @@ def validate_new_disappear_markers(results: dict) -> PairCheckResult:
     for i, tid in enumerate(track_ids):
         tid = int(tid)
         if not vp[i] and vc[i]:
-            if tid in prev_ids:
-                return PairCheckResult(
-                    'new_disappear', False,
-                    f'track {tid} marked new but exists in prev')
             if bprev.shape[-1] == 5:
                 if np.any(bprev[i] != 0):
                     return PairCheckResult(
@@ -139,10 +171,6 @@ def validate_new_disappear_markers(results: dict) -> PairCheckResult:
                     'new_disappear', False,
                     f'track {tid} new but prev qbox not placeholder')
         if vp[i] and not vc[i]:
-            if tid in curr_ids:
-                return PairCheckResult(
-                    'new_disappear', False,
-                    f'track {tid} marked disappear but exists in curr')
             if bcurr.shape[-1] == 5:
                 if np.any(bcurr[i] != 0):
                     return PairCheckResult(

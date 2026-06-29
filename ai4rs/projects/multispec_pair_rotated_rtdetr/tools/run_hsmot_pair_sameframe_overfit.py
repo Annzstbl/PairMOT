@@ -40,14 +40,17 @@ def parse_args():
     parser.add_argument('--max-iters', type=int, default=3000)
     parser.add_argument('--val-interval', type=int, default=500)
     parser.add_argument('--num-frames', type=int, default=10)
+    parser.add_argument('--source-frame-interval', type=int, default=1)
     parser.add_argument('--from-real', action='store_true')
     parser.add_argument('--src-root', default='../data/hsmot/train')
     parser.add_argument('--ann-file', default='../data/hsmot/train_half.txt')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--loss-thr', type=float, default=2.0)
-    parser.add_argument('--score-thr', type=float, default=0.35)
-    parser.add_argument('--iou-thr', type=float, default=0.5)
+    parser.add_argument('--min-independent-ap50', type=float, default=0.90)
+    parser.add_argument('--min-independent-map50-95', type=float, default=0.40)
+    parser.add_argument('--min-pair-ap50', type=float, default=0.80)
+    parser.add_argument('--min-pair-map50-95', type=float, default=0.30)
     parser.add_argument('--skip-train', action='store_true')
+    parser.add_argument('--checkpoint')
     parser.add_argument('--force-recreate-data', action='store_true')
     parser.add_argument(
         '--tmpdir',
@@ -87,9 +90,13 @@ def main():
         work_dir=work_dir,
         max_iters=args.max_iters,
         num_frames=args.num_frames,
-        loss_thr=args.loss_thr,
-        score_thr=args.score_thr,
-        iou_thr=args.iou_thr,
+        source_frame_interval=args.source_frame_interval,
+        min_independent_ap50=args.min_independent_ap50,
+        min_independent_map50_95=args.min_independent_map50_95,
+        min_pair_ap50=args.min_pair_ap50,
+        min_pair_map50_95=args.min_pair_map50_95,
+        source_seq=None,
+        source_start_frame=None,
         skip_train=args.skip_train,
         device=device,
         launcher=args.launcher,
@@ -99,6 +106,7 @@ def main():
         seed=args.seed,
         reuse_data=not args.force_recreate_data,
         val_interval=args.val_interval,
+        checkpoint_path=args.checkpoint,
     )
     sys.exit(0 if report.passed else 1)
 

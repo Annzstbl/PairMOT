@@ -45,6 +45,61 @@ def _restore_invalid_pair_boxes(results: dict) -> None:
             results[bbox_key] = tensor
 
 
+def _slice_pair_field(value, keep: np.ndarray):
+    if isinstance(value, torch.Tensor):
+        return value[torch.from_numpy(keep).to(device=value.device)]
+    return np.asarray(value)[keep]
+
+
+def _filter_fully_invalid_pair_rows(results: dict) -> None:
+    if 'pair_valid_prev' not in results or 'pair_valid_curr' not in results:
+        return
+    valid_prev = results['pair_valid_prev']
+    valid_curr = results['pair_valid_curr']
+    if isinstance(valid_prev, torch.Tensor):
+        vp = valid_prev.cpu().numpy().astype(bool)
+    else:
+        vp = np.asarray(valid_prev, dtype=bool)
+    if isinstance(valid_curr, torch.Tensor):
+        vc = valid_curr.cpu().numpy().astype(bool)
+    else:
+        vc = np.asarray(valid_curr, dtype=bool)
+    keep = vp | vc
+    if keep.all():
+        return
+
+    for key in ('pair_labels', 'pair_track_ids', 'pair_valid_prev',
+                'pair_valid_curr'):
+        if key in results:
+            results[key] = _slice_pair_field(results[key], keep)
+    for key in ('gt_bboxes_prev', 'gt_bboxes_curr'):
+        if key in results:
+            results[key] = results[key][keep]
+
+
+def _filter_outside_pair_boxes(results: dict) -> None:
+    """Mark side-specific boxes outside the image as invalid after geometry."""
+    img_shape = results['img_shape'][:2]
+    for valid_key, bbox_key in (
+            ('pair_valid_prev', 'gt_bboxes_prev'),
+            ('pair_valid_curr', 'gt_bboxes_curr')):
+        if valid_key not in results or bbox_key not in results:
+            continue
+        boxes = results[bbox_key]
+        if len(boxes) == 0:
+            continue
+        inside = boxes.is_inside(img_shape).cpu().numpy().astype(bool)
+        valid = results[valid_key]
+        if isinstance(valid, torch.Tensor):
+            inside_t = torch.from_numpy(inside).to(
+                device=valid.device, dtype=torch.bool)
+            results[valid_key] = valid.bool() & inside_t
+        else:
+            results[valid_key] = np.asarray(valid, dtype=bool) & inside
+    _restore_invalid_pair_boxes(results)
+    _filter_fully_invalid_pair_rows(results)
+
+
 def _subresult(results: dict, img_idx: int, bbox_key: str) -> dict:
     sub = {
         'img': results['img'][img_idx],
@@ -210,5 +265,5 @@ class PairSharedRandomRotate(BaseTransform):
                 rotate._transform_bboxes(sub)
             _write_subresult(results, img_idx, bbox_key, sub)
         results['img_shape'] = results['img'][0].shape[:2]
-        _restore_invalid_pair_boxes(results)
+        _filter_outside_pair_boxes(results)
         return results

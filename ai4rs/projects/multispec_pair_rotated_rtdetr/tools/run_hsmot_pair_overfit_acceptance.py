@@ -43,6 +43,11 @@ from projects.multispec_pair_rotated_rtdetr.tools.create_hsmot_pair_overfit_data
 from projects.multispec_pair_rotated_rtdetr.tools.create_hsmot_pair_overfit_from_real import (
     create_hsmot_pair_overfit_from_real,
 )
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.overfit_ap import (
+    independent_ap_metrics,
+    pair_ap_metrics,
+    serialize_pair_sample,
+)
 from projects.multispec_pair_rotated_rtdetr.tools.load_pair_pretrain import (
     ensure_pair_adapted_checkpoint,
 )
@@ -178,6 +183,9 @@ def _ensure_overfit_dataset(
     src_root: str,
     ann_file: str,
     num_frames: int,
+    source_frame_interval: int,
+    source_seq: Optional[str],
+    source_start_frame: Optional[int],
     seed: int,
     reuse_data: bool,
 ) -> bool:
@@ -194,6 +202,9 @@ def _ensure_overfit_dataset(
             src_root=osp.abspath(src_root),
             ann_file=ann_file,
             num_frames=num_frames,
+            source_frame_interval=source_frame_interval,
+            source_seq=source_seq,
+            source_start_frame=source_start_frame,
             seed=seed,
         )
         return True
@@ -240,6 +251,24 @@ def _pair_loss_sum(losses: Dict[str, torch.Tensor]) -> float:
         if 'loss' in key and isinstance(val, torch.Tensor):
             total += float(val.detach().cpu())
     return total
+
+
+@torch.no_grad()
+def evaluate_pair_ap(model, dataloader: DataLoader, preprocessor,
+                     device: torch.device) -> Dict[str, float]:
+    """Compute independent detection AP and association-aware pair AP."""
+    samples = []
+    model.eval()
+    for batch in dataloader:
+        inputs, batch_samples = _prepare_pair_batch(
+            batch, preprocessor, device, training=False)
+        outputs = model.predict(inputs, batch_samples, rescale=False)
+        for output in outputs:
+            samples.append(serialize_pair_sample(
+                output.pair_gt_instances, output.pred_pair_instances))
+    metrics = pair_ap_metrics(samples)
+    metrics.update(independent_ap_metrics(samples))
+    return metrics
 
 
 def _to_rbox_tensor(boxes) -> torch.Tensor:
@@ -307,25 +336,47 @@ def evaluate_pair_predictions(
             pred_pres_p = pred.presence_prev.cpu()
             pred_pres_c = pred.presence_curr.cpu()
 
-            used_queries = set()
+            candidates = []
+            has_score_candidate = [False] * num_gt
             for gi in range(num_gt):
                 label = int(gt_labels[gi].item())
-                cls_mask = pred_labels == label
-                cand_scores = pred_scores.clone()
-                cand_scores[~cls_mask] = -1.0
-                cand_scores[list(used_queries)] = -1.0
-                best_q = int(cand_scores.argmax().item())
-                best_score = float(cand_scores[best_q].item())
+                for qi in range(len(pred_scores)):
+                    if int(pred_labels[qi].item()) != label:
+                        continue
+                    if float(pred_scores[qi].item()) < score_thr:
+                        continue
+                    has_score_candidate[gi] = True
+                    ious = []
+                    if valid_prev[gi]:
+                        ious.append(_rbox_iou(pred_prev[qi], gt_prev[gi]))
+                    if valid_curr[gi]:
+                        ious.append(_rbox_iou(pred_curr[qi], gt_curr[gi]))
+                    mean_iou = sum(ious) / len(ious) if ious else 0.0
+                    candidates.append((mean_iou, gi, qi))
 
-                if best_score < score_thr:
-                    report.fail(
-                        f'GT#{gi} label={label} has no query above '
-                        f'score_thr={score_thr} (best={best_score:.3f})')
+            gt_to_match = {}
+            used_gt = set()
+            used_queries = set()
+            for mean_iou, gi, qi in sorted(candidates, reverse=True):
+                if gi in used_gt or qi in used_queries:
+                    continue
+                used_gt.add(gi)
+                used_queries.add(qi)
+                gt_to_match[gi] = qi
+
+            duplicate_match += len(used_queries) - len(set(used_queries))
+            for gi in range(num_gt):
+                if gi not in gt_to_match:
+                    if not has_score_candidate[gi]:
+                        report.fail(
+                            f'GT#{gi} label={int(gt_labels[gi].item())} '
+                            f'has no query above score_thr={score_thr}')
+                    else:
+                        report.fail(
+                            f'GT#{gi} has no unique high-score query match')
                     continue
 
-                if best_q in used_queries:
-                    duplicate_match += 1
-                used_queries.add(best_q)
+                best_q = gt_to_match[gi]
                 matched_queries += 1
 
                 if valid_prev[gi]:
@@ -448,9 +499,13 @@ def run_acceptance(
     work_dir: str,
     max_iters: int,
     num_frames: int,
-    loss_thr: float,
-    score_thr: float,
-    iou_thr: float,
+    source_frame_interval: int,
+    min_independent_ap50: float,
+    min_independent_map50_95: float,
+    min_pair_ap50: float,
+    min_pair_map50_95: float,
+    source_seq: Optional[str] = None,
+    source_start_frame: Optional[int] = None,
     skip_train: bool = False,
     device: str = 'cuda:0',
     launcher: str = 'none',
@@ -460,6 +515,8 @@ def run_acceptance(
     seed: int = 42,
     reuse_data: bool = True,
     val_interval: int = 500,
+    checkpoint_path: Optional[str] = None,
+    resume_from: Optional[str] = None,
 ) -> AcceptanceReport:
     register_all_modules()
     os.chdir(_AI4RS_ROOT)
@@ -472,6 +529,9 @@ def run_acceptance(
             src_root=src_root,
             ann_file=ann_file,
             num_frames=num_frames,
+            source_frame_interval=source_frame_interval,
+            source_seq=source_seq,
+            source_start_frame=source_start_frame,
             seed=seed,
             reuse_data=reuse_data,
         )
@@ -484,12 +544,16 @@ def run_acceptance(
     cfg.train_cfg.max_iters = max_iters
     cfg.train_cfg.val_interval = val_interval
     _sync_pair_dataset_cfg(cfg, data_root, is_real_layout)
-    cfg.default_hooks.logger.interval = min(10, max_iters // 20)
+    cfg.default_hooks.logger.interval = max(1, min(10, max_iters // 20))
 
     if local_rank == 0:
         _prepare_pair_pretrain(cfg)
     else:
         _sync_pair_pretrain(cfg)
+
+    if resume_from is not None:
+        cfg.load_from = osp.abspath(resume_from)
+        cfg.resume = True
 
     if not skip_train:
         if local_rank == 0:
@@ -501,7 +565,10 @@ def run_acceptance(
     if not _finalize_dist_for_eval(launcher):
         return AcceptanceReport(passed=True)
 
-    ckpt = _latest_checkpoint(work_dir)
+    ckpt = (osp.abspath(checkpoint_path)
+            if checkpoint_path is not None else _latest_checkpoint(work_dir))
+    if not osp.isfile(ckpt):
+        raise FileNotFoundError(f'Checkpoint not found: {ckpt}')
     print(f'[2/3] Evaluating checkpoint: {ckpt}')
 
     preprocessor = _build_preprocessor(cfg)
@@ -522,34 +589,21 @@ def run_acceptance(
         collate_fn=collate_pair_batch,
     )
 
-    # final train-mode loss on one batch (sanity)
-    model.train()
-    batch = next(iter(loader))
-    inputs, samples = _prepare_pair_batch(
-        batch, preprocessor, dev, training=True)
-    losses = model.loss(inputs, samples)
-    loss_sum = _pair_loss_sum(losses)
-    print(f'Final batch loss sum: {loss_sum:.4f} (threshold {loss_thr})')
-
     report = AcceptanceReport()
-    report.metrics['final_loss_sum'] = loss_sum
-    if loss_sum > loss_thr:
-        report.fail(f'loss sum {loss_sum:.4f} > {loss_thr}')
-    else:
-        report.ok(f'loss sum {loss_sum:.4f} <= {loss_thr}')
-
-    eval_report = evaluate_pair_predictions(
-        model,
-        loader,
-        preprocessor,
-        dev,
-        score_thr=score_thr,
-        iou_thr=iou_thr,
-    )
-    report.metrics.update(eval_report.metrics)
-    report.messages.extend(eval_report.messages)
-    if not eval_report.passed:
-        report.passed = False
+    ap_metrics = evaluate_pair_ap(model, loader, preprocessor, dev)
+    report.metrics.update(ap_metrics)
+    thresholds = {
+        'independent_AP50': min_independent_ap50,
+        'independent_mAP50_95': min_independent_map50_95,
+        'pair_AP50': min_pair_ap50,
+        'pair_mAP50_95': min_pair_map50_95,
+    }
+    for key, threshold in thresholds.items():
+        value = ap_metrics[key]
+        if value < threshold:
+            report.fail(f'{key} {value:.4f} < {threshold:.4f}')
+        else:
+            report.ok(f'{key} {value:.4f} >= {threshold:.4f}')
 
     print('[3/3] Acceptance summary')
     for msg in report.messages:
@@ -585,6 +639,13 @@ def parse_args():
         help='Frames in one clip: synthetic uses this directly; '
         'real (--from-real) extracts one contiguous clip (pairs = frames - 1)')
     parser.add_argument(
+        '--source-frame-interval',
+        type=int,
+        default=1,
+        help='Original-frame gap between sampled pair frames with --from-real')
+    parser.add_argument('--source-seq')
+    parser.add_argument('--source-start-frame', type=int)
+    parser.add_argument(
         '--from-real',
         action='store_true',
         help='Extract one contiguous clip from real HSMOT instead of synthetic')
@@ -597,10 +658,17 @@ def parse_args():
         default='../data/hsmot/train_half.txt',
         help='Sequence split file for real HSMOT')
     parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--loss-thr', type=float, default=2.0)
-    parser.add_argument('--score-thr', type=float, default=0.35)
-    parser.add_argument('--iou-thr', type=float, default=0.5)
+    parser.add_argument('--min-independent-ap50', type=float, default=0.90)
+    parser.add_argument('--min-independent-map50-95', type=float, default=0.40)
+    parser.add_argument('--min-pair-ap50', type=float, default=0.80)
+    parser.add_argument('--min-pair-map50-95', type=float, default=0.30)
     parser.add_argument('--skip-train', action='store_true')
+    parser.add_argument(
+        '--checkpoint',
+        help='Evaluate this checkpoint instead of the latest work-dir checkpoint')
+    parser.add_argument(
+        '--resume-from',
+        help='Resume training state from this checkpoint')
     parser.add_argument(
         '--force-recreate-data',
         action='store_true',
@@ -644,9 +712,13 @@ def main():
         work_dir=work_dir,
         max_iters=args.max_iters,
         num_frames=args.num_frames,
-        loss_thr=args.loss_thr,
-        score_thr=args.score_thr,
-        iou_thr=args.iou_thr,
+        source_frame_interval=args.source_frame_interval,
+        source_seq=args.source_seq,
+        source_start_frame=args.source_start_frame,
+        min_independent_ap50=args.min_independent_ap50,
+        min_independent_map50_95=args.min_independent_map50_95,
+        min_pair_ap50=args.min_pair_ap50,
+        min_pair_map50_95=args.min_pair_map50_95,
         skip_train=args.skip_train,
         device=device,
         launcher=args.launcher,
@@ -656,6 +728,8 @@ def main():
         seed=args.seed,
         reuse_data=not args.force_recreate_data,
         val_interval=args.val_interval,
+        checkpoint_path=args.checkpoint,
+        resume_from=args.resume_from,
     )
     sys.exit(0 if report.passed else 1)
 

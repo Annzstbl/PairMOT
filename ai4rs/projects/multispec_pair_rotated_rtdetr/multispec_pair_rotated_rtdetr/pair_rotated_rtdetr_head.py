@@ -16,8 +16,9 @@ from mmdet.structures import SampleList
 from mmdet.utils import InstanceList, OptInstanceList, reduce_mean
 from mmengine.structures import InstanceData
 from mmrotate.registry import MODELS
-from mmrotate.structures.bbox import RotatedBoxes, qbox2rbox
+from mmrotate.structures.bbox import RotatedBoxes, qbox2rbox, rbbox_overlaps
 from projects.rotated_rtdetr.rotated_rtdetr import RotatedRTDETRHead
+from projects.rotated_rtdetr.rotated_rtdetr.prob_iou import probiou
 from projects.rotated_rtdetr.rotated_rtdetr.varifocal_loss import VarifocalLoss
 from torch import Tensor
 
@@ -26,19 +27,22 @@ from .pair_instance_data import PairInstanceData
 
 def _to_rbox_tensor(bboxes, angle_cfg: dict) -> Tensor:
     """Convert GT boxes to ``(N, 5)`` rbox tensor."""
+    def _regularize(tensor: Tensor) -> Tensor:
+        boxes = RotatedBoxes(tensor.clone())
+        boxes.regularize_boxes(**angle_cfg)
+        return boxes.tensor
+
     if isinstance(bboxes, RotatedBoxes):
-        bboxes = bboxes.clone()
-        bboxes.regularize_boxes(**angle_cfg)
-        return bboxes.tensor
+        return _regularize(bboxes.tensor)
     if hasattr(bboxes, 'tensor'):
         tensor = bboxes.tensor
         if tensor.size(-1) == 8:
-            return qbox2rbox(tensor)
-        return tensor
+            tensor = qbox2rbox(tensor)
+        return _regularize(tensor)
     tensor = bboxes
     if tensor.size(-1) == 8:
-        return qbox2rbox(tensor)
-    return tensor
+        tensor = qbox2rbox(tensor)
+    return _regularize(tensor)
 
 
 @MODELS.register_module()
@@ -47,12 +51,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
 
     Expects decoder outputs ``hidden_states`` plus per-layer
     ``references_prev`` / ``references_curr`` (sigmoid 5D OBB). Encoder
-    auxiliary loss and denoising loss are disabled in ``loss_by_feat``.
+    auxiliary loss remains disabled; optional PairDN loss is supported.
     """
 
     def __init__(self,
                  *args,
                  loss_presence: Optional[dict] = None,
+                 dn_loss_weight: float = 1.0,
                  **kwargs) -> None:
         if loss_presence is None:
             loss_presence = dict(
@@ -60,6 +65,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 use_sigmoid=True,
                 loss_weight=1.0)
         self.loss_presence_cfg = loss_presence
+        self.dn_loss_weight = dn_loss_weight
         loss_cls = kwargs.get('loss_cls')
         if isinstance(loss_cls, dict):
             self.varifocal_loss_iou_type = loss_cls.pop(
@@ -176,8 +182,25 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         dn_meta: Optional[Dict[str, int]] = None,
         batch_gt_instances_ignore: OptInstanceList = None,
     ) -> Dict[str, Tensor]:
-        """Pair matching loss over all decoder layers (no enc / DN)."""
-        del enc_cls_scores, enc_bbox_preds, dn_meta, batch_gt_instances_ignore
+        """Pair matching loss plus optional track-union denoising loss."""
+        del enc_cls_scores, enc_bbox_preds, batch_gt_instances_ignore
+
+        if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
+            num_dn = dn_meta['num_denoising_queries']
+            dn_outs = (
+                all_layers_cls_scores[:, :, :num_dn],
+                all_layers_presence_prev[:, :, :num_dn],
+                all_layers_presence_curr[:, :, :num_dn],
+                all_layers_bbox_prev[:, :, :num_dn],
+                all_layers_bbox_curr[:, :, :num_dn],
+            )
+            all_layers_cls_scores = all_layers_cls_scores[:, :, num_dn:]
+            all_layers_presence_prev = all_layers_presence_prev[:, :, num_dn:]
+            all_layers_presence_curr = all_layers_presence_curr[:, :, num_dn:]
+            all_layers_bbox_prev = all_layers_bbox_prev[:, :, num_dn:]
+            all_layers_bbox_curr = all_layers_bbox_curr[:, :, num_dn:]
+        else:
+            dn_outs = None
 
         layer_outs = multi_apply(
             self.loss_by_feat_single,
@@ -212,7 +235,171 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             loss_dict[f'{prefix}loss_bbox_curr'] = losses_bbox_curr[layer_id]
             loss_dict[f'{prefix}loss_iou_prev'] = losses_iou_prev[layer_id]
             loss_dict[f'{prefix}loss_iou_curr'] = losses_iou_curr[layer_id]
+
+        if dn_outs is not None:
+            dn_losses = self.loss_pair_dn(
+                *dn_outs,
+                batch_pair_gt_instances=batch_pair_gt_instances,
+                batch_img_metas=batch_img_metas,
+                dn_meta=dn_meta)
+            (dn_cls, dn_pres_prev, dn_pres_curr, dn_bbox_prev, dn_bbox_curr,
+             dn_iou_prev, dn_iou_curr) = dn_losses
+            if self.dn_loss_weight != 1.0:
+                dn_cls = [loss * self.dn_loss_weight for loss in dn_cls]
+                dn_pres_prev = [loss * self.dn_loss_weight for loss in dn_pres_prev]
+                dn_pres_curr = [loss * self.dn_loss_weight for loss in dn_pres_curr]
+                dn_bbox_prev = [loss * self.dn_loss_weight for loss in dn_bbox_prev]
+                dn_bbox_curr = [loss * self.dn_loss_weight for loss in dn_bbox_curr]
+                dn_iou_prev = [loss * self.dn_loss_weight for loss in dn_iou_prev]
+                dn_iou_curr = [loss * self.dn_loss_weight for loss in dn_iou_curr]
+            loss_dict.update(
+                dn_loss_cls=dn_cls[-1],
+                dn_loss_pres_prev=dn_pres_prev[-1],
+                dn_loss_pres_curr=dn_pres_curr[-1],
+                dn_loss_bbox_prev=dn_bbox_prev[-1],
+                dn_loss_bbox_curr=dn_bbox_curr[-1],
+                dn_loss_iou_prev=dn_iou_prev[-1],
+                dn_loss_iou_curr=dn_iou_curr[-1])
+            for layer_id in range(len(dn_cls) - 1):
+                prefix = f'd{layer_id}.'
+                loss_dict[f'{prefix}dn_loss_cls'] = dn_cls[layer_id]
+                loss_dict[f'{prefix}dn_loss_pres_prev'] = dn_pres_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_pres_curr'] = dn_pres_curr[layer_id]
+                loss_dict[f'{prefix}dn_loss_bbox_prev'] = dn_bbox_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_bbox_curr'] = dn_bbox_curr[layer_id]
+                loss_dict[f'{prefix}dn_loss_iou_prev'] = dn_iou_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_iou_curr'] = dn_iou_curr[layer_id]
         return loss_dict
+
+    def _get_pair_dn_targets(self, batch_pair_gt_instances: InstanceList,
+                             batch_img_metas: List[dict],
+                             dn_meta: Dict[str, int], device: torch.device):
+        """Build direct targets for DN slots without Hungarian matching."""
+        max_targets = dn_meta['max_num_dn_targets']
+        num_groups = dn_meta['num_denoising_groups']
+        num_dn = dn_meta['num_denoising_queries']
+        target_lists = [[] for _ in range(9)]
+        num_total_pos = 0
+        for pair_gt, img_meta in zip(batch_pair_gt_instances, batch_img_metas):
+            labels = torch.full((num_dn,), self.num_classes, device=device,
+                                dtype=torch.long)
+            label_weights = torch.zeros(num_dn, device=device)
+            bbox_prev_targets = torch.zeros(num_dn, 5, device=device)
+            bbox_curr_targets = torch.zeros(num_dn, 5, device=device)
+            bbox_prev_weights = torch.zeros(num_dn, 5, device=device)
+            bbox_curr_weights = torch.zeros(num_dn, 5, device=device)
+            pres_prev_targets = torch.zeros(num_dn, device=device)
+            pres_curr_targets = torch.zeros(num_dn, device=device)
+            pres_weights = torch.zeros(num_dn, device=device)
+            num_targets = len(pair_gt.labels)
+            if num_targets > 0:
+                img_h, img_w = img_meta['img_shape']
+                factor = bbox_prev_targets.new_tensor(
+                    [img_w, img_h, img_w, img_h, self.angle_factor])
+                gt_prev = _to_rbox_tensor(pair_gt.bboxes_prev,
+                                          self.angle_cfg).to(device) / factor
+                gt_curr = _to_rbox_tensor(pair_gt.bboxes_curr,
+                                          self.angle_cfg).to(device) / factor
+                valid_prev = torch.as_tensor(
+                    pair_gt.valid_prev, device=device, dtype=torch.bool)
+                valid_curr = torch.as_tensor(
+                    pair_gt.valid_curr, device=device, dtype=torch.bool)
+                for group_idx in range(2 * num_groups):
+                    start = group_idx * max_targets
+                    end = start + num_targets
+                    labels[start:end] = pair_gt.labels.to(device)
+                    label_weights[start:end] = 1
+                    bbox_prev_targets[start:end] = gt_prev
+                    bbox_curr_targets[start:end] = gt_curr
+                    bbox_prev_weights[start:end] = valid_prev.float().unsqueeze(
+                        -1).expand(-1, 5)
+                    bbox_curr_weights[start:end] = valid_curr.float().unsqueeze(
+                        -1).expand(-1, 5)
+                    pres_prev_targets[start:end] = valid_prev.float()
+                    pres_curr_targets[start:end] = valid_curr.float()
+                    pres_weights[start:end] = 1
+                num_total_pos += num_targets * 2 * num_groups
+            for bucket, value in zip(target_lists, (
+                    labels, label_weights, bbox_prev_targets,
+                    bbox_prev_weights, bbox_curr_targets, bbox_curr_weights,
+                    pres_prev_targets, pres_curr_targets, pres_weights)):
+                bucket.append(value)
+        return (*target_lists, num_total_pos)
+
+    def loss_pair_dn(self, all_layers_cls_scores: Tensor,
+                     all_layers_presence_prev: Tensor,
+                     all_layers_presence_curr: Tensor,
+                     all_layers_bbox_prev: Tensor,
+                     all_layers_bbox_curr: Tensor,
+                     batch_pair_gt_instances: InstanceList,
+                     batch_img_metas: List[dict],
+                     dn_meta: Dict[str, int]):
+        return multi_apply(
+            self._loss_pair_dn_single,
+            all_layers_cls_scores,
+            all_layers_presence_prev,
+            all_layers_presence_curr,
+            all_layers_bbox_prev,
+            all_layers_bbox_curr,
+            batch_pair_gt_instances=batch_pair_gt_instances,
+            batch_img_metas=batch_img_metas,
+            dn_meta=dn_meta)
+
+    def _loss_pair_dn_single(self, cls_scores: Tensor, presence_prev: Tensor,
+                             presence_curr: Tensor, bbox_prev: Tensor,
+                             bbox_curr: Tensor,
+                             batch_pair_gt_instances: InstanceList,
+                             batch_img_metas: List[dict],
+                             dn_meta: Dict[str, int]):
+        (labels_list, label_weights_list, bbox_prev_targets_list,
+         bbox_prev_weights_list, bbox_curr_targets_list,
+         bbox_curr_weights_list, pres_prev_targets_list,
+         pres_curr_targets_list, pres_weights_list,
+         num_total_pos) = self._get_pair_dn_targets(
+             batch_pair_gt_instances, batch_img_metas, dn_meta,
+             cls_scores.device)
+        labels = torch.cat(labels_list)
+        label_weights = torch.cat(label_weights_list)
+        bbox_prev_targets = torch.cat(bbox_prev_targets_list)
+        bbox_prev_weights = torch.cat(bbox_prev_weights_list)
+        bbox_curr_targets = torch.cat(bbox_curr_targets_list)
+        bbox_curr_weights = torch.cat(bbox_curr_weights_list)
+        pres_prev_targets = torch.cat(pres_prev_targets_list)
+        pres_curr_targets = torch.cat(pres_curr_targets_list)
+        pres_weights = torch.cat(pres_weights_list)
+        cls_flat = cls_scores.reshape(-1, self.cls_out_channels)
+        cls_avg_factor = max(float(reduce_mean(
+            cls_flat.new_tensor([num_total_pos])).item()), 1.0)
+        loss_cls = self._loss_cls(
+            cls_flat, labels, label_weights, bbox_prev.reshape(-1, 5),
+            bbox_curr.reshape(-1, 5), bbox_prev_targets, bbox_curr_targets,
+            bbox_prev_weights, bbox_curr_weights, batch_img_metas,
+            cls_avg_factor)
+        num_pos = max(float(reduce_mean(loss_cls.new_tensor(
+            [num_total_pos])).item()), 1.0)
+        loss_pres_prev = self.loss_presence(
+            presence_prev.reshape(-1), pres_prev_targets, pres_weights,
+            avg_factor=num_pos)
+        loss_pres_curr = self.loss_presence(
+            presence_curr.reshape(-1), pres_curr_targets, pres_weights,
+            avg_factor=num_pos)
+        factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
+        bbox_prev_flat = bbox_prev.reshape(-1, 5)
+        bbox_curr_flat = bbox_curr.reshape(-1, 5)
+        loss_iou_prev = self.loss_iou(
+            bbox_prev_flat * factors, bbox_prev_targets * factors,
+            bbox_prev_weights, avg_factor=num_pos)
+        loss_iou_curr = self.loss_iou(
+            bbox_curr_flat * factors, bbox_curr_targets * factors,
+            bbox_curr_weights, avg_factor=num_pos)
+        loss_bbox_prev = self.loss_bbox(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+            avg_factor=num_pos)
+        loss_bbox_curr = self.loss_bbox(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+            avg_factor=num_pos)
+        return (loss_cls, loss_pres_prev, loss_pres_curr, loss_bbox_prev,
+                loss_bbox_curr, loss_iou_prev, loss_iou_curr)
 
     def loss_by_feat_single(
         self,
@@ -349,13 +536,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             cls_iou_targets = label_weights.new_zeros(cls_scores.shape)
             if pos_inds.numel() > 0:
                 pos_labels = labels[pos_inds]
-                iou_targets = self._pair_hbox_iou_targets(
+                iou_targets = self._pair_iou_targets(
                     bbox_prev[pos_inds],
                     bbox_curr[pos_inds],
                     bbox_prev_targets[pos_inds],
                     bbox_curr_targets[pos_inds],
                     bbox_prev_weights[pos_inds],
                     bbox_curr_weights[pos_inds],
+                    batch_img_metas,
+                    pos_inds,
+                    bbox_prev.size(0),
                 )
                 cls_iou_targets[pos_inds, pos_labels] = iou_targets
             return self.loss_cls(
@@ -363,8 +553,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         return self.loss_cls(
             cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
 
-    @staticmethod
     def _pair_hbox_iou_targets(
+        self,
         bbox_prev: Tensor,
         bbox_curr: Tensor,
         bbox_prev_targets: Tensor,
@@ -399,6 +589,83 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         valid_any = side_count > 0
         iou[valid_any] = iou[valid_any] / side_count[valid_any]
         return iou
+
+    def _pair_iou_targets(
+        self,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        bbox_prev_targets: Tensor,
+        bbox_curr_targets: Tensor,
+        bbox_prev_weights: Tensor,
+        bbox_curr_weights: Tensor,
+        batch_img_metas: List[dict],
+        flat_pos_inds: Tensor,
+        flat_num_queries: int,
+    ) -> Tensor:
+        """Quality targets for pair Varifocal cls on visible sides."""
+        if self.varifocal_loss_iou_type == 'hbox_iou':
+            return self._pair_hbox_iou_targets(
+                bbox_prev, bbox_curr, bbox_prev_targets, bbox_curr_targets,
+                bbox_prev_weights, bbox_curr_weights)
+
+        if self.varifocal_loss_iou_type not in ('rbox_iou', 'prob_iou'):
+            raise NotImplementedError(
+                f'Unsupported pair Varifocal IoU target '
+                f'{self.varifocal_loss_iou_type!r}')
+
+        num_imgs = len(batch_img_metas)
+        num_queries = flat_num_queries // max(num_imgs, 1)
+        factors = []
+        for img_meta in batch_img_metas:
+            img_h, img_w = img_meta['img_shape']
+            factor = bbox_prev.new_tensor(
+                [img_w, img_h, img_w, img_h,
+                 self.angle_factor]).unsqueeze(0)
+            factors.append(factor.repeat(num_queries, 1))
+        pos_factors = torch.cat(factors, 0)[flat_pos_inds]
+
+        pred_prev = bbox_prev * pos_factors
+        pred_curr = bbox_curr * pos_factors
+        target_prev = bbox_prev_targets * pos_factors
+        target_curr = bbox_curr_targets * pos_factors
+
+        valid_prev = bbox_prev_weights[:, 0] > 0
+        valid_curr = bbox_curr_weights[:, 0] > 0
+        iou = bbox_prev.new_zeros(bbox_prev.size(0))
+        side_count = bbox_prev.new_zeros(bbox_prev.size(0))
+
+        if self.varifocal_loss_iou_type == 'rbox_iou':
+            overlap_fn = rbbox_overlaps
+        else:
+            overlap_fn = None
+
+        if valid_prev.any():
+            if overlap_fn is None:
+                iou[valid_prev] += probiou(
+                    pred_prev[valid_prev].detach(),
+                    target_prev[valid_prev])[:, 0]
+            else:
+                iou[valid_prev] += overlap_fn(
+                    pred_prev[valid_prev].detach(),
+                    target_prev[valid_prev],
+                    is_aligned=True)
+            side_count[valid_prev] += 1
+
+        if valid_curr.any():
+            if overlap_fn is None:
+                iou[valid_curr] += probiou(
+                    pred_curr[valid_curr].detach(),
+                    target_curr[valid_curr])[:, 0]
+            else:
+                iou[valid_curr] += overlap_fn(
+                    pred_curr[valid_curr].detach(),
+                    target_curr[valid_curr],
+                    is_aligned=True)
+            side_count[valid_curr] += 1
+
+        valid_any = side_count > 0
+        iou[valid_any] = iou[valid_any] / side_count[valid_any]
+        return iou.clamp_(min=0, max=1)
 
     def _build_rescale_factors(self, batch_img_metas: List[dict],
                                bbox_prev: Tensor) -> Tensor:
@@ -577,10 +844,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         img_shape = img_meta['img_shape']
 
         if self.loss_cls.use_sigmoid:
-            cls_score = cls_score.sigmoid()
-            scores, indexes = cls_score.view(-1).topk(max_per_img)
-            det_labels = indexes % self.num_classes
-            bbox_index = indexes // self.num_classes
+            # A pair query represents one object pair.  Flattening Q*C can
+            # emit the same query multiple times with different labels, which
+            # breaks the one-query/one-pair matching contract.
+            scores, det_labels = cls_score.sigmoid().max(-1)
+            max_per_img = min(max_per_img, scores.numel())
+            scores, bbox_index = scores.topk(max_per_img)
+            det_labels = det_labels[bbox_index]
         else:
             scores, det_labels = cls_score.softmax(dim=-1)[..., :-1].max(-1)
             scores, bbox_index = scores.topk(max_per_img)

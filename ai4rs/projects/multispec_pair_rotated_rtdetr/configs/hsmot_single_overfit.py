@@ -66,7 +66,7 @@ val_dataloader = dict(
         pipeline=test_pipeline,
         backend_args=backend_args))
 
-val_evaluator = dict(type='HSMOTDetMetric')
+val_evaluator = dict(type='HSMOTDetMetric', eval_mode='area')
 
 test_dataloader = val_dataloader
 test_evaluator = val_evaluator

@@ -2,6 +2,7 @@
 """Validation visualization hook for HSMOT pair RT-DETR."""
 
 import os.path as osp
+from collections import defaultdict
 from typing import Optional, Sequence
 
 import cv2
@@ -20,7 +21,7 @@ from mmrotate.datasets.transforms.visualize_hsmot_pair import (
     visualize_hsmot_pair,
 )
 
-from .pair_overfit_metric import _eval_pair_sample, _to_rbox_tensor
+from .pair_overfit_metric import _eval_pair_sample, _rbox_iou, _to_rbox_tensor
 
 
 def _crop_frame_to_img_shape(frame: torch.Tensor,
@@ -94,32 +95,101 @@ def _match_pred_indices(
     pred: InstanceData,
     score_thr: float,
 ) -> dict:
-    """Map GT index -> best pred query index (or -1)."""
+    """Legacy score-first matcher retained for single-frame visualization."""
     matches = {}
     if len(gt.labels) == 0:
         return matches
-
     gt_labels = gt.labels.cpu()
     pred_scores = pred.scores.cpu()
     pred_labels = pred.labels.cpu()
     used_queries = set()
     for gi in range(len(gt_labels)):
         label = int(gt_labels[gi].item())
-        cls_mask = pred_labels == label
-        cand_scores = pred_scores.clone()
-        cand_scores[~cls_mask] = -1.0
-        cand_scores[list(used_queries)] = -1.0
-        best_q = int(cand_scores.argmax().item())
-        best_score = float(cand_scores[best_q].item())
-        if best_score < score_thr:
-            matches[gi] = -1
-            continue
-        if best_q in used_queries:
+        candidates = pred_scores.clone()
+        candidates[pred_labels != label] = -1.0
+        candidates[list(used_queries)] = -1.0
+        best_q = int(candidates.argmax().item())
+        if float(candidates[best_q].item()) < score_thr:
             matches[gi] = -1
             continue
         used_queries.add(best_q)
         matches[gi] = best_q
     return matches
+
+
+def _match_pred_indices_by_iou(
+    gt: InstanceData,
+    pred: InstanceData,
+    iou_thr: float,
+) -> dict:
+    """Assign geometrically valid same-class queries for GT diagnostics."""
+    gt_labels = gt.labels.cpu()
+    gt_prev = _to_rbox_tensor(gt.bboxes_prev).cpu()
+    gt_curr = _to_rbox_tensor(gt.bboxes_curr).cpu()
+    valid_prev = gt.valid_prev.cpu().bool()
+    valid_curr = gt.valid_curr.cpu().bool()
+    pred_prev = _to_rbox_tensor(pred.bboxes_prev).cpu()
+    pred_curr = _to_rbox_tensor(pred.bboxes_curr).cpu()
+    pred_labels = pred.labels.cpu()
+    candidates = []
+    for gi, label in enumerate(gt_labels.tolist()):
+        for qi, pred_label in enumerate(pred_labels.tolist()):
+            if pred_label != label:
+                continue
+            ious = []
+            if valid_prev[gi]:
+                ious.append(_rbox_iou(pred_prev[qi], gt_prev[gi]))
+            if valid_curr[gi]:
+                ious.append(_rbox_iou(pred_curr[qi], gt_curr[gi]))
+            pair_iou = min(ious) if ious else 0.0
+            if pair_iou >= iou_thr:
+                candidates.append((pair_iou, gi, qi))
+
+    matches = {}
+    used_queries = set()
+    used_gt = set()
+    for pair_iou, gi, qi in sorted(candidates, reverse=True):
+        if gi in used_gt or qi in used_queries:
+            continue
+        matches[gi] = qi
+        used_gt.add(gi)
+        used_queries.add(qi)
+    return matches
+
+
+def _draw_prediction_view(
+    left: np.ndarray,
+    right: np.ndarray,
+    pred: InstanceData,
+    *,
+    score_thr: float,
+    pres_thr: float,
+    img_meta: Optional[dict],
+    color: tuple,
+) -> None:
+    """Draw all deployment candidates above a score threshold."""
+    pred_prev = _to_rbox_tensor(pred.bboxes_prev).cpu()
+    pred_curr = _to_rbox_tensor(pred.bboxes_curr).cpu()
+    if img_meta is not None:
+        pred_prev = _bboxes_to_input_space(pred_prev, img_meta).cpu()
+        pred_curr = _bboxes_to_input_space(pred_curr, img_meta).cpu()
+    scores = pred.scores.cpu()
+    pres_prev = pred.presence_prev.cpu()
+    pres_curr = pred.presence_curr.cpu()
+    keep = scores >= score_thr
+    labels = [
+        f'p{qi} s={scores[qi]:.2f} pr={pres_prev[qi]:.2f}'
+        for qi in torch.nonzero(keep & (pres_prev >= pres_thr),
+                                 as_tuple=False).flatten().tolist()
+    ]
+    prev_keep = keep & (pres_prev >= pres_thr)
+    curr_keep = keep & (pres_curr >= pres_thr)
+    _draw_pred_boxes(left, pred_prev[prev_keep], labels, color)
+    labels = [
+        f'p{qi} s={scores[qi]:.2f} pr={pres_curr[qi]:.2f}'
+        for qi in torch.nonzero(curr_keep, as_tuple=False).flatten().tolist()
+    ]
+    _draw_pred_boxes(right, pred_curr[curr_keep], labels, color)
 
 
 def visualize_hsmot_pair_pred_gt(
@@ -134,8 +204,10 @@ def visualize_hsmot_pair_pred_gt(
     save_path: Optional[str] = None,
     meta_line: Optional[str] = None,
     img_meta: Optional[dict] = None,
+    view: str = 'deploy',
+    low_score_thr: float = 0.10,
 ) -> np.ndarray:
-    """Draw GT (green) and matched predictions (orange) for one pair."""
+    """Draw GT plus a deployment, low-score, or IoU diagnostic view."""
     stats = _eval_pair_sample(
         gt,
         pred,
@@ -173,35 +245,35 @@ def visualize_hsmot_pair_pred_gt(
     left = vis[:, :w_half].copy()
     right = vis[:, w_half:].copy()
 
-    matches = _match_pred_indices(gt, pred, score_thr=score_thr)
-    pred_prev = _to_rbox_tensor(pred.bboxes_prev).cpu()
-    pred_curr = _to_rbox_tensor(pred.bboxes_curr).cpu()
-    if img_meta is not None:
-        pred_prev = _bboxes_to_input_space(pred_prev, img_meta).cpu()
-        pred_curr = _bboxes_to_input_space(pred_curr, img_meta).cpu()
-    pred_scores = pred.scores.cpu()
-    pred_pres_p = pred.presence_prev.cpu()
-    pred_pres_c = pred.presence_curr.cpu()
-
-    prev_boxes = []
-    curr_boxes = []
-    prev_labels = []
-    curr_labels = []
-    for gi, q in matches.items():
-        if q < 0:
-            continue
-        prev_boxes.append(pred_prev[q])
-        curr_boxes.append(pred_curr[q])
-        prev_labels.append(
-            f'p{q} s={pred_scores[q]:.2f} pr={pred_pres_p[q]:.2f}')
-        curr_labels.append(
-            f'p{q} s={pred_scores[q]:.2f} pr={pred_pres_c[q]:.2f}')
-
-    if prev_boxes:
-        _draw_pred_boxes(left, torch.stack(prev_boxes), prev_labels,
-                         (0, 165, 255))
-        _draw_pred_boxes(right, torch.stack(curr_boxes), curr_labels,
-                         (0, 165, 255))
+    if view == 'deploy':
+        _draw_prediction_view(
+            left, right, pred, score_thr=score_thr, pres_thr=pres_thr,
+            img_meta=img_meta, color=(0, 165, 255))
+    elif view == 'low_score':
+        _draw_prediction_view(
+            left, right, pred, score_thr=low_score_thr, pres_thr=pres_thr,
+            img_meta=img_meta, color=(0, 255, 255))
+    elif view == 'iou_diag':
+        matches = _match_pred_indices_by_iou(gt, pred, iou_thr=iou_thr)
+        pred_prev = _to_rbox_tensor(pred.bboxes_prev).cpu()
+        pred_curr = _to_rbox_tensor(pred.bboxes_curr).cpu()
+        if img_meta is not None:
+            pred_prev = _bboxes_to_input_space(pred_prev, img_meta).cpu()
+            pred_curr = _bboxes_to_input_space(pred_curr, img_meta).cpu()
+        scores = pred.scores.cpu()
+        pres_prev = pred.presence_prev.cpu()
+        pres_curr = pred.presence_curr.cpu()
+        query_ids = list(matches.values())
+        _draw_pred_boxes(
+            left, pred_prev[query_ids],
+            [f'p{q} s={scores[q]:.2f} pr={pres_prev[q]:.2f}' for q in query_ids],
+            (255, 255, 0))
+        _draw_pred_boxes(
+            right, pred_curr[query_ids],
+            [f'p{q} s={scores[q]:.2f} pr={pres_curr[q]:.2f}' for q in query_ids],
+            (255, 255, 0))
+    else:
+        raise ValueError(f'Unknown visualization view: {view}')
 
     vis = np.concatenate([left, right], axis=1)
     if save_path is not None:
@@ -219,23 +291,42 @@ class HSMOTPairValVisualizationHook(Hook):
                  score_thr: float = 0.35,
                  iou_thr: float = 0.5,
                  pres_thr: float = 0.5,
-                 out_dir: str = 'val_vis') -> None:
+                 out_dir: str = 'val_vis',
+                 max_samples: Optional[int] = None,
+                 max_samples_per_sequence: Optional[int] = 1,
+                 views: Sequence[str] = ('deploy', 'low_score', 'iou_diag')) -> None:
         self.draw = draw
         self.score_thr = score_thr
         self.iou_thr = iou_thr
         self.pres_thr = pres_thr
         self.out_dir = out_dir
+        self.max_samples = max_samples
+        self.max_samples_per_sequence = max_samples_per_sequence
+        self.views = tuple(views)
+        unknown_views = set(self.views) - {'deploy', 'low_score', 'iou_diag'}
+        if unknown_views:
+            raise ValueError(f'Unknown pair visualization views: {unknown_views}')
         self._save_root: Optional[str] = None
         self._pair_idx = 0
+        self._seq_counts = defaultdict(int)
 
     def before_val_epoch(self, runner: Runner) -> None:
         rank, _ = get_dist_info()
         if rank != 0:
             return
         self._pair_idx = 0
+        self._seq_counts.clear()
         self._save_root = osp.join(
             runner.work_dir, self.out_dir, f'iter_{runner.iter:06d}')
         mkdir_or_exist(self._save_root)
+
+    def _should_save_sample(self, meta: dict) -> bool:
+        if self.max_samples is not None and self._pair_idx >= self.max_samples:
+            return False
+        if self.max_samples_per_sequence is None:
+            return True
+        seq = meta.get('video_id', meta.get('seq_name', 'seq'))
+        return self._seq_counts[seq] < self.max_samples_per_sequence
 
     def after_val_iter(self,
                        runner: Runner,
@@ -255,12 +346,16 @@ class HSMOTPairValVisualizationHook(Hook):
             input_list = inputs
 
         for sample, pair_input in zip(outputs, input_list):
+            if self.max_samples is not None and self._pair_idx >= self.max_samples:
+                return
             if not hasattr(sample, 'pair_gt_instances'):
                 continue
             if not hasattr(sample, 'pred_pair_instances'):
                 continue
 
             meta = sample.metainfo
+            if not self._should_save_sample(meta):
+                continue
             img_shape = tuple(meta.get('img_shape', pair_input.shape[-2:]))
             img_prev, img_curr = _pair_frames_for_vis(pair_input, img_shape)
             img_prev = _to_numpy_image(img_prev)
@@ -274,18 +369,23 @@ class HSMOTPairValVisualizationHook(Hook):
                 f'{meta.get("video_id", "seq")}_'
                 f'{meta.get("frame_id_prev", 0)}_'
                 f'{meta.get("frame_id", 0)}')
-            save_path = osp.join(
-                self._save_root, f'{self._pair_idx:04d}_{pair_name}.jpg')
-            visualize_hsmot_pair_pred_gt(
-                img_prev,
-                img_curr,
-                sample.pair_gt_instances,
-                sample.pred_pair_instances,
-                score_thr=self.score_thr,
-                iou_thr=self.iou_thr,
-                pres_thr=self.pres_thr,
-                save_path=save_path,
-                meta_line=meta_line,
-                img_meta=meta,
-            )
+            for view in self.views:
+                suffix = '' if view == 'deploy' else f'_{view}'
+                visualize_hsmot_pair_pred_gt(
+                    img_prev,
+                    img_curr,
+                    sample.pair_gt_instances,
+                    sample.pred_pair_instances,
+                    score_thr=self.score_thr,
+                    iou_thr=self.iou_thr,
+                    pres_thr=self.pres_thr,
+                    save_path=osp.join(
+                        self._save_root,
+                        f'{self._pair_idx:04d}_{pair_name}{suffix}.jpg'),
+                    meta_line=meta_line,
+                    img_meta=meta,
+                    view=view,
+                )
+            seq = meta.get('video_id', meta.get('seq_name', 'seq'))
+            self._seq_counts[seq] += 1
             self._pair_idx += 1

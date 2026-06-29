@@ -35,8 +35,11 @@ def parse_args():
         help='enable automatically scaling LR.')
     parser.add_argument(
         '--resume',
-        action='store_true',
-        help='resume from the latest checkpoint in the work_dir automatically')
+        nargs='?',
+        const='auto',
+        default=None,
+        help='resume from the latest checkpoint in the work_dir automatically, '
+        'or resume from the specified checkpoint path')
     parser.add_argument(
         '--cfg-options',
         nargs='+',
@@ -113,7 +116,17 @@ def main():
                                '"auto_scale_lr.base_batch_size" in your'
                                ' configuration file.')
 
-    cfg.resume = args.resume
+    # Keep config-level resume settings unless the CLI explicitly requests
+    # auto-resume.  Many experiment configs use ``load_from`` for pretraining;
+    # mmengine treats ``resume=True`` plus ``load_from`` as "resume from
+    # load_from", which would restore optimizer/EMA from the pretrain checkpoint
+    # instead of the latest checkpoint in ``work_dir``.
+    if args.resume is not None:
+        cfg.resume = True
+        if args.resume == 'auto':
+            cfg.load_from = None
+        else:
+            cfg.load_from = args.resume
 
     # Lazy-import configs (with read_base) skip custom_imports in fromfile.
     if cfg.get('custom_imports', None):
@@ -131,4 +144,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

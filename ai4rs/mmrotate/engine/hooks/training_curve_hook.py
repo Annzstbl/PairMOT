@@ -32,7 +32,7 @@ class TrainingCurveHook(Hook):
         self.out_subdir = out_subdir
         self.dpi = dpi
 
-    def after_train(self, runner: Runner) -> None:
+    def _plot(self, runner: Runner, stage: str) -> None:
         rank, _ = get_dist_info()
         if rank != 0:
             return
@@ -53,5 +53,11 @@ class TrainingCurveHook(Hook):
             return
 
         runner.logger.info(
-            'TrainingCurveHook: saved training curves to '
+            f'TrainingCurveHook: saved {stage} training curves to '
             f'{out_dir}: {", ".join(saved.keys())}')
+
+    def after_val_epoch(self, runner: Runner, metrics=None) -> None:
+        self._plot(runner, 'validation')
+
+    def after_train(self, runner: Runner) -> None:
+        self._plot(runner, 'final')

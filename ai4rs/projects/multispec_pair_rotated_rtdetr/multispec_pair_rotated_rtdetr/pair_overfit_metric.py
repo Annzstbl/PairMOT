@@ -9,6 +9,8 @@ from mmengine.structures import InstanceData
 from mmrotate.registry import METRICS
 from mmrotate.structures.bbox import qbox2rbox, rbbox_overlaps
 
+from .overfit_ap import independent_ap_metrics, pair_ap_metrics, serialize_pair_sample
+
 
 def _to_rbox_tensor(boxes) -> torch.Tensor:
     if hasattr(boxes, 'tensor'):
@@ -27,6 +29,12 @@ def _rbox_iou(a: torch.Tensor, b: torch.Tensor) -> float:
         a.unsqueeze(0), b.unsqueeze(0), is_aligned=True)[0].item())
 
 
+def _field(data, key: str):
+    if isinstance(data, dict):
+        return data[key]
+    return getattr(data, key)
+
+
 def _eval_pair_sample(
     gt: InstanceData,
     pred: InstanceData,
@@ -36,7 +44,8 @@ def _eval_pair_sample(
     pres_thr: float,
 ) -> Dict[str, float]:
     """Evaluate one pair sample; return per-sample counters."""
-    num_gt = len(gt.labels)
+    gt_labels_data = _field(gt, 'labels')
+    num_gt = len(gt_labels_data)
     stats = dict(
         gt_pairs=float(num_gt),
         matched_queries=0.0,
@@ -55,36 +64,55 @@ def _eval_pair_sample(
     if num_gt == 0:
         return stats
 
-    gt_labels = gt.labels.cpu()
-    gt_prev = _to_rbox_tensor(gt.bboxes_prev).cpu()
-    gt_curr = _to_rbox_tensor(gt.bboxes_curr).cpu()
-    valid_prev = gt.valid_prev.cpu().bool()
-    valid_curr = gt.valid_curr.cpu().bool()
+    gt_labels = gt_labels_data.cpu()
+    gt_prev = _to_rbox_tensor(_field(gt, 'bboxes_prev')).cpu()
+    gt_curr = _to_rbox_tensor(_field(gt, 'bboxes_curr')).cpu()
+    valid_prev = _field(gt, 'valid_prev').cpu().bool()
+    valid_curr = _field(gt, 'valid_curr').cpu().bool()
 
-    pred_scores = pred.scores.cpu()
-    pred_labels = pred.labels.cpu()
-    pred_prev = pred.bboxes_prev.cpu()
-    pred_curr = pred.bboxes_curr.cpu()
-    pred_pres_p = pred.presence_prev.cpu()
-    pred_pres_c = pred.presence_curr.cpu()
+    pred_scores = _field(pred, 'scores').cpu()
+    pred_labels = _field(pred, 'labels').cpu()
+    pred_prev = _field(pred, 'bboxes_prev').cpu()
+    pred_curr = _field(pred, 'bboxes_curr').cpu()
+    pred_pres_p = _field(pred, 'presence_prev').cpu()
+    pred_pres_c = _field(pred, 'presence_curr').cpu()
 
-    used_queries = set()
+    candidates = []
+    has_score_candidate = [False] * num_gt
     for gi in range(num_gt):
         label = int(gt_labels[gi].item())
-        cls_mask = pred_labels == label
-        cand_scores = pred_scores.clone()
-        cand_scores[~cls_mask] = -1.0
-        cand_scores[list(used_queries)] = -1.0
-        best_q = int(cand_scores.argmax().item())
-        best_score = float(cand_scores[best_q].item())
+        for qi in range(len(pred_scores)):
+            if int(pred_labels[qi].item()) != label:
+                continue
+            if float(pred_scores[qi].item()) < score_thr:
+                continue
+            has_score_candidate[gi] = True
+            ious = []
+            if valid_prev[gi]:
+                ious.append(_rbox_iou(pred_prev[qi], gt_prev[gi]))
+            if valid_curr[gi]:
+                ious.append(_rbox_iou(pred_curr[qi], gt_curr[gi]))
+            mean_iou = sum(ious) / len(ious) if ious else 0.0
+            candidates.append((mean_iou, gi, qi))
 
-        if best_score < score_thr:
+    gt_to_query = {}
+    used_gt = set()
+    used_queries = set()
+    for mean_iou, gi, qi in sorted(candidates, reverse=True):
+        if gi in used_gt or qi in used_queries:
+            continue
+        used_gt.add(gi)
+        used_queries.add(qi)
+        gt_to_query[gi] = qi
+
+    for gi in range(num_gt):
+        if gi not in gt_to_query:
             stats['match_fail'] += 1.0
+            if has_score_candidate[gi]:
+                stats['duplicate_match'] += 1.0
             continue
 
-        if best_q in used_queries:
-            stats['duplicate_match'] += 1.0
-        used_queries.add(best_q)
+        best_q = gt_to_query[gi]
         stats['matched_queries'] += 1.0
 
         if valid_prev[gi]:
@@ -118,7 +146,7 @@ def _eval_pair_sample(
 
 @METRICS.register_module()
 class HSMOTPairOverfitMetric(BaseMetric):
-    """Pair matching / IoU / presence metrics for overfit validation."""
+    """Pair matching / IoU / presence metrics and ranking AP validation."""
 
     default_prefix = 'pair'
 
@@ -126,27 +154,43 @@ class HSMOTPairOverfitMetric(BaseMetric):
                  score_thr: float = 0.35,
                  iou_thr: float = 0.5,
                  pres_thr: float = 0.5,
+                 max_dets: int | None = 100,
+                 report_gaps: Sequence[int] = (),
                  collect_device: str = 'cpu',
                  prefix: str = None) -> None:
         super().__init__(collect_device=collect_device, prefix=prefix)
         self.score_thr = score_thr
         self.iou_thr = iou_thr
         self.pres_thr = pres_thr
+        self.max_dets = max_dets
+        self.report_gaps = tuple(sorted(set(int(gap) for gap in report_gaps)))
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
         for sample in data_samples:
-            if not hasattr(sample, 'pair_gt_instances'):
+            if isinstance(sample, dict):
+                gt = sample.get('pair_gt_instances')
+                pred = sample.get('pred_pair_instances')
+            else:
+                gt = getattr(sample, 'pair_gt_instances', None)
+                pred = getattr(sample, 'pred_pair_instances', None)
+            if gt is None:
                 continue
-            if not hasattr(sample, 'pred_pair_instances'):
+            if pred is None:
                 continue
-            self.results.append(
-                _eval_pair_sample(
-                    sample.pair_gt_instances,
-                    sample.pred_pair_instances,
-                    score_thr=self.score_thr,
-                    iou_thr=self.iou_thr,
-                    pres_thr=self.pres_thr,
-                ))
+            # Keep the legacy counters as diagnostics, but make AP the metric
+            # reported by validation and used by the acceptance scripts.
+            stats = _eval_pair_sample(
+                gt,
+                pred,
+                score_thr=self.score_thr,
+                iou_thr=self.iou_thr,
+                pres_thr=self.pres_thr,
+            )
+            stats['ap_sample'] = serialize_pair_sample(
+                gt, pred, pres_thr=self.pres_thr, max_dets=self.max_dets)
+            stats['frame_gap'] = int(getattr(sample, 'metainfo', {}).get(
+                'frame_gap', 0))
+            self.results.append(stats)
 
     def compute_metrics(self, results: List[dict]) -> Dict[str, float]:
         if not results:
@@ -183,4 +227,48 @@ class HSMOTPairOverfitMetric(BaseMetric):
             metrics['mean_iou_curr'] = iou_curr_sum / iou_curr_count
         if presence_total > 0:
             metrics['presence_acc'] = presence_ok / presence_total
+        ap_samples = [r['ap_sample'] for r in results]
+        pair_metrics = pair_ap_metrics(ap_samples)
+        metrics.update(pair_metrics)
+        independent_metrics = independent_ap_metrics(
+            ap_samples, pair_ap50=pair_metrics['pair_AP50'])
+        metrics.update(independent_metrics)
+        for gap in self.report_gaps:
+            gap_samples = [r['ap_sample'] for r in results
+                           if r.get('frame_gap') == gap]
+            if not gap_samples:
+                continue
+            prefix = f'gap{gap}_'
+            if len(gap_samples) == len(ap_samples):
+                metrics.update({
+                    f'{prefix}{name}': value
+                    for name, value in pair_metrics.items()
+                })
+                metrics.update({
+                    f'{prefix}{name}': value
+                    for name, value in independent_metrics.items()
+                })
+                continue
+            gap_pair_metrics = pair_ap_metrics(gap_samples)
+            metrics.update({
+                f'{prefix}{name}': value
+                for name, value in gap_pair_metrics.items()
+            })
+            metrics.update({
+                f'{prefix}{name}': value
+                for name, value in independent_ap_metrics(
+                    gap_samples,
+                    pair_ap50=gap_pair_metrics['pair_AP50']).items()
+            })
         return metrics
+
+
+@METRICS.register_module()
+class HSMOTPairAPMetric(HSMOTPairOverfitMetric):
+    """Production name for the pair AP evaluator.
+
+    The historical ``HSMOTPairOverfitMetric`` name remains registered so old
+    acceptance configs continue to run unchanged.
+    """
+
+    pass

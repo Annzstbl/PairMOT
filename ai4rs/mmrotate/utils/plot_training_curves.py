@@ -32,9 +32,13 @@ def load_scalars(scalars_path: str) -> List[dict]:
     records = []
     with open(scalars_path, 'r', encoding='utf-8') as f:
         for line in f:
-            line = line.strip()
-            if line:
+            line = line.replace('\x00', '').strip()
+            if not line:
+                continue
+            try:
                 records.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
     return records
 
 
@@ -153,7 +157,8 @@ def _split_val_metric_keys(
     map_keys, class_ap_keys, class_recall_keys = [], [], []
     for key in val_keys:
         name = key.split('/')[-1]
-        if name in ('mAP', 'mean_recall') or (
+        if name in ('mAP', 'mean_recall') or name.endswith(('_AP50', '_AP75',
+                                                            '_mAP50_95')) or (
                 name.startswith('AP') and name[2:].isdigit()):
             map_keys.append(key)
         elif name.endswith('_AP'):
@@ -161,6 +166,15 @@ def _split_val_metric_keys(
         elif name.endswith('_recall'):
             class_recall_keys.append(key)
     return map_keys, class_ap_keys, class_recall_keys
+
+
+def _pair_ap_keys(keys: Sequence[str]) -> List[str]:
+    """Select readable global pair-detection AP curves for the overview."""
+    wanted = {
+        'independent_AP50', 'independent_mAP50_95',
+        'pair_AP50', 'pair_mAP50_95', 'association_gap_AP50',
+    }
+    return [key for key in keys if key.split('/')[-1] in wanted]
 
 
 def _sort_ap_keys(keys: Sequence[str]) -> List[str]:
@@ -236,7 +250,7 @@ def plot_training_curves(
     val_keys = _collect_val_metric_keys(val_records)
     map_keys, class_ap_keys, class_recall_keys = _split_val_metric_keys(
         val_keys)
-    overview_map_keys = [
+    overview_map_keys = _pair_ap_keys(map_keys) or [
         k for k in _sort_ap_keys(map_keys)
         if k.split('/')[-1] in ('mAP', 'AP50', 'AP75', 'AP95')
     ] or map_keys
@@ -248,7 +262,7 @@ def plot_training_curves(
             if xs:
                 ax.plot(xs, ys, label=key.split('/')[-1], marker='o',
                         linewidth=1.2, markersize=4)
-        ax.set_title('Validation mAP / AP')
+        ax.set_title('Validation AP')
         ax.set_xlabel('epoch')
         ax.grid(True, alpha=0.3)
         ax.legend(loc='best', fontsize=8)
@@ -313,7 +327,7 @@ def plot_training_curves(
                 if xs:
                     ax.plot(xs, ys, label=key.split('/')[-1], marker='o',
                             linewidth=1.2, markersize=5)
-            ax.set_title('Validation mAP / AP')
+            ax.set_title('Validation AP')
             ax.set_xlabel('epoch')
             ax.grid(True, alpha=0.3)
             ax.legend(loc='best', fontsize=8)
