@@ -4,6 +4,7 @@
 from typing import Dict, List, Literal, Optional, Tuple
 
 import torch
+import torch.nn.functional as F
 from mmengine.logging import print_log
 from mmdet.structures import OptSampleList, SampleList
 from mmrotate.registry import MODELS
@@ -17,7 +18,8 @@ from .pair_rotated_rtdetr_layers import PairRotatedRTDETRTransformerDecoder
 from .pair_cdn_query_generator import PairCdnQueryGenerator
 from .component_timer import CudaComponentTimer
 
-QueryInitMode = Literal['learned', 'gt_noised', 'dual_topk']
+QueryInitMode = Literal['learned', 'gt_noised', 'dual_topk',
+                        'pair_topk_v1', 'pair_topk_sameidx_v1']
 
 
 @MODELS.register_module()
@@ -37,15 +39,19 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  query_init: QueryInitMode = 'learned',
                  gt_ref_noise_scale: float = 0.02,
                  pair_dn_cfg: Optional[Dict] = None,
+                 pair_proposal_cfg: Optional[Dict] = None,
                  **kwargs) -> None:
-        if query_init not in ('learned', 'gt_noised', 'dual_topk'):
+        if query_init not in ('learned', 'gt_noised', 'dual_topk',
+                              'pair_topk_v1', 'pair_topk_sameidx_v1'):
             raise ValueError(
-                f'query_init must be learned, gt_noised, or dual_topk, '
+                f'query_init must be learned, gt_noised, dual_topk, '
+                f'pair_topk_v1, or pair_topk_sameidx_v1, '
                 f'got {query_init!r}')
         self.pair_mode = pair_mode
         self.query_init = query_init
         self.gt_ref_noise_scale = gt_ref_noise_scale
         self.pair_dn_cfg = pair_dn_cfg
+        self.pair_proposal_cfg = pair_proposal_cfg or {}
         super().__init__(*args, **kwargs)
         self.debug_shapes = debug_shapes
         self.pair_dn_query_generator = None
@@ -88,6 +94,17 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         self.embed_dims = self.decoder.embed_dims
         self.memory_trans_fc = nn.Linear(self.embed_dims, self.embed_dims)
         self.memory_trans_norm = nn.LayerNorm(self.embed_dims)
+        if self.pair_mode:
+            self.pair_query_fusion = nn.Linear(
+                self.embed_dims * 2, self.embed_dims)
+            nn.init.zeros_(self.pair_query_fusion.weight)
+            nn.init.zeros_(self.pair_query_fusion.bias)
+            with torch.no_grad():
+                eye = torch.eye(self.embed_dims)
+                self.pair_query_fusion.weight[:, :self.embed_dims].copy_(
+                    0.5 * eye)
+                self.pair_query_fusion.weight[:, self.embed_dims:].copy_(
+                    0.5 * eye)
 
     def _log_shape(self, name: str, tensor: Tensor) -> None:
         if self.debug_shapes:
@@ -171,6 +188,291 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         reference_prev = ref_prev_unact.sigmoid()
         reference_curr = ref_curr_unact.sigmoid()
         return query, reference_prev, reference_curr
+
+    def _single_frame_topk_proposals(
+        self,
+        memory: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+        reg_branch: nn.Module,
+        pre_topk: int,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        """Generate independent per-frame encoder top-k proposals."""
+        bs, num_values, c = memory.shape
+        k = min(pre_topk, num_values)
+        num_layers = self.decoder.num_layers
+        output_memory, output_proposals = self.gen_encoder_output_proposals(
+            memory, memory_mask, spatial_shapes)
+        enc_cls = self.bbox_head.cls_branches[num_layers](output_memory)
+        scores = enc_cls.sigmoid().max(-1)[0]
+        topk_idx = torch.topk(scores, k=k, dim=1)[1]
+        query = torch.gather(
+            output_memory, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, c))
+        props = torch.gather(
+            output_proposals, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, 5))
+        refs = (reg_branch(query) + props).sigmoid()
+        topk_scores = torch.gather(scores, 1, topk_idx)
+        return query, refs, topk_scores, topk_idx
+
+    def _topk_pair_queries_sameidx_v1(
+        self,
+        memory_prev: Tensor,
+        memory_curr: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """Dual-frame proposal scoring while preserving aligned proposal index.
+
+        This is a conservative two-frame proposal init: both frames build their
+        encoder proposals independently, but top-k is selected over the same
+        flattened spatial index. It avoids the free proposal rematching used in
+        ``pair_topk_v1`` so pretrained RT-DETR proposal ordering remains stable.
+        """
+        cfg = self.pair_proposal_cfg
+        bs, num_values, c = memory_prev.shape
+        k = min(self.num_queries, num_values)
+        num_layers = self.decoder.num_layers
+
+        output_memory_p, output_proposals_p = self.gen_encoder_output_proposals(
+            memory_prev, memory_mask, spatial_shapes)
+        output_memory_c, output_proposals_c = self.gen_encoder_output_proposals(
+            memory_curr, memory_mask, spatial_shapes)
+
+        enc_cls_p = self.bbox_head.cls_branches[num_layers](output_memory_p)
+        enc_cls_c = self.bbox_head.cls_branches[num_layers](output_memory_c)
+        score_p = enc_cls_p.sigmoid().max(-1)[0]
+        score_c = enc_cls_c.sigmoid().max(-1)[0]
+
+        score_mode = str(cfg.get('sameidx_score_mode', 'sqrt'))
+        if score_mode == 'prev':
+            joint_score = score_p
+        elif score_mode == 'mean':
+            joint_score = 0.5 * (score_p + score_c)
+        elif score_mode == 'min':
+            joint_score = torch.minimum(score_p, score_c)
+        else:
+            joint_score = torch.sqrt(
+                score_p.clamp(min=1e-6) * score_c.clamp(min=1e-6))
+
+        topk_idx = torch.topk(joint_score, k=k, dim=1)[1]
+        query_p = torch.gather(
+            output_memory_p, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, c))
+        query_c = torch.gather(
+            output_memory_c, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, c))
+        query = self.pair_query_fusion(torch.cat([query_p, query_c], dim=-1))
+
+        props_p = torch.gather(
+            output_proposals_p, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, 5))
+        props_c = torch.gather(
+            output_proposals_c, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, 5))
+
+        ref_source = str(cfg.get('sameidx_ref_source', 'frame'))
+        if ref_source == 'fused':
+            ref_prev_unact = self.bbox_head.reg_branches[num_layers](
+                query) + props_p
+            ref_curr_unact = self.bbox_head.reg_branches_curr[num_layers](
+                query) + props_c
+        else:
+            ref_prev_unact = self.bbox_head.reg_branches[num_layers](
+                query_p) + props_p
+            ref_curr_unact = self.bbox_head.reg_branches_curr[num_layers](
+                query_c) + props_c
+
+        reference_prev = ref_prev_unact.sigmoid()
+        reference_curr = ref_curr_unact.sigmoid()
+
+        if k < self.num_queries:
+            pad = self.num_queries - k
+            learned_query = self.decoder.query_embedding.weight.to(
+                device=memory_prev.device, dtype=memory_prev.dtype)
+            learned_prev = self.decoder.ref_prev_embedding.weight.sigmoid().to(
+                device=memory_prev.device, dtype=memory_prev.dtype)
+            learned_curr = self.decoder.ref_curr_embedding.weight.sigmoid().to(
+                device=memory_prev.device, dtype=memory_prev.dtype)
+            query = torch.cat([
+                query,
+                learned_query[:pad].unsqueeze(0).expand(bs, -1, -1)
+            ], dim=1)
+            reference_prev = torch.cat([
+                reference_prev,
+                learned_prev[:pad].unsqueeze(0).expand(bs, -1, -1)
+            ], dim=1)
+            reference_curr = torch.cat([
+                reference_curr,
+                learned_curr[:pad].unsqueeze(0).expand(bs, -1, -1)
+            ], dim=1)
+
+        return query, reference_prev, reference_curr
+
+    def _pair_match_score(self, query_prev: Tensor, query_curr: Tensor,
+                          ref_prev: Tensor, ref_curr: Tensor,
+                          score_prev: Tensor, score_curr: Tensor) -> Tensor:
+        """Build proposal pair score from appearance, geometry, and cls prior."""
+        cfg = self.pair_proposal_cfg
+        sim_weight = float(cfg.get('sim_weight', 1.0))
+        geom_weight = float(cfg.get('geom_weight', 1.0))
+        score_weight = float(cfg.get('score_weight', 1.0))
+        geom_sigma = float(cfg.get('geom_sigma', 0.08))
+        max_center_dist = float(cfg.get('max_center_dist', 0.35))
+        max_log_scale = float(cfg.get('max_log_scale', 1.2))
+
+        q_prev = F.normalize(query_prev, dim=-1)
+        q_curr = F.normalize(query_curr, dim=-1)
+        sim = torch.matmul(q_prev, q_curr.transpose(0, 1))
+        sim = (sim + 1.0) * 0.5
+
+        center_delta = ref_prev[:, None, :2] - ref_curr[None, :, :2]
+        center_dist = center_delta.norm(dim=-1)
+        center_score = torch.exp(-center_dist / max(geom_sigma, 1e-6))
+
+        wh_prev = ref_prev[:, None, 2:4].clamp(min=1e-4)
+        wh_curr = ref_curr[None, :, 2:4].clamp(min=1e-4)
+        log_scale = (wh_prev.log() - wh_curr.log()).abs().amax(dim=-1)
+        scale_score = torch.exp(-log_scale / max(max_log_scale, 1e-6))
+        geom = center_score * scale_score
+
+        cls_prior = torch.sqrt(
+            score_prev[:, None].clamp(min=1e-6) *
+            score_curr[None, :].clamp(min=1e-6))
+        match_score = (
+            sim_weight * sim + geom_weight * geom +
+            score_weight * cls_prior)
+        invalid = center_dist > max_center_dist
+        match_score = match_score.masked_fill(invalid, -1e6)
+        return match_score
+
+    def _topk_pair_queries_v1(
+        self,
+        memory_prev: Tensor,
+        memory_curr: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+    ) -> Tuple[Tensor, Tensor, Tensor]:
+        """Independent frame proposals + greedy pair matching + query fusion."""
+        cfg = self.pair_proposal_cfg
+        bs, _, c = memory_prev.shape
+        pre_topk = int(cfg.get('pre_topk', self.num_queries * 2))
+        match_score_thr = float(cfg.get('match_score_thr', 0.0))
+        birth_score_thr = float(cfg.get('birth_score_thr', 0.35))
+        death_score_thr = float(cfg.get('death_score_thr', 0.35))
+        enable_birth = bool(cfg.get('enable_birth', True))
+        enable_death = bool(cfg.get('enable_death', True))
+
+        num_layers = self.decoder.num_layers
+        query_p, ref_p, score_p, _ = self._single_frame_topk_proposals(
+            memory_prev, memory_mask, spatial_shapes,
+            self.bbox_head.reg_branches[num_layers], pre_topk)
+        query_c, ref_c, score_c, _ = self._single_frame_topk_proposals(
+            memory_curr, memory_mask, spatial_shapes,
+            self.bbox_head.reg_branches_curr[num_layers], pre_topk)
+
+        learned_query = self.decoder.query_embedding.weight.to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_prev = self.decoder.ref_prev_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_curr = self.decoder.ref_curr_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+
+        batch_queries: List[Tensor] = []
+        batch_ref_prev: List[Tensor] = []
+        batch_ref_curr: List[Tensor] = []
+        for b in range(bs):
+            pair_scores = self._pair_match_score(
+                query_p[b], query_c[b], ref_p[b], ref_c[b], score_p[b],
+                score_c[b])
+            best_scores, best_curr = pair_scores.max(dim=1)
+            order = torch.argsort(best_scores, descending=True)
+            used_prev = torch.zeros(
+                query_p.size(1), dtype=torch.bool, device=query_p.device)
+            used_curr = torch.zeros(
+                query_c.size(1), dtype=torch.bool, device=query_c.device)
+            cand_q: List[Tensor] = []
+            cand_prev: List[Tensor] = []
+            cand_curr: List[Tensor] = []
+            cand_score: List[Tensor] = []
+
+            for pi in order:
+                score = best_scores[pi]
+                if score <= match_score_thr or score < -1e5:
+                    break
+                ci = best_curr[pi]
+                if used_prev[pi] or used_curr[ci]:
+                    continue
+                fused = self.pair_query_fusion(
+                    torch.cat([query_p[b, pi], query_c[b, ci]], dim=-1))
+                cand_q.append(fused)
+                cand_prev.append(ref_p[b, pi])
+                cand_curr.append(ref_c[b, ci])
+                cand_score.append(score)
+                used_prev[pi] = True
+                used_curr[ci] = True
+                if len(cand_q) >= self.num_queries:
+                    break
+
+            if enable_birth and len(cand_q) < self.num_queries:
+                birth_order = torch.argsort(score_c[b], descending=True)
+                for ci in birth_order:
+                    if used_curr[ci] or score_c[b, ci] < birth_score_thr:
+                        continue
+                    fused = self.pair_query_fusion(
+                        torch.cat([query_c[b, ci], query_c[b, ci]], dim=-1))
+                    cand_q.append(fused)
+                    cand_prev.append(learned_prev[len(cand_q) - 1])
+                    cand_curr.append(ref_c[b, ci])
+                    cand_score.append(score_c[b, ci])
+                    used_curr[ci] = True
+                    if len(cand_q) >= self.num_queries:
+                        break
+
+            if enable_death and len(cand_q) < self.num_queries:
+                death_order = torch.argsort(score_p[b], descending=True)
+                for pi in death_order:
+                    if used_prev[pi] or score_p[b, pi] < death_score_thr:
+                        continue
+                    fused = self.pair_query_fusion(
+                        torch.cat([query_p[b, pi], query_p[b, pi]], dim=-1))
+                    cand_q.append(fused)
+                    cand_prev.append(ref_p[b, pi])
+                    cand_curr.append(learned_curr[len(cand_q) - 1])
+                    cand_score.append(score_p[b, pi])
+                    used_prev[pi] = True
+                    if len(cand_q) >= self.num_queries:
+                        break
+
+            if cand_q:
+                q = torch.stack(cand_q)
+                rp = torch.stack(cand_prev)
+                rc = torch.stack(cand_curr)
+                scores = torch.stack(cand_score)
+                if q.size(0) > self.num_queries:
+                    keep = torch.topk(scores, k=self.num_queries).indices
+                    q, rp, rc = q[keep], rp[keep], rc[keep]
+            else:
+                q = query_p.new_zeros((0, c))
+                rp = ref_p.new_zeros((0, 5))
+                rc = ref_c.new_zeros((0, 5))
+
+            pad = self.num_queries - q.size(0)
+            if pad > 0:
+                q = torch.cat([q, learned_query[:pad]], dim=0)
+                rp = torch.cat([rp, learned_prev[:pad]], dim=0)
+                rc = torch.cat([rc, learned_curr[:pad]], dim=0)
+
+            batch_queries.append(q[:self.num_queries])
+            batch_ref_prev.append(rp[:self.num_queries])
+            batch_ref_curr.append(rc[:self.num_queries])
+
+        return (
+            torch.stack(batch_queries, dim=0),
+            torch.stack(batch_ref_prev, dim=0),
+            torch.stack(batch_ref_curr, dim=0),
+        )
 
     @staticmethod
     def _to_pair_rbox(bboxes) -> Tensor:
@@ -269,6 +571,21 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 memory_mask,
                 spatial_shapes,
             )
+        elif self.query_init == 'pair_topk_v1':
+            query, reference_prev, reference_curr = self._topk_pair_queries_v1(
+                memory_prev,
+                memory_curr,
+                memory_mask,
+                spatial_shapes,
+            )
+        elif self.query_init == 'pair_topk_sameidx_v1':
+            query, reference_prev, reference_curr = (
+                self._topk_pair_queries_sameidx_v1(
+                    memory_prev,
+                    memory_curr,
+                    memory_mask,
+                    spatial_shapes,
+                ))
         else:
             raise RuntimeError(f'Unsupported query_init: {self.query_init!r}')
 

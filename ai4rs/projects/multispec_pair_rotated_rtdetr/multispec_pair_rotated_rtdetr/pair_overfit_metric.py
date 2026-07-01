@@ -5,6 +5,7 @@ from typing import Dict, List, Sequence
 
 import torch
 from mmengine.evaluator import BaseMetric
+from mmengine.logging import print_log
 from mmengine.structures import InstanceData
 from mmrotate.registry import METRICS
 from mmrotate.structures.bbox import qbox2rbox, rbbox_overlaps
@@ -33,6 +34,80 @@ def _field(data, key: str):
     if isinstance(data, dict):
         return data[key]
     return getattr(data, key)
+
+
+def _format_value(value: float) -> str:
+    if isinstance(value, float):
+        if value.is_integer():
+            return f'{value:.0f}'
+        return f'{value:.4f}'
+    return str(value)
+
+
+def _format_row(name: str, value: float) -> str:
+    return f'| {name:<30} | {_format_value(value):>12} |'
+
+
+def _format_pair_metric_table(metrics: Dict[str, float]) -> str:
+    """Build a compact validation summary for human-readable logs."""
+    sections = [
+        ('Detection AP', [
+            'independent_AP50',
+            'independent_AP75',
+            'independent_mAP50_95',
+            'independent_prev_AP50',
+            'independent_curr_AP50',
+        ]),
+        ('Pair AP', [
+            'pair_AP50',
+            'pair_AP75',
+            'pair_mAP50_95',
+            'association_gap_AP50',
+        ]),
+        ('Matching Diagnostics', [
+            'gt_pairs',
+            'matched_queries',
+            'match_ratio',
+            'duplicate_match',
+            'match_fail',
+            'iou_prev_fail',
+            'iou_curr_fail',
+            'presence_fail',
+            'mean_iou_prev',
+            'mean_iou_curr',
+            'presence_acc',
+        ]),
+    ]
+    gap_prefixes = sorted({
+        key.split('_', 1)[0]
+        for key in metrics
+        if key.startswith('gap') and '_' in key
+    })
+    for gap_prefix in gap_prefixes:
+        sections.append((f'{gap_prefix} AP', [
+            f'{gap_prefix}_independent_AP50',
+            f'{gap_prefix}_pair_AP50',
+            f'{gap_prefix}_association_gap_AP50',
+            f'{gap_prefix}_independent_mAP50_95',
+            f'{gap_prefix}_pair_mAP50_95',
+        ]))
+
+    lines = [
+        '',
+        'Pair validation summary:',
+        '+--------------------------------+--------------+',
+        '| metric                         |        value |',
+        '+--------------------------------+--------------+',
+    ]
+    for section_name, keys in sections:
+        present_keys = [key for key in keys if key in metrics]
+        if not present_keys:
+            continue
+        lines.append(f'| [{section_name:<28}] |              |')
+        for key in present_keys:
+            lines.append(_format_row(key, metrics[key]))
+        lines.append('+--------------------------------+--------------+')
+    return '\n'.join(lines)
 
 
 def _eval_pair_sample(
@@ -260,6 +335,7 @@ class HSMOTPairOverfitMetric(BaseMetric):
                     gap_samples,
                     pair_ap50=gap_pair_metrics['pair_AP50']).items()
             })
+        print_log(_format_pair_metric_table(metrics), logger='current')
         return metrics
 
 
