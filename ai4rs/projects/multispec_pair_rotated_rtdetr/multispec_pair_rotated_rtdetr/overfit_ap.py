@@ -27,6 +27,10 @@ def _field(data, key: str):
     return data[key] if isinstance(data, dict) else getattr(data, key)
 
 
+def _has_field(data, key: str) -> bool:
+    return key in data if isinstance(data, dict) else hasattr(data, key)
+
+
 def _ap_from_tp_fp(tp: np.ndarray, fp: np.ndarray, num_gt: int) -> float:
     if num_gt == 0:
         return float('nan')
@@ -125,6 +129,9 @@ def _summary(samples: Sequence[dict], pair: bool, prefix: str) -> Dict[str, floa
     metrics = {}
     class_ap_grid = [_class_aps(samples, label, pair)
                      for label in range(num_classes)]
+    for label, aps in enumerate(class_ap_grid):
+        if not np.isnan(aps[0]):
+            metrics[f'{prefix}_class{label}_AP50'] = float(aps[0])
     for thr_idx, thr in enumerate(IOU_THRS):
         class_aps = [aps[thr_idx] for aps in class_ap_grid]
         valid = [ap for ap in class_aps if not np.isnan(ap)]
@@ -143,18 +150,27 @@ def serialize_pair_sample(gt,
     gt_labels = _field(gt, 'labels').detach().cpu().long()
     pred_labels = _field(pred, 'labels').detach().cpu().long()
     cls_scores = _field(pred, 'scores').detach().cpu().float().clamp(0, 1)
-    pres_prev = _field(pred, 'presence_prev').detach().cpu().float().clamp(0, 1)
-    pres_curr = _field(pred, 'presence_curr').detach().cpu().float().clamp(0, 1)
-    pred_valid_prev = pres_prev >= pres_thr
-    pred_valid_curr = pres_curr >= pres_thr
-    # Score the visibility mode that the query explicitly predicts.
-    pair_scores = cls_scores * torch.where(
-        pred_valid_prev & pred_valid_curr, torch.sqrt(pres_prev * pres_curr),
-        torch.where(pred_valid_prev, pres_prev * (1 - pres_curr),
-                    (1 - pres_prev) * pres_curr))
+    if _has_field(pred, 'scores_prev'):
+        score_prev = _field(pred, 'scores_prev').detach().cpu().float().clamp(0, 1)
+        score_curr = _field(pred, 'scores_curr').detach().cpu().float().clamp(0, 1)
+        pred_valid_prev = torch.ones_like(score_prev, dtype=torch.bool)
+        pred_valid_curr = torch.ones_like(score_curr, dtype=torch.bool)
+        pair_scores = torch.sqrt(
+            score_prev.clamp(min=1e-6) * score_curr.clamp(min=1e-6))
+    else:
+        pres_prev = _field(pred, 'presence_prev').detach().cpu().float().clamp(0, 1)
+        pres_curr = _field(pred, 'presence_curr').detach().cpu().float().clamp(0, 1)
+        score_prev = cls_scores * pres_prev
+        score_curr = cls_scores * pres_curr
+        pred_valid_prev = pres_prev >= pres_thr
+        pred_valid_curr = pres_curr >= pres_thr
+        # Score the visibility mode that the query explicitly predicts.
+        pair_scores = cls_scores * torch.where(
+            pred_valid_prev & pred_valid_curr, torch.sqrt(pres_prev * pres_curr),
+            torch.where(pred_valid_prev, pres_prev * (1 - pres_curr),
+                        (1 - pres_prev) * pres_curr))
     if max_dets is not None and pair_scores.numel() > max_dets:
-        independent_scores = torch.maximum(cls_scores * pres_prev,
-                                           cls_scores * pres_curr)
+        independent_scores = torch.maximum(score_prev, score_curr)
         rank_scores = torch.maximum(pair_scores, independent_scores)
         keep = torch.topk(rank_scores, k=max_dets).indices
         pred_labels = pred_labels[keep]
@@ -162,8 +178,8 @@ def serialize_pair_sample(gt,
         pred_valid_curr = pred_valid_curr[keep]
         pair_scores = pair_scores[keep]
         cls_scores = cls_scores[keep]
-        pres_prev = pres_prev[keep]
-        pres_curr = pres_curr[keep]
+        score_prev = score_prev[keep]
+        score_curr = score_curr[keep]
         pred_prev = to_rbox_tensor(_field(pred, 'bboxes_prev')).detach().cpu().float()[keep]
         pred_curr = to_rbox_tensor(_field(pred, 'bboxes_curr')).detach().cpu().float()[keep]
     else:
@@ -182,8 +198,10 @@ def serialize_pair_sample(gt,
         pred_valid_curr=pred_valid_curr,
         pred_scores=pair_scores,
         pred_cls_scores=cls_scores,
-        pred_presence_prev=pres_prev,
-        pred_presence_curr=pres_curr)
+        pred_presence_prev=score_prev,
+        pred_presence_curr=score_curr,
+        pred_score_prev=score_prev,
+        pred_score_curr=score_curr)
 
 
 def pair_ap_metrics(samples: Sequence[dict]) -> Dict[str, float]:
@@ -203,8 +221,10 @@ def independent_ap_metrics(pair_samples: Sequence[dict],
                 gt_boxes=sample[f'gt_{side}'][valid],
                 pred_labels=sample['pred_labels'],
                 pred_boxes=sample[f'pred_{side}'],
-                pred_scores=(sample['pred_cls_scores'] *
-                             sample[f'pred_presence_{side}'])))
+                pred_scores=sample.get(
+                    f'pred_score_{side}',
+                    sample['pred_cls_scores'] *
+                    sample[f'pred_presence_{side}'])))
         current = _summary(samples, pair=False, prefix=f'independent_{side}')
         metrics.update(current)
         side_metrics.append(current)

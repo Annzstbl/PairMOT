@@ -189,10 +189,22 @@ def _predict_one(model, preprocessor, pipeline, device, pair_info: dict,
         pred.bboxes_curr.detach().cpu().float(), meta)
     pres_prev = getattr(pred, 'presence_prev', None)
     pres_curr = getattr(pred, 'presence_curr', None)
+    score_prev = getattr(pred, 'scores_prev', None)
+    score_curr = getattr(pred, 'scores_curr', None)
+    label_prev = getattr(pred, 'labels_prev', None)
+    label_curr = getattr(pred, 'labels_curr', None)
     if pres_prev is not None:
         pres_prev = pres_prev.detach().cpu().float()
     if pres_curr is not None:
         pres_curr = pres_curr.detach().cpu().float()
+    if score_prev is not None:
+        score_prev = score_prev.detach().cpu().float()
+    if score_curr is not None:
+        score_curr = score_curr.detach().cpu().float()
+    if label_prev is not None:
+        label_prev = label_prev.detach().cpu().long()
+    if label_curr is not None:
+        label_curr = label_curr.detach().cpu().long()
 
     detections = []
     for idx in range(int(scores.numel())):
@@ -208,6 +220,10 @@ def _predict_one(model, preprocessor, pipeline, device, pair_info: dict,
             label=int(labels[idx]),
             presence_prev=pp,
             presence_curr=pc,
+            score_prev=float(score_prev[idx]) if score_prev is not None else None,
+            score_curr=float(score_curr[idx]) if score_curr is not None else None,
+            label_prev=int(label_prev[idx]) if label_prev is not None else None,
+            label_curr=int(label_curr[idx]) if label_curr is not None else None,
         ))
 
     return PairFrameRecord(
@@ -673,16 +689,16 @@ def save_track_visualizations(args, tracker_name: str,
             _draw_canvas_label(raw_canvas[:, :w_prev], f'prev {rec.prev_frame_id}')
             _draw_canvas_label(raw_canvas[:, w_prev:], f'curr {rec.curr_frame_id}')
             for det in rec.detections:
-                if det.score < args.vis_score_thr:
+                if max(det.prev_side_score(), det.curr_side_score()) < args.vis_score_thr:
                     continue
                 color = _color_for_id(det.index + 1)
                 prev_poly = rbox_to_qbox_for_vis(det.prev_bbox)
                 curr_poly = rbox_to_qbox_for_vis(det.curr_bbox)
                 curr_poly[:, 0] += w_prev
                 _draw_poly(raw_canvas, prev_poly, color,
-                           f'q{det.index}:{det.score:.2f}')
+                           f'q{det.index} p={det.prev_side_score():.2f}')
                 _draw_poly(raw_canvas, curr_poly, color,
-                           f'q{det.index}:{det.score:.2f}')
+                           f'q{det.index} c={det.curr_side_score():.2f}')
                 _draw_pair_link(raw_canvas, prev_poly, curr_poly, color)
             cv2.imwrite(osp.join(raw_dir, name), raw_canvas)
 
@@ -692,19 +708,24 @@ def save_track_visualizations(args, tracker_name: str,
             det_by_index = {det.index: det for det in rec.detections}
             frame_events = events.get(rec.curr_frame_id, [])
             for event in frame_events:
-                if event.get('event') not in ('birth', 'match'):
+                if event.get('event') not in (
+                        'birth', 'match', 'matched_prev_curr_low'):
                     continue
                 det = det_by_index.get(int(event['det_index']))
                 if det is None:
                     continue
-                track_id = int(event['track_id'])
+                track_id = int(event.get('track_id', det.index + 1))
                 color = _color_for_id(track_id)
                 prev_poly = rbox_to_qbox_for_vis(det.prev_bbox)
                 curr_poly = rbox_to_qbox_for_vis(det.curr_bbox)
                 curr_poly[:, 0] += w_prev
                 label = event['event']
-                _draw_poly(match_canvas, prev_poly, color, f'{label} id{track_id}')
-                _draw_poly(match_canvas, curr_poly, color, f'{label} id{track_id}')
+                text = (
+                    f'{label} id{track_id} '
+                    f'p={event.get("prev_score", det.prev_side_score()):.2f} '
+                    f'c={event.get("curr_score", det.curr_side_score()):.2f}')
+                _draw_poly(match_canvas, prev_poly, color, text)
+                _draw_poly(match_canvas, curr_poly, color, text)
                 _draw_pair_link(match_canvas, prev_poly, curr_poly, color)
             cv2.imwrite(osp.join(match_dir, name), match_canvas)
 
@@ -732,9 +753,12 @@ def save_track_visualizations(args, tracker_name: str,
                 _draw_poly(diag_canvas, track_poly, (255, 80, 40),
                            f'track id{track_id}')
                 _draw_poly(diag_canvas, det_prev_poly, (0, 190, 255),
-                           f'prev q{det.index} IoU={iou:.2f} {reason}')
+                           f'prev q{det.index} IoU={iou:.2f} '
+                           f'p={event.get("best_det_prev_score", det.prev_side_score()):.2f} '
+                           f'{reason}')
                 _draw_poly(diag_canvas, det_curr_poly, (60, 230, 80),
-                           f'curr q{det.index}')
+                           f'curr q{det.index} '
+                           f'c={event.get("best_det_curr_score", det.curr_side_score()):.2f}')
                 _draw_pair_link(diag_canvas, det_prev_poly, det_curr_poly,
                                 (0, 190, 255))
             cv2.imwrite(osp.join(diag_dir, name), diag_canvas)

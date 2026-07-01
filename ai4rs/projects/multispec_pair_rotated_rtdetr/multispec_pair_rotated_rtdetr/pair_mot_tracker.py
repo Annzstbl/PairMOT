@@ -55,6 +55,32 @@ class PairDetection:
     label: int
     presence_prev: Optional[float] = None
     presence_curr: Optional[float] = None
+    score_prev: Optional[float] = None
+    score_curr: Optional[float] = None
+    label_prev: Optional[int] = None
+    label_curr: Optional[int] = None
+
+    def prev_side_score(self) -> float:
+        if self.score_prev is not None:
+            return float(self.score_prev)
+        if self.presence_prev is not None:
+            return float(self.cls_score) * float(self.presence_prev)
+        return float(self.score)
+
+    def curr_side_score(self) -> float:
+        if self.score_curr is not None:
+            return float(self.score_curr)
+        if self.presence_curr is not None:
+            return float(self.cls_score) * float(self.presence_curr)
+        return float(self.score)
+
+    def pair_score(self) -> float:
+        return math.sqrt(
+            max(self.prev_side_score(), 1e-6) *
+            max(self.curr_side_score(), 1e-6))
+
+    def birth_score(self) -> float:
+        return self.curr_side_score()
 
 
 @dataclass
@@ -329,7 +355,7 @@ class PairMOTTracker:
         created = []
         self.last_events = []
         for det in record.detections:
-            if det.score < self.new_born_th:
+            if det.birth_score() < self.new_born_th:
                 continue
             iou = rotated_iou_matrix([det.prev_bbox], [det.curr_bbox])[0, 0]
             if iou >= self.init_same_iou_th:
@@ -347,20 +373,27 @@ class PairMOTTracker:
                     'event': 'birth_suppressed',
                     'frame_id': record.curr_frame_id,
                     'det_index': det.index,
-                    'score': det.score,
+                    'score': det.birth_score(),
+                    'pair_score': det.pair_score(),
+                    'prev_score': det.prev_side_score(),
+                    'curr_score': det.curr_side_score(),
                     'label': det.label,
                     'duplicate_iou': duplicate_iou,
                     'new_birth_iou_th': self.new_birth_iou_th,
                 })
                 continue
-            track = self._new_track(bbox, det.score, det.label, record.curr_frame_id)
+            track = self._new_track(
+                bbox, det.birth_score(), det.label, record.curr_frame_id)
             created.append(track)
             self.last_events.append({
                 'event': 'birth',
                 'frame_id': record.curr_frame_id,
                 'track_id': track.track_id,
                 'det_index': det.index,
-                'score': det.score,
+                'score': det.birth_score(),
+                'pair_score': det.pair_score(),
+                'prev_score': det.prev_side_score(),
+                'curr_score': det.curr_side_score(),
                 'label': det.label,
                 'same_frame_iou': float(iou),
             })
@@ -370,7 +403,13 @@ class PairMOTTracker:
         self.last_events = []
         for track in self.tracks:
             self._advance_track_to_frame(track, record.prev_frame_id)
-        detections = [det for det in record.detections if det.score >= self.track_th]
+        # Match to previous-frame tracks only when the previous side is
+        # credible. Current-side confidence is checked after a match and is
+        # also used independently for new births.
+        detections = [
+            det for det in record.detections
+            if det.prev_side_score() >= self.track_th
+        ]
         candidate_tracks = [
             tr for tr in self.tracks
             if tr.state in ('Tracked', 'Lost') and tr.time_since_update <= self.max_age
@@ -381,6 +420,8 @@ class PairMOTTracker:
         unmatched_track_idx = set(range(len(candidate_tracks)))
         unmatched_det_idx = set(range(len(detections)))
         diag_by_track: Dict[int, dict] = {}
+        consumed_det_indices = set()
+        curr_low_track_idx = set()
         if candidate_tracks and detections:
             track_boxes = [tr.bbox for tr in candidate_tracks]
             det_prev_boxes = [det.prev_bbox for det in detections]
@@ -411,6 +452,9 @@ class PairMOTTracker:
                     'best_det_index': best_det.index,
                     'best_det_label': best_det.label,
                     'best_det_score': best_det.score,
+                    'best_det_pair_score': best_det.pair_score(),
+                    'best_det_prev_score': best_det.prev_side_score(),
+                    'best_det_curr_score': best_det.curr_side_score(),
                     'best_iou': best_iou,
                     'match_iou_th': self.match_iou_th,
                     'class_ok': class_ok,
@@ -422,23 +466,44 @@ class PairMOTTracker:
                 if ious[row, col] < self.match_iou_th:
                     continue
                 matches.append((row, col, float(ious[row, col])))
-                unmatched_track_idx.discard(row)
-                unmatched_det_idx.discard(col)
 
         for track_idx, det_idx, match_iou in matches:
             track = candidate_tracks[track_idx]
             det = detections[det_idx]
-            self._update_track(
-                track, det.curr_bbox, det.score, det.label, record.curr_frame_id)
-            self.last_events.append({
-                'event': 'match',
-                'frame_id': record.curr_frame_id,
-                'track_id': track.track_id,
-                'det_index': det.index,
-                'score': det.score,
-                'label': det.label,
-                'match_iou': match_iou,
-            })
+            consumed_det_indices.add(det.index)
+            unmatched_det_idx.discard(det_idx)
+            if det.curr_side_score() >= self.track_th:
+                unmatched_track_idx.discard(track_idx)
+                self._update_track(
+                    track, det.curr_bbox, det.curr_side_score(), det.label,
+                    record.curr_frame_id)
+                self.last_events.append({
+                    'event': 'match',
+                    'frame_id': record.curr_frame_id,
+                    'track_id': track.track_id,
+                    'det_index': det.index,
+                    'score': det.curr_side_score(),
+                    'pair_score': det.pair_score(),
+                    'prev_score': det.prev_side_score(),
+                    'curr_score': det.curr_side_score(),
+                    'label': det.label,
+                    'match_iou': match_iou,
+                })
+            else:
+                curr_low_track_idx.add(track_idx)
+                self.last_events.append({
+                    'event': 'matched_prev_curr_low',
+                    'frame_id': record.curr_frame_id,
+                    'track_id': track.track_id,
+                    'det_index': det.index,
+                    'score': det.curr_side_score(),
+                    'pair_score': det.pair_score(),
+                    'prev_score': det.prev_side_score(),
+                    'curr_score': det.curr_side_score(),
+                    'label': det.label,
+                    'match_iou': match_iou,
+                    'track_th': self.track_th,
+                })
 
         matched_track_idx = {track_idx for track_idx, _, _ in matches}
         matched_det_idx = {det_idx for _, det_idx, _ in matches}
@@ -454,6 +519,8 @@ class PairMOTTracker:
                 diag['reason'] = 'class_constraint'
             elif diag['best_iou'] < self.match_iou_th:
                 diag['reason'] = 'iou_below_threshold'
+            elif track_idx in curr_low_track_idx:
+                diag['reason'] = 'curr_score_below_track_threshold'
             elif best_det_idx in matched_det_idx:
                 diag['reason'] = 'best_det_taken_by_one_to_one_assignment'
             else:
@@ -466,11 +533,12 @@ class PairMOTTracker:
 
         self._mark_lost_and_prune()
 
-        # Pair detections that did not attach to an existing track can create
-        # new tracks only at the higher new-born threshold.
-        for det_idx in sorted(unmatched_det_idx):
-            det = detections[det_idx]
-            if det.score >= self.new_born_th:
+        # Birth is a current-frame decision. It must consider all detections,
+        # including those whose previous side was too weak for track matching.
+        for det in sorted(record.detections, key=lambda item: item.index):
+            if det.index in consumed_det_indices:
+                continue
+            if det.birth_score() >= self.new_born_th:
                 duplicate_iou = self._duplicate_iou_with_tracks(
                     det.curr_bbox, det.label, self.tracks)
                 if duplicate_iou >= self.new_birth_iou_th:
@@ -478,20 +546,27 @@ class PairMOTTracker:
                         'event': 'birth_suppressed',
                         'frame_id': record.curr_frame_id,
                         'det_index': det.index,
-                        'score': det.score,
+                        'score': det.birth_score(),
+                        'pair_score': det.pair_score(),
+                        'prev_score': det.prev_side_score(),
+                        'curr_score': det.curr_side_score(),
                         'label': det.label,
                         'duplicate_iou': duplicate_iou,
                         'new_birth_iou_th': self.new_birth_iou_th,
                     })
                     continue
                 track = self._new_track(
-                    det.curr_bbox, det.score, det.label, record.curr_frame_id)
+                    det.curr_bbox, det.birth_score(), det.label,
+                    record.curr_frame_id)
                 self.last_events.append({
                     'event': 'birth',
                     'frame_id': record.curr_frame_id,
                     'track_id': track.track_id,
                     'det_index': det.index,
-                    'score': det.score,
+                    'score': det.birth_score(),
+                    'pair_score': det.pair_score(),
+                    'prev_score': det.prev_side_score(),
+                    'curr_score': det.curr_side_score(),
                     'label': det.label,
                 })
 

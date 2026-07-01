@@ -76,11 +76,19 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             self.bbox_head.cls_branches[enc_idx],
             self.bbox_head.reg_branches[enc_idx],
             self.bbox_head.reg_branches_curr[enc_idx],
-            self.bbox_head.presence_prev_branches[enc_idx],
-            self.bbox_head.presence_curr_branches[enc_idx],
         ):
             for param in branch.parameters():
                 param.requires_grad = False
+        if hasattr(self.bbox_head, 'cls_branches_curr'):
+            for param in self.bbox_head.cls_branches_curr[enc_idx].parameters():
+                param.requires_grad = False
+        if hasattr(self.bbox_head, 'presence_prev_branches'):
+            for branch in (
+                self.bbox_head.presence_prev_branches[enc_idx],
+                self.bbox_head.presence_curr_branches[enc_idx],
+            ):
+                for param in branch.parameters():
+                    param.requires_grad = False
 
     def _init_layers(self) -> None:
         """Initialize encoder/decoder; pair mode swaps in Pair decoder."""

@@ -45,7 +45,7 @@ def _format_value(value: float) -> str:
 
 
 def _format_row(name: str, value: float) -> str:
-    return f'| {name:<30} | {_format_value(value):>12} |'
+    return f'| {name:<44} | {_format_value(value):>12} |'
 
 
 def _format_pair_metric_table(metrics: Dict[str, float]) -> str:
@@ -91,22 +91,26 @@ def _format_pair_metric_table(metrics: Dict[str, float]) -> str:
             f'{gap_prefix}_independent_mAP50_95',
             f'{gap_prefix}_pair_mAP50_95',
         ]))
+    class_keys = sorted(
+        [key for key in metrics if '_class' in key and key.endswith('_AP50')])
+    if class_keys:
+        sections.append(('Class AP50', class_keys))
 
     lines = [
         '',
         'Pair validation summary:',
-        '+--------------------------------+--------------+',
-        '| metric                         |        value |',
-        '+--------------------------------+--------------+',
+        '+----------------------------------------------+--------------+',
+        '| metric                                       |        value |',
+        '+----------------------------------------------+--------------+',
     ]
     for section_name, keys in sections:
         present_keys = [key for key in keys if key in metrics]
         if not present_keys:
             continue
-        lines.append(f'| [{section_name:<28}] |              |')
+        lines.append(f'| [{section_name:<42}] |              |')
         for key in present_keys:
             lines.append(_format_row(key, metrics[key]))
-        lines.append('+--------------------------------+--------------+')
+        lines.append('+----------------------------------------------+--------------+')
     return '\n'.join(lines)
 
 
@@ -149,8 +153,14 @@ def _eval_pair_sample(
     pred_labels = _field(pred, 'labels').cpu()
     pred_prev = _field(pred, 'bboxes_prev').cpu()
     pred_curr = _field(pred, 'bboxes_curr').cpu()
-    pred_pres_p = _field(pred, 'presence_prev').cpu()
-    pred_pres_c = _field(pred, 'presence_curr').cpu()
+    has_presence = hasattr(pred, 'presence_prev') or (
+        isinstance(pred, dict) and 'presence_prev' in pred)
+    if has_presence:
+        pred_pres_p = _field(pred, 'presence_prev').cpu()
+        pred_pres_c = _field(pred, 'presence_curr').cpu()
+    else:
+        pred_pres_p = torch.ones_like(pred_scores)
+        pred_pres_c = torch.ones_like(pred_scores)
 
     candidates = []
     has_score_candidate = [False] * num_gt
@@ -231,6 +241,7 @@ class HSMOTPairOverfitMetric(BaseMetric):
                  pres_thr: float = 0.5,
                  max_dets: int | None = 100,
                  report_gaps: Sequence[int] = (),
+                 both_visible_gt_only: bool = False,
                  collect_device: str = 'cpu',
                  prefix: str = None) -> None:
         super().__init__(collect_device=collect_device, prefix=prefix)
@@ -239,6 +250,37 @@ class HSMOTPairOverfitMetric(BaseMetric):
         self.pres_thr = pres_thr
         self.max_dets = max_dets
         self.report_gaps = tuple(sorted(set(int(gap) for gap in report_gaps)))
+        self.both_visible_gt_only = bool(both_visible_gt_only)
+
+    def _filter_gt(self, gt):
+        if not self.both_visible_gt_only:
+            return gt
+        valid = _field(gt, 'valid_prev').bool() & _field(gt, 'valid_curr').bool()
+        if valid.all():
+            return gt
+        if isinstance(gt, dict):
+            filtered = {}
+            for key, value in gt.items():
+                try:
+                    should_filter = (
+                        hasattr(value, '__getitem__') and len(value) == len(valid))
+                except TypeError:
+                    should_filter = False
+                filtered[key] = value[valid] if should_filter else value
+        else:
+            filtered = InstanceData()
+            for key in gt.keys():
+                value = getattr(gt, key)
+                try:
+                    should_filter = (
+                        hasattr(value, '__getitem__') and len(value) == len(valid))
+                except TypeError:
+                    should_filter = False
+                if should_filter:
+                    setattr(filtered, key, value[valid])
+                else:
+                    setattr(filtered, key, value)
+        return filtered
 
     def process(self, data_batch: dict, data_samples: Sequence[dict]) -> None:
         for sample in data_samples:
@@ -252,6 +294,7 @@ class HSMOTPairOverfitMetric(BaseMetric):
                 continue
             if pred is None:
                 continue
+            gt = self._filter_gt(gt)
             # Keep the legacy counters as diagnostics, but make AP the metric
             # reported by validation and used by the acceptance scripts.
             stats = _eval_pair_sample(

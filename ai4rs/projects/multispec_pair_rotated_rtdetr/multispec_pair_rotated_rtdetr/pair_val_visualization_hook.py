@@ -174,8 +174,14 @@ def _draw_prediction_view(
         pred_prev = _bboxes_to_input_space(pred_prev, img_meta).cpu()
         pred_curr = _bboxes_to_input_space(pred_curr, img_meta).cpu()
     scores = pred.scores.cpu()
-    pres_prev = pred.presence_prev.cpu()
-    pres_curr = pred.presence_curr.cpu()
+    pres_prev = getattr(pred, 'presence_prev', None)
+    pres_curr = getattr(pred, 'presence_curr', None)
+    if pres_prev is None:
+        pres_prev = getattr(pred, 'scores_prev', scores)
+    if pres_curr is None:
+        pres_curr = getattr(pred, 'scores_curr', scores)
+    pres_prev = pres_prev.cpu()
+    pres_curr = pres_curr.cpu()
     keep = scores >= score_thr
     labels = [
         f'p{qi} s={scores[qi]:.2f} pr={pres_prev[qi]:.2f}'
@@ -261,8 +267,14 @@ def visualize_hsmot_pair_pred_gt(
             pred_prev = _bboxes_to_input_space(pred_prev, img_meta).cpu()
             pred_curr = _bboxes_to_input_space(pred_curr, img_meta).cpu()
         scores = pred.scores.cpu()
-        pres_prev = pred.presence_prev.cpu()
-        pres_curr = pred.presence_curr.cpu()
+        pres_prev = getattr(pred, 'presence_prev', None)
+        pres_curr = getattr(pred, 'presence_curr', None)
+        if pres_prev is None:
+            pres_prev = getattr(pred, 'scores_prev', scores)
+        if pres_curr is None:
+            pres_curr = getattr(pred, 'scores_curr', scores)
+        pres_prev = pres_prev.cpu()
+        pres_curr = pres_curr.cpu()
         query_ids = list(matches.values())
         _draw_pred_boxes(
             left, pred_prev[query_ids],

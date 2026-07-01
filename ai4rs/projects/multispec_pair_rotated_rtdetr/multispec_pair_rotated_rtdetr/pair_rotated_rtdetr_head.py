@@ -1,5 +1,5 @@
 # Copyright (c) AI4RS. All rights reserved.
-"""Pair RT-DETR detection head with shared cls and dual OBB / presence (M4)."""
+"""Pair RT-DETR detection head with pair-frame OBB outputs."""
 
 from __future__ import annotations
 
@@ -58,7 +58,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  *args,
                  loss_presence: Optional[dict] = None,
                  dn_loss_weight: float = 1.0,
+                 use_presence: bool = True,
+                 dual_cls: bool = False,
+                 train_both_visible_only: bool = False,
                  **kwargs) -> None:
+        self.use_presence = bool(use_presence)
+        self.dual_cls = bool(dual_cls)
+        self.train_both_visible_only = bool(train_both_visible_only)
         if loss_presence is None:
             loss_presence = dict(
                 type='mmdet.CrossEntropyLoss',
@@ -73,21 +79,26 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         else:
             self.varifocal_loss_iou_type = 'hbox_iou'
         super(RotatedRTDETRHead, self).__init__(*args, **kwargs)
-        self.loss_presence = MODELS.build(loss_presence)
+        self.loss_presence = MODELS.build(loss_presence) if self.use_presence else None
 
     def _init_layers(self) -> None:
         super()._init_layers()
+        if self.dual_cls:
+            self.cls_branches_curr = nn.ModuleList([
+                copy.deepcopy(branch) for branch in self.cls_branches
+            ])
         self.reg_branches_curr = nn.ModuleList([
             copy.deepcopy(branch) for branch in self.reg_branches
         ])
-        pres_branch = Linear(self.embed_dims, 1)
         num_layers = self.num_pred_layer
-        self.presence_prev_branches = nn.ModuleList([
-            copy.deepcopy(pres_branch) for _ in range(num_layers)
-        ])
-        self.presence_curr_branches = nn.ModuleList([
-            copy.deepcopy(pres_branch) for _ in range(num_layers)
-        ])
+        if self.use_presence:
+            pres_branch = Linear(self.embed_dims, 1)
+            self.presence_prev_branches = nn.ModuleList([
+                copy.deepcopy(pres_branch) for _ in range(num_layers)
+            ])
+            self.presence_curr_branches = nn.ModuleList([
+                copy.deepcopy(pres_branch) for _ in range(num_layers)
+            ])
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -95,18 +106,36 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 self.reg_branches_curr, self.reg_branches):
             curr_branch.load_state_dict(prev_branch.state_dict())
 
+    def _sync_cls_branches_curr_from_prev(self) -> None:
+        """Mirror prev cls weights onto curr when dual frame cls is enabled."""
+        if not self.dual_cls:
+            return
+        for curr_branch, prev_branch in zip(
+                self.cls_branches_curr, self.cls_branches):
+            curr_branch.load_state_dict(prev_branch.state_dict())
+
     def init_weights(self) -> None:
         super().init_weights()
+        self._sync_cls_branches_curr_from_prev()
         self._sync_reg_branches_curr_from_prev()
 
     def load_state_dict(self, state_dict, strict: bool = True):
         has_curr = any(
             key.startswith('reg_branches_curr.') for key in state_dict)
+        has_cls_curr = any(
+            key.startswith('cls_branches_curr.') for key in state_dict)
         incompatible = super().load_state_dict(state_dict, strict=False)
+        if not has_cls_curr:
+            self._sync_cls_branches_curr_from_prev()
         if not has_curr:
             self._sync_reg_branches_curr_from_prev()
         if strict:
             missing_keys = list(incompatible.missing_keys)
+            if not has_cls_curr:
+                missing_keys = [
+                    key for key in missing_keys
+                    if not key.startswith('cls_branches_curr.')
+                ]
             if not has_curr:
                 missing_keys = [
                     key for key in missing_keys
@@ -125,7 +154,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         hidden_states: List[Tensor],
         references_prev: List[Tensor],
         references_curr: List[Tensor],
-    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    ) -> Tuple[Tensor, ...]:
         """Build per-layer pair head outputs.
 
         Args:
@@ -145,6 +174,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 - all_layers_bbox_curr ``(num_layers, bs, Q, 5)``.
         """
         all_cls: List[Tensor] = []
+        all_cls_curr: List[Tensor] = []
         all_pres_prev: List[Tensor] = []
         all_pres_curr: List[Tensor] = []
         all_bbox_prev: List[Tensor] = []
@@ -153,28 +183,67 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         for layer_id, hidden_state in enumerate(hidden_states):
             # hidden_state: (bs, num_queries, embed_dims)
             all_cls.append(self.cls_branches[layer_id](hidden_state))
-            all_pres_prev.append(
-                self.presence_prev_branches[layer_id](hidden_state).squeeze(-1))
-            all_pres_curr.append(
-                self.presence_curr_branches[layer_id](hidden_state).squeeze(-1))
+            if self.dual_cls:
+                all_cls_curr.append(
+                    self.cls_branches_curr[layer_id](hidden_state))
+            if self.use_presence:
+                all_pres_prev.append(
+                    self.presence_prev_branches[layer_id](hidden_state).squeeze(-1))
+                all_pres_curr.append(
+                    self.presence_curr_branches[layer_id](hidden_state).squeeze(-1))
             all_bbox_prev.append(references_prev[layer_id])
             all_bbox_curr.append(references_curr[layer_id])
 
+        if self.dual_cls:
+            if self.use_presence:
+                return (
+                    torch.stack(all_cls),
+                    torch.stack(all_cls_curr),
+                    torch.stack(all_pres_prev),
+                    torch.stack(all_pres_curr),
+                    torch.stack(all_bbox_prev),
+                    torch.stack(all_bbox_curr),
+                )
+            return (
+                torch.stack(all_cls),
+                torch.stack(all_cls_curr),
+                torch.stack(all_bbox_prev),
+                torch.stack(all_bbox_curr),
+            )
+        if self.use_presence:
+            return (
+                torch.stack(all_cls),
+                torch.stack(all_pres_prev),
+                torch.stack(all_pres_curr),
+                torch.stack(all_bbox_prev),
+                torch.stack(all_bbox_curr),
+            )
         return (
             torch.stack(all_cls),
-            torch.stack(all_pres_prev),
-            torch.stack(all_pres_curr),
             torch.stack(all_bbox_prev),
             torch.stack(all_bbox_curr),
         )
 
+    def _filter_both_visible_gt(self, pair_gt: InstanceData) -> InstanceData:
+        """Keep only GT tracks visible in both frames for the new pair task."""
+        if not self.train_both_visible_only:
+            return pair_gt
+        valid = pair_gt.valid_prev.bool() & pair_gt.valid_curr.bool()
+        if valid.all():
+            return pair_gt
+        filtered = InstanceData()
+        for key in pair_gt.keys():
+            value = getattr(pair_gt, key)
+            if hasattr(value, '__getitem__') and len(value) == len(valid):
+                setattr(filtered, key, value[valid])
+            else:
+                setattr(filtered, key, value)
+        return filtered
+
     def loss_by_feat(
         self,
         all_layers_cls_scores: Tensor,
-        all_layers_presence_prev: Tensor,
-        all_layers_presence_curr: Tensor,
-        all_layers_bbox_prev: Tensor,
-        all_layers_bbox_curr: Tensor,
+        *args,
         batch_pair_gt_instances: InstanceList,
         batch_img_metas: List[dict],
         enc_cls_scores: Optional[Tensor] = None,
@@ -184,6 +253,38 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
     ) -> Dict[str, Tensor]:
         """Pair matching loss plus optional track-union denoising loss."""
         del enc_cls_scores, enc_bbox_preds, batch_gt_instances_ignore
+        batch_pair_gt_instances = [
+            self._filter_both_visible_gt(gt) for gt in batch_pair_gt_instances
+        ]
+
+        if self.dual_cls and not self.use_presence:
+            if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
+                raise NotImplementedError(
+                    'PairDN is not implemented for dual-cls/no-presence head.')
+            (all_layers_cls_curr_scores, all_layers_bbox_prev,
+             all_layers_bbox_curr) = args
+            return self.loss_by_feat_dual_cls(
+                all_layers_cls_scores,
+                all_layers_cls_curr_scores,
+                all_layers_bbox_prev,
+                all_layers_bbox_curr,
+                batch_pair_gt_instances,
+                batch_img_metas)
+
+        if not self.use_presence:
+            if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
+                raise NotImplementedError(
+                    'PairDN is not implemented for no-presence head.')
+            all_layers_bbox_prev, all_layers_bbox_curr = args
+            zero_pres_prev = all_layers_cls_scores.new_zeros(
+                all_layers_cls_scores.shape[:3])
+            zero_pres_curr = all_layers_cls_scores.new_zeros(
+                all_layers_cls_scores.shape[:3])
+            all_layers_presence_prev = zero_pres_prev
+            all_layers_presence_curr = zero_pres_curr
+        else:
+            (all_layers_presence_prev, all_layers_presence_curr,
+             all_layers_bbox_prev, all_layers_bbox_curr) = args
 
         if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
             num_dn = dn_meta['num_denoising_queries']
@@ -270,6 +371,215 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 loss_dict[f'{prefix}dn_loss_iou_prev'] = dn_iou_prev[layer_id]
                 loss_dict[f'{prefix}dn_loss_iou_curr'] = dn_iou_curr[layer_id]
         return loss_dict
+
+    def loss_by_feat_dual_cls(
+        self,
+        all_layers_cls_prev: Tensor,
+        all_layers_cls_curr: Tensor,
+        all_layers_bbox_prev: Tensor,
+        all_layers_bbox_curr: Tensor,
+        batch_pair_gt_instances: InstanceList,
+        batch_img_metas: List[dict],
+    ) -> Dict[str, Tensor]:
+        """Loss for dual per-frame cls without presence branches."""
+        layer_outs = multi_apply(
+            self.loss_by_feat_single_dual_cls,
+            all_layers_cls_prev,
+            all_layers_cls_curr,
+            all_layers_bbox_prev,
+            all_layers_bbox_curr,
+            batch_pair_gt_instances=batch_pair_gt_instances,
+            batch_img_metas=batch_img_metas,
+        )
+        (losses_cls_prev, losses_cls_curr, losses_bbox_prev,
+         losses_bbox_curr, losses_iou_prev, losses_iou_curr) = layer_outs
+        loss_dict = dict(
+            loss_cls_prev=losses_cls_prev[-1],
+            loss_cls_curr=losses_cls_curr[-1],
+            loss_cls=losses_cls_prev[-1] + losses_cls_curr[-1],
+            loss_bbox_prev=losses_bbox_prev[-1],
+            loss_bbox_curr=losses_bbox_curr[-1],
+            loss_iou_prev=losses_iou_prev[-1],
+            loss_iou_curr=losses_iou_curr[-1],
+        )
+        num_layers = len(losses_cls_prev) - 1
+        for layer_id in range(num_layers):
+            prefix = f'd{layer_id}.'
+            loss_dict[f'{prefix}loss_cls_prev'] = losses_cls_prev[layer_id]
+            loss_dict[f'{prefix}loss_cls_curr'] = losses_cls_curr[layer_id]
+            loss_dict[f'{prefix}loss_cls'] = (
+                losses_cls_prev[layer_id] + losses_cls_curr[layer_id])
+            loss_dict[f'{prefix}loss_bbox_prev'] = losses_bbox_prev[layer_id]
+            loss_dict[f'{prefix}loss_bbox_curr'] = losses_bbox_curr[layer_id]
+            loss_dict[f'{prefix}loss_iou_prev'] = losses_iou_prev[layer_id]
+            loss_dict[f'{prefix}loss_iou_curr'] = losses_iou_curr[layer_id]
+        return loss_dict
+
+    def loss_by_feat_single_dual_cls(
+        self,
+        cls_prev: Tensor,
+        cls_curr: Tensor,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        batch_pair_gt_instances: InstanceList,
+        batch_img_metas: List[dict],
+    ) -> Tuple[Tensor, ...]:
+        """Loss for one decoder layer with prev/curr cls logits."""
+        num_imgs = cls_prev.size(0)
+        pair_cls = 0.5 * (cls_prev + cls_curr)
+        targets = self.get_targets_no_presence(
+            [pair_cls[i] for i in range(num_imgs)],
+            [bbox_prev[i] for i in range(num_imgs)],
+            [bbox_curr[i] for i in range(num_imgs)],
+            batch_pair_gt_instances,
+            batch_img_metas,
+        )
+        (labels_list, label_weights_list, bbox_prev_targets_list,
+         bbox_prev_weights_list, bbox_curr_targets_list,
+         bbox_curr_weights_list, num_total_pos, num_total_neg) = targets
+
+        labels = torch.cat(labels_list, 0)
+        label_weights = torch.cat(label_weights_list, 0)
+        bbox_prev_targets = torch.cat(bbox_prev_targets_list, 0)
+        bbox_prev_weights = torch.cat(bbox_prev_weights_list, 0)
+        bbox_curr_targets = torch.cat(bbox_curr_targets_list, 0)
+        bbox_curr_weights = torch.cat(bbox_curr_weights_list, 0)
+
+        cls_avg_factor = num_total_pos * 1.0 + num_total_neg * self.bg_cls_weight
+        cls_prev_flat = cls_prev.reshape(-1, self.cls_out_channels)
+        cls_curr_flat = cls_curr.reshape(-1, self.cls_out_channels)
+        if self.sync_cls_avg_factor:
+            cls_avg_factor = reduce_mean(
+                cls_prev_flat.new_tensor([cls_avg_factor]))
+        cls_avg_factor = max(cls_avg_factor, 1)
+        bbox_prev_flat = bbox_prev.reshape(-1, 5)
+        bbox_curr_flat = bbox_curr.reshape(-1, 5)
+        loss_cls_prev = self._loss_cls(
+            cls_prev_flat, labels, label_weights, bbox_prev_flat,
+            bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
+            bbox_prev_weights, bbox_curr_weights, batch_img_metas,
+            cls_avg_factor)
+        loss_cls_curr = self._loss_cls(
+            cls_curr_flat, labels, label_weights, bbox_prev_flat,
+            bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
+            bbox_prev_weights, bbox_curr_weights, batch_img_metas,
+            cls_avg_factor)
+
+        num_total_pos_tensor = loss_cls_prev.new_tensor([num_total_pos])
+        num_total_pos_val = torch.clamp(
+            reduce_mean(num_total_pos_tensor), min=1).item()
+        factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
+        loss_iou_prev = self.loss_iou(
+            bbox_prev_flat * factors,
+            bbox_prev_targets * factors,
+            bbox_prev_weights,
+            avg_factor=num_total_pos_val)
+        loss_iou_curr = self.loss_iou(
+            bbox_curr_flat * factors,
+            bbox_curr_targets * factors,
+            bbox_curr_weights,
+            avg_factor=num_total_pos_val)
+        loss_bbox_prev = self.loss_bbox(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+            avg_factor=num_total_pos_val)
+        loss_bbox_curr = self.loss_bbox(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+            avg_factor=num_total_pos_val)
+        return (loss_cls_prev, loss_cls_curr, loss_bbox_prev, loss_bbox_curr,
+                loss_iou_prev, loss_iou_curr)
+
+    def get_targets_no_presence(
+        self,
+        cls_scores_list: List[Tensor],
+        bbox_prev_list: List[Tensor],
+        bbox_curr_list: List[Tensor],
+        batch_pair_gt_instances: InstanceList,
+        batch_img_metas: List[dict],
+    ) -> tuple:
+        """Compute pair targets without presence branches."""
+        (labels_list, label_weights_list, bbox_prev_targets_list,
+         bbox_prev_weights_list, bbox_curr_targets_list,
+         bbox_curr_weights_list, pos_inds_list,
+         neg_inds_list) = multi_apply(
+             self._get_targets_single_no_presence,
+             cls_scores_list,
+             bbox_prev_list,
+             bbox_curr_list,
+             batch_pair_gt_instances,
+             batch_img_metas,
+         )
+        num_total_pos = sum((inds.numel() for inds in pos_inds_list))
+        num_total_neg = sum((inds.numel() for inds in neg_inds_list))
+        return (labels_list, label_weights_list, bbox_prev_targets_list,
+                bbox_prev_weights_list, bbox_curr_targets_list,
+                bbox_curr_weights_list, num_total_pos, num_total_neg)
+
+    def _get_targets_single_no_presence(
+        self,
+        cls_score: Tensor,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        pair_gt_instances: InstanceData,
+        img_meta: dict,
+    ) -> tuple:
+        """Assign one image and build regression / cls targets."""
+        img_h, img_w = img_meta['img_shape']
+        factor = bbox_prev.new_tensor(
+            [img_w, img_h, img_w, img_h, self.angle_factor]).unsqueeze(0)
+        num_queries = cls_score.size(0)
+        pred_instances = InstanceData(
+            scores=cls_score,
+            bboxes_prev=bbox_prev * factor,
+            bboxes_curr=bbox_curr * factor,
+        )
+        gt_bboxes_prev = _to_rbox_tensor(pair_gt_instances.bboxes_prev,
+                                         self.angle_cfg)
+        gt_bboxes_curr = _to_rbox_tensor(pair_gt_instances.bboxes_curr,
+                                         self.angle_cfg)
+        gt_instances = InstanceData(
+            labels=pair_gt_instances.labels,
+            bboxes_prev=gt_bboxes_prev,
+            bboxes_curr=gt_bboxes_curr,
+            valid_prev=pair_gt_instances.valid_prev,
+            valid_curr=pair_gt_instances.valid_curr,
+        )
+        assign_result = self.assigner.assign(
+            pred_instances=pred_instances,
+            gt_instances=gt_instances,
+            img_meta=img_meta,
+        )
+        gt_labels = gt_instances.labels
+        pos_inds = torch.nonzero(
+            assign_result.gt_inds > 0, as_tuple=False).squeeze(-1).unique()
+        neg_inds = torch.nonzero(
+            assign_result.gt_inds == 0, as_tuple=False).squeeze(-1).unique()
+        pos_assigned_gt_inds = assign_result.gt_inds[pos_inds] - 1
+
+        labels = bbox_prev.new_full((num_queries, ),
+                                    self.num_classes,
+                                    dtype=torch.long)
+        labels[pos_inds] = gt_labels[pos_assigned_gt_inds]
+        label_weights = bbox_prev.new_ones(num_queries)
+
+        valid_prev = gt_instances.valid_prev
+        valid_curr = gt_instances.valid_curr
+        bbox_prev_targets = torch.zeros(num_queries, 5, device=bbox_prev.device)
+        bbox_curr_targets = torch.zeros(num_queries, 5, device=bbox_curr.device)
+        bbox_prev_weights = torch.zeros(num_queries, 5, device=bbox_prev.device)
+        bbox_curr_weights = torch.zeros(num_queries, 5, device=bbox_curr.device)
+        if pos_inds.numel() > 0:
+            pos_gt_prev = gt_bboxes_prev[pos_assigned_gt_inds] / factor
+            pos_gt_curr = gt_bboxes_curr[pos_assigned_gt_inds] / factor
+            pos_valid_prev = valid_prev[pos_assigned_gt_inds]
+            pos_valid_curr = valid_curr[pos_assigned_gt_inds]
+            bbox_prev_targets[pos_inds] = pos_gt_prev
+            bbox_curr_targets[pos_inds] = pos_gt_curr
+            bbox_prev_weights[pos_inds] = pos_valid_prev.float().unsqueeze(
+                -1).repeat(1, 5)
+            bbox_curr_weights[pos_inds] = pos_valid_curr.float().unsqueeze(
+                -1).repeat(1, 5)
+        return (labels, label_weights, bbox_prev_targets, bbox_prev_weights,
+                bbox_curr_targets, bbox_curr_weights, pos_inds, neg_inds)
 
     def _get_pair_dn_targets(self, batch_pair_gt_instances: InstanceList,
                              batch_img_metas: List[dict],
@@ -801,14 +1111,30 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
     def predict_by_feat(
         self,
         all_layers_cls_scores: Tensor,
-        all_layers_presence_prev: Tensor,
-        all_layers_presence_curr: Tensor,
-        all_layers_bbox_prev: Tensor,
-        all_layers_bbox_curr: Tensor,
+        *args,
         batch_img_metas: List[dict],
         rescale: bool = False,
     ) -> InstanceList:
         """Transform decoder outputs into ``PairInstanceData`` (no NMS)."""
+        if self.dual_cls and not self.use_presence:
+            all_layers_cls_curr_scores, all_layers_bbox_prev, all_layers_bbox_curr = args
+            return self.predict_by_feat_dual_cls(
+                all_layers_cls_scores,
+                all_layers_cls_curr_scores,
+                all_layers_bbox_prev,
+                all_layers_bbox_curr,
+                batch_img_metas,
+                rescale=rescale)
+
+        if not self.use_presence:
+            all_layers_bbox_prev, all_layers_bbox_curr = args
+            all_layers_presence_prev = all_layers_cls_scores.new_ones(
+                all_layers_cls_scores.shape[:3]) * 20
+            all_layers_presence_curr = all_layers_cls_scores.new_ones(
+                all_layers_cls_scores.shape[:3]) * 20
+        else:
+            (all_layers_presence_prev, all_layers_presence_curr,
+             all_layers_bbox_prev, all_layers_bbox_curr) = args
         cls_scores = all_layers_cls_scores[-1]
         presence_prev = all_layers_presence_prev[-1]
         presence_curr = all_layers_presence_curr[-1]
@@ -887,6 +1213,87 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         results.presence_curr = presence_curr[bbox_index].sigmoid()
         return results
 
+    def predict_by_feat_dual_cls(
+        self,
+        all_layers_cls_prev: Tensor,
+        all_layers_cls_curr: Tensor,
+        all_layers_bbox_prev: Tensor,
+        all_layers_bbox_curr: Tensor,
+        batch_img_metas: List[dict],
+        rescale: bool = False,
+    ) -> InstanceList:
+        """Post-process dual per-frame cls outputs without presence."""
+        cls_prev = all_layers_cls_prev[-1]
+        cls_curr = all_layers_cls_curr[-1]
+        bbox_prev = all_layers_bbox_prev[-1]
+        bbox_curr = all_layers_bbox_curr[-1]
+        result_list = []
+        for img_id, img_meta in enumerate(batch_img_metas):
+            result_list.append(
+                self._predict_by_feat_single_dual_cls(
+                    cls_prev[img_id],
+                    cls_curr[img_id],
+                    bbox_prev[img_id],
+                    bbox_curr[img_id],
+                    img_meta,
+                    rescale=rescale))
+        return result_list
+
+    def _predict_by_feat_single_dual_cls(
+        self,
+        cls_prev: Tensor,
+        cls_curr: Tensor,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        img_meta: dict,
+        rescale: bool = False,
+    ) -> PairInstanceData:
+        """Post-process one image for dual cls / no presence."""
+        if self.loss_cls.use_sigmoid:
+            scores_prev, labels_prev = cls_prev.sigmoid().max(-1)
+            scores_curr, labels_curr = cls_curr.sigmoid().max(-1)
+        else:
+            scores_prev, labels_prev = cls_prev.softmax(dim=-1)[..., :-1].max(-1)
+            scores_curr, labels_curr = cls_curr.softmax(dim=-1)[..., :-1].max(-1)
+        pair_scores = torch.sqrt(
+            scores_prev.clamp(min=1e-6) * scores_curr.clamp(min=1e-6))
+        max_per_img = self.test_cfg.get('max_per_img', len(pair_scores))
+        max_per_img = min(max_per_img, pair_scores.numel())
+        scores, bbox_index = pair_scores.topk(max_per_img)
+        labels = labels_curr[bbox_index]
+        img_shape = img_meta['img_shape']
+
+        det_bboxes_prev = bbox_prev[bbox_index].clone()
+        det_bboxes_curr = bbox_curr[bbox_index].clone()
+        det_bboxes_prev[:, 0:4:2] *= img_shape[1]
+        det_bboxes_prev[:, 1:4:2] *= img_shape[0]
+        det_bboxes_prev[:, 4] *= self.angle_factor
+        det_bboxes_curr[:, 0:4:2] *= img_shape[1]
+        det_bboxes_curr[:, 1:4:2] *= img_shape[0]
+        det_bboxes_curr[:, 4] *= self.angle_factor
+        det_bboxes_prev[:, 0:4:2].clamp_(min=0, max=img_shape[1])
+        det_bboxes_prev[:, 1:4:2].clamp_(min=0, max=img_shape[0])
+        det_bboxes_curr[:, 0:4:2].clamp_(min=0, max=img_shape[1])
+        det_bboxes_curr[:, 1:4:2].clamp_(min=0, max=img_shape[0])
+        if rescale:
+            scale_factor = np.array(img_meta['scale_factor']).repeat(2)
+            if scale_factor.shape[0] == 4:
+                scale_factor = np.append(scale_factor, 1)
+            scale = det_bboxes_prev.new_tensor(scale_factor)
+            det_bboxes_prev = det_bboxes_prev / scale
+            det_bboxes_curr = det_bboxes_curr / scale
+
+        results = PairInstanceData()
+        results.scores = scores
+        results.labels = labels
+        results.bboxes_prev = det_bboxes_prev
+        results.bboxes_curr = det_bboxes_curr
+        results.scores_prev = scores_prev[bbox_index]
+        results.scores_curr = scores_curr[bbox_index]
+        results.labels_prev = labels_prev[bbox_index]
+        results.labels_curr = labels_curr[bbox_index]
+        return results
+
     @staticmethod
     def _hidden_list(hidden_states: Tensor) -> List[Tensor]:
         if isinstance(hidden_states, Tensor):
@@ -913,17 +1320,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             data_sample.metainfo for data_sample in batch_data_samples
         ]
         hidden_list = self._hidden_list(hidden_states)
-        (all_cls, all_pres_prev, all_pres_curr, all_bbox_prev,
-         all_bbox_curr) = self.forward(
-             hidden_list, references_prev, references_curr)
+        outs = self.forward(hidden_list, references_prev, references_curr)
         return self.loss_by_feat(
-            all_cls,
-            all_pres_prev,
-            all_pres_curr,
-            all_bbox_prev,
-            all_bbox_curr,
-            batch_pair_gt_instances,
-            batch_img_metas,
+            *outs,
+            batch_pair_gt_instances=batch_pair_gt_instances,
+            batch_img_metas=batch_img_metas,
             enc_cls_scores=enc_outputs_class,
             enc_bbox_preds=enc_outputs_coord,
             dn_meta=dn_meta,
@@ -945,4 +1346,5 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         ]
         hidden_list = self._hidden_list(hidden_states)
         outs = self.forward(hidden_list, references_prev, references_curr)
-        return self.predict_by_feat(*outs, batch_img_metas, rescale=rescale)
+        return self.predict_by_feat(
+            *outs, batch_img_metas=batch_img_metas, rescale=rescale)
