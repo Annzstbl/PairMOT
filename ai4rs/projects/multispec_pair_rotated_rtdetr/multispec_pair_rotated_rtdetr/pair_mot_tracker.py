@@ -1,0 +1,519 @@
+"""Pair-detection based online MOT utilities for HSMOT.
+
+The tracker consumes cached pair detections.  Model inference and tracking are
+kept separate so threshold and lifecycle parameters can be swept without
+running the pair detector again.
+"""
+from __future__ import annotations
+
+import json
+import math
+import os
+import os.path as osp
+from dataclasses import dataclass, field
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+
+import numpy as np
+import torch
+from scipy.optimize import linear_sum_assignment
+
+from mmrotate.structures.bbox import rbbox_overlaps, rbox2qbox
+
+
+CACHE_VERSION = 1
+
+
+def wrap_angle(angle: float) -> float:
+    """Wrap an angle to [-pi, pi)."""
+    return (float(angle) + math.pi) % (2 * math.pi) - math.pi
+
+
+def rbox_to_qbox_list(rbox: Sequence[float]) -> List[float]:
+    tensor = torch.as_tensor(rbox, dtype=torch.float32).reshape(1, 5)
+    qbox = rbox2qbox(tensor).reshape(-1).cpu().numpy()
+    return [float(x) for x in qbox.tolist()]
+
+
+def rotated_iou_matrix(
+    boxes1: Sequence[Sequence[float]],
+    boxes2: Sequence[Sequence[float]],
+) -> np.ndarray:
+    if len(boxes1) == 0 or len(boxes2) == 0:
+        return np.zeros((len(boxes1), len(boxes2)), dtype=np.float32)
+    b1 = torch.as_tensor(boxes1, dtype=torch.float32)
+    b2 = torch.as_tensor(boxes2, dtype=torch.float32)
+    return rbbox_overlaps(b1, b2).detach().cpu().numpy().astype(np.float32)
+
+
+@dataclass
+class PairDetection:
+    index: int
+    prev_bbox: List[float]
+    curr_bbox: List[float]
+    score: float
+    cls_score: float
+    label: int
+    presence_prev: Optional[float] = None
+    presence_curr: Optional[float] = None
+
+
+@dataclass
+class PairFrameRecord:
+    seq_name: str
+    prev_frame_id: int
+    curr_frame_id: int
+    frame_gap: int
+    prev_img_path: str
+    curr_img_path: str
+    img_shape: List[int]
+    ori_shape: List[int]
+    scale_factor: List[float]
+    detections: List[PairDetection]
+    is_first_pair: bool = False
+
+
+def detection_score(
+    cls_score: float,
+    presence_prev: Optional[float],
+    presence_curr: Optional[float],
+    mode: str,
+) -> float:
+    cls_score = float(cls_score)
+    if mode == 'cls':
+        return cls_score
+    if presence_prev is None or presence_curr is None:
+        return cls_score
+    pres_min = min(float(presence_prev), float(presence_curr))
+    if mode == 'cls_min_presence':
+        return cls_score * pres_min
+    if mode == 'auto':
+        # Presence can be badly calibrated; only down-weight when it is clearly
+        # confident.  Otherwise fall back to class score.
+        if max(float(presence_prev), float(presence_curr)) >= 0.5:
+            return cls_score * pres_min
+        return cls_score
+    raise ValueError(f'Unsupported score mode: {mode}')
+
+
+def write_cache(path: str, meta: dict,
+                records: Iterable[PairFrameRecord]) -> None:
+    os.makedirs(osp.dirname(path), exist_ok=True)
+    meta = dict(meta)
+    meta['cache_version'] = CACHE_VERSION
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(json.dumps({'type': 'meta', **meta}, ensure_ascii=False) + '\n')
+        for rec in records:
+            f.write(json.dumps({
+                'type': 'pair',
+                'seq_name': rec.seq_name,
+                'prev_frame_id': rec.prev_frame_id,
+                'curr_frame_id': rec.curr_frame_id,
+                'frame_gap': rec.frame_gap,
+                'prev_img_path': rec.prev_img_path,
+                'curr_img_path': rec.curr_img_path,
+                'img_shape': rec.img_shape,
+                'ori_shape': rec.ori_shape,
+                'scale_factor': rec.scale_factor,
+                'is_first_pair': rec.is_first_pair,
+                'detections': [det.__dict__ for det in rec.detections],
+            }, ensure_ascii=False) + '\n')
+
+
+def read_cache(path: str) -> Tuple[dict, List[PairFrameRecord]]:
+    meta = {}
+    records: List[PairFrameRecord] = []
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            if not line.strip():
+                continue
+            obj = json.loads(line)
+            if obj.get('type') == 'meta':
+                meta = obj
+                continue
+            detections = [PairDetection(**det) for det in obj['detections']]
+            records.append(PairFrameRecord(
+                seq_name=obj['seq_name'],
+                prev_frame_id=int(obj['prev_frame_id']),
+                curr_frame_id=int(obj['curr_frame_id']),
+                frame_gap=int(obj.get('frame_gap', 1)),
+                prev_img_path=obj.get('prev_img_path', ''),
+                curr_img_path=obj.get('curr_img_path', ''),
+                img_shape=list(obj.get('img_shape', [])),
+                ori_shape=list(obj.get('ori_shape', [])),
+                scale_factor=list(obj.get('scale_factor', [])),
+                detections=detections,
+                is_first_pair=bool(obj.get('is_first_pair', False)),
+            ))
+    if int(meta.get('cache_version', -1)) != CACHE_VERSION:
+        raise ValueError(
+            f'Unsupported cache version in {path}: {meta.get("cache_version")}')
+    return meta, records
+
+
+class RotatedKalman:
+    """Small constant-velocity Kalman filter for cx, cy, w, h, angle."""
+
+    ndim = 5
+    dt = 1.0
+
+    def initiate(self, measurement: Sequence[float]) -> Tuple[np.ndarray, np.ndarray]:
+        mean = np.zeros((2 * self.ndim,), dtype=np.float32)
+        mean[:self.ndim] = np.asarray(measurement, dtype=np.float32)
+        mean[4] = wrap_angle(float(mean[4]))
+        covariance = np.eye(2 * self.ndim, dtype=np.float32)
+        covariance[:self.ndim, :self.ndim] *= 10.0
+        covariance[self.ndim:, self.ndim:] *= 100.0
+        return mean, covariance
+
+    def predict(self, mean: np.ndarray,
+                covariance: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        motion = np.eye(2 * self.ndim, dtype=np.float32)
+        for i in range(self.ndim):
+            motion[i, self.ndim + i] = self.dt
+        std_pos = np.array([2.0, 2.0, 1.0, 1.0, 0.05], dtype=np.float32)
+        std_vel = np.array([1.0, 1.0, 0.5, 0.5, 0.02], dtype=np.float32)
+        motion_cov = np.diag(np.r_[std_pos, std_vel] ** 2).astype(np.float32)
+        mean = motion @ mean
+        mean[4] = wrap_angle(float(mean[4]))
+        covariance = motion @ covariance @ motion.T + motion_cov
+        return mean, covariance
+
+    def update(self, mean: np.ndarray, covariance: np.ndarray,
+               measurement: Sequence[float]) -> Tuple[np.ndarray, np.ndarray]:
+        measurement = np.asarray(measurement, dtype=np.float32).copy()
+        measurement[4] = mean[4] + wrap_angle(float(measurement[4] - mean[4]))
+        proj = np.eye(self.ndim, 2 * self.ndim, dtype=np.float32)
+        innovation_cov = np.diag(
+            np.array([1.0, 1.0, 0.5, 0.5, 0.03], dtype=np.float32) ** 2)
+        projected_mean = proj @ mean
+        projected_cov = proj @ covariance @ proj.T + innovation_cov
+        kalman_gain = covariance @ proj.T @ np.linalg.inv(projected_cov)
+        innovation = measurement - projected_mean
+        innovation[4] = wrap_angle(float(innovation[4]))
+        mean = mean + kalman_gain @ innovation
+        mean[4] = wrap_angle(float(mean[4]))
+        covariance = covariance - kalman_gain @ projected_cov @ kalman_gain.T
+        return mean.astype(np.float32), covariance.astype(np.float32)
+
+
+@dataclass
+class Track:
+    track_id: int
+    label: int
+    score: float
+    bbox: List[float]
+    mean: np.ndarray
+    covariance: np.ndarray
+    state: str = 'Tracked'
+    age: int = 1
+    hits: int = 1
+    time_since_update: int = 0
+    last_frame_id: int = 0
+    history: List[Tuple[int, List[float], float, int]] = field(default_factory=list)
+
+    def predicted_bbox(self) -> List[float]:
+        box = self.mean[:5].astype(float).tolist()
+        box[2] = max(box[2], 1.0)
+        box[3] = max(box[3], 1.0)
+        box[4] = wrap_angle(box[4])
+        return box
+
+
+class PairMOTTracker:
+    """Online tracker using pair detections as the association signal."""
+
+    def __init__(self,
+                 *,
+                 new_born_th: float = 0.5,
+                 track_th: float = 0.2,
+                 match_iou_th: float = 0.3,
+                 new_birth_iou_th: float = 0.6,
+                 max_age: int = 30,
+                 init_same_iou_th: float = 0.3,
+                 class_aware: bool = False) -> None:
+        self.new_born_th = float(new_born_th)
+        self.track_th = float(track_th)
+        self.match_iou_th = float(match_iou_th)
+        self.new_birth_iou_th = float(new_birth_iou_th)
+        self.max_age = int(max_age)
+        self.init_same_iou_th = float(init_same_iou_th)
+        self.class_aware = bool(class_aware)
+        self.kalman = RotatedKalman()
+        self.tracks: List[Track] = []
+        self.finished_tracks: List[Track] = []
+        self.last_events: List[dict] = []
+        self.next_id = 1
+
+    def reset(self) -> None:
+        self.tracks = []
+        self.finished_tracks = []
+        self.last_events = []
+        self.next_id = 1
+
+    def predict(self) -> None:
+        for track in self.tracks:
+            self._advance_track_to_frame(track, track.last_frame_id + 1)
+
+    def _advance_track_to_frame(self, track: Track, frame_id: int) -> None:
+        frame_id = int(frame_id)
+        if track.last_frame_id > frame_id:
+            raise ValueError(
+                f'Track {track.track_id} is at frame {track.last_frame_id}, '
+                f'cannot move back to frame {frame_id}')
+        while track.last_frame_id < frame_id:
+            track.mean, track.covariance = self.kalman.predict(
+                track.mean, track.covariance)
+            track.bbox = track.predicted_bbox()
+            track.age += 1
+            track.time_since_update += 1
+            track.last_frame_id += 1
+
+    def _new_track(self, bbox: Sequence[float], score: float, label: int,
+                   frame_id: int) -> Track:
+        mean, covariance = self.kalman.initiate(bbox)
+        track = Track(
+            track_id=self.next_id,
+            label=int(label),
+            score=float(score),
+            bbox=[float(x) for x in bbox],
+            mean=mean,
+            covariance=covariance,
+            last_frame_id=int(frame_id),
+        )
+        track.history.append((int(frame_id), track.bbox, float(score), int(label)))
+        self.tracks.append(track)
+        self.next_id += 1
+        return track
+
+    def _duplicate_iou_with_tracks(self, bbox: Sequence[float], label: int,
+                                   tracks: Sequence[Track]) -> float:
+        candidates = [
+            tr.bbox for tr in tracks
+            if tr.state == 'Tracked'
+            and tr.time_since_update == 0
+            and ((not self.class_aware) or tr.label == int(label))
+        ]
+        if not candidates:
+            return 0.0
+        ious = rotated_iou_matrix([bbox], candidates)
+        return float(ious.max()) if ious.size else 0.0
+
+    def _update_track(self, track: Track, bbox: Sequence[float], score: float,
+                      label: int, frame_id: int) -> None:
+        if track.last_frame_id < int(frame_id):
+            self._advance_track_to_frame(track, int(frame_id))
+        track.mean, track.covariance = self.kalman.update(
+            track.mean, track.covariance, bbox)
+        track.bbox = [float(x) for x in bbox]
+        track.score = float(score)
+        track.label = int(label)
+        track.state = 'Tracked'
+        track.time_since_update = 0
+        track.hits += 1
+        track.last_frame_id = int(frame_id)
+        track.history.append((int(frame_id), track.bbox, float(score), int(label)))
+
+    def _mark_lost_and_prune(self) -> None:
+        kept = []
+        for track in self.tracks:
+            if track.time_since_update > 0:
+                track.state = 'Lost'
+            if track.time_since_update <= self.max_age:
+                kept.append(track)
+            else:
+                track.state = 'Removed'
+                self.finished_tracks.append(track)
+        self.tracks = kept
+
+    def init_first_frame(self, record: PairFrameRecord) -> List[Track]:
+        created = []
+        self.last_events = []
+        for det in record.detections:
+            if det.score < self.new_born_th:
+                continue
+            iou = rotated_iou_matrix([det.prev_bbox], [det.curr_bbox])[0, 0]
+            if iou >= self.init_same_iou_th:
+                bbox = [
+                    float((a + b) * 0.5)
+                    for a, b in zip(det.prev_bbox, det.curr_bbox)
+                ]
+                bbox[4] = wrap_angle(bbox[4])
+            else:
+                bbox = det.curr_bbox
+            duplicate_iou = self._duplicate_iou_with_tracks(
+                bbox, det.label, created)
+            if duplicate_iou >= self.new_birth_iou_th:
+                self.last_events.append({
+                    'event': 'birth_suppressed',
+                    'frame_id': record.curr_frame_id,
+                    'det_index': det.index,
+                    'score': det.score,
+                    'label': det.label,
+                    'duplicate_iou': duplicate_iou,
+                    'new_birth_iou_th': self.new_birth_iou_th,
+                })
+                continue
+            track = self._new_track(bbox, det.score, det.label, record.curr_frame_id)
+            created.append(track)
+            self.last_events.append({
+                'event': 'birth',
+                'frame_id': record.curr_frame_id,
+                'track_id': track.track_id,
+                'det_index': det.index,
+                'score': det.score,
+                'label': det.label,
+                'same_frame_iou': float(iou),
+            })
+        return created
+
+    def update_pair(self, record: PairFrameRecord) -> List[Track]:
+        self.last_events = []
+        for track in self.tracks:
+            self._advance_track_to_frame(track, record.prev_frame_id)
+        detections = [det for det in record.detections if det.score >= self.track_th]
+        candidate_tracks = [
+            tr for tr in self.tracks
+            if tr.state in ('Tracked', 'Lost') and tr.time_since_update <= self.max_age
+            and tr.last_frame_id == record.prev_frame_id
+        ]
+
+        matches: List[Tuple[int, int, float]] = []
+        unmatched_track_idx = set(range(len(candidate_tracks)))
+        unmatched_det_idx = set(range(len(detections)))
+        diag_by_track: Dict[int, dict] = {}
+        if candidate_tracks and detections:
+            track_boxes = [tr.bbox for tr in candidate_tracks]
+            det_prev_boxes = [det.prev_bbox for det in detections]
+            ious = rotated_iou_matrix(track_boxes, det_prev_boxes)
+            raw_ious = ious.copy()
+            if self.class_aware:
+                for ti, tr in enumerate(candidate_tracks):
+                    for di, det in enumerate(detections):
+                        if tr.label != det.label:
+                            ious[ti, di] = -1.0
+            for ti, tr in enumerate(candidate_tracks):
+                if raw_ious.shape[1] == 0:
+                    continue
+                best_di = int(np.argmax(raw_ious[ti]))
+                best_det = detections[best_di]
+                best_iou = float(raw_ious[ti, best_di])
+                class_ok = (not self.class_aware) or tr.label == best_det.label
+                diag_by_track[ti] = {
+                    'event': 'match_diag',
+                    'frame_id': record.curr_frame_id,
+                    'prev_frame_id': record.prev_frame_id,
+                    'track_id': tr.track_id,
+                    'track_state': tr.state,
+                    'track_label': tr.label,
+                    'track_score': tr.score,
+                    'track_time_since_update': tr.time_since_update,
+                    'track_bbox': tr.bbox,
+                    'best_det_index': best_det.index,
+                    'best_det_label': best_det.label,
+                    'best_det_score': best_det.score,
+                    'best_iou': best_iou,
+                    'match_iou_th': self.match_iou_th,
+                    'class_ok': class_ok,
+                    'would_match_by_iou': best_iou >= self.match_iou_th,
+                    'matched': False,
+                }
+            rows, cols = linear_sum_assignment(-ious)
+            for row, col in zip(rows.tolist(), cols.tolist()):
+                if ious[row, col] < self.match_iou_th:
+                    continue
+                matches.append((row, col, float(ious[row, col])))
+                unmatched_track_idx.discard(row)
+                unmatched_det_idx.discard(col)
+
+        for track_idx, det_idx, match_iou in matches:
+            track = candidate_tracks[track_idx]
+            det = detections[det_idx]
+            self._update_track(
+                track, det.curr_bbox, det.score, det.label, record.curr_frame_id)
+            self.last_events.append({
+                'event': 'match',
+                'frame_id': record.curr_frame_id,
+                'track_id': track.track_id,
+                'det_index': det.index,
+                'score': det.score,
+                'label': det.label,
+                'match_iou': match_iou,
+            })
+
+        matched_track_idx = {track_idx for track_idx, _, _ in matches}
+        matched_det_idx = {det_idx for _, det_idx, _ in matches}
+        for track_idx in sorted(unmatched_track_idx):
+            diag = diag_by_track.get(track_idx)
+            if diag is None:
+                continue
+            best_det_idx = next(
+                (idx for idx, det in enumerate(detections)
+                 if det.index == diag['best_det_index']),
+                None)
+            if not diag['class_ok']:
+                diag['reason'] = 'class_constraint'
+            elif diag['best_iou'] < self.match_iou_th:
+                diag['reason'] = 'iou_below_threshold'
+            elif best_det_idx in matched_det_idx:
+                diag['reason'] = 'best_det_taken_by_one_to_one_assignment'
+            else:
+                diag['reason'] = 'not_selected_by_hungarian'
+            self.last_events.append(diag)
+
+        for track_idx in sorted(unmatched_track_idx):
+            track = candidate_tracks[track_idx]
+            self._advance_track_to_frame(track, record.curr_frame_id)
+
+        self._mark_lost_and_prune()
+
+        # Pair detections that did not attach to an existing track can create
+        # new tracks only at the higher new-born threshold.
+        for det_idx in sorted(unmatched_det_idx):
+            det = detections[det_idx]
+            if det.score >= self.new_born_th:
+                duplicate_iou = self._duplicate_iou_with_tracks(
+                    det.curr_bbox, det.label, self.tracks)
+                if duplicate_iou >= self.new_birth_iou_th:
+                    self.last_events.append({
+                        'event': 'birth_suppressed',
+                        'frame_id': record.curr_frame_id,
+                        'det_index': det.index,
+                        'score': det.score,
+                        'label': det.label,
+                        'duplicate_iou': duplicate_iou,
+                        'new_birth_iou_th': self.new_birth_iou_th,
+                    })
+                    continue
+                track = self._new_track(
+                    det.curr_bbox, det.score, det.label, record.curr_frame_id)
+                self.last_events.append({
+                    'event': 'birth',
+                    'frame_id': record.curr_frame_id,
+                    'track_id': track.track_id,
+                    'det_index': det.index,
+                    'score': det.score,
+                    'label': det.label,
+                })
+
+        return [tr for tr in self.tracks if tr.state == 'Tracked']
+
+    def all_history(self) -> List[Tuple[int, int, List[float], float, int]]:
+        rows = []
+        for track in self.finished_tracks + self.tracks:
+            for frame_id, bbox, score, label in track.history:
+                rows.append((frame_id, track.track_id, bbox, score, label))
+        rows.sort(key=lambda item: (item[0], item[1]))
+        return rows
+
+
+def write_trackeval_txt(path: str,
+                        rows: Iterable[Tuple[int, int, Sequence[float], float, int]]
+                        ) -> None:
+    os.makedirs(osp.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        for frame_id, track_id, bbox, score, label in rows:
+            qbox = rbox_to_qbox_list(bbox)
+            vals = [int(frame_id), int(track_id)]
+            vals += [f'{v:.2f}' for v in qbox]
+            vals += [f'{float(score):.6f}', int(label), 0]
+            f.write(','.join(map(str, vals)) + '\n')
