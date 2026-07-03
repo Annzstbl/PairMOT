@@ -15,7 +15,8 @@ from .pair_rotated_rtdetr_layers import (
 )
 from .pair_component_timer_hook import PairComponentTimerHook
 from .pair_dataset_epoch_hook import PairDatasetEpochHook
-from .liquid_sampler_monitor_hook import LiquidSamplerMonitorHook
+from .liquid_sampler_monitor_hook import (LiquidSamplerAnnealHook,
+                                          LiquidSamplerMonitorHook)
 from .pair_val_visualization_hook import HSMOTPairValVisualizationHook
 from .single_val_visualization_hook import HSMOTSingleValVisualizationHook
 from .timed_rotated_rtdetr import TimedRotatedRTDETR
@@ -25,6 +26,7 @@ __all__ = [
     'HSMOTPairAPMetric',
     'HSMOTPairValVisualizationHook',
     'HSMOTSingleValVisualizationHook',
+    'LiquidSamplerAnnealHook',
     'LiquidSamplerMonitorHook',
     'PairComponentTimerHook',
     'PairDatasetEpochHook',

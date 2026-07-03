@@ -7,12 +7,23 @@ with read_base():
 model['backbone'].update(
     liquid_sampler=dict(
         embed_dims=32,
-        tau=1.0,
+        tau=2.0,
         hard=False,
+        init_logit=2.0,
+        head_weight_std=1e-3,
+        eval_hard=True,
         lowres_grad_downsample=4,
         use_lowres_grad_correction=True,
     ))
 
+custom_hooks.append(
+    dict(
+        type='LiquidSamplerAnnealHook',
+        tau_start=2.0,
+        tau_end=0.5,
+        anneal_epochs=36,
+        hard_start_epoch=36,
+        log_interval=200))
 custom_hooks.append(dict(type='LiquidSamplerMonitorHook', interval=50))
 custom_keys['backbone.stem.0.liquid_sampler'] = dict(lr_mult=1.0)
 custom_keys['backbone.stem.0.se_conv'] = dict(lr_mult=1.0)

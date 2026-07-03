@@ -109,9 +109,14 @@ def _record_to_ap_sample(rec, pair_gt: dict, pres_thr: float) -> dict:
             pres_prev = score_prev
             pres_curr = score_curr
         keep = valid_prev | valid_curr
+        det_labels = [
+            det.curr_side_label()
+            if bool(valid_curr[i]) else det.prev_side_label()
+            for i, det in enumerate(dets)
+        ]
         out.update(
             pred_labels=torch.as_tensor(
-                [det.label for det in dets], dtype=torch.long)[keep],
+                det_labels, dtype=torch.long)[keep],
             pred_prev=torch.as_tensor([det.prev_bbox for det in dets],
                                       dtype=torch.float32)[keep],
             pred_curr=torch.as_tensor([det.curr_bbox for det in dets],

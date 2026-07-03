@@ -20,7 +20,11 @@ from .component_timer import CudaComponentTimer
 
 QueryInitMode = Literal['learned', 'gt_noised', 'dual_topk',
                         'pair_topk_v1', 'pair_topk_sameidx_v1',
-                        'pair_topk_v2']
+                        'pair_topk_v2', 'typed_pair_topk_v1']
+
+QUERY_TYPE_SURVIVAL = 0
+QUERY_TYPE_CURR_ONLY = 1
+QUERY_TYPE_PREV_ONLY = 2
 
 
 @MODELS.register_module()
@@ -44,10 +48,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  **kwargs) -> None:
         if query_init not in ('learned', 'gt_noised', 'dual_topk',
                               'pair_topk_v1', 'pair_topk_sameidx_v1',
-                              'pair_topk_v2'):
+                              'pair_topk_v2', 'typed_pair_topk_v1'):
             raise ValueError(
                 f'query_init must be learned, gt_noised, dual_topk, '
-                f'pair_topk_v1, pair_topk_sameidx_v1, or pair_topk_v2, '
+                f'pair_topk_v1, pair_topk_sameidx_v1, pair_topk_v2, '
+                f'or typed_pair_topk_v1, '
                 f'got {query_init!r}')
         self.pair_mode = pair_mode
         self.query_init = query_init
@@ -115,12 +120,20 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     0.5 * eye)
                 self.pair_query_fusion.weight[:, self.embed_dims:].copy_(
                     0.5 * eye)
-            if self.query_init == 'pair_topk_v2':
+            if self.query_init in ('pair_topk_v2', 'typed_pair_topk_v1'):
                 self.pair_quality_predictor = nn.Sequential(
                     nn.Linear(self.embed_dims, self.embed_dims),
                     nn.ReLU(inplace=True),
                     nn.Linear(self.embed_dims, 1),
                 )
+            if self.query_init == 'typed_pair_topk_v1':
+                self.null_prev_query = nn.Parameter(torch.zeros(self.embed_dims))
+                self.null_curr_query = nn.Parameter(torch.zeros(self.embed_dims))
+                null_ref = torch.tensor(
+                    [0.5, 0.5, 0.05, 0.05, 0.5], dtype=torch.float32)
+                null_ref_unact = torch.logit(null_ref.clamp(1e-4, 1 - 1e-4))
+                self.null_prev_ref_unact = nn.Parameter(null_ref_unact.clone())
+                self.null_curr_ref_unact = nn.Parameter(null_ref_unact.clone())
 
     def _log_shape(self, name: str, tensor: Tensor) -> None:
         if self.debug_shapes:
@@ -534,6 +547,266 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                         break
         return order.new_tensor(selected)
 
+    @staticmethod
+    def _topk_unused_indices(scores: Tensor, used: Tensor, k: int) -> Tensor:
+        if k <= 0 or scores.numel() == 0:
+            return scores.new_zeros((0,), dtype=torch.long)
+        masked = scores.masked_fill(used, -1.0)
+        k = min(k, scores.numel())
+        vals, inds = torch.topk(masked, k=k)
+        return inds[vals > -0.5]
+
+    def _typed_pair_queries_v1(
+        self,
+        memory_prev: Tensor,
+        memory_curr: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+        batch_data_samples: OptSampleList = None,
+    ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor],
+               Optional[Tensor], Optional[Tensor], Tensor]:
+        """Typed survival / curr-only / prev-only proposal initialization."""
+        cfg = self.pair_proposal_cfg
+        bs, _, c = memory_prev.shape
+        num_survival = int(cfg.get('num_survival_queries', 300))
+        num_curr_only = int(cfg.get('num_curr_only_queries', 30))
+        num_prev_only = int(cfg.get('num_prev_only_queries', 30))
+        total_queries = num_survival + num_curr_only + num_prev_only
+        if total_queries != self.num_queries:
+            raise ValueError(
+                f'typed_pair_topk_v1 expects decoder.num_queries='
+                f'{total_queries}, got {self.num_queries}')
+
+        pre_topk = int(cfg.get('pre_topk', max(self.num_queries * 3, 900)))
+        candidate_topk = int(cfg.get('candidate_topk', self.num_queries * 6))
+        affinity_thr = float(cfg.get('affinity_thr', 0.25))
+        proposal_quality_weight = float(cfg.get('proposal_quality_weight', 0.70))
+        learned_quality_weight = float(cfg.get('learned_quality_weight', 0.20))
+        affinity_rank_weight = float(cfg.get('affinity_rank_weight', 0.10))
+        unique_pair_selection = bool(cfg.get('unique_pair_selection', True))
+        pair_selection_mode = str(cfg.get('pair_selection_mode', 'rank'))
+        num_layers = self.decoder.num_layers
+        cls_prev_branch = self.bbox_head.cls_branches[num_layers]
+        cls_curr_branch = getattr(self.bbox_head, 'cls_branches_curr',
+                                  self.bbox_head.cls_branches)[num_layers]
+
+        query_p, ref_p, score_p, label_p, logits_p, _ = (
+            self._single_frame_topk_proposals_v2(
+                memory_prev, memory_mask, spatial_shapes, cls_prev_branch,
+                self.bbox_head.reg_branches[num_layers], pre_topk))
+        query_c, ref_c, score_c, label_c, logits_c, _ = (
+            self._single_frame_topk_proposals_v2(
+                memory_curr, memory_mask, spatial_shapes, cls_curr_branch,
+                self.bbox_head.reg_branches_curr[num_layers], pre_topk))
+
+        learned_query = self.decoder.query_embedding.weight.to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_prev = self.decoder.ref_prev_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_curr = self.decoder.ref_curr_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        null_prev_query = self.null_prev_query.to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        null_curr_query = self.null_curr_query.to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        null_prev_ref = self.null_prev_ref_unact.to(
+            device=memory_prev.device, dtype=memory_prev.dtype).sigmoid()
+        null_curr_ref = self.null_curr_ref_unact.to(
+            device=memory_prev.device, dtype=memory_prev.dtype).sigmoid()
+
+        batch_queries: List[Tensor] = []
+        batch_ref_prev: List[Tensor] = []
+        batch_ref_curr: List[Tensor] = []
+        batch_enc_cls_prev: List[Tensor] = []
+        batch_enc_cls_curr: List[Tensor] = []
+        batch_enc_bbox_prev: List[Tensor] = []
+        batch_enc_bbox_curr: List[Tensor] = []
+        batch_query_types: List[Tensor] = []
+
+        for b in range(bs):
+            img_shape = (batch_data_samples[b].metainfo['img_shape']
+                         if batch_data_samples is not None else (1, 1))
+            gmc = self._as_gmc_tensor(
+                batch_data_samples, b, memory_prev.device, memory_prev.dtype)
+            affinity = self._pair_affinity_score_v2(
+                query_p[b], query_c[b], ref_p[b], ref_c[b], score_p[b],
+                score_c[b], label_p[b], label_c[b], gmc, img_shape)
+            if pair_selection_mode == 'hungarian_affinity':
+                pair_i, pair_j = self._hungarian_affinity_pairs(
+                    affinity, affinity_thr, candidate_topk)
+            else:
+                valid = affinity > affinity_thr
+                pair_i, pair_j = torch.nonzero(valid, as_tuple=True)
+                if pair_i.numel() == 0:
+                    flat_scores, flat_idx = torch.topk(
+                        affinity.reshape(-1),
+                        k=min(candidate_topk, affinity.numel()))
+                    keep = flat_scores > -1e5
+                    flat_idx = flat_idx[keep]
+                    pair_i = flat_idx // affinity.size(1)
+                    pair_j = flat_idx % affinity.size(1)
+                if pair_i.numel() > candidate_topk:
+                    flat_valid_scores = affinity[pair_i, pair_j]
+                    keep = torch.topk(
+                        flat_valid_scores, k=candidate_topk).indices
+                    pair_i = pair_i[keep]
+                    pair_j = pair_j[keep]
+
+            if pair_i.numel() > 0:
+                prop_quality = torch.sqrt(
+                    score_p[b, pair_i].clamp(min=1e-6) *
+                    score_c[b, pair_j].clamp(min=1e-6))
+                aff = affinity[pair_i, pair_j].clamp(min=0.0)
+                rank_score = proposal_quality_weight * prop_quality
+                if learned_quality_weight != 0.0:
+                    with torch.no_grad():
+                        quality_fused = self.pair_query_fusion(
+                            torch.cat([
+                                query_p[b, pair_i].detach(),
+                                query_c[b, pair_j].detach()
+                            ], dim=-1))
+                        learned_quality = self.pair_quality_predictor(
+                            quality_fused).squeeze(-1).sigmoid()
+                    rank_score = (
+                        rank_score + learned_quality_weight * learned_quality)
+                if affinity_rank_weight != 0.0:
+                    rank_score = rank_score + affinity_rank_weight * aff
+                order = torch.argsort(rank_score, descending=True)
+                if (pair_selection_mode != 'hungarian_affinity'
+                        and unique_pair_selection
+                        and order.numel() > num_survival):
+                    order = self._unique_pair_order(order, pair_i, pair_j)
+                pair_i = pair_i[order][:num_survival]
+                pair_j = pair_j[order][:num_survival]
+                q_surv = self.pair_query_fusion(
+                    torch.cat([query_p[b, pair_i], query_c[b, pair_j]],
+                              dim=-1))
+                rp_surv = ref_p[b, pair_i]
+                rc_surv = ref_c[b, pair_j]
+                ep_surv = logits_p[b, pair_i]
+                ec_surv = logits_c[b, pair_j]
+            else:
+                pair_i = score_p.new_zeros((0,), dtype=torch.long)
+                pair_j = score_c.new_zeros((0,), dtype=torch.long)
+                q_surv = query_p.new_zeros((0, c))
+                rp_surv = ref_p.new_zeros((0, 5))
+                rc_surv = ref_c.new_zeros((0, 5))
+                ep_surv = logits_p.new_zeros((0, logits_p.size(-1)))
+                ec_surv = logits_c.new_zeros((0, logits_c.size(-1)))
+
+            used_prev = torch.zeros(
+                query_p.size(1), dtype=torch.bool, device=query_p.device)
+            used_curr = torch.zeros(
+                query_c.size(1), dtype=torch.bool, device=query_c.device)
+            if pair_i.numel() > 0:
+                used_prev[pair_i] = True
+                used_curr[pair_j] = True
+            curr_idx = self._topk_unused_indices(
+                score_c[b], used_curr, num_curr_only)
+            prev_idx = self._topk_unused_indices(
+                score_p[b], used_prev, num_prev_only)
+
+            if curr_idx.numel() > 0:
+                q_prev_null = null_prev_query.expand(curr_idx.numel(), -1)
+                q_curr = query_c[b, curr_idx]
+                q_curr_only = self.pair_query_fusion(
+                    torch.cat([q_prev_null, q_curr], dim=-1))
+                rp_curr_only = null_prev_ref.expand(curr_idx.numel(), -1)
+                rc_curr_only = ref_c[b, curr_idx]
+                ep_curr_only = logits_p.new_zeros(
+                    (curr_idx.numel(), logits_p.size(-1)))
+                ec_curr_only = logits_c[b, curr_idx]
+            else:
+                q_curr_only = query_c.new_zeros((0, c))
+                rp_curr_only = ref_p.new_zeros((0, 5))
+                rc_curr_only = ref_c.new_zeros((0, 5))
+                ep_curr_only = logits_p.new_zeros((0, logits_p.size(-1)))
+                ec_curr_only = logits_c.new_zeros((0, logits_c.size(-1)))
+
+            if prev_idx.numel() > 0:
+                q_prev = query_p[b, prev_idx]
+                q_curr_null = null_curr_query.expand(prev_idx.numel(), -1)
+                q_prev_only = self.pair_query_fusion(
+                    torch.cat([q_prev, q_curr_null], dim=-1))
+                rp_prev_only = ref_p[b, prev_idx]
+                rc_prev_only = null_curr_ref.expand(prev_idx.numel(), -1)
+                ep_prev_only = logits_p[b, prev_idx]
+                ec_prev_only = logits_c.new_zeros(
+                    (prev_idx.numel(), logits_c.size(-1)))
+            else:
+                q_prev_only = query_p.new_zeros((0, c))
+                rp_prev_only = ref_p.new_zeros((0, 5))
+                rc_prev_only = ref_c.new_zeros((0, 5))
+                ep_prev_only = logits_p.new_zeros((0, logits_p.size(-1)))
+                ec_prev_only = logits_c.new_zeros((0, logits_c.size(-1)))
+
+            groups = [
+                (q_surv, rp_surv, rc_surv, ep_surv, ec_surv, num_survival,
+                 QUERY_TYPE_SURVIVAL, 0),
+                (q_curr_only, rp_curr_only, rc_curr_only, ep_curr_only,
+                 ec_curr_only, num_curr_only, QUERY_TYPE_CURR_ONLY,
+                 num_survival),
+                (q_prev_only, rp_prev_only, rc_prev_only, ep_prev_only,
+                 ec_prev_only, num_prev_only, QUERY_TYPE_PREV_ONLY,
+                 num_survival + num_curr_only),
+            ]
+            q_parts = []
+            rp_parts = []
+            rc_parts = []
+            ep_parts = []
+            ec_parts = []
+            type_parts = []
+            for q, rp, rc, ep, ec, target, qtype, learned_offset in groups:
+                pad = target - q.size(0)
+                if pad > 0:
+                    start = learned_offset + q.size(0)
+                    end = start + pad
+                    q = torch.cat([q, learned_query[start:end]], dim=0)
+                    rp = torch.cat([rp, learned_prev[start:end]], dim=0)
+                    rc = torch.cat([rc, learned_curr[start:end]], dim=0)
+                    ep = torch.cat([
+                        ep,
+                        logits_p.new_zeros((pad, logits_p.size(-1)))
+                    ], dim=0)
+                    ec = torch.cat([
+                        ec,
+                        logits_c.new_zeros((pad, logits_c.size(-1)))
+                    ], dim=0)
+                q_parts.append(q[:target])
+                rp_parts.append(rp[:target])
+                rc_parts.append(rc[:target])
+                ep_parts.append(ep[:target])
+                ec_parts.append(ec[:target])
+                type_parts.append(torch.full(
+                    (target,), qtype, dtype=torch.long, device=memory_prev.device))
+
+            q = torch.cat(q_parts, dim=0)
+            rp = torch.cat(rp_parts, dim=0)
+            rc = torch.cat(rc_parts, dim=0)
+            ep = torch.cat(ep_parts, dim=0)
+            ec = torch.cat(ec_parts, dim=0)
+            query_types = torch.cat(type_parts, dim=0)
+
+            batch_queries.append(q)
+            batch_ref_prev.append(rp)
+            batch_ref_curr.append(rc)
+            batch_enc_cls_prev.append(ep)
+            batch_enc_cls_curr.append(ec)
+            batch_enc_bbox_prev.append(rp)
+            batch_enc_bbox_curr.append(rc)
+            batch_query_types.append(query_types)
+
+        return (
+            torch.stack(batch_queries, dim=0),
+            torch.stack(batch_ref_prev, dim=0),
+            torch.stack(batch_ref_curr, dim=0),
+            torch.stack(batch_enc_cls_prev, dim=0),
+            torch.stack(batch_enc_cls_curr, dim=0),
+            torch.stack(batch_enc_bbox_prev, dim=0),
+            torch.stack(batch_enc_bbox_curr, dim=0),
+            torch.stack(batch_query_types, dim=0),
+        )
+
     def _topk_pair_queries_v2(
         self,
         memory_prev: Tensor,
@@ -898,6 +1171,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         """Select pair query / dual reference init per ``query_init``."""
         enc_cls_prev = enc_cls_curr = None
         enc_bbox_prev = enc_bbox_curr = None
+        query_types = None
         if self.query_init == 'learned':
             query, reference_prev, reference_curr = None, None, None
         elif self.query_init == 'gt_noised':
@@ -938,6 +1212,21 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                      spatial_shapes,
                      batch_data_samples=batch_data_samples,
                  ))
+        elif self.query_init == 'typed_pair_topk_v1':
+            (query, reference_prev, reference_curr, enc_cls_prev,
+             enc_cls_curr, enc_bbox_prev, enc_bbox_curr, query_types) = (
+                 self._typed_pair_queries_v1(
+                     memory_prev,
+                     memory_curr,
+                     memory_mask,
+                     spatial_shapes,
+                     batch_data_samples=batch_data_samples,
+                 ))
+            if batch_data_samples is not None:
+                for sample, sample_query_types in zip(
+                        batch_data_samples, query_types):
+                    sample.set_metainfo(dict(
+                        pair_query_types=sample_query_types.detach()))
         else:
             raise RuntimeError(f'Unsupported query_init: {self.query_init!r}')
 

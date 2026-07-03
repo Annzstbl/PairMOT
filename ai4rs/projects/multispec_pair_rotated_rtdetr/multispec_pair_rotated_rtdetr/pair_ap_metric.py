@@ -2,17 +2,19 @@
 """Pair AP validation metrics for HSMOT pair RT-DETR."""
 
 import csv
+import json
 import math
 import os
 import os.path as osp
 import subprocess
 import sys
+import time
 from typing import Dict, List, Optional, Sequence, Union
 
 import numpy as np
 import torch
 from mmengine.evaluator import BaseMetric
-from mmengine.logging import print_log
+from mmengine.logging import MessageHub, print_log
 from mmengine.structures import InstanceData
 from mmrotate.registry import METRICS
 from mmrotate.structures.bbox import qbox2rbox, rbbox_overlaps
@@ -27,6 +29,7 @@ from .pair_mot_tracker import (
     PairFrameRecord,
     PairMOTTracker,
     bootstrap_first_record_from_pair,
+    read_pair_det_txt,
     write_pair_det_txt,
     write_trackeval_txt,
 )
@@ -438,6 +441,126 @@ def _read_summary_row(path: str) -> dict:
     return row or {}
 
 
+def _current_val_epoch_name(fallback_index: int) -> str:
+    try:
+        message_hub = MessageHub.get_current_instance()
+        epoch = message_hub.get_info('epoch', None)
+    except Exception:
+        epoch = None
+    if isinstance(epoch, int):
+        return f'epoch_{epoch:02d}'
+    return f'val_{fallback_index:04d}'
+
+
+def _current_val_step(fallback_index: int) -> int:
+    try:
+        step = MessageHub.get_current_instance().get_info('epoch', None)
+    except Exception:
+        step = None
+    if isinstance(step, int):
+        return step
+    return int(fallback_index)
+
+
+def _default_val_det_out_dir(track_eval_out_dir: Optional[str]) -> Optional[str]:
+    if not track_eval_out_dir:
+        return None
+    parent = osp.dirname(osp.abspath(track_eval_out_dir))
+    if osp.basename(osp.abspath(track_eval_out_dir)) == 'val_track_eval':
+        return osp.join(parent, 'val_det')
+    return osp.join(osp.abspath(track_eval_out_dir), 'val_det')
+
+
+def _write_val_det_from_records(records: Sequence[dict], out_dir: str) -> str:
+    pair_records = [_record_from_dict(record) for record in records]
+    by_seq: Dict[str, List[PairFrameRecord]] = {}
+    for record in pair_records:
+        if record.frame_gap != 1:
+            continue
+        by_seq.setdefault(record.seq_name, []).append(record)
+    os.makedirs(out_dir, exist_ok=True)
+    for seq_name, seq_records in sorted(by_seq.items()):
+        seq_records = sorted(
+            seq_records, key=lambda item: (item.prev_frame_id,
+                                           item.curr_frame_id))
+        write_pair_det_txt(osp.join(out_dir, f'{seq_name}.txt'), seq_records)
+    return out_dir
+
+
+def _load_val_det_records(val_det_dir: str) -> List[PairFrameRecord]:
+    records: List[PairFrameRecord] = []
+    for filename in sorted(os.listdir(val_det_dir)):
+        if not filename.endswith('.txt'):
+            continue
+        records.extend(read_pair_det_txt(osp.join(val_det_dir, filename)))
+    return records
+
+
+def _append_json_scalar(scalars_path: Optional[str], metrics: Dict[str, float],
+                        step: int) -> None:
+    if not scalars_path:
+        return
+    os.makedirs(osp.dirname(scalars_path), exist_ok=True)
+    row = {f'pair/{key}': value for key, value in metrics.items()}
+    row['step'] = int(step)
+    with open(scalars_path, 'a', encoding='utf-8') as f:
+        f.write(json.dumps(row, sort_keys=True) + '\n')
+
+
+def _latest_scalars_path_from_work_dir(work_dir: Optional[str]) -> Optional[str]:
+    if not work_dir or not osp.isdir(work_dir):
+        return None
+    candidates = []
+    for name in os.listdir(work_dir):
+        path = osp.join(work_dir, name, 'vis_data', 'scalars.json')
+        if osp.isfile(path):
+            candidates.append(path)
+    if not candidates:
+        return None
+    return max(candidates, key=osp.getmtime)
+
+
+def _latest_main_log_path_from_work_dir(work_dir: Optional[str]) -> Optional[str]:
+    if not work_dir or not osp.isdir(work_dir):
+        return None
+    candidates = []
+    for name in os.listdir(work_dir):
+        path = osp.join(work_dir, name, f'{name}.log')
+        if osp.isfile(path):
+            candidates.append(path)
+    if not candidates:
+        return None
+    return max(candidates, key=osp.getmtime)
+
+
+def _default_main_log_path(track_eval_out_dir: Optional[str]) -> Optional[str]:
+    if not track_eval_out_dir:
+        return None
+    out_dir = osp.abspath(track_eval_out_dir)
+    work_dir = osp.dirname(out_dir)
+    if osp.basename(out_dir) != 'val_track_eval':
+        work_dir = out_dir
+    return _latest_main_log_path_from_work_dir(work_dir)
+
+
+def _default_scalars_path(track_eval_out_dir: Optional[str]) -> Optional[str]:
+    if not track_eval_out_dir:
+        return None
+    out_dir = osp.abspath(track_eval_out_dir)
+    work_dir = osp.dirname(out_dir)
+    if osp.basename(out_dir) != 'val_track_eval':
+        work_dir = out_dir
+    return _latest_scalars_path_from_work_dir(work_dir)
+
+
+def _plot_curves_for_scalars(scalars_path: Optional[str]) -> None:
+    if not scalars_path or not osp.isfile(scalars_path):
+        return
+    from mmrotate.utils.plot_training_curves import plot_training_curves
+    out_dir = osp.join(osp.dirname(scalars_path), 'curves')
+    plot_training_curves(scalars_path, out_dir=out_dir)
+
+
 def _add_trackeval_metrics(metrics: Dict[str, float], eval_dir: str) -> None:
     for src_name, prefix in (
             ('cls_comb_cls_av', 'track/cls'),
@@ -541,6 +664,156 @@ def _run_track_eval_from_records(records: Sequence[dict], *, out_dir: str,
     return metrics
 
 
+def _run_track_eval_from_val_det(
+        val_det_dir: str, *, out_dir: str, data_root: str, ann_subdir: str,
+        img_subdir: str, trackeval_root: str, tracker_name: str,
+        tracker_sub_folder: str, new_born_th: float, track_th: float,
+        match_iou_th: float, new_birth_iou_th: float, max_age: int,
+        init_same_iou_th: float, class_aware: bool) -> Dict[str, float]:
+    pair_records = _load_val_det_records(val_det_dir)
+    by_seq: Dict[str, List[PairFrameRecord]] = {}
+    for record in pair_records:
+        if record.frame_gap != 1:
+            continue
+        by_seq.setdefault(record.seq_name, []).append(record)
+
+    tracker_root = osp.join(out_dir, 'trackers', tracker_name)
+    pred_dir = osp.join(tracker_root, tracker_sub_folder)
+    os.makedirs(pred_dir, exist_ok=True)
+
+    for seq_name, seq_records in sorted(by_seq.items()):
+        seq_records = sorted(
+            seq_records, key=lambda item: (item.prev_frame_id,
+                                           item.curr_frame_id))
+        if not seq_records:
+            continue
+        tracker = PairMOTTracker(
+            new_born_th=new_born_th,
+            track_th=track_th,
+            match_iou_th=match_iou_th,
+            new_birth_iou_th=new_birth_iou_th,
+            max_age=max_age,
+            init_same_iou_th=init_same_iou_th,
+            class_aware=class_aware)
+        tracker.init_first_frame(bootstrap_first_record_from_pair(seq_records[0]))
+        for record in seq_records:
+            tracker.update_pair(record)
+        write_trackeval_txt(
+            osp.join(pred_dir, f'{seq_name}.txt'), tracker.all_history())
+
+    cmd = [
+        sys.executable,
+        osp.join(osp.abspath(trackeval_root), 'scripts/run_hsmot_8ch.py'),
+        '--USE_PARALLEL', 'False',
+        '--METRICS', 'HOTA', 'CLEAR', 'Identity',
+        '--TRACKERS_TO_EVAL', tracker_name,
+        '--TRACKER_SUB_FOLDER', tracker_sub_folder,
+        '--GT_FOLDER', osp.abspath(osp.join(data_root, ann_subdir)),
+        '--IMG_FOLDER', osp.abspath(osp.join(data_root, img_subdir)),
+        '--TRACKERS_FOLDER', osp.abspath(osp.join(out_dir, 'trackers')),
+        '--OUTPUT_FOLDER', osp.abspath(osp.join(out_dir, 'trackers')),
+    ]
+    env = os.environ.copy()
+    ai4rs_root = osp.abspath(osp.join(osp.dirname(__file__), '../../..'))
+    pairmmot_root = osp.abspath(osp.join(ai4rs_root, '..'))
+    extra_pythonpath = [
+        ai4rs_root,
+        pairmmot_root,
+        osp.join(pairmmot_root, 'hsmot'),
+    ]
+    env['PYTHONPATH'] = os.pathsep.join(
+        extra_pythonpath + ([env['PYTHONPATH']] if env.get('PYTHONPATH') else []))
+    output = subprocess.run(
+        cmd, cwd=osp.abspath(trackeval_root), check=True, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True).stdout
+    with open(osp.join(out_dir, 'trackeval_stdout.log'), 'w',
+              encoding='utf-8') as f:
+        f.write(output)
+
+    metrics: Dict[str, float] = {}
+    _add_trackeval_metrics(metrics, osp.join(tracker_root, 'eval'))
+    return metrics
+
+
+def _async_track_eval_worker(kwargs: dict) -> None:
+    log_path = kwargs.pop('async_log_path')
+    os.makedirs(osp.dirname(log_path), exist_ok=True)
+    t0 = time.time()
+    try:
+        with open(log_path, 'a', encoding='utf-8') as log:
+            log.write(
+                f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] '
+                f'start async track eval: {kwargs["out_dir"]}\n')
+        metrics = _run_track_eval_from_val_det(**kwargs['track_kwargs'])
+        metrics['track/num_records'] = float(kwargs['num_records'])
+        metrics['track/num_sequences'] = float(kwargs['num_sequences'])
+        metrics['track/async_done'] = 1.0
+        metrics_path = osp.join(kwargs['out_dir'], 'metrics.json')
+        with open(metrics_path, 'w', encoding='utf-8') as f:
+            json.dump(metrics, f, indent=2, sort_keys=True)
+        _append_json_scalar(kwargs.get('scalars_path'), metrics, kwargs['step'])
+        _plot_curves_for_scalars(kwargs.get('scalars_path'))
+        elapsed = time.time() - t0
+        main_log_path = kwargs.get('main_log_path')
+        summary = (
+            f'Pair MOT async validation finished in {elapsed:.1f}s: '
+            f'cls_hota={metrics.get("track/cls_hota", float("nan")):.4f}, '
+            f'cls_mota={metrics.get("track/cls_mota", float("nan")):.4f}, '
+            f'cls_idf1={metrics.get("track/cls_idf1", float("nan")):.4f}, '
+            f'det_hota={metrics.get("track/det_hota", float("nan")):.4f}, '
+            f'det_mota={metrics.get("track/det_mota", float("nan")):.4f}, '
+            f'det_idf1={metrics.get("track/det_idf1", float("nan")):.4f}')
+        if main_log_path:
+            with open(main_log_path, 'a', encoding='utf-8') as main_log:
+                main_log.write(
+                    f'{time.strftime("%Y/%m/%d %H:%M:%S")} - mmengine - '
+                    f'INFO - {summary}\n')
+        with open(log_path, 'a', encoding='utf-8') as log:
+            log.write(
+                f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] '
+                f'{summary}: '
+                f'{metrics_path}\n')
+    except Exception as exc:
+        with open(log_path, 'a', encoding='utf-8') as log:
+            log.write(
+                f'[{time.strftime("%Y-%m-%d %H:%M:%S")}] '
+                f'async track eval failed: {repr(exc)}\n')
+
+
+def _launch_async_track_eval(kwargs: dict) -> None:
+    out_dir = kwargs['out_dir']
+    os.makedirs(out_dir, exist_ok=True)
+    payload_path = osp.join(out_dir, 'async_track_eval_payload.json')
+    with open(payload_path, 'w', encoding='utf-8') as f:
+        json.dump(kwargs, f, indent=2, sort_keys=True)
+
+    ai4rs_root = osp.abspath(osp.join(osp.dirname(__file__), '../../..'))
+    pairmmot_root = osp.abspath(osp.join(ai4rs_root, '..'))
+    env = os.environ.copy()
+    extra_pythonpath = [
+        ai4rs_root,
+        pairmmot_root,
+        osp.join(pairmmot_root, 'hsmot'),
+    ]
+    env['PYTHONPATH'] = os.pathsep.join(
+        extra_pythonpath + ([env['PYTHONPATH']] if env.get('PYTHONPATH') else []))
+    with open(kwargs['async_log_path'], 'a', encoding='utf-8') as log_f:
+        subprocess.Popen(
+            [
+                sys.executable,
+                osp.join(ai4rs_root, 'projects/multispec_pair_rotated_rtdetr/'
+                         'tools/async_pair_track_eval.py'),
+                payload_path,
+            ],
+            cwd=ai4rs_root,
+            env=env,
+            stdout=log_f,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+            close_fds=True)
+
+
 @METRICS.register_module()
 class HSMOTPairOverfitMetric(BaseMetric):
     """Backward-compatible registry name for pair AP validation.
@@ -560,7 +833,11 @@ class HSMOTPairOverfitMetric(BaseMetric):
                  report_gaps: Sequence[int] = (),
                  both_visible_gt_only: bool = False,
                  diagnostic_mode: bool = False,
+                 save_val_det: bool = True,
+                 val_det_out_dir: Optional[str] = None,
                  track_eval: bool = False,
+                 async_track_eval: bool = True,
+                 async_track_scalars_path: Optional[str] = None,
                  track_eval_out_dir: Optional[str] = None,
                  trackeval_root: str = '/data/users/litianhao01/PairMmot/TrackEval',
                  track_data_root: str = '/data/users/litianhao01/PairMmot/data/hsmot/test',
@@ -585,7 +862,11 @@ class HSMOTPairOverfitMetric(BaseMetric):
         self.report_gaps = tuple(sorted(set(int(gap) for gap in report_gaps)))
         self.both_visible_gt_only = bool(both_visible_gt_only)
         self.diagnostic_mode = bool(diagnostic_mode)
+        self.save_val_det = bool(save_val_det)
+        self.val_det_out_dir = val_det_out_dir
         self.track_eval = bool(track_eval)
+        self.async_track_eval = bool(async_track_eval)
+        self.async_track_scalars_path = async_track_scalars_path
         self.track_eval_out_dir = track_eval_out_dir
         self.trackeval_root = trackeval_root
         self.track_data_root = track_data_root
@@ -601,6 +882,7 @@ class HSMOTPairOverfitMetric(BaseMetric):
         self.track_init_same_iou_th = float(track_init_same_iou_th)
         self.track_class_aware = bool(track_class_aware)
         self._track_eval_count = 0
+        self._val_det_count = 0
 
     def _filter_gt(self, gt):
         if not self.both_visible_gt_only:
@@ -650,7 +932,7 @@ class HSMOTPairOverfitMetric(BaseMetric):
                 frame_gap=int(getattr(sample, 'metainfo', {}).get(
                     'frame_gap', 0)),
             )
-            if self.track_eval:
+            if self.track_eval or self.save_val_det:
                 track_record = _track_record_from_sample(
                     sample, pred, self.track_score_mode)
                 if track_record is not None:
@@ -744,9 +1026,40 @@ class HSMOTPairOverfitMetric(BaseMetric):
                 for name, value in gap_metrics.items()
             })
         print_log(_format_pair_metric_table(metrics), logger='current')
+        track_records = [
+            r['track_record'] for r in results if 'track_record' in r]
+        val_det_dir = None
+        if self.save_val_det or self.track_eval:
+            self._val_det_count += 1
+            val_det_root = self.val_det_out_dir or _default_val_det_out_dir(
+                self.track_eval_out_dir)
+            if val_det_root and track_records:
+                val_det_name = _current_val_epoch_name(self._val_det_count)
+                val_det_dir = osp.join(val_det_root, val_det_name)
+                try:
+                    _write_val_det_from_records(track_records, val_det_dir)
+                    metrics['val_det/num_records'] = float(len(track_records))
+                    metrics['val_det/num_sequences'] = float(
+                        len({record['seq_name'] for record in track_records}))
+                    with open(osp.join(val_det_dir, 'metrics.json'),
+                              'w',
+                              encoding='utf-8') as f:
+                        json.dump(metrics, f, indent=2, sort_keys=True)
+                    print_log(
+                        f'Pair validation detections written to {val_det_dir}',
+                        logger='current')
+                except Exception as exc:
+                    print_log(
+                        f'Pair validation detection export failed: {exc}',
+                        logger='current')
+            else:
+                print_log(
+                    'Pair validation detection export skipped: '
+                    f'track_records={len(track_records)}, '
+                    f'val_det_out_dir={val_det_root}',
+                    logger='current')
+
         if self.track_eval:
-            track_records = [
-                r['track_record'] for r in results if 'track_record' in r]
             metrics['track/num_records'] = float(len(track_records))
             metrics['track/num_sequences'] = float(
                 len({record['seq_name'] for record in track_records}))
@@ -756,6 +1069,62 @@ class HSMOTPairOverfitMetric(BaseMetric):
                     self.track_eval_out_dir,
                     f'val_track_{self._track_eval_count:04d}')
                 tracker_name = f'val_pairmot_{self._track_eval_count:04d}'
+                if self.async_track_eval:
+                    metrics['track/async_launched'] = 0.0
+                    if val_det_dir is None:
+                        print_log(
+                            'Pair MOT async validation skipped: '
+                            'val_det_dir is not available',
+                            logger='current')
+                        return metrics
+                    scalars_path = (
+                        self.async_track_scalars_path
+                        or _default_scalars_path(self.track_eval_out_dir))
+                    async_log_path = osp.join(
+                        eval_out_dir, 'async_track_eval.log')
+                    main_log_path = _default_main_log_path(
+                        self.track_eval_out_dir)
+                    try:
+                        _launch_async_track_eval(dict(
+                            out_dir=eval_out_dir,
+                            async_log_path=async_log_path,
+                            scalars_path=scalars_path,
+                            main_log_path=main_log_path,
+                            step=_current_val_step(self._track_eval_count),
+                            num_records=len(track_records),
+                            num_sequences=len({
+                                record['seq_name']
+                                for record in track_records
+                            }),
+                            track_kwargs=dict(
+                                val_det_dir=val_det_dir,
+                                out_dir=eval_out_dir,
+                                data_root=self.track_data_root,
+                                ann_subdir=self.track_ann_subdir,
+                                img_subdir=self.track_img_subdir,
+                                trackeval_root=self.trackeval_root,
+                                tracker_name=tracker_name,
+                                tracker_sub_folder=self.track_tracker_sub_folder,
+                                new_born_th=self.track_new_born_th,
+                                track_th=self.track_track_th,
+                                match_iou_th=self.track_match_iou_th,
+                                new_birth_iou_th=self.track_new_birth_iou_th,
+                                max_age=self.track_max_age,
+                                init_same_iou_th=self.track_init_same_iou_th,
+                                class_aware=self.track_class_aware)))
+                        metrics['track/async_launched'] = 1.0
+                        print_log(
+                            'Pair MOT async validation launched: '
+                            f'out_dir={eval_out_dir}, '
+                            f'val_det_dir={val_det_dir}, '
+                            f'scalars_path={scalars_path}, '
+                            f'main_log_path={main_log_path}',
+                            logger='current')
+                    except Exception as exc:
+                        print_log(
+                            f'Pair MOT async validation launch failed: {exc}',
+                            logger='current')
+                    return metrics
                 try:
                     track_metrics = _run_track_eval_from_records(
                         track_records,

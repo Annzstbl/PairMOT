@@ -177,6 +177,70 @@ def _pair_ap_keys(keys: Sequence[str]) -> List[str]:
     return [key for key in keys if key.split('/')[-1] in wanted]
 
 
+def _select_existing_keys(keys: Sequence[str],
+                          specs: Sequence[Tuple[str, str]]) -> List[Tuple[str, str]]:
+    available = set(keys)
+    selected = []
+    for metric_name, label in specs:
+        full_key = metric_name if '/' in metric_name else f'pair/{metric_name}'
+        if full_key in available:
+            selected.append((full_key, label))
+    return selected
+
+
+def _plot_val_key_specs(ax,
+                        val_records: Sequence[dict],
+                        specs: Sequence[Tuple[str, str]],
+                        title: str) -> None:
+    plotted = False
+    for key, label in specs:
+        xs, ys = _val_epoch_series(val_records, key)
+        if not xs:
+            continue
+        ax.plot(xs, ys, label=label, marker='o', linewidth=1.2,
+                markersize=4)
+        plotted = True
+    if not plotted:
+        ax.set_visible(False)
+        return
+    ax.set_title(title)
+    ax.set_xlabel('epoch')
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc='best', fontsize=7, ncols=2)
+
+
+def _validation_map_specs(val_keys: Sequence[str]):
+    pair_specs = _select_existing_keys(val_keys, (
+        ('pair_AP50', 'all_pair_AP50'),
+        ('pair_mAP50_95', 'all_pair_mAP'),
+        ('both_pair_AP50', 'both_pair_AP50'),
+        ('both_pair_AP75', 'both_pair_AP75'),
+        ('disappear_pair_AP50', 'disappear_pair_AP50'),
+        ('disappear_pair_AP75', 'disappear_pair_AP75'),
+        ('new_pair_AP50', 'new_pair_AP50'),
+        ('new_pair_AP75', 'new_pair_AP75'),
+    ))
+    independent_specs = _select_existing_keys(val_keys, (
+        ('independent_AP50', 'all_ind_AP50'),
+        ('independent_mAP50_95', 'all_ind_mAP'),
+        ('both_independent_AP50', 'both_ind_AP50'),
+        ('both_independent_AP75', 'both_ind_AP75'),
+        ('disappear_independent_AP50', 'disappear_ind_AP50'),
+        ('disappear_independent_AP75', 'disappear_ind_AP75'),
+        ('new_independent_AP50', 'new_ind_AP50'),
+        ('new_independent_AP75', 'new_ind_AP75'),
+    ))
+    track_specs = _select_existing_keys(val_keys, (
+        ('pair/track/cls_hota', 'cls_HOTA'),
+        ('pair/track/cls_mota', 'cls_MOTA'),
+        ('pair/track/cls_idf1', 'cls_IDF1'),
+        ('pair/track/det_hota', 'det_HOTA'),
+        ('pair/track/det_mota', 'det_MOTA'),
+        ('pair/track/det_idf1', 'det_IDF1'),
+    ))
+    return pair_specs, independent_specs, track_specs
+
+
 def _sort_ap_keys(keys: Sequence[str]) -> List[str]:
     def _ap_order(key: str) -> tuple:
         name = key.split('/')[-1]
@@ -321,16 +385,34 @@ def plot_training_curves(
     # --- validation metrics ---
     if val_keys:
         if map_keys:
-            fig, ax = plt.subplots(figsize=(9, 4))
-            for key in _sort_ap_keys(map_keys):
-                xs, ys = _val_epoch_series(val_records, key)
-                if xs:
-                    ax.plot(xs, ys, label=key.split('/')[-1], marker='o',
-                            linewidth=1.2, markersize=5)
-            ax.set_title('Validation AP')
-            ax.set_xlabel('epoch')
-            ax.grid(True, alpha=0.3)
-            ax.legend(loc='best', fontsize=8)
+            pair_specs, independent_specs, track_specs = _validation_map_specs(
+                val_keys)
+            if pair_specs or independent_specs or track_specs:
+                fig, axes = plt.subplots(3, 1, figsize=(11, 10), sharex=True)
+                _plot_val_key_specs(
+                    axes[0], val_records, pair_specs,
+                    'Pair AP: all / both / disappear / new')
+                _plot_val_key_specs(
+                    axes[1], val_records, independent_specs,
+                    'Independent AP: all / both / disappear / new')
+                _plot_val_key_specs(
+                    axes[2], val_records, track_specs,
+                    'Tracking: cls / det HOTA MOTA IDF1')
+                for ax in axes:
+                    if ax.get_visible():
+                        ax.set_xlabel('epoch')
+                fig.suptitle('Validation Map', fontsize=13)
+            else:
+                fig, ax = plt.subplots(figsize=(9, 4))
+                for key in _sort_ap_keys(map_keys):
+                    xs, ys = _val_epoch_series(val_records, key)
+                    if xs:
+                        ax.plot(xs, ys, label=key.split('/')[-1], marker='o',
+                                linewidth=1.2, markersize=5)
+                ax.set_title('Validation AP')
+                ax.set_xlabel('epoch')
+                ax.grid(True, alpha=0.3)
+                ax.legend(loc='best', fontsize=8)
             fig.tight_layout()
             path = osp.join(out_dir, 'validation_map.png')
             fig.savefig(path, dpi=dpi, bbox_inches='tight')

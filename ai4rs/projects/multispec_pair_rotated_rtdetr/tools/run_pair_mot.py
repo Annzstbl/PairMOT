@@ -225,7 +225,8 @@ def _record_from_sample(sample, pair_info: dict, score_mode: str) -> PairFrameRe
             curr_bbox=[float(x) for x in bboxes_curr[idx].tolist()],
             score=detection_score(cls_score, pp, pc, score_mode),
             cls_score=cls_score,
-            label=int(labels[idx]),
+            label=(None if label_prev is not None or label_curr is not None
+                   else int(labels[idx])),
             presence_prev=pp,
             presence_curr=pc,
             score_prev=float(score_prev[idx]) if score_prev is not None else None,

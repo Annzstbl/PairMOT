@@ -24,6 +24,10 @@ from torch import Tensor
 
 from .pair_instance_data import PairInstanceData
 
+QUERY_TYPE_SURVIVAL = 0
+QUERY_TYPE_CURR_ONLY = 1
+QUERY_TYPE_PREV_ONLY = 2
+
 
 def _to_rbox_tensor(bboxes, angle_cfg: dict) -> Tensor:
     """Convert GT boxes to ``(N, 5)`` rbox tensor."""
@@ -527,11 +531,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             batch_pair_gt_instances,
             batch_img_metas,
         )
-        (labels_list, label_weights_list, bbox_prev_targets_list,
+        (labels_prev_list, labels_curr_list, label_weights_list,
+         bbox_prev_targets_list,
          bbox_prev_weights_list, bbox_curr_targets_list,
          bbox_curr_weights_list, num_total_pos, num_total_neg) = targets
 
-        labels = torch.cat(labels_list, 0)
+        labels_prev = torch.cat(labels_prev_list, 0)
+        labels_curr = torch.cat(labels_curr_list, 0)
         label_weights = torch.cat(label_weights_list, 0)
         bbox_prev_targets = torch.cat(bbox_prev_targets_list, 0)
         bbox_prev_weights = torch.cat(bbox_prev_weights_list, 0)
@@ -548,12 +554,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
         loss_cls_prev = self._loss_cls(
-            cls_prev_flat, labels, label_weights, bbox_prev_flat,
+            cls_prev_flat, labels_prev, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
         loss_cls_curr = self._loss_cls(
-            cls_curr_flat, labels, label_weights, bbox_prev_flat,
+            cls_curr_flat, labels_curr, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
@@ -590,7 +596,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         batch_img_metas: List[dict],
     ) -> tuple:
         """Compute pair targets without presence branches."""
-        (labels_list, label_weights_list, bbox_prev_targets_list,
+        (labels_prev_list, labels_curr_list, label_weights_list,
+         bbox_prev_targets_list,
          bbox_prev_weights_list, bbox_curr_targets_list,
          bbox_curr_weights_list, pos_inds_list,
          neg_inds_list) = multi_apply(
@@ -603,9 +610,69 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
          )
         num_total_pos = sum((inds.numel() for inds in pos_inds_list))
         num_total_neg = sum((inds.numel() for inds in neg_inds_list))
-        return (labels_list, label_weights_list, bbox_prev_targets_list,
+        return (labels_prev_list, labels_curr_list, label_weights_list,
+                bbox_prev_targets_list,
                 bbox_prev_weights_list, bbox_curr_targets_list,
                 bbox_curr_weights_list, num_total_pos, num_total_neg)
+
+    @staticmethod
+    def _gt_type_mask(valid_prev: Tensor, valid_curr: Tensor,
+                      query_type: int) -> Tensor:
+        if query_type == QUERY_TYPE_SURVIVAL:
+            return valid_prev & valid_curr
+        if query_type == QUERY_TYPE_CURR_ONLY:
+            return (~valid_prev) & valid_curr
+        if query_type == QUERY_TYPE_PREV_ONLY:
+            return valid_prev & (~valid_curr)
+        return torch.ones_like(valid_prev, dtype=torch.bool)
+
+    def _typed_assign_no_presence(
+        self,
+        pred_instances: InstanceData,
+        gt_instances: InstanceData,
+        img_meta: dict,
+        query_types: Tensor,
+    ):
+        num_queries = pred_instances.scores.size(0)
+        device = pred_instances.scores.device
+        assigned_gt_inds = torch.zeros(num_queries, dtype=torch.long,
+                                       device=device)
+        valid_prev = gt_instances.valid_prev.bool()
+        valid_curr = gt_instances.valid_curr.bool()
+        for query_type in (QUERY_TYPE_SURVIVAL, QUERY_TYPE_CURR_ONLY,
+                           QUERY_TYPE_PREV_ONLY):
+            qinds = torch.nonzero(
+                query_types == query_type, as_tuple=False).squeeze(-1)
+            if qinds.numel() == 0:
+                continue
+            gt_mask = self._gt_type_mask(valid_prev, valid_curr, query_type)
+            gt_inds = torch.nonzero(gt_mask, as_tuple=False).squeeze(-1)
+            if gt_inds.numel() == 0:
+                continue
+            pred_subset = InstanceData(
+                scores=pred_instances.scores[qinds],
+                bboxes_prev=pred_instances.bboxes_prev[qinds],
+                bboxes_curr=pred_instances.bboxes_curr[qinds],
+            )
+            gt_subset = InstanceData(
+                labels=gt_instances.labels[gt_inds],
+                bboxes_prev=gt_instances.bboxes_prev[gt_inds],
+                bboxes_curr=gt_instances.bboxes_curr[gt_inds],
+                valid_prev=gt_instances.valid_prev[gt_inds],
+                valid_curr=gt_instances.valid_curr[gt_inds],
+            )
+            assign_result = self.assigner.assign(
+                pred_instances=pred_subset,
+                gt_instances=gt_subset,
+                img_meta=img_meta,
+            )
+            local_pos = torch.nonzero(
+                assign_result.gt_inds > 0, as_tuple=False).squeeze(-1)
+            if local_pos.numel() == 0:
+                continue
+            local_gt = assign_result.gt_inds[local_pos] - 1
+            assigned_gt_inds[qinds[local_pos]] = gt_inds[local_gt] + 1
+        return assigned_gt_inds
 
     def _get_targets_single_no_presence(
         self,
@@ -636,22 +703,32 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             valid_prev=pair_gt_instances.valid_prev,
             valid_curr=pair_gt_instances.valid_curr,
         )
-        assign_result = self.assigner.assign(
-            pred_instances=pred_instances,
-            gt_instances=gt_instances,
-            img_meta=img_meta,
-        )
+        query_types = img_meta.get('pair_query_types', None)
+        if query_types is not None and len(query_types) == num_queries:
+            query_types = torch.as_tensor(
+                query_types, device=bbox_prev.device, dtype=torch.long)
+            assigned_gt_inds = self._typed_assign_no_presence(
+                pred_instances, gt_instances, img_meta, query_types)
+        else:
+            assign_result = self.assigner.assign(
+                pred_instances=pred_instances,
+                gt_instances=gt_instances,
+                img_meta=img_meta,
+            )
+            assigned_gt_inds = assign_result.gt_inds
         gt_labels = gt_instances.labels
         pos_inds = torch.nonzero(
-            assign_result.gt_inds > 0, as_tuple=False).squeeze(-1).unique()
+            assigned_gt_inds > 0, as_tuple=False).squeeze(-1).unique()
         neg_inds = torch.nonzero(
-            assign_result.gt_inds == 0, as_tuple=False).squeeze(-1).unique()
-        pos_assigned_gt_inds = assign_result.gt_inds[pos_inds] - 1
+            assigned_gt_inds == 0, as_tuple=False).squeeze(-1).unique()
+        pos_assigned_gt_inds = assigned_gt_inds[pos_inds] - 1
 
-        labels = bbox_prev.new_full((num_queries, ),
-                                    self.num_classes,
-                                    dtype=torch.long)
-        labels[pos_inds] = gt_labels[pos_assigned_gt_inds]
+        labels_prev = bbox_prev.new_full((num_queries, ),
+                                         self.num_classes,
+                                         dtype=torch.long)
+        labels_curr = bbox_prev.new_full((num_queries, ),
+                                         self.num_classes,
+                                         dtype=torch.long)
         label_weights = bbox_prev.new_ones(num_queries)
 
         valid_prev = gt_instances.valid_prev
@@ -665,14 +742,18 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             pos_gt_curr = gt_bboxes_curr[pos_assigned_gt_inds] / factor
             pos_valid_prev = valid_prev[pos_assigned_gt_inds]
             pos_valid_curr = valid_curr[pos_assigned_gt_inds]
+            pos_labels = gt_labels[pos_assigned_gt_inds]
+            labels_prev[pos_inds[pos_valid_prev]] = pos_labels[pos_valid_prev]
+            labels_curr[pos_inds[pos_valid_curr]] = pos_labels[pos_valid_curr]
             bbox_prev_targets[pos_inds] = pos_gt_prev
             bbox_curr_targets[pos_inds] = pos_gt_curr
             bbox_prev_weights[pos_inds] = pos_valid_prev.float().unsqueeze(
                 -1).repeat(1, 5)
             bbox_curr_weights[pos_inds] = pos_valid_curr.float().unsqueeze(
                 -1).repeat(1, 5)
-        return (labels, label_weights, bbox_prev_targets, bbox_prev_weights,
-                bbox_curr_targets, bbox_curr_weights, pos_inds, neg_inds)
+        return (labels_prev, labels_curr, label_weights, bbox_prev_targets,
+                bbox_prev_weights, bbox_curr_targets, bbox_curr_weights,
+                pos_inds, neg_inds)
 
     def _get_pair_dn_targets(self, batch_pair_gt_instances: InstanceList,
                              batch_img_metas: List[dict],
@@ -758,7 +839,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
          bbox_prev_weights_list, bbox_curr_targets_list,
          bbox_curr_weights_list, pres_prev_targets_list,
          pres_curr_targets_list, pres_weights_list,
-         num_total_pos) = self._get_pair_dn_targets(
+             num_total_pos) = self._get_pair_dn_targets(
              batch_pair_gt_instances, batch_img_metas, dn_meta,
              cls_scores.device)
         labels = torch.cat(labels_list)
@@ -836,6 +917,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
              batch_pair_gt_instances, batch_img_metas, dn_meta,
              cls_prev.device)
         labels = torch.cat(labels_list)
+        pres_prev_targets = torch.cat(_pres_prev_targets_list)
+        pres_curr_targets = torch.cat(_pres_curr_targets_list)
+        labels_prev = labels.clone()
+        labels_curr = labels.clone()
+        labels_prev[pres_prev_targets <= 0] = self.num_classes
+        labels_curr[pres_curr_targets <= 0] = self.num_classes
         label_weights = torch.cat(label_weights_list)
         bbox_prev_targets = torch.cat(bbox_prev_targets_list)
         bbox_prev_weights = torch.cat(bbox_prev_weights_list)
@@ -848,12 +935,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         cls_avg_factor = max(float(reduce_mean(
             cls_prev_flat.new_tensor([num_total_pos])).item()), 1.0)
         loss_cls_prev = self._loss_cls(
-            cls_prev_flat, labels, label_weights, bbox_prev_flat,
+            cls_prev_flat, labels_prev, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
         loss_cls_curr = self._loss_cls(
-            cls_curr_flat, labels, label_weights, bbox_prev_flat,
+            cls_curr_flat, labels_curr, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
@@ -1419,8 +1506,23 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         else:
             scores_prev, labels_prev = cls_prev.softmax(dim=-1)[..., :-1].max(-1)
             scores_curr, labels_curr = cls_curr.softmax(dim=-1)[..., :-1].max(-1)
-        pair_scores = torch.sqrt(
-            scores_prev.clamp(min=1e-6) * scores_curr.clamp(min=1e-6))
+        query_types = img_meta.get('pair_query_types', None)
+        if query_types is not None and len(query_types) == scores_prev.numel():
+            query_types = torch.as_tensor(
+                query_types, device=scores_prev.device, dtype=torch.long)
+            survival_scores = torch.sqrt(
+                scores_prev.clamp(min=1e-6) * scores_curr.clamp(min=1e-6))
+            curr_only_scores = (1 - scores_prev).clamp(min=0) * scores_curr
+            prev_only_scores = scores_prev * (1 - scores_curr).clamp(min=0)
+            pair_scores = torch.where(
+                query_types == QUERY_TYPE_CURR_ONLY,
+                curr_only_scores,
+                torch.where(query_types == QUERY_TYPE_PREV_ONLY,
+                            prev_only_scores, survival_scores))
+        else:
+            query_types = None
+            pair_scores = torch.sqrt(
+                scores_prev.clamp(min=1e-6) * scores_curr.clamp(min=1e-6))
         max_per_img = self.test_cfg.get('max_per_img', len(pair_scores))
         max_per_img = min(max_per_img, pair_scores.numel())
         scores, bbox_index = pair_scores.topk(max_per_img)
@@ -1456,6 +1558,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         results.scores_curr = scores_curr[bbox_index]
         results.labels_prev = labels_prev[bbox_index]
         results.labels_curr = labels_curr[bbox_index]
+        if query_types is not None:
+            results.query_types = query_types[bbox_index]
         return results
 
     @staticmethod

@@ -48,7 +48,9 @@ class LiquidSpectralSampler(nn.Module):
                  tau: float = 1.0,
                  hard: bool = False,
                  init_logit: float = 8.0,
+                 head_weight_std: float = 0.0,
                  deterministic_eval: bool = True,
+                 eval_hard: bool = True,
                  lowres_grad_size: Optional[Union[int, Tuple[int, int]]] = None,
                  lowres_grad_downsample: int = 4,
                  use_lowres_grad_correction: bool = True) -> None:
@@ -61,6 +63,7 @@ class LiquidSpectralSampler(nn.Module):
         self.tau = tau
         self.hard = hard
         self.deterministic_eval = deterministic_eval
+        self.eval_hard = eval_hard
         self.lowres_grad_size = lowres_grad_size
         self.lowres_grad_downsample = lowres_grad_downsample
         self.use_lowres_grad_correction = use_lowres_grad_correction
@@ -71,9 +74,9 @@ class LiquidSpectralSampler(nn.Module):
         self.w2 = nn.Linear(embed_dims * 2, embed_dims)
         self.head = nn.Linear(
             embed_dims, self.num_groups * spectral_kernel * num_spectral)
-        self._init_weights(init_logit)
+        self._init_weights(init_logit, head_weight_std)
 
-    def _init_weights(self, init_logit: float) -> None:
+    def _init_weights(self, init_logit: float, head_weight_std: float) -> None:
         nn.init.zeros_(self.band_embedding)
         nn.init.xavier_uniform_(self.desc_proj.weight)
         nn.init.zeros_(self.desc_proj.bias)
@@ -81,7 +84,10 @@ class LiquidSpectralSampler(nn.Module):
         nn.init.zeros_(self.w1.bias)
         nn.init.xavier_uniform_(self.w2.weight)
         nn.init.zeros_(self.w2.bias)
-        nn.init.zeros_(self.head.weight)
+        if head_weight_std > 0:
+            nn.init.normal_(self.head.weight, mean=0.0, std=head_weight_std)
+        else:
+            nn.init.zeros_(self.head.weight)
 
         bias = torch.zeros(
             self.num_groups,
@@ -99,7 +105,7 @@ class LiquidSpectralSampler(nn.Module):
                 logits, tau=self.tau, hard=self.hard, dim=-1)
 
         probs = F.softmax(logits / self.tau, dim=-1)
-        if not self.hard:
+        if not self.eval_hard:
             return probs
         indices = probs.argmax(dim=-1, keepdim=True)
         hard_probs = torch.zeros_like(probs).scatter_(-1, indices, 1.0)

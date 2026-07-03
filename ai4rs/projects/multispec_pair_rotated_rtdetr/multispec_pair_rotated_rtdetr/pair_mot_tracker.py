@@ -48,13 +48,31 @@ class PairDetection:
     curr_bbox: List[float]
     score: float
     cls_score: float
-    label: int
+    label: Optional[int]
     presence_prev: Optional[float] = None
     presence_curr: Optional[float] = None
     score_prev: Optional[float] = None
     score_curr: Optional[float] = None
     label_prev: Optional[int] = None
     label_curr: Optional[int] = None
+
+    def prev_side_label(self) -> int:
+        if self.label_prev is not None:
+            return int(self.label_prev)
+        if self.label is not None:
+            return int(self.label)
+        if self.label_curr is not None:
+            return int(self.label_curr)
+        raise ValueError('PairDetection has no previous-side label.')
+
+    def curr_side_label(self) -> int:
+        if self.label_curr is not None:
+            return int(self.label_curr)
+        if self.label is not None:
+            return int(self.label)
+        if self.label_prev is not None:
+            return int(self.label_prev)
+        raise ValueError('PairDetection has no current-side label.')
 
     def prev_side_score(self) -> float:
         if self.score_prev is not None:
@@ -129,8 +147,8 @@ def write_pair_det_txt(path: str, records: Iterable[PairFrameRecord]) -> None:
                 prev_q_np = np.zeros((0, 8), dtype=np.float32)
                 curr_q_np = np.zeros((0, 8), dtype=np.float32)
             for row_idx, det in enumerate(dets):
-                prev_cls = det.label_prev if det.label_prev is not None else det.label
-                curr_cls = det.label_curr if det.label_curr is not None else det.label
+                prev_cls = det.prev_side_label()
+                curr_cls = det.curr_side_label()
                 presence_prev = 1.0 if det.presence_prev is None else det.presence_prev
                 presence_curr = 1.0 if det.presence_curr is None else det.presence_curr
                 vals = [
@@ -143,7 +161,7 @@ def write_pair_det_txt(path: str, records: Iterable[PairFrameRecord]) -> None:
                 vals += [f'{float(v):.2f}' for v in curr_q_np[row_idx].tolist()]
                 vals += [int(curr_cls), f'{det.curr_side_score():.6f}']
                 vals += [
-                    int(det.label),
+                    'nan',
                     f'{det.pair_score():.6f}',
                     f'{float(det.cls_score):.6f}',
                     f'{float(presence_prev):.6f}',
@@ -179,7 +197,7 @@ def read_pair_det_txt(path: str, seq_name: Optional[str] = None
             curr_bbox = qbox2rbox(curr_q).reshape(-1).tolist()
             curr_cls = int(float(parts[21]))
             curr_score = float(parts[22])
-            pair_cls = int(float(parts[23]))
+            pair_cls = None if parts[23].lower() == 'nan' else int(float(parts[23]))
             pair_score = float(parts[24])
             cls_score = float(parts[25])
             presence_prev = float(parts[26]) if len(parts) > 26 else None
@@ -228,13 +246,13 @@ def bootstrap_first_record_from_pair(record: PairFrameRecord) -> PairFrameRecord
             curr_bbox=list(det.prev_bbox),
             score=prev_score,
             cls_score=det.cls_score,
-            label=det.label_prev if det.label_prev is not None else det.label,
+            label=None,
             presence_prev=det.presence_prev,
             presence_curr=det.presence_prev,
             score_prev=det.score_prev,
             score_curr=det.score_prev,
-            label_prev=det.label_prev,
-            label_curr=det.label_prev,
+            label_prev=det.prev_side_label(),
+            label_curr=det.prev_side_label(),
         ))
     return PairFrameRecord(
         seq_name=record.seq_name,
@@ -455,6 +473,7 @@ class PairMOTTracker:
         for det in record.detections:
             if det.birth_score() < self.new_born_th:
                 continue
+            label = det.curr_side_label()
             iou = rotated_iou_matrix([det.prev_bbox], [det.curr_bbox])[0, 0]
             if iou >= self.init_same_iou_th:
                 bbox = [
@@ -465,7 +484,7 @@ class PairMOTTracker:
             else:
                 bbox = det.curr_bbox
             duplicate_iou = self._duplicate_iou_with_tracks(
-                bbox, det.label, created)
+                bbox, label, created)
             if duplicate_iou >= self.new_birth_iou_th:
                 self.last_events.append({
                     'event': 'birth_suppressed',
@@ -475,13 +494,13 @@ class PairMOTTracker:
                     'pair_score': det.pair_score(),
                     'prev_score': det.prev_side_score(),
                     'curr_score': det.curr_side_score(),
-                    'label': det.label,
+                    'label': label,
                     'duplicate_iou': duplicate_iou,
                     'new_birth_iou_th': self.new_birth_iou_th,
                 })
                 continue
             track = self._new_track(
-                bbox, det.birth_score(), det.label, record.curr_frame_id)
+                bbox, det.birth_score(), label, record.curr_frame_id)
             created.append(track)
             self.last_events.append({
                 'event': 'birth',
@@ -492,7 +511,7 @@ class PairMOTTracker:
                 'pair_score': det.pair_score(),
                 'prev_score': det.prev_side_score(),
                 'curr_score': det.curr_side_score(),
-                'label': det.label,
+                'label': label,
                 'same_frame_iou': float(iou),
             })
         return created
@@ -528,15 +547,16 @@ class PairMOTTracker:
             if self.class_aware:
                 for ti, tr in enumerate(candidate_tracks):
                     for di, det in enumerate(detections):
-                        if tr.label != det.label:
+                        if tr.label != det.prev_side_label():
                             ious[ti, di] = -1.0
             for ti, tr in enumerate(candidate_tracks):
                 if raw_ious.shape[1] == 0:
                     continue
                 best_di = int(np.argmax(raw_ious[ti]))
                 best_det = detections[best_di]
+                best_det_label = best_det.prev_side_label()
                 best_iou = float(raw_ious[ti, best_di])
-                class_ok = (not self.class_aware) or tr.label == best_det.label
+                class_ok = (not self.class_aware) or tr.label == best_det_label
                 diag_by_track[ti] = {
                     'event': 'match_diag',
                     'frame_id': record.curr_frame_id,
@@ -548,7 +568,7 @@ class PairMOTTracker:
                     'track_time_since_update': tr.time_since_update,
                     'track_bbox': tr.bbox,
                     'best_det_index': best_det.index,
-                    'best_det_label': best_det.label,
+                    'best_det_label': best_det_label,
                     'best_det_score': best_det.score,
                     'best_det_pair_score': best_det.pair_score(),
                     'best_det_prev_score': best_det.prev_side_score(),
@@ -568,12 +588,13 @@ class PairMOTTracker:
         for track_idx, det_idx, match_iou in matches:
             track = candidate_tracks[track_idx]
             det = detections[det_idx]
+            curr_label = det.curr_side_label()
             consumed_det_indices.add(det.index)
             unmatched_det_idx.discard(det_idx)
             if det.curr_side_score() >= self.track_th:
                 unmatched_track_idx.discard(track_idx)
                 self._update_track(
-                    track, det.curr_bbox, det.curr_side_score(), det.label,
+                    track, det.curr_bbox, det.curr_side_score(), curr_label,
                     record.curr_frame_id)
                 self.last_events.append({
                     'event': 'match',
@@ -584,7 +605,7 @@ class PairMOTTracker:
                     'pair_score': det.pair_score(),
                     'prev_score': det.prev_side_score(),
                     'curr_score': det.curr_side_score(),
-                    'label': det.label,
+                    'label': curr_label,
                     'match_iou': match_iou,
                 })
             else:
@@ -598,7 +619,7 @@ class PairMOTTracker:
                     'pair_score': det.pair_score(),
                     'prev_score': det.prev_side_score(),
                     'curr_score': det.curr_side_score(),
-                    'label': det.label,
+                    'label': curr_label,
                     'match_iou': match_iou,
                     'track_th': self.track_th,
                 })
@@ -637,8 +658,9 @@ class PairMOTTracker:
             if det.index in consumed_det_indices:
                 continue
             if det.birth_score() >= self.new_born_th:
+                curr_label = det.curr_side_label()
                 duplicate_iou = self._duplicate_iou_with_tracks(
-                    det.curr_bbox, det.label, self.tracks)
+                    det.curr_bbox, curr_label, self.tracks)
                 if duplicate_iou >= self.new_birth_iou_th:
                     self.last_events.append({
                         'event': 'birth_suppressed',
@@ -648,13 +670,13 @@ class PairMOTTracker:
                         'pair_score': det.pair_score(),
                         'prev_score': det.prev_side_score(),
                         'curr_score': det.curr_side_score(),
-                        'label': det.label,
+                        'label': curr_label,
                         'duplicate_iou': duplicate_iou,
                         'new_birth_iou_th': self.new_birth_iou_th,
                     })
                     continue
                 track = self._new_track(
-                    det.curr_bbox, det.birth_score(), det.label,
+                    det.curr_bbox, det.birth_score(), curr_label,
                     record.curr_frame_id)
                 self.last_events.append({
                     'event': 'birth',
@@ -665,7 +687,7 @@ class PairMOTTracker:
                     'pair_score': det.pair_score(),
                     'prev_score': det.prev_side_score(),
                     'curr_score': det.curr_side_score(),
-                    'label': det.label,
+                    'label': curr_label,
                 })
 
         return [tr for tr in self.tracks if tr.state == 'Tracked']

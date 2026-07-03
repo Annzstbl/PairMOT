@@ -20,6 +20,38 @@ from mmengine.utils import import_modules_from_strings
 from mmrotate.utils import register_all_modules
 
 
+def _sync_pair_val_output_dirs(cfg, old_work_dir):
+    """Keep PairMOT validation artifacts under the effective work_dir."""
+    if old_work_dir is None or cfg.get('work_dir', None) is None:
+        return
+    old_work_dir = osp.abspath(str(old_work_dir))
+    new_work_dir = osp.abspath(str(cfg.work_dir))
+    if old_work_dir == new_work_dir:
+        return
+
+    def _sync_evaluator(evaluator):
+        if evaluator is None:
+            return
+        metrics = evaluator.get('metrics', None)
+        metric_list = metrics if isinstance(metrics, list) else [metrics]
+        for metric in metric_list:
+            if not isinstance(metric, dict):
+                continue
+            for key in ('track_eval_out_dir', 'val_det_out_dir'):
+                out_dir = metric.get(key, None)
+                if not out_dir:
+                    continue
+                out_dir_abs = osp.abspath(str(out_dir))
+                if out_dir_abs == old_work_dir:
+                    metric[key] = new_work_dir
+                elif out_dir_abs.startswith(old_work_dir + osp.sep):
+                    metric[key] = osp.join(
+                        new_work_dir, osp.relpath(out_dir_abs, old_work_dir))
+
+    _sync_evaluator(cfg.get('val_evaluator', None))
+    _sync_evaluator(cfg.get('test_evaluator', None))
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a detector')
     parser.add_argument('config', help='train config file path')
@@ -79,6 +111,7 @@ def main():
     cfg.launcher = args.launcher
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
+    old_work_dir = cfg.get('work_dir', None)
 
     # work_dir is determined in this priority: CLI > segment in file > filename
     if args.work_dir is not None:
@@ -88,6 +121,7 @@ def main():
         # use config filename as default work_dir if cfg.work_dir is None
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
+    _sync_pair_val_output_dirs(cfg, old_work_dir)
 
     # enable automatic-mixed-precision training
     if args.amp is True:
