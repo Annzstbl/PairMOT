@@ -21,7 +21,7 @@ from mmrotate.datasets.transforms.visualize_hsmot_pair import (
     visualize_hsmot_pair,
 )
 
-from .pair_overfit_metric import _eval_pair_sample, _rbox_iou, _to_rbox_tensor
+from .pair_ap_metric import _eval_pair_sample, _rbox_iou, _to_rbox_tensor
 
 
 def _crop_frame_to_img_shape(frame: torch.Tensor,
@@ -212,26 +212,30 @@ def visualize_hsmot_pair_pred_gt(
     img_meta: Optional[dict] = None,
     view: str = 'deploy',
     low_score_thr: float = 0.10,
+    diagnostic_mode: bool = False,
 ) -> np.ndarray:
     """Draw GT plus a deployment, low-score, or IoU diagnostic view."""
-    stats = _eval_pair_sample(
-        gt,
-        pred,
-        score_thr=score_thr,
-        iou_thr=iou_thr,
-        pres_thr=pres_thr,
-    )
-    match_ratio = stats['matched_queries'] / max(stats['gt_pairs'], 1.0)
-    summary = (
-        f'match={stats["matched_queries"]:.0f}/{stats["gt_pairs"]:.0f} '
-        f'({match_ratio:.2f})')
-    if stats['iou_prev_count'] > 0:
-        mean_p = stats['iou_prev_sum'] / stats['iou_prev_count']
-        mean_c = stats['iou_curr_sum'] / max(stats['iou_curr_count'], 1.0)
-        summary += f' iou_prev={mean_p:.2f} iou_curr={mean_c:.2f}'
-    if stats['presence_total'] > 0:
-        pres_acc = stats['presence_ok'] / stats['presence_total']
-        summary += f' pres_acc={pres_acc:.2f}'
+    if diagnostic_mode:
+        stats = _eval_pair_sample(
+            gt,
+            pred,
+            score_thr=score_thr,
+            iou_thr=iou_thr,
+            pres_thr=pres_thr,
+        )
+        match_ratio = stats['matched_queries'] / max(stats['gt_pairs'], 1.0)
+        summary = (
+            f'match={stats["matched_queries"]:.0f}/{stats["gt_pairs"]:.0f} '
+            f'({match_ratio:.2f})')
+        if stats['iou_prev_count'] > 0:
+            mean_p = stats['iou_prev_sum'] / stats['iou_prev_count']
+            mean_c = stats['iou_curr_sum'] / max(stats['iou_curr_count'], 1.0)
+            summary += f' iou_prev={mean_p:.2f} iou_curr={mean_c:.2f}'
+        if stats['presence_total'] > 0:
+            pres_acc = stats['presence_ok'] / stats['presence_total']
+            summary += f' pres_acc={pres_acc:.2f}'
+    else:
+        summary = 'match=n/a (diagnostics disabled)'
 
     vis = visualize_hsmot_pair(
         img_prev,
@@ -306,7 +310,8 @@ class HSMOTPairValVisualizationHook(Hook):
                  out_dir: str = 'val_vis',
                  max_samples: Optional[int] = None,
                  max_samples_per_sequence: Optional[int] = 1,
-                 views: Sequence[str] = ('deploy', 'low_score', 'iou_diag')) -> None:
+                 views: Sequence[str] = ('deploy', 'low_score', 'iou_diag'),
+                 diagnostic_mode: bool = False) -> None:
         self.draw = draw
         self.score_thr = score_thr
         self.iou_thr = iou_thr
@@ -315,6 +320,7 @@ class HSMOTPairValVisualizationHook(Hook):
         self.max_samples = max_samples
         self.max_samples_per_sequence = max_samples_per_sequence
         self.views = tuple(views)
+        self.diagnostic_mode = bool(diagnostic_mode)
         unknown_views = set(self.views) - {'deploy', 'low_score', 'iou_diag'}
         if unknown_views:
             raise ValueError(f'Unknown pair visualization views: {unknown_views}')
@@ -397,6 +403,7 @@ class HSMOTPairValVisualizationHook(Hook):
                     meta_line=meta_line,
                     img_meta=meta,
                     view=view,
+                    diagnostic_mode=self.diagnostic_mode,
                 )
             seq = meta.get('video_id', meta.get('seq_name', 'seq'))
             self._seq_counts[seq] += 1

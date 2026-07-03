@@ -248,6 +248,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         batch_img_metas: List[dict],
         enc_cls_scores: Optional[Tensor] = None,
         enc_bbox_preds: Optional[Tensor] = None,
+        enc_outputs_class_prev: Optional[Tensor] = None,
+        enc_outputs_class_curr: Optional[Tensor] = None,
+        enc_outputs_coord_prev: Optional[Tensor] = None,
+        enc_outputs_coord_curr: Optional[Tensor] = None,
         dn_meta: Optional[Dict[str, int]] = None,
         batch_gt_instances_ignore: OptInstanceList = None,
     ) -> Dict[str, Tensor]:
@@ -258,9 +262,6 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         ]
 
         if self.dual_cls and not self.use_presence:
-            if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
-                raise NotImplementedError(
-                    'PairDN is not implemented for dual-cls/no-presence head.')
             (all_layers_cls_curr_scores, all_layers_bbox_prev,
              all_layers_bbox_curr) = args
             return self.loss_by_feat_dual_cls(
@@ -269,7 +270,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 all_layers_bbox_prev,
                 all_layers_bbox_curr,
                 batch_pair_gt_instances,
-                batch_img_metas)
+                batch_img_metas,
+                dn_meta=dn_meta,
+                enc_outputs_class_prev=enc_outputs_class_prev,
+                enc_outputs_class_curr=enc_outputs_class_curr,
+                enc_outputs_coord_prev=enc_outputs_coord_prev,
+                enc_outputs_coord_curr=enc_outputs_coord_curr)
 
         if not self.use_presence:
             if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
@@ -380,8 +386,28 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         all_layers_bbox_curr: Tensor,
         batch_pair_gt_instances: InstanceList,
         batch_img_metas: List[dict],
+        dn_meta: Optional[Dict[str, int]] = None,
+        enc_outputs_class_prev: Optional[Tensor] = None,
+        enc_outputs_class_curr: Optional[Tensor] = None,
+        enc_outputs_coord_prev: Optional[Tensor] = None,
+        enc_outputs_coord_curr: Optional[Tensor] = None,
     ) -> Dict[str, Tensor]:
         """Loss for dual per-frame cls without presence branches."""
+        if dn_meta is not None and dn_meta['num_denoising_queries'] > 0:
+            num_dn = dn_meta['num_denoising_queries']
+            dn_outs = (
+                all_layers_cls_prev[:, :, :num_dn],
+                all_layers_cls_curr[:, :, :num_dn],
+                all_layers_bbox_prev[:, :, :num_dn],
+                all_layers_bbox_curr[:, :, :num_dn],
+            )
+            all_layers_cls_prev = all_layers_cls_prev[:, :, num_dn:]
+            all_layers_cls_curr = all_layers_cls_curr[:, :, num_dn:]
+            all_layers_bbox_prev = all_layers_bbox_prev[:, :, num_dn:]
+            all_layers_bbox_curr = all_layers_bbox_curr[:, :, num_dn:]
+        else:
+            dn_outs = None
+
         layer_outs = multi_apply(
             self.loss_by_feat_single_dual_cls,
             all_layers_cls_prev,
@@ -413,6 +439,73 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             loss_dict[f'{prefix}loss_bbox_curr'] = losses_bbox_curr[layer_id]
             loss_dict[f'{prefix}loss_iou_prev'] = losses_iou_prev[layer_id]
             loss_dict[f'{prefix}loss_iou_curr'] = losses_iou_curr[layer_id]
+
+        if dn_outs is not None:
+            dn_losses = self.loss_pair_dn_dual_cls(
+                *dn_outs,
+                batch_pair_gt_instances=batch_pair_gt_instances,
+                batch_img_metas=batch_img_metas,
+                dn_meta=dn_meta)
+            (dn_cls_prev, dn_cls_curr, dn_bbox_prev, dn_bbox_curr,
+             dn_iou_prev, dn_iou_curr) = dn_losses
+            if self.dn_loss_weight != 1.0:
+                dn_cls_prev = [
+                    loss * self.dn_loss_weight for loss in dn_cls_prev
+                ]
+                dn_cls_curr = [
+                    loss * self.dn_loss_weight for loss in dn_cls_curr
+                ]
+                dn_bbox_prev = [
+                    loss * self.dn_loss_weight for loss in dn_bbox_prev
+                ]
+                dn_bbox_curr = [
+                    loss * self.dn_loss_weight for loss in dn_bbox_curr
+                ]
+                dn_iou_prev = [
+                    loss * self.dn_loss_weight for loss in dn_iou_prev
+                ]
+                dn_iou_curr = [
+                    loss * self.dn_loss_weight for loss in dn_iou_curr
+                ]
+            loss_dict.update(
+                dn_loss_cls_prev=dn_cls_prev[-1],
+                dn_loss_cls_curr=dn_cls_curr[-1],
+                dn_loss_cls=dn_cls_prev[-1] + dn_cls_curr[-1],
+                dn_loss_bbox_prev=dn_bbox_prev[-1],
+                dn_loss_bbox_curr=dn_bbox_curr[-1],
+                dn_loss_iou_prev=dn_iou_prev[-1],
+                dn_loss_iou_curr=dn_iou_curr[-1])
+            for layer_id in range(len(dn_cls_prev) - 1):
+                prefix = f'd{layer_id}.'
+                loss_dict[f'{prefix}dn_loss_cls_prev'] = dn_cls_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_cls_curr'] = dn_cls_curr[layer_id]
+                loss_dict[f'{prefix}dn_loss_cls'] = (
+                    dn_cls_prev[layer_id] + dn_cls_curr[layer_id])
+                loss_dict[f'{prefix}dn_loss_bbox_prev'] = dn_bbox_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_bbox_curr'] = dn_bbox_curr[layer_id]
+                loss_dict[f'{prefix}dn_loss_iou_prev'] = dn_iou_prev[layer_id]
+                loss_dict[f'{prefix}dn_loss_iou_curr'] = dn_iou_curr[layer_id]
+        if (enc_outputs_class_prev is not None
+                and enc_outputs_class_curr is not None
+                and enc_outputs_coord_prev is not None
+                and enc_outputs_coord_curr is not None):
+            enc_losses = self.loss_by_feat_single_dual_cls(
+                enc_outputs_class_prev,
+                enc_outputs_class_curr,
+                enc_outputs_coord_prev,
+                enc_outputs_coord_curr,
+                batch_pair_gt_instances=batch_pair_gt_instances,
+                batch_img_metas=batch_img_metas)
+            (enc_cls_prev, enc_cls_curr, enc_bbox_prev, enc_bbox_curr,
+             enc_iou_prev, enc_iou_curr) = enc_losses
+            loss_dict.update(
+                enc_loss_cls_prev=enc_cls_prev,
+                enc_loss_cls_curr=enc_cls_curr,
+                enc_loss_cls=enc_cls_prev + enc_cls_curr,
+                enc_loss_bbox_prev=enc_bbox_prev,
+                enc_loss_bbox_curr=enc_bbox_curr,
+                enc_loss_iou_prev=enc_iou_prev,
+                enc_loss_iou_curr=enc_iou_curr)
         return loss_dict
 
     def loss_by_feat_single_dual_cls(
@@ -710,6 +803,77 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             avg_factor=num_pos)
         return (loss_cls, loss_pres_prev, loss_pres_curr, loss_bbox_prev,
                 loss_bbox_curr, loss_iou_prev, loss_iou_curr)
+
+    def loss_pair_dn_dual_cls(self, all_layers_cls_prev: Tensor,
+                              all_layers_cls_curr: Tensor,
+                              all_layers_bbox_prev: Tensor,
+                              all_layers_bbox_curr: Tensor,
+                              batch_pair_gt_instances: InstanceList,
+                              batch_img_metas: List[dict],
+                              dn_meta: Dict[str, int]):
+        """Direct DN loss for dual-cls/no-presence head."""
+        return multi_apply(
+            self._loss_pair_dn_dual_cls_single,
+            all_layers_cls_prev,
+            all_layers_cls_curr,
+            all_layers_bbox_prev,
+            all_layers_bbox_curr,
+            batch_pair_gt_instances=batch_pair_gt_instances,
+            batch_img_metas=batch_img_metas,
+            dn_meta=dn_meta)
+
+    def _loss_pair_dn_dual_cls_single(self, cls_prev: Tensor,
+                                      cls_curr: Tensor, bbox_prev: Tensor,
+                                      bbox_curr: Tensor,
+                                      batch_pair_gt_instances: InstanceList,
+                                      batch_img_metas: List[dict],
+                                      dn_meta: Dict[str, int]):
+        (labels_list, label_weights_list, bbox_prev_targets_list,
+         bbox_prev_weights_list, bbox_curr_targets_list,
+         bbox_curr_weights_list, _pres_prev_targets_list,
+         _pres_curr_targets_list, _pres_weights_list,
+         num_total_pos) = self._get_pair_dn_targets(
+             batch_pair_gt_instances, batch_img_metas, dn_meta,
+             cls_prev.device)
+        labels = torch.cat(labels_list)
+        label_weights = torch.cat(label_weights_list)
+        bbox_prev_targets = torch.cat(bbox_prev_targets_list)
+        bbox_prev_weights = torch.cat(bbox_prev_weights_list)
+        bbox_curr_targets = torch.cat(bbox_curr_targets_list)
+        bbox_curr_weights = torch.cat(bbox_curr_weights_list)
+        cls_prev_flat = cls_prev.reshape(-1, self.cls_out_channels)
+        cls_curr_flat = cls_curr.reshape(-1, self.cls_out_channels)
+        bbox_prev_flat = bbox_prev.reshape(-1, 5)
+        bbox_curr_flat = bbox_curr.reshape(-1, 5)
+        cls_avg_factor = max(float(reduce_mean(
+            cls_prev_flat.new_tensor([num_total_pos])).item()), 1.0)
+        loss_cls_prev = self._loss_cls(
+            cls_prev_flat, labels, label_weights, bbox_prev_flat,
+            bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
+            bbox_prev_weights, bbox_curr_weights, batch_img_metas,
+            cls_avg_factor)
+        loss_cls_curr = self._loss_cls(
+            cls_curr_flat, labels, label_weights, bbox_prev_flat,
+            bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
+            bbox_prev_weights, bbox_curr_weights, batch_img_metas,
+            cls_avg_factor)
+        num_pos = max(float(reduce_mean(loss_cls_prev.new_tensor(
+            [num_total_pos])).item()), 1.0)
+        factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
+        loss_iou_prev = self.loss_iou(
+            bbox_prev_flat * factors, bbox_prev_targets * factors,
+            bbox_prev_weights, avg_factor=num_pos)
+        loss_iou_curr = self.loss_iou(
+            bbox_curr_flat * factors, bbox_curr_targets * factors,
+            bbox_curr_weights, avg_factor=num_pos)
+        loss_bbox_prev = self.loss_bbox(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+            avg_factor=num_pos)
+        loss_bbox_curr = self.loss_bbox(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+            avg_factor=num_pos)
+        return (loss_cls_prev, loss_cls_curr, loss_bbox_prev, loss_bbox_curr,
+                loss_iou_prev, loss_iou_curr)
 
     def loss_by_feat_single(
         self,
@@ -1307,6 +1471,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         references_curr: List[Tensor],
         enc_outputs_class: Optional[Tensor] = None,
         enc_outputs_coord: Optional[Tensor] = None,
+        enc_outputs_class_prev: Optional[Tensor] = None,
+        enc_outputs_class_curr: Optional[Tensor] = None,
+        enc_outputs_coord_prev: Optional[Tensor] = None,
+        enc_outputs_coord_curr: Optional[Tensor] = None,
         batch_data_samples: Optional[SampleList] = None,
         dn_meta: Optional[Dict[str, int]] = None,
         **kwargs,
@@ -1327,6 +1495,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             batch_img_metas=batch_img_metas,
             enc_cls_scores=enc_outputs_class,
             enc_bbox_preds=enc_outputs_coord,
+            enc_outputs_class_prev=enc_outputs_class_prev,
+            enc_outputs_class_curr=enc_outputs_class_curr,
+            enc_outputs_coord_prev=enc_outputs_coord_prev,
+            enc_outputs_coord_curr=enc_outputs_coord_curr,
             dn_meta=dn_meta,
         )
 

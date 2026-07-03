@@ -22,7 +22,7 @@ from mmrotate.datasets.transforms.visualize_hsmot_pair import (
     _to_numpy_image,
 )
 
-from .pair_overfit_metric import _to_rbox_tensor
+from .pair_ap_metric import _to_rbox_tensor
 from .pair_val_visualization_hook import (
     _bboxes_to_input_space,
     _match_pred_indices,

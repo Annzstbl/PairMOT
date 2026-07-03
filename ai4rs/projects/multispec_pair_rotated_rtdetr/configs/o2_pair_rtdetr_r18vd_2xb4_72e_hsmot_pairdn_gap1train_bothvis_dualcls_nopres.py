@@ -37,9 +37,6 @@ model.bbox_head.update(
     dn_loss_weight=0.0,
 )
 
-val_evaluator['metrics'].update(
-    both_visible_gt_only=True,
-)
 test_evaluator = val_evaluator
 
 max_epochs = 48
@@ -49,13 +46,25 @@ default_hooks.checkpoint.update(interval=4, max_keep_ckpts=8)
 for hook in custom_hooks:
     if hook.get('type') == 'EarlyStoppingHook':
         hook.update(
-            monitor='pair/pair_AP50',
+            monitor='pair/pair_mAP50_95',
             rule='greater',
-            min_delta=0.01,
-            patience=2,
+            min_delta=0.001,
+            patience=4,
             strict=False)
 
 work_dir = (
     '/data/users/litianhao01/PairMmot/workdir/'
-    'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_'
+    '0702_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_'
     'gap1train_bothvis_dualcls_nopres')
+
+val_evaluator['metrics'].update(
+    track_eval=True,
+    track_eval_out_dir=f'{work_dir}/val_track_eval',
+    track_data_root='/data/users/litianhao01/PairMmot/data/hsmot/test',
+    track_new_born_th=0.6,
+    track_track_th=0.2,
+    track_match_iou_th=0.25,
+    track_new_birth_iou_th=0.5,
+    track_max_age=30,
+)
+test_evaluator = val_evaluator

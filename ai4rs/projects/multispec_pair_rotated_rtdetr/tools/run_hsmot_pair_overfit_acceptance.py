@@ -43,7 +43,7 @@ from projects.multispec_pair_rotated_rtdetr.tools.create_hsmot_pair_overfit_data
 from projects.multispec_pair_rotated_rtdetr.tools.create_hsmot_pair_overfit_from_real import (
     create_hsmot_pair_overfit_from_real,
 )
-from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.overfit_ap import (
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_ap import (
     independent_ap_metrics,
     pair_ap_metrics,
     serialize_pair_sample,

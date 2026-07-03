@@ -1,5 +1,6 @@
 # Copyright (c) AI4RS. All rights reserved.
 import copy
+import json
 import random
 import os.path as osp
 from typing import Dict, List, Optional, Sequence, Tuple, Union
@@ -47,6 +48,8 @@ class HSMOTPairDataset(BaseDataset):
                  img_format: str = 'npy',
                  require_prev_image: bool = True,
                  same_frame: bool = False,
+                 gmc_cache_dir: Optional[str] = None,
+                 allow_missing_gmc: bool = False,
                  file_client_args: dict = None,
                  backend_args: dict = None,
                  **kwargs) -> None:
@@ -76,6 +79,8 @@ class HSMOTPairDataset(BaseDataset):
         self.img_format = img_format
         self.require_prev_image = require_prev_image
         self.same_frame = same_frame
+        self.gmc_cache_dir = gmc_cache_dir
+        self.allow_missing_gmc = bool(allow_missing_gmc)
         self.backend_args = backend_args
         if file_client_args is not None:
             raise RuntimeError(
@@ -107,6 +112,36 @@ class HSMOTPairDataset(BaseDataset):
 
     def _img_path(self, img_root: str, seq_name: str, frame_id: int) -> str:
         return osp.join(img_root, seq_name, self._get_img_filename(frame_id))
+
+    def _gmc_cache_path(self, seq_name: str, frame_id_prev: int,
+                        frame_id_curr: int) -> str:
+        assert self.gmc_cache_dir is not None
+        return osp.join(self.gmc_cache_dir, seq_name,
+                        f'{frame_id_prev:06d}_{frame_id_curr:06d}.json')
+
+    def _load_gmc_matrix(self, seq_name: str, frame_id_prev: int,
+                         frame_id_curr: int) -> Optional[np.ndarray]:
+        if self.gmc_cache_dir is None:
+            return None
+        if frame_id_prev == frame_id_curr:
+            return np.eye(3, dtype=np.float32)
+        cache_path = self._gmc_cache_path(seq_name, frame_id_prev,
+                                          frame_id_curr)
+        if not osp.isfile(cache_path):
+            if self.allow_missing_gmc:
+                return np.eye(3, dtype=np.float32)
+            raise FileNotFoundError(
+                'Missing GMC cache for HSMOT pair: '
+                f'{seq_name} {frame_id_prev}->{frame_id_curr}: {cache_path}. '
+                'Run tools/build_hsmot_gmc_cache.py first, or set '
+                'allow_missing_gmc=True only for debugging.')
+        with open(cache_path, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        matrix = np.asarray(payload.get('matrix'), dtype=np.float32)
+        if matrix.shape != (3, 3):
+            raise ValueError(f'Invalid GMC matrix shape in {cache_path}: '
+                             f'{matrix.shape}')
+        return matrix
 
     def _instances_from_frame(
             self, frame_anns: Dict[int, List[dict]], frame_id: int) -> List[dict]:
@@ -143,7 +178,7 @@ class HSMOTPairDataset(BaseDataset):
             return None
         if self.require_prev_image and not osp.isfile(img_path_prev):
             return None
-        return {
+        info = {
             'img_id': f'{seq_name}_{frame_id_curr:06d}_p{frame_id_prev:06d}',
             'video_id': seq_name,
             'seq_name': seq_name,
@@ -159,6 +194,11 @@ class HSMOTPairDataset(BaseDataset):
             'instances_prev': self._instances_from_frame(frame_anns, frame_id_prev),
             'instances_curr': self._instances_from_frame(frame_anns, frame_id_curr),
         }
+        gmc_matrix = self._load_gmc_matrix(seq_name, frame_id_prev,
+                                           frame_id_curr)
+        if gmc_matrix is not None:
+            info['gmc_matrix'] = gmc_matrix
+        return info
 
     def _random_partner(self, seq_name: str, frame_id: int,
                         available_frame_ids: set) -> Optional[int]:
@@ -216,6 +256,7 @@ class HSMOTPairDataset(BaseDataset):
                         'file_name_prev': self._get_img_filename(frame_id_curr),
                         'instances_prev': copy.deepcopy(instances_curr),
                         'instances_curr': instances_curr,
+                        'gmc_matrix': np.eye(3, dtype=np.float32),
                     })
                     continue
 

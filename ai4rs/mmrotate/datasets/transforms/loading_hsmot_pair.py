@@ -180,7 +180,7 @@ class PackHSMOTPairInputs(BaseTransform):
         meta_keys=('img_id', 'img_path', 'img_path_prev', 'ori_shape',
                    'img_shape', 'scale_factor', 'flip', 'flip_direction',
                    'video_id', 'seq_name', 'frame_id', 'frame_id_prev',
-                   'frame_gap', 'anchor_frame_id')):
+                   'frame_gap', 'anchor_frame_id', 'gmc_matrix')):
         self.meta_keys = meta_keys
 
     def transform(self, results: dict) -> dict:
@@ -220,7 +220,13 @@ class PackHSMOTPairInputs(BaseTransform):
         img_meta = {}
         for key in self.meta_keys:
             if key in results:
-                img_meta[key] = results[key]
+                value = results[key]
+                if key == 'gmc_matrix' and 'homography_matrix' in results:
+                    aug_h = np.asarray(
+                        results['homography_matrix'], dtype=np.float32)
+                    value = aug_h @ np.asarray(value, dtype=np.float32) @ (
+                        np.linalg.inv(aug_h).astype(np.float32))
+                img_meta[key] = value
         data_sample.set_metainfo(img_meta)
 
         return {'inputs': inputs, 'data_samples': data_sample}

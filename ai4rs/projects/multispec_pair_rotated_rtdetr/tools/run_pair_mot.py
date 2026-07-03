@@ -2,7 +2,7 @@
 """Run pair-detection based online MOT for HSMOT.
 
 Stages:
-  detect: sequentially run pair detector per video and write jsonl caches.
+  detect: sequentially run pair detector per video and write txt pair caches.
   track:  read caches, run Rotated BoT-SORT style tracker, write TrackEval txt.
   eval:   call ../TrackEval HSMOT_8ch evaluation on tracker txt files.
   all:    detect + track + eval.
@@ -19,6 +19,7 @@ import os.path as osp
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from typing import Dict, Iterable, List, Sequence, Tuple
 
 import numpy as np
@@ -39,12 +40,31 @@ from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_m
     PairDetection,
     PairFrameRecord,
     PairMOTTracker,
+    bootstrap_first_record_from_pair,
     detection_score,
-    read_cache,
     rbox_to_qbox_list,
-    write_cache,
+    read_pair_det_txt,
+    write_pair_det_txt,
     write_trackeval_txt,
 )
+
+_TRACK_THREAD_LIMITER = None
+
+
+def _limit_track_worker_threads(num_threads: int) -> None:
+    """Avoid nested BLAS/Torch threading inside parallel track workers."""
+    global _TRACK_THREAD_LIMITER
+    num_threads = int(num_threads)
+    if num_threads <= 0:
+        return
+    for name in ('OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'OPENBLAS_NUM_THREADS'):
+        os.environ[name] = str(num_threads)
+    torch.set_num_threads(num_threads)
+    try:
+        from threadpoolctl import threadpool_limits
+    except Exception:
+        return
+    _TRACK_THREAD_LIMITER = threadpool_limits(limits=num_threads)
 
 
 def _sequence_list(data_root: str, ann_file: str | None,
@@ -166,19 +186,7 @@ def _rboxes_to_original_image(rboxes: torch.Tensor, meta: dict) -> torch.Tensor:
     return rboxes / scale
 
 
-def _predict_one(model, preprocessor, pipeline, device, pair_info: dict,
-                 score_mode: str) -> PairFrameRecord:
-    packed = pipeline(pair_info)
-    inputs = packed['inputs'].unsqueeze(0)
-    data_sample = packed['data_samples']
-    preprocessed = preprocessor(
-        {'inputs': inputs, 'data_samples': [data_sample]}, training=False)
-    with torch.no_grad():
-        outputs = model.predict(
-            preprocessed['inputs'].to(device),
-            preprocessed['data_samples'],
-            rescale=False)
-    sample = outputs[0]
+def _record_from_sample(sample, pair_info: dict, score_mode: str) -> PairFrameRecord:
     meta = sample.metainfo
     pred = sample.pred_pair_instances
     scores = pred.scores.detach().cpu().float()
@@ -241,15 +249,61 @@ def _predict_one(model, preprocessor, pipeline, device, pair_info: dict,
     )
 
 
+def _predict_batch(model, preprocessor, pipeline, device,
+                   pair_infos: Sequence[dict], score_mode: str,
+                   num_workers: int = 0) -> List[PairFrameRecord]:
+    if num_workers > 0 and len(pair_infos) > 1:
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            packed_items = list(executor.map(pipeline, pair_infos))
+    else:
+        packed_items = [pipeline(pair_info) for pair_info in pair_infos]
+    inputs = [item['inputs'] for item in packed_items]
+    data_samples = [item['data_samples'] for item in packed_items]
+    if len(inputs) == 1:
+        inputs = inputs[0].unsqueeze(0)
+    preprocessed = preprocessor(
+        {'inputs': inputs, 'data_samples': data_samples}, training=False)
+    with torch.inference_mode():
+        outputs = model.predict(
+            preprocessed['inputs'].to(device),
+            preprocessed['data_samples'],
+            rescale=False)
+    return [
+        _record_from_sample(sample, pair_info, score_mode)
+        for sample, pair_info in zip(outputs, pair_infos)
+    ]
+
+
+def _predict_one(model, preprocessor, pipeline, device, pair_info: dict,
+                 score_mode: str) -> PairFrameRecord:
+    return _predict_batch(
+        model, preprocessor, pipeline, device, [pair_info], score_mode)[0]
+
+
+def _config_train_num_workers(cfg: Config) -> int:
+    train_dataloader = cfg.get('train_dataloader', {})
+    if isinstance(train_dataloader, dict):
+        return int(train_dataloader.get('num_workers', 0))
+    return int(getattr(train_dataloader, 'num_workers', 0))
+
+
 def _detect_sequences_worker(worker_id: int, seqs: Sequence[str], args_dict: dict,
                              device: str) -> None:
     cfg, model, preprocessor, pipeline, torch_device = _build_model_and_pipeline(
         args_dict['config'], args_dict['checkpoint'], device)
+    num_workers = args_dict.get('num_workers')
+    if num_workers is None:
+        num_workers = _config_train_num_workers(cfg)
+    num_workers = max(0, int(num_workers))
+    print(
+        f'[worker {worker_id}] device={device} batch_size={args_dict.get("batch_size", 1)} '
+        f'num_workers={num_workers}',
+        flush=True)
     img_root = osp.join(args_dict['data_root'], args_dict['img_subdir'])
     ann_dir = osp.join(args_dict['data_root'], args_dict['ann_subdir'])
     cache_dir = osp.join(args_dict['out_dir'], 'pair_cache')
     for seq_idx, seq_name in enumerate(seqs):
-        cache_path = osp.join(cache_dir, f'{seq_name}.jsonl')
+        cache_path = osp.join(cache_dir, f'{seq_name}.txt')
         if osp.isfile(cache_path) and not args_dict['force']:
             print(f'[worker {worker_id}] cache exists, skip {seq_name}: {cache_path}', flush=True)
             continue
@@ -260,38 +314,23 @@ def _detect_sequences_worker(worker_id: int, seqs: Sequence[str], args_dict: dic
         frame_ids = _frame_ids_from_images(
             osp.join(img_root, seq_name), args_dict['img_format'])
         records = []
-        # First frame bootstrap: Frame1 + Frame1.
-        first = frame_ids[0]
-        pair_infos = [_make_pair_info(
-            seq_name, img_root, args_dict['img_format'], frame_anns, first, first)]
-        pair_infos.extend(
+        pair_infos = list(
             _make_pair_info(seq_name, img_root, args_dict['img_format'],
                             frame_anns, prev_id, curr_id)
             for prev_id, curr_id in zip(frame_ids[:-1], frame_ids[1:]))
-        for pair_idx, pair_info in enumerate(pair_infos):
-            rec = _predict_one(
-                model, preprocessor, pipeline, torch_device, pair_info,
-                args_dict['score_mode'])
-            records.append(rec)
-            if args_dict['log_interval'] and (pair_idx + 1) % args_dict['log_interval'] == 0:
+        batch_size = max(1, int(args_dict.get('batch_size', 1)))
+        for start in range(0, len(pair_infos), batch_size):
+            batch_pair_infos = pair_infos[start:start + batch_size]
+            records.extend(_predict_batch(
+                model, preprocessor, pipeline, torch_device, batch_pair_infos,
+                args_dict['score_mode'], num_workers=num_workers))
+            done = start + len(batch_pair_infos)
+            if args_dict['log_interval'] and done % args_dict['log_interval'] == 0:
                 print(
                     f'[worker {worker_id}] {seq_name} pair '
-                    f'{pair_idx + 1}/{len(pair_infos)}',
+                    f'{done}/{len(pair_infos)}',
                     flush=True)
-        meta = {
-            'seq_name': seq_name,
-            'config': osp.abspath(args_dict['config']),
-            'checkpoint': osp.abspath(args_dict['checkpoint']),
-            'data_root': osp.abspath(args_dict['data_root']),
-            'ann_subdir': args_dict['ann_subdir'],
-            'img_subdir': args_dict['img_subdir'],
-            'img_format': args_dict['img_format'],
-            'score_mode': args_dict['score_mode'],
-            'num_frames': len(frame_ids),
-            'num_pair_records': len(records),
-            'box_format': 'rbox_cxcywha_original_image',
-        }
-        write_cache(cache_path, meta, records)
+        write_pair_det_txt(cache_path, records)
         print(
             f'[worker {worker_id}] wrote cache {seq_idx + 1}/{len(seqs)} '
             f'{seq_name}: {cache_path}',
@@ -333,10 +372,10 @@ def run_detect(args) -> None:
 
 
 def _run_tracker_on_cache(cache_path: str, args, tracker_name: str) -> dict:
-    meta, records = read_cache(cache_path)
+    records = read_pair_det_txt(cache_path)
     if not records:
         raise ValueError(f'Empty cache: {cache_path}')
-    seq_name = str(meta['seq_name'])
+    seq_name = records[0].seq_name
     save_events = bool(args.save_debug_matches or args.save_vis)
     tracker = PairMOTTracker(
         new_born_th=args.new_born_th,
@@ -348,17 +387,12 @@ def _run_tracker_on_cache(cache_path: str, args, tracker_name: str) -> dict:
         class_aware=args.class_aware,
     )
     event_rows = []
-    first = True
-    for rec in sorted(records, key=lambda x: (x.curr_frame_id, x.prev_frame_id)):
-        if first:
-            if not rec.is_first_pair or rec.prev_frame_id != rec.curr_frame_id:
-                raise ValueError(
-                    f'First cache record must be Frame1+Frame1 for {seq_name}')
-            tracker.init_first_frame(rec)
-            if save_events:
-                event_rows.extend(tracker.last_events)
-            first = False
-            continue
+    sorted_records = sorted(records, key=lambda x: (x.prev_frame_id,
+                                                    x.curr_frame_id))
+    tracker.init_first_frame(bootstrap_first_record_from_pair(sorted_records[0]))
+    if save_events:
+        event_rows.extend(tracker.last_events)
+    for rec in sorted_records:
         if rec.frame_gap != 1:
             raise ValueError(
                 f'MOT inference expects sequential gap=1, got {rec.frame_gap} '
@@ -366,10 +400,10 @@ def _run_tracker_on_cache(cache_path: str, args, tracker_name: str) -> dict:
         tracker.update_pair(rec)
         if save_events:
             event_rows.extend(tracker.last_events)
+    rows = tracker.all_history()
     pred_path = osp.join(
         args.out_dir, 'trackers', tracker_name, args.tracker_sub_folder,
         f'{seq_name}.txt')
-    rows = tracker.all_history()
     write_trackeval_txt(pred_path, rows)
     out = {
         'seq_name': seq_name,
@@ -389,6 +423,13 @@ def _run_tracker_on_cache(cache_path: str, args, tracker_name: str) -> dict:
     return out
 
 
+def _run_tracker_on_cache_job(job: Tuple[str, dict, str]) -> dict:
+    cache_path, args_dict, tracker_name = job
+    _limit_track_worker_threads(args_dict.get('_track_worker_threads', 0))
+    return _run_tracker_on_cache(
+        cache_path, argparse.Namespace(**args_dict), tracker_name)
+
+
 def _tracker_name(args, suffix: str = '') -> str:
     if args.tracker_name:
         return args.tracker_name + suffix
@@ -404,12 +445,26 @@ def run_track(args, suffix: str = '') -> Tuple[str, List[dict]]:
     if args.max_seqs:
         seqs = seqs[:args.max_seqs]
     tracker_name = _tracker_name(args, suffix)
-    summaries = []
+    jobs = []
     for seq_name in seqs:
-        cache_path = osp.join(cache_dir, f'{seq_name}.jsonl')
+        cache_path = osp.join(cache_dir, f'{seq_name}.txt')
         if not osp.isfile(cache_path):
             raise FileNotFoundError(f'Pair cache missing: {cache_path}')
-        summaries.append(_run_tracker_on_cache(cache_path, args, tracker_name))
+        args_dict = vars(args).copy()
+        args_dict['_track_worker_threads'] = 0
+        jobs.append((cache_path, args_dict, tracker_name))
+    track_num_procs = max(1, int(getattr(args, 'track_num_procs', 1)))
+    if track_num_procs > 1 and len(jobs) > 1:
+        track_worker_threads = int(getattr(args, 'track_worker_threads', 1))
+        jobs = [
+            (cache_path, {**args_dict, '_track_worker_threads': track_worker_threads},
+             tracker_name)
+            for cache_path, args_dict, tracker_name in jobs
+        ]
+        with ProcessPoolExecutor(max_workers=track_num_procs) as executor:
+            summaries = list(executor.map(_run_tracker_on_cache_job, jobs))
+    else:
+        summaries = [_run_tracker_on_cache_job(job) for job in jobs]
     summary_path = osp.join(args.out_dir, 'trackers', tracker_name, 'track_summary.json')
     os.makedirs(osp.dirname(summary_path), exist_ok=True)
     with open(summary_path, 'w', encoding='utf-8') as f:
@@ -580,12 +635,26 @@ def _events_by_frame(path: str) -> Dict[int, List[dict]]:
 
 
 def _records_by_curr_frame(cache_path: str) -> Dict[int, PairFrameRecord]:
-    _, records = read_cache(cache_path)
+    records = read_pair_det_txt(cache_path)
     return {rec.curr_frame_id: rec for rec in records}
 
 
-def _records_for_vis(cache_path: str) -> List[PairFrameRecord]:
-    _, records = read_cache(cache_path)
+def _attach_image_paths(records: List[PairFrameRecord], args) -> None:
+    img_root = osp.join(args.data_root, args.img_subdir)
+    for rec in records:
+        if not rec.prev_img_path:
+            rec.prev_img_path = osp.join(
+                img_root, rec.seq_name,
+                f'{rec.prev_frame_id:06d}.{args.img_format}')
+        if not rec.curr_img_path:
+            rec.curr_img_path = osp.join(
+                img_root, rec.seq_name,
+                f'{rec.curr_frame_id:06d}.{args.img_format}')
+
+
+def _records_for_vis(cache_path: str, args) -> List[PairFrameRecord]:
+    records = read_pair_det_txt(cache_path)
+    _attach_image_paths(records, args)
     return records
 
 
@@ -646,10 +715,10 @@ def save_track_visualizations(args, tracker_name: str,
         seq = summary['seq_name']
         pred_path = summary['pred_path']
         event_path = summary.get('event_path', '')
-        cache_path = osp.join(args.out_dir, 'pair_cache', f'{seq}.jsonl')
+        cache_path = osp.join(args.out_dir, 'pair_cache', f'{seq}.txt')
         by_frame = _load_track_txt(pred_path)
         events = _events_by_frame(event_path)
-        pair_records = _records_for_vis(cache_path)
+        pair_records = _records_for_vis(cache_path, args)
         seq_vis_dir = osp.join(vis_root, seq)
         if osp.isdir(seq_vis_dir):
             shutil.rmtree(seq_vis_dir)
@@ -842,6 +911,25 @@ def parse_args():
     parser.add_argument('--device', default='cuda:0')
     parser.add_argument('--devices', default='')
     parser.add_argument('--num-procs', type=int, default=1)
+    parser.add_argument('--batch-size', type=int, default=1)
+    parser.add_argument(
+        '--track-num-procs',
+        type=int,
+        default=1,
+        help='Parallel sequence workers for stage=track. This only uses cached '
+        'detections and does not run model inference.')
+    parser.add_argument(
+        '--track-worker-threads',
+        type=int,
+        default=1,
+        help='Torch/BLAS threads per parallel track worker. Use 0 to keep the '
+        'environment defaults.')
+    parser.add_argument(
+        '--num-workers',
+        type=int,
+        default=None,
+        help='Workers for per-batch pipeline/image loading. Defaults to '
+        'train_dataloader.num_workers from the config.')
     parser.add_argument('--max-seqs', type=int, default=0)
     parser.add_argument('--force', action='store_true')
     parser.add_argument('--log-interval', type=int, default=100)

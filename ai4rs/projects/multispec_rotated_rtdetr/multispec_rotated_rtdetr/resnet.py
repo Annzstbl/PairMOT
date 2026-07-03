@@ -31,6 +31,18 @@ def _filter_backbone_state_dict(state_dict: dict) -> dict:
     return state_dict
 
 
+def _filter_shape_matched_state_dict(module: nn.Module,
+                                     state_dict: dict) -> OrderedDict:
+    """Drop pretrained tensors whose shapes do not match ``module``."""
+    current_state = module.state_dict()
+    filtered = OrderedDict()
+    for key, value in state_dict.items():
+        if (key in current_state
+                and tuple(value.shape) == tuple(current_state[key].shape)):
+            filtered[key] = value
+    return filtered
+
+
 @MODELS.register_module()
 class MultispecResNetV1dPaddle(ResNetV1dPaddle):
     """ResNetV1dPaddle backbone with multi-spectral input support.
@@ -74,6 +86,7 @@ class MultispecResNetV1dPaddle(ResNetV1dPaddle):
                 state_dict,
                 in_channels=self.in_channels,
                 expand_mode=self.expand_mode)
+            state_dict = _filter_shape_matched_state_dict(self, state_dict)
             missing, unexpected = self.load_state_dict(
                 state_dict, strict=False)
             print_log(
@@ -99,19 +112,23 @@ class MultispecResNetV1dPaddle3DSE(ResNetV1dPaddle):
     Pretrained RGB weights from the original 3x3 conv are mapped to
     ``conv3d``; SE layers are randomly initialized.
 
-    Args:
-        in_channels (int): Number of input spectral bands. Defaults to 8.
-        num_spectral (int): Spectral bands for the 3D stem. Defaults to 8.
-        se_reduction (int): SE bottleneck ratio. Defaults to 4.
+        Args:
+            in_channels (int): Number of input spectral bands. Defaults to 8.
+            num_spectral (int): Spectral bands for the 3D stem. Defaults to 8.
+            se_reduction (int): SE bottleneck ratio. Defaults to 4.
+            liquid_sampler (dict | None): Optional Liquid Spectral Sampling
+                config for the 3D stem. Defaults to None.
     """
 
     def __init__(self,
                  in_channels: int = 8,
                  num_spectral: int = 8,
                  se_reduction: int = 4,
+                 liquid_sampler: dict = None,
                  **kwargs) -> None:
         self.num_spectral = num_spectral
         self.se_reduction = se_reduction
+        self.liquid_sampler = liquid_sampler
         super().__init__(in_channels=in_channels, **kwargs)
 
     def _make_stem_layer(self, in_channels, stem_channels) -> None:
@@ -126,6 +143,7 @@ class MultispecResNetV1dPaddle3DSE(ResNetV1dPaddle):
                 out_channels=out_mid,
                 num_spectral=self.num_spectral,
                 reduction=self.se_reduction,
+                liquid_sampler=self.liquid_sampler,
             ),  # Conv3d kernel (3, 3, 3), stride (1, 2, 2), padding (1, 1, 1)
             build_norm_layer(self.norm_cfg, out_mid)[1],
             nn.ReLU(inplace=True),
@@ -169,6 +187,7 @@ class MultispecResNetV1dPaddle3DSE(ResNetV1dPaddle):
             state_dict = load_checkpoint_state_dict(checkpoint)
             state_dict = _filter_backbone_state_dict(state_dict)
             state_dict = adapt_state_dict_stem_conv3d_se(state_dict)
+            state_dict = _filter_shape_matched_state_dict(self, state_dict)
             missing, unexpected = self.load_state_dict(
                 state_dict, strict=False)
             print_log(

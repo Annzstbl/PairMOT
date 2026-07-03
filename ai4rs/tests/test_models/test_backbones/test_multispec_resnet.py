@@ -8,6 +8,8 @@ import torch
 from projects.multispec_rotated_rtdetr.multispec_rotated_rtdetr.pretrain_utils import (
     adapt_state_dict_in_channels, adapt_state_dict_stem_conv3d_se,
     expand_conv1_weight)
+from projects.multispec_rotated_rtdetr.multispec_rotated_rtdetr.stem_conv3d_se import (
+    LiquidSpectralSampler, MultispecStemConv3dSE)
 
 
 class TestMultispecPretrainUtils(unittest.TestCase):
@@ -48,6 +50,53 @@ class TestMultispecPretrainUtils(unittest.TestCase):
         self.assertIn('layer1.0.conv1.weight', adapted)
         self.assertNotIn('layer1.0.conv1.conv3d.weight', adapted)
         self.assertEqual(adapted['stem.0.conv3d.weight'].shape, (32, 1, 3, 3, 3))
+
+    def test_liquid_spectral_sampler_initial_windows(self):
+        stem = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=dict(embed_dims=32, tau=1.0, hard=True),
+        ).eval()
+        x = torch.randn(2, 8, 32, 32)
+        out, groups, probs = stem(x, return_sampling=True)
+
+        self.assertEqual(out.shape, (2, 16, 16, 16))
+        self.assertEqual(groups.shape, (2, 16, 6, 16, 16))
+        self.assertEqual(probs.shape, (2, 6, 3, 8))
+        expected = torch.tensor([
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+        ])
+        torch.testing.assert_close(probs[0].argmax(dim=-1), expected)
+
+    def test_liquid_sampler_lowres_grad_correction(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            embed_dims=16,
+            tau=1.0,
+            hard=False,
+            lowres_grad_size=4,
+        ).train()
+        x = torch.randn(2, 8, 16, 20, requires_grad=True)
+        sampled, probs = sampler(x)
+
+        expected = torch.bmm(
+            probs.reshape(2, 18, 8).detach(),
+            x.flatten(2)).view(2, 6, 3, 16, 20)
+        torch.testing.assert_close(sampled, expected)
+
+        loss = sampled.square().mean()
+        loss.backward()
+        self.assertIsNotNone(x.grad)
+        self.assertGreater(x.grad.abs().sum().item(), 0)
+        self.assertIsNotNone(sampler.head.bias.grad)
+        self.assertGreater(sampler.head.bias.grad.abs().sum().item(), 0)
 
 
 if __name__ == '__main__':

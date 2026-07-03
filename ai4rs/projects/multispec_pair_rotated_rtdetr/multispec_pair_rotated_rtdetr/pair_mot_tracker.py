@@ -6,7 +6,6 @@ running the pair detector again.
 """
 from __future__ import annotations
 
-import json
 import math
 import os
 import os.path as osp
@@ -17,10 +16,7 @@ import numpy as np
 import torch
 from scipy.optimize import linear_sum_assignment
 
-from mmrotate.structures.bbox import rbbox_overlaps, rbox2qbox
-
-
-CACHE_VERSION = 1
+from mmrotate.structures.bbox import qbox2rbox, rbbox_overlaps, rbox2qbox
 
 
 def wrap_angle(angle: float) -> float:
@@ -98,6 +94,163 @@ class PairFrameRecord:
     is_first_pair: bool = False
 
 
+PAIR_DET_TXT_HEADER = (
+    '# curr_frame,prev_frame,det_index,'
+    'prev_x1,prev_y1,prev_x2,prev_y2,prev_x3,prev_y3,prev_x4,prev_y4,'
+    'prev_cls,prev_score,'
+    'curr_x1,curr_y1,curr_x2,curr_y2,curr_x3,curr_y3,curr_x4,curr_y4,'
+    'curr_cls,curr_score,pair_cls,pair_score,cls_score,'
+    'presence_prev,presence_curr\n')
+
+
+def write_pair_det_txt(path: str, records: Iterable[PairFrameRecord]) -> None:
+    """Write pair detections as the canonical text cache format.
+
+    The text cache intentionally starts from real temporal pairs such as
+    01-02. Same-frame bootstrap records are skipped.
+    """
+    records = sorted(
+        records, key=lambda item: (item.prev_frame_id, item.curr_frame_id))
+    os.makedirs(osp.dirname(path), exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(PAIR_DET_TXT_HEADER)
+        for rec in records:
+            if rec.prev_frame_id == rec.curr_frame_id:
+                continue
+            dets = sorted(rec.detections, key=lambda det: det.index)
+            if dets:
+                prev_q = rbox2qbox(torch.as_tensor(
+                    [det.prev_bbox for det in dets], dtype=torch.float32))
+                curr_q = rbox2qbox(torch.as_tensor(
+                    [det.curr_bbox for det in dets], dtype=torch.float32))
+                prev_q_np = prev_q.detach().cpu().numpy()
+                curr_q_np = curr_q.detach().cpu().numpy()
+            else:
+                prev_q_np = np.zeros((0, 8), dtype=np.float32)
+                curr_q_np = np.zeros((0, 8), dtype=np.float32)
+            for row_idx, det in enumerate(dets):
+                prev_cls = det.label_prev if det.label_prev is not None else det.label
+                curr_cls = det.label_curr if det.label_curr is not None else det.label
+                presence_prev = 1.0 if det.presence_prev is None else det.presence_prev
+                presence_curr = 1.0 if det.presence_curr is None else det.presence_curr
+                vals = [
+                    int(rec.curr_frame_id),
+                    int(rec.prev_frame_id),
+                    int(det.index),
+                ]
+                vals += [f'{float(v):.2f}' for v in prev_q_np[row_idx].tolist()]
+                vals += [int(prev_cls), f'{det.prev_side_score():.6f}']
+                vals += [f'{float(v):.2f}' for v in curr_q_np[row_idx].tolist()]
+                vals += [int(curr_cls), f'{det.curr_side_score():.6f}']
+                vals += [
+                    int(det.label),
+                    f'{det.pair_score():.6f}',
+                    f'{float(det.cls_score):.6f}',
+                    f'{float(presence_prev):.6f}',
+                    f'{float(presence_curr):.6f}',
+                ]
+                f.write(','.join(map(str, vals)) + '\n')
+
+
+def read_pair_det_txt(path: str, seq_name: Optional[str] = None
+                      ) -> List[PairFrameRecord]:
+    """Read canonical pair detection txt into PairFrameRecord objects."""
+    if seq_name is None:
+        seq_name = osp.splitext(osp.basename(path))[0]
+    by_pair: Dict[Tuple[int, int], List[PairDetection]] = {}
+    with open(path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            parts = line.split(',')
+            if len(parts) < 28:
+                raise ValueError(f'Invalid pair det row in {path}: {line}')
+            curr_frame = int(float(parts[0]))
+            prev_frame = int(float(parts[1]))
+            det_index = int(float(parts[2]))
+            prev_q = torch.as_tensor(
+                [float(v) for v in parts[3:11]], dtype=torch.float32).view(1, 8)
+            prev_bbox = qbox2rbox(prev_q).reshape(-1).tolist()
+            prev_cls = int(float(parts[11]))
+            prev_score = float(parts[12])
+            curr_q = torch.as_tensor(
+                [float(v) for v in parts[13:21]], dtype=torch.float32).view(1, 8)
+            curr_bbox = qbox2rbox(curr_q).reshape(-1).tolist()
+            curr_cls = int(float(parts[21]))
+            curr_score = float(parts[22])
+            pair_cls = int(float(parts[23]))
+            pair_score = float(parts[24])
+            cls_score = float(parts[25])
+            presence_prev = float(parts[26]) if len(parts) > 26 else None
+            presence_curr = float(parts[27]) if len(parts) > 27 else None
+            by_pair.setdefault((prev_frame, curr_frame), []).append(
+                PairDetection(
+                    index=det_index,
+                    prev_bbox=[float(x) for x in prev_bbox],
+                    curr_bbox=[float(x) for x in curr_bbox],
+                    score=pair_score,
+                    cls_score=cls_score,
+                    label=pair_cls,
+                    presence_prev=presence_prev,
+                    presence_curr=presence_curr,
+                    score_prev=prev_score,
+                    score_curr=curr_score,
+                    label_prev=prev_cls,
+                    label_curr=curr_cls,
+                ))
+    records = []
+    for (prev_frame, curr_frame), detections in sorted(by_pair.items()):
+        records.append(PairFrameRecord(
+            seq_name=str(seq_name),
+            prev_frame_id=int(prev_frame),
+            curr_frame_id=int(curr_frame),
+            frame_gap=int(curr_frame) - int(prev_frame),
+            prev_img_path='',
+            curr_img_path='',
+            img_shape=[],
+            ori_shape=[],
+            scale_factor=[],
+            detections=sorted(detections, key=lambda det: det.index),
+            is_first_pair=False,
+        ))
+    return records
+
+
+def bootstrap_first_record_from_pair(record: PairFrameRecord) -> PairFrameRecord:
+    """Build frame-1 initialization from the previous side of a 01-02 pair."""
+    detections = []
+    for det in record.detections:
+        prev_score = det.prev_side_score()
+        detections.append(PairDetection(
+            index=det.index,
+            prev_bbox=list(det.prev_bbox),
+            curr_bbox=list(det.prev_bbox),
+            score=prev_score,
+            cls_score=det.cls_score,
+            label=det.label_prev if det.label_prev is not None else det.label,
+            presence_prev=det.presence_prev,
+            presence_curr=det.presence_prev,
+            score_prev=det.score_prev,
+            score_curr=det.score_prev,
+            label_prev=det.label_prev,
+            label_curr=det.label_prev,
+        ))
+    return PairFrameRecord(
+        seq_name=record.seq_name,
+        prev_frame_id=record.prev_frame_id,
+        curr_frame_id=record.prev_frame_id,
+        frame_gap=0,
+        prev_img_path=record.prev_img_path,
+        curr_img_path=record.prev_img_path,
+        img_shape=list(record.img_shape),
+        ori_shape=list(record.ori_shape),
+        scale_factor=list(record.scale_factor),
+        detections=detections,
+        is_first_pair=True,
+    )
+
+
 def detection_score(
     cls_score: float,
     presence_prev: Optional[float],
@@ -119,61 +272,6 @@ def detection_score(
             return cls_score * pres_min
         return cls_score
     raise ValueError(f'Unsupported score mode: {mode}')
-
-
-def write_cache(path: str, meta: dict,
-                records: Iterable[PairFrameRecord]) -> None:
-    os.makedirs(osp.dirname(path), exist_ok=True)
-    meta = dict(meta)
-    meta['cache_version'] = CACHE_VERSION
-    with open(path, 'w', encoding='utf-8') as f:
-        f.write(json.dumps({'type': 'meta', **meta}, ensure_ascii=False) + '\n')
-        for rec in records:
-            f.write(json.dumps({
-                'type': 'pair',
-                'seq_name': rec.seq_name,
-                'prev_frame_id': rec.prev_frame_id,
-                'curr_frame_id': rec.curr_frame_id,
-                'frame_gap': rec.frame_gap,
-                'prev_img_path': rec.prev_img_path,
-                'curr_img_path': rec.curr_img_path,
-                'img_shape': rec.img_shape,
-                'ori_shape': rec.ori_shape,
-                'scale_factor': rec.scale_factor,
-                'is_first_pair': rec.is_first_pair,
-                'detections': [det.__dict__ for det in rec.detections],
-            }, ensure_ascii=False) + '\n')
-
-
-def read_cache(path: str) -> Tuple[dict, List[PairFrameRecord]]:
-    meta = {}
-    records: List[PairFrameRecord] = []
-    with open(path, 'r', encoding='utf-8') as f:
-        for line in f:
-            if not line.strip():
-                continue
-            obj = json.loads(line)
-            if obj.get('type') == 'meta':
-                meta = obj
-                continue
-            detections = [PairDetection(**det) for det in obj['detections']]
-            records.append(PairFrameRecord(
-                seq_name=obj['seq_name'],
-                prev_frame_id=int(obj['prev_frame_id']),
-                curr_frame_id=int(obj['curr_frame_id']),
-                frame_gap=int(obj.get('frame_gap', 1)),
-                prev_img_path=obj.get('prev_img_path', ''),
-                curr_img_path=obj.get('curr_img_path', ''),
-                img_shape=list(obj.get('img_shape', [])),
-                ori_shape=list(obj.get('ori_shape', [])),
-                scale_factor=list(obj.get('scale_factor', [])),
-                detections=detections,
-                is_first_pair=bool(obj.get('is_first_pair', False)),
-            ))
-    if int(meta.get('cache_version', -1)) != CACHE_VERSION:
-        raise ValueError(
-            f'Unsupported cache version in {path}: {meta.get("cache_version")}')
-    return meta, records
 
 
 class RotatedKalman:
@@ -584,11 +682,16 @@ class PairMOTTracker:
 def write_trackeval_txt(path: str,
                         rows: Iterable[Tuple[int, int, Sequence[float], float, int]]
                         ) -> None:
+    rows = list(rows)
     os.makedirs(osp.dirname(path), exist_ok=True)
+    if not rows:
+        open(path, 'w', encoding='utf-8').close()
+        return
+    rboxes = torch.as_tensor([row[2] for row in rows], dtype=torch.float32)
+    qboxes = rbox2qbox(rboxes).detach().cpu().numpy()
     with open(path, 'w', encoding='utf-8') as f:
-        for frame_id, track_id, bbox, score, label in rows:
-            qbox = rbox_to_qbox_list(bbox)
+        for (frame_id, track_id, _, score, label), qbox in zip(rows, qboxes):
             vals = [int(frame_id), int(track_id)]
-            vals += [f'{v:.2f}' for v in qbox]
+            vals += [f'{float(v):.2f}' for v in qbox.tolist()]
             vals += [f'{float(score):.6f}', int(label), 0]
             f.write(','.join(map(str, vals)) + '\n')

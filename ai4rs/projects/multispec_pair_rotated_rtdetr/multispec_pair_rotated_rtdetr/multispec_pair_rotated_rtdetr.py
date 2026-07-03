@@ -19,7 +19,8 @@ from .pair_cdn_query_generator import PairCdnQueryGenerator
 from .component_timer import CudaComponentTimer
 
 QueryInitMode = Literal['learned', 'gt_noised', 'dual_topk',
-                        'pair_topk_v1', 'pair_topk_sameidx_v1']
+                        'pair_topk_v1', 'pair_topk_sameidx_v1',
+                        'pair_topk_v2']
 
 
 @MODELS.register_module()
@@ -42,10 +43,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  pair_proposal_cfg: Optional[Dict] = None,
                  **kwargs) -> None:
         if query_init not in ('learned', 'gt_noised', 'dual_topk',
-                              'pair_topk_v1', 'pair_topk_sameidx_v1'):
+                              'pair_topk_v1', 'pair_topk_sameidx_v1',
+                              'pair_topk_v2'):
             raise ValueError(
                 f'query_init must be learned, gt_noised, dual_topk, '
-                f'pair_topk_v1, or pair_topk_sameidx_v1, '
+                f'pair_topk_v1, pair_topk_sameidx_v1, or pair_topk_v2, '
                 f'got {query_init!r}')
         self.pair_mode = pair_mode
         self.query_init = query_init
@@ -113,6 +115,12 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     0.5 * eye)
                 self.pair_query_fusion.weight[:, self.embed_dims:].copy_(
                     0.5 * eye)
+            if self.query_init == 'pair_topk_v2':
+                self.pair_quality_predictor = nn.Sequential(
+                    nn.Linear(self.embed_dims, self.embed_dims),
+                    nn.ReLU(inplace=True),
+                    nn.Linear(self.embed_dims, 1),
+                )
 
     def _log_shape(self, name: str, tensor: Tensor) -> None:
         if self.debug_shapes:
@@ -223,6 +231,38 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         refs = (reg_branch(query) + props).sigmoid()
         topk_scores = torch.gather(scores, 1, topk_idx)
         return query, refs, topk_scores, topk_idx
+
+    def _single_frame_topk_proposals_v2(
+        self,
+        memory: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+        cls_branch: nn.Module,
+        reg_branch: nn.Module,
+        pre_topk: int,
+    ) -> Tuple[Tensor, Tensor, Tensor, Tensor, Tensor, Tensor]:
+        """Generate per-frame proposals with logits and labels for pairing."""
+        bs, num_values, c = memory.shape
+        k = min(pre_topk, num_values)
+        output_memory, output_proposals = self.gen_encoder_output_proposals(
+            memory, memory_mask, spatial_shapes)
+        enc_cls = cls_branch(output_memory)
+        probs = enc_cls.sigmoid()
+        scores, labels = probs.max(dim=-1)
+        topk_idx = torch.topk(scores, k=k, dim=1)[1]
+        query = torch.gather(
+            output_memory, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, c))
+        props = torch.gather(
+            output_proposals, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, 5))
+        refs = (reg_branch(query) + props).sigmoid()
+        topk_scores = torch.gather(scores, 1, topk_idx)
+        topk_labels = torch.gather(labels, 1, topk_idx)
+        topk_logits = torch.gather(
+            enc_cls, 1,
+            topk_idx.unsqueeze(-1).repeat(1, 1, enc_cls.size(-1)))
+        return query, refs, topk_scores, topk_labels, topk_logits, topk_idx
 
     def _topk_pair_queries_sameidx_v1(
         self,
@@ -354,6 +394,297 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         invalid = center_dist > max_center_dist
         match_score = match_score.masked_fill(invalid, -1e6)
         return match_score
+
+    @staticmethod
+    def _as_gmc_tensor(batch_data_samples: OptSampleList, batch_idx: int,
+                       device: torch.device, dtype: torch.dtype) -> Tensor:
+        if batch_data_samples is None:
+            return torch.eye(3, device=device, dtype=dtype)
+        meta = batch_data_samples[batch_idx].metainfo
+        matrix = meta.get('gmc_matrix', None)
+        if matrix is None:
+            return torch.eye(3, device=device, dtype=dtype)
+        return torch.as_tensor(matrix, device=device, dtype=dtype).reshape(3, 3)
+
+    @staticmethod
+    def _warp_ref_centers_by_gmc(refs: Tensor, gmc: Tensor,
+                                 img_shape: Tuple[int, int]) -> Tensor:
+        """Warp normalized proposal centers by prev->curr GMC matrix."""
+        img_h, img_w = img_shape
+        xy = refs[:, :2].clone()
+        xy_px = xy * refs.new_tensor([img_w, img_h])
+        ones = torch.ones((xy_px.size(0), 1), device=xy_px.device,
+                          dtype=xy_px.dtype)
+        homo = torch.cat([xy_px, ones], dim=-1)
+        warped = homo @ gmc.transpose(0, 1)
+        denom = warped[:, 2:3].clamp(min=1e-6)
+        warped_xy = warped[:, :2] / denom
+        return (warped_xy / refs.new_tensor([img_w, img_h])).clamp(0.0, 1.0)
+
+    def _pair_affinity_score_v2(self, query_prev: Tensor, query_curr: Tensor,
+                                ref_prev: Tensor, ref_curr: Tensor,
+                                score_prev: Tensor, score_curr: Tensor,
+                                label_prev: Tensor, label_curr: Tensor,
+                                gmc: Tensor, img_shape: Tuple[int, int]) -> Tensor:
+        """Pairing affinity used as a constraint, not the primary top-k rank."""
+        cfg = self.pair_proposal_cfg
+        sim_weight = float(cfg.get('sim_weight', 0.25))
+        geom_weight = float(cfg.get('geom_weight', 0.5))
+        score_weight = float(cfg.get('score_weight', 0.25))
+        class_mismatch_penalty = float(cfg.get('class_mismatch_penalty', 0.5))
+        class_aware = bool(cfg.get('class_aware', True))
+        geom_sigma = float(cfg.get('geom_sigma', 0.08))
+        max_center_dist = float(cfg.get('max_center_dist', 0.20))
+        max_log_scale = float(cfg.get('max_log_scale', 1.0))
+
+        q_prev = F.normalize(query_prev, dim=-1)
+        q_curr = F.normalize(query_curr, dim=-1)
+        sim = (torch.matmul(q_prev, q_curr.transpose(0, 1)) + 1.0) * 0.5
+
+        warped_prev_xy = self._warp_ref_centers_by_gmc(
+            ref_prev, gmc, img_shape)
+        center_delta = warped_prev_xy[:, None, :] - ref_curr[None, :, :2]
+        center_dist = center_delta.norm(dim=-1)
+        center_score = torch.exp(-center_dist / max(geom_sigma, 1e-6))
+
+        wh_prev = ref_prev[:, None, 2:4].clamp(min=1e-4)
+        wh_curr = ref_curr[None, :, 2:4].clamp(min=1e-4)
+        log_scale = (wh_prev.log() - wh_curr.log()).abs().amax(dim=-1)
+        scale_score = torch.exp(-log_scale / max(max_log_scale, 1e-6))
+        geom = center_score * scale_score
+
+        cls_prior = torch.sqrt(
+            score_prev[:, None].clamp(min=1e-6) *
+            score_curr[None, :].clamp(min=1e-6))
+        affinity = (
+            sim_weight * sim + geom_weight * geom +
+            score_weight * cls_prior)
+
+        if class_aware:
+            same_cls = label_prev[:, None] == label_curr[None, :]
+            affinity = torch.where(
+                same_cls, affinity, affinity - class_mismatch_penalty)
+
+        invalid = center_dist > max_center_dist
+        affinity = affinity.masked_fill(invalid, -1e6)
+        return affinity.clamp(max=1.0)
+
+    @staticmethod
+    def _hungarian_affinity_pairs(
+        affinity: Tensor,
+        affinity_thr: float,
+        candidate_topk: int,
+    ) -> Tuple[Tensor, Tensor]:
+        """Select one-to-one proposal pairs by maximizing affinity."""
+        try:
+            from scipy.optimize import linear_sum_assignment
+        except ImportError as exc:
+            raise RuntimeError(
+                'pair_selection_mode="hungarian_affinity" requires scipy.'
+            ) from exc
+
+        valid = affinity > affinity_thr
+        if valid.any():
+            cost = torch.where(valid, -affinity, affinity.new_full((), 1e6))
+        else:
+            flat_scores, flat_idx = torch.topk(
+                affinity.reshape(-1),
+                k=min(candidate_topk, affinity.numel()))
+            keep = flat_scores > -1e5
+            return flat_idx[keep] // affinity.size(1), flat_idx[keep] % affinity.size(1)
+
+        row_ind, col_ind = linear_sum_assignment(
+            cost.detach().cpu().float().numpy())
+        rows = torch.as_tensor(row_ind, device=affinity.device, dtype=torch.long)
+        cols = torch.as_tensor(col_ind, device=affinity.device, dtype=torch.long)
+        keep = valid[rows, cols]
+        return rows[keep], cols[keep]
+
+    def _unique_pair_order(self, order: Tensor, pair_i: Tensor,
+                           pair_j: Tensor) -> Tensor:
+        """Apply the existing greedy 1v1 preference with one host sync.
+
+        Greedy uniqueness is inherently sequential. Keeping it in Python
+        preserves the exact selection order, but converting candidate tensors to
+        lists once avoids a GPU scalar synchronization for every candidate.
+        """
+        order_list = order.detach().cpu().tolist()
+        pair_i_list = pair_i.detach().cpu().tolist()
+        pair_j_list = pair_j.detach().cpu().tolist()
+
+        selected = []
+        used_prev = set()
+        used_curr = set()
+        for idx in order_list:
+            pi = pair_i_list[idx]
+            pj = pair_j_list[idx]
+            if pi in used_prev or pj in used_curr:
+                continue
+            selected.append(idx)
+            used_prev.add(pi)
+            used_curr.add(pj)
+            if len(selected) >= self.num_queries:
+                break
+        if len(selected) < self.num_queries:
+            selected_set = set(selected)
+            for idx in order_list:
+                if idx not in selected_set:
+                    selected.append(idx)
+                    if len(selected) >= self.num_queries:
+                        break
+        return order.new_tensor(selected)
+
+    def _topk_pair_queries_v2(
+        self,
+        memory_prev: Tensor,
+        memory_curr: Tensor,
+        memory_mask: Optional[Tensor],
+        spatial_shapes: Tensor,
+        batch_data_samples: OptSampleList = None,
+    ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor],
+               Optional[Tensor], Optional[Tensor]]:
+        """Proposal-quality-first pair proposals with GMC-constrained affinity."""
+        cfg = self.pair_proposal_cfg
+        bs, _, c = memory_prev.shape
+        pre_topk = int(cfg.get('pre_topk', self.num_queries * 3))
+        candidate_topk = int(cfg.get('candidate_topk', self.num_queries * 6))
+        affinity_thr = float(cfg.get('affinity_thr', 0.25))
+        proposal_quality_weight = float(cfg.get('proposal_quality_weight', 0.70))
+        learned_quality_weight = float(cfg.get('learned_quality_weight', 0.20))
+        affinity_rank_weight = float(cfg.get('affinity_rank_weight', 0.10))
+        unique_pair_selection = bool(cfg.get('unique_pair_selection', False))
+        pair_selection_mode = str(cfg.get('pair_selection_mode', 'rank'))
+        num_layers = self.decoder.num_layers
+        cls_prev_branch = self.bbox_head.cls_branches[num_layers]
+        cls_curr_branch = getattr(self.bbox_head, 'cls_branches_curr',
+                                  self.bbox_head.cls_branches)[num_layers]
+
+        query_p, ref_p, score_p, label_p, logits_p, _ = (
+            self._single_frame_topk_proposals_v2(
+                memory_prev, memory_mask, spatial_shapes, cls_prev_branch,
+                self.bbox_head.reg_branches[num_layers], pre_topk))
+        query_c, ref_c, score_c, label_c, logits_c, _ = (
+            self._single_frame_topk_proposals_v2(
+                memory_curr, memory_mask, spatial_shapes, cls_curr_branch,
+                self.bbox_head.reg_branches_curr[num_layers], pre_topk))
+
+        learned_query = self.decoder.query_embedding.weight.to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_prev = self.decoder.ref_prev_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+        learned_curr = self.decoder.ref_curr_embedding.weight.sigmoid().to(
+            device=memory_prev.device, dtype=memory_prev.dtype)
+
+        batch_queries: List[Tensor] = []
+        batch_ref_prev: List[Tensor] = []
+        batch_ref_curr: List[Tensor] = []
+        batch_enc_cls_prev: List[Tensor] = []
+        batch_enc_cls_curr: List[Tensor] = []
+        batch_enc_bbox_prev: List[Tensor] = []
+        batch_enc_bbox_curr: List[Tensor] = []
+
+        for b in range(bs):
+            img_shape = (batch_data_samples[b].metainfo['img_shape']
+                         if batch_data_samples is not None else (1, 1))
+            gmc = self._as_gmc_tensor(
+                batch_data_samples, b, memory_prev.device, memory_prev.dtype)
+            affinity = self._pair_affinity_score_v2(
+                query_p[b], query_c[b], ref_p[b], ref_c[b], score_p[b],
+                score_c[b], label_p[b], label_c[b], gmc, img_shape)
+            if pair_selection_mode == 'hungarian_affinity':
+                pair_i, pair_j = self._hungarian_affinity_pairs(
+                    affinity, affinity_thr, candidate_topk)
+            else:
+                valid = affinity > affinity_thr
+                pair_i, pair_j = torch.nonzero(valid, as_tuple=True)
+                if pair_i.numel() == 0:
+                    flat_scores, flat_idx = torch.topk(
+                        affinity.reshape(-1),
+                        k=min(candidate_topk, affinity.numel()))
+                    keep = flat_scores > -1e5
+                    flat_idx = flat_idx[keep]
+                    pair_i = flat_idx // affinity.size(1)
+                    pair_j = flat_idx % affinity.size(1)
+                if pair_i.numel() > candidate_topk:
+                    flat_valid_scores = affinity[pair_i, pair_j]
+                    keep = torch.topk(
+                        flat_valid_scores, k=candidate_topk).indices
+                    pair_i = pair_i[keep]
+                    pair_j = pair_j[keep]
+
+            if pair_i.numel() > 0:
+                prop_quality = torch.sqrt(
+                    score_p[b, pair_i].clamp(min=1e-6) *
+                    score_c[b, pair_j].clamp(min=1e-6))
+                aff = affinity[pair_i, pair_j].clamp(min=0.0)
+                rank_score = proposal_quality_weight * prop_quality
+                if learned_quality_weight != 0.0:
+                    with torch.no_grad():
+                        quality_fused = self.pair_query_fusion(
+                            torch.cat([
+                                query_p[b, pair_i].detach(),
+                                query_c[b, pair_j].detach()
+                            ], dim=-1))
+                        learned_quality = self.pair_quality_predictor(
+                            quality_fused).squeeze(-1).sigmoid()
+                    rank_score = (
+                        rank_score + learned_quality_weight * learned_quality)
+                if affinity_rank_weight != 0.0:
+                    rank_score = rank_score + affinity_rank_weight * aff
+                order = torch.argsort(rank_score, descending=True)
+                if (pair_selection_mode != 'hungarian_affinity'
+                        and unique_pair_selection
+                        and order.numel() > self.num_queries):
+                    order = self._unique_pair_order(order, pair_i, pair_j)
+                pair_i = pair_i[order]
+                pair_j = pair_j[order]
+                pair_i = pair_i[:self.num_queries]
+                pair_j = pair_j[:self.num_queries]
+                q = self.pair_query_fusion(
+                    torch.cat([query_p[b, pair_i], query_c[b, pair_j]],
+                              dim=-1))
+                rp = ref_p[b, pair_i]
+                rc = ref_c[b, pair_j]
+                ep = logits_p[b, pair_i]
+                ec = logits_c[b, pair_j]
+            else:
+                q = query_p.new_zeros((0, c))
+                rp = ref_p.new_zeros((0, 5))
+                rc = ref_c.new_zeros((0, 5))
+                ep = logits_p.new_zeros((0, logits_p.size(-1)))
+                ec = logits_c.new_zeros((0, logits_c.size(-1)))
+
+            pad = self.num_queries - q.size(0)
+            if pad > 0:
+                q = torch.cat([q, learned_query[:pad]], dim=0)
+                rp = torch.cat([rp, learned_prev[:pad]], dim=0)
+                rc = torch.cat([rc, learned_curr[:pad]], dim=0)
+                ep = torch.cat([
+                    ep,
+                    logits_p.new_zeros((pad, logits_p.size(-1)))
+                ], dim=0)
+                ec = torch.cat([
+                    ec,
+                    logits_c.new_zeros((pad, logits_c.size(-1)))
+                ], dim=0)
+
+            batch_queries.append(q[:self.num_queries])
+            batch_ref_prev.append(rp[:self.num_queries])
+            batch_ref_curr.append(rc[:self.num_queries])
+            batch_enc_cls_prev.append(ep[:self.num_queries])
+            batch_enc_cls_curr.append(ec[:self.num_queries])
+            batch_enc_bbox_prev.append(rp[:self.num_queries])
+            batch_enc_bbox_curr.append(rc[:self.num_queries])
+
+        return (
+            torch.stack(batch_queries, dim=0),
+            torch.stack(batch_ref_prev, dim=0),
+            torch.stack(batch_ref_curr, dim=0),
+            torch.stack(batch_enc_cls_prev, dim=0),
+            torch.stack(batch_enc_cls_curr, dim=0),
+            torch.stack(batch_enc_bbox_prev, dim=0),
+            torch.stack(batch_enc_bbox_curr, dim=0),
+        )
 
     def _topk_pair_queries_v1(
         self,
@@ -562,8 +893,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         spatial_shapes: Tensor,
         batch_data_samples: OptSampleList = None,
     ) -> Tuple[Optional[Tensor], Optional[Tensor], Optional[Tensor],
-               Optional[Tensor], Optional[Dict]]:
+               Optional[Tensor], Optional[Dict], Optional[Tensor],
+               Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
         """Select pair query / dual reference init per ``query_init``."""
+        enc_cls_prev = enc_cls_curr = None
+        enc_bbox_prev = enc_bbox_curr = None
         if self.query_init == 'learned':
             query, reference_prev, reference_curr = None, None, None
         elif self.query_init == 'gt_noised':
@@ -594,12 +928,23 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     memory_mask,
                     spatial_shapes,
                 ))
+        elif self.query_init == 'pair_topk_v2':
+            (query, reference_prev, reference_curr, enc_cls_prev,
+             enc_cls_curr, enc_bbox_prev, enc_bbox_curr) = (
+                 self._topk_pair_queries_v2(
+                     memory_prev,
+                     memory_curr,
+                     memory_mask,
+                     spatial_shapes,
+                     batch_data_samples=batch_data_samples,
+                 ))
         else:
             raise RuntimeError(f'Unsupported query_init: {self.query_init!r}')
 
         if (not self.training or self.pair_dn_query_generator is None
                 or batch_data_samples is None):
-            return query, reference_prev, reference_curr, None, None
+            return (query, reference_prev, reference_curr, None, None,
+                    enc_cls_prev, enc_cls_curr, enc_bbox_prev, enc_bbox_curr)
 
         (dn_query, dn_prev_unact, dn_curr_unact, self_attn_mask,
          dn_meta) = self.pair_dn_query_generator(batch_data_samples)
@@ -619,7 +964,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         reference_curr = torch.cat(
             [dn_curr_unact, torch.logit(reference_curr.clamp(1e-4, 1 - 1e-4))],
             dim=1).sigmoid()
-        return query, reference_prev, reference_curr, self_attn_mask, dn_meta
+        return (query, reference_prev, reference_curr, self_attn_mask, dn_meta,
+                enc_cls_prev, enc_cls_curr, enc_bbox_prev, enc_bbox_curr)
 
     def _pair_decoder_reg_branches(
         self,
@@ -751,7 +1097,9 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             return dict(prev=head_prev, curr=head_curr)
 
         if timer is not None:
-            query, reference_prev, reference_curr, self_attn_mask, dn_meta = timer.record(
+            (query, reference_prev, reference_curr, self_attn_mask, dn_meta,
+             enc_cls_prev, enc_cls_curr, enc_bbox_prev,
+             enc_bbox_curr) = timer.record(
                 'query_init',
                 lambda: self._init_pair_decoder_queries(
                     memory_prev,
@@ -773,13 +1121,15 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     self_attn_mask=self_attn_mask,
                 ))
         else:
-            query, reference_prev, reference_curr, self_attn_mask, dn_meta = self._init_pair_decoder_queries(
-                memory_prev,
-                memory_curr,
-                encoder_outputs_dict['memory_mask'],
-                encoder_outputs_dict['spatial_shapes'],
-                batch_data_samples=batch_data_samples,
-            )
+            (query, reference_prev, reference_curr, self_attn_mask, dn_meta,
+             enc_cls_prev, enc_cls_curr, enc_bbox_prev,
+             enc_bbox_curr) = self._init_pair_decoder_queries(
+                 memory_prev,
+                 memory_curr,
+                 encoder_outputs_dict['memory_mask'],
+                 encoder_outputs_dict['spatial_shapes'],
+                 batch_data_samples=batch_data_samples,
+             )
             pair_decoder_out = self.forward_decoder_pair(
                 query=query,
                 memory_prev=memory_prev,
@@ -791,6 +1141,10 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 self_attn_mask=self_attn_mask,
             )
         pair_decoder_out['dn_meta'] = dn_meta
+        pair_decoder_out['enc_outputs_class_prev'] = enc_cls_prev
+        pair_decoder_out['enc_outputs_class_curr'] = enc_cls_curr
+        pair_decoder_out['enc_outputs_coord_prev'] = enc_bbox_prev
+        pair_decoder_out['enc_outputs_coord_curr'] = enc_bbox_curr
         return pair_decoder_out
 
     def loss(self, batch_inputs: Tensor,

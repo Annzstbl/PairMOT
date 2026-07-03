@@ -125,7 +125,8 @@ default_hooks = dict(
         score_thr=0.35,
         iou_thr=0.5,
         pres_thr=0.5,
-        out_dir='val_vis'))
+        out_dir='val_vis',
+        diagnostic_mode=True))
 
 custom_hooks = [
     dict(type='PairComponentTimerHook', interval=50),

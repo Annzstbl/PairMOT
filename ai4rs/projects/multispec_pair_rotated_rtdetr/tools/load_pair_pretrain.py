@@ -12,6 +12,7 @@ import torch
 def adapt_single_frame_ckpt_for_pair(
     state_dict: Dict[str, torch.Tensor],
     copy_cls_branches_curr: bool = False,
+    copy_dn_query_generator_to_pair: bool = False,
 ) -> Tuple[Dict[str, torch.Tensor], Dict[str, int]]:
     """Map single-frame RT-DETR weights onto Pair model keys.
 
@@ -19,7 +20,8 @@ def adapt_single_frame_ckpt_for_pair(
     - ``bbox_head.reg_branches.*`` -> ``reg_branches_curr`` (curr-frame decoder reg)
     - optionally ``bbox_head.cls_branches.*`` -> ``cls_branches_curr`` for
       dual-cls pair heads
-    - Drop ``dn_query_generator.*`` (pair overfit uses ``dn_cfg=None``)
+    - Drop ``dn_query_generator.*`` by default, or copy it to
+      ``pair_dn_query_generator.*`` when PairDN is enabled.
     """
     adapted: Dict[str, torch.Tensor] = {}
     stats = {
@@ -28,11 +30,18 @@ def adapt_single_frame_ckpt_for_pair(
         'reg_branches_curr_copied': 0,
         'cls_branches_curr_copied': 0,
         'dropped_dn': 0,
+        'pair_dn_copied': 0,
         'dropped_unmatched': 0,
     }
 
     for key, value in state_dict.items():
         if key.startswith('dn_query_generator.'):
+            if copy_dn_query_generator_to_pair:
+                pair_dn_key = key.replace(
+                    'dn_query_generator.', 'pair_dn_query_generator.', 1)
+                adapted[pair_dn_key] = copy.deepcopy(value)
+                stats['pair_dn_copied'] += 1
+                continue
             stats['dropped_dn'] += 1
             continue
 
@@ -69,6 +78,7 @@ def ensure_pair_adapted_checkpoint(
     cache_dir: str,
     force: bool = False,
     copy_cls_branches_curr: bool = False,
+    copy_dn_query_generator_to_pair: bool = False,
     output_name: str = 'pair_adapted_pretrain.pth',
 ) -> str:
     """Build (or reuse) a pair-adapted checkpoint under ``cache_dir``."""
@@ -82,7 +92,9 @@ def ensure_pair_adapted_checkpoint(
     checkpoint = torch.load(src_ckpt, map_location='cpu')
     state_dict = checkpoint.get('state_dict', checkpoint)
     adapted_sd, stats = adapt_single_frame_ckpt_for_pair(
-        state_dict, copy_cls_branches_curr=copy_cls_branches_curr)
+        state_dict,
+        copy_cls_branches_curr=copy_cls_branches_curr,
+        copy_dn_query_generator_to_pair=copy_dn_query_generator_to_pair)
 
     out = dict(checkpoint) if isinstance(checkpoint, dict) else {}
     out['state_dict'] = adapted_sd
@@ -101,5 +113,6 @@ def ensure_pair_adapted_checkpoint(
         f'{stats["cross_attn_expanded"]} reg_branches_curr_copied='
         f'{stats["reg_branches_curr_copied"]} cls_branches_curr_copied='
         f'{stats["cls_branches_curr_copied"]} dropped_dn='
-        f'{stats["dropped_dn"]}')
+        f'{stats["dropped_dn"]} pair_dn_copied='
+        f'{stats["pair_dn_copied"]}')
     return dst_ckpt

@@ -7,7 +7,7 @@ from .pretrain_utils import (HSMOT_SPECTRAL_BANDS, adapt_state_dict_in_channels,
                              convert_stem_conv2d_to_conv3d_weight,
                              expand_conv1_weight, load_checkpoint_state_dict)
 from .resnet import MultispecResNetV1dPaddle, MultispecResNetV1dPaddle3DSE
-from .stem_conv3d_se import MultispecStemConv3dSE
+from .stem_conv3d_se import LiquidSpectralSampler, MultispecStemConv3dSE
 
 __all__ = [
     'HSMOTVisualizationHook',
@@ -16,6 +16,7 @@ __all__ = [
     'MultispecResNetV1dPaddle',
     'MultispecResNetV1dPaddle3DSE',
     'MultispecStemConv3dSE',
+    'LiquidSpectralSampler',
     'expand_conv1_weight',
     'convert_stem_conv2d_to_conv3d_weight',
     'adapt_state_dict_in_channels',

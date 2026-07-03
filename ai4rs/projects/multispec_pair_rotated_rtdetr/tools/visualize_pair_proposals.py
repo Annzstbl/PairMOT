@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import glob
 import json
 import os
 import os.path as osp
@@ -39,21 +40,27 @@ from projects.multispec_pair_rotated_rtdetr.tools.run_pair_mot import (  # noqa:
 DEFAULT_EXPERIMENTS = {
     'baseline': {
         'dir': '/data/users/litianhao01/PairMmot/workdir/'
-        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1_fixed_20260628',
-        'config': 'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train.py',
-        'checkpoint': 'epoch_72.pth',
+        '0702_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_bothvis_dualcls_nopres',
+        'config': '/data/users/litianhao01/PairMmot/ai4rs/projects/'
+        'multispec_pair_rotated_rtdetr/configs/'
+        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_bothvis_dualcls_nopres.py',
+        'checkpoint': 'latest',
     },
-    'pairtopkv1': {
+    'pairtopk_v2': {
         'dir': '/data/users/litianhao01/PairMmot/workdir/'
-        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_pairtopk_v1',
-        'config': 'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_pairtopk_v1.py',
-        'checkpoint': 'epoch_20.pth',
+        '0702_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_bothvis_dualcls_nopres_pairtopk_v2',
+        'config': '/data/users/litianhao01/PairMmot/ai4rs/projects/'
+        'multispec_pair_rotated_rtdetr/configs/'
+        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_bothvis_dualcls_nopres_pairtopk_v2.py',
+        'checkpoint': 'latest',
     },
-    'sameid_v1': {
+    'pairtopk_v2_unique': {
         'dir': '/data/users/litianhao01/PairMmot/workdir/'
-        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_pairtopk_sameidx_v1',
-        'config': 'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_pairtopk_sameidx_v1.py',
-        'checkpoint': 'epoch_8.pth',
+        '0702_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_bothvis_dualcls_nopres_pairtopk_v2_unique',
+        'config': '/data/users/litianhao01/PairMmot/ai4rs/projects/'
+        'multispec_pair_rotated_rtdetr/configs/'
+        'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_bothvis_dualcls_nopres_pairtopk_v2_unique.py',
+        'checkpoint': 'latest',
     },
 }
 
@@ -79,6 +86,21 @@ def _resolve_path(exp_cfg: dict, key: str) -> str:
     if osp.isabs(value):
         return value
     return osp.join(exp_cfg['dir'], value)
+
+
+def _latest_checkpoint(exp_dir: str) -> str:
+    ckpts = glob.glob(osp.join(exp_dir, 'epoch_*.pth'))
+    if not ckpts:
+        raise FileNotFoundError(f'No epoch_*.pth checkpoints found in {exp_dir}')
+
+    def epoch_num(path: str) -> int:
+        name = osp.splitext(osp.basename(path))[0]
+        try:
+            return int(name.rsplit('_', 1)[1])
+        except (IndexError, ValueError):
+            return -1
+
+    return max(ckpts, key=epoch_num)
 
 
 def _build_model_and_pipeline(config: str, checkpoint: str, device: str):
@@ -319,6 +341,159 @@ def _pairtopk_diag(model, memory_prev, memory_curr, memory_mask, spatial_shapes,
     return candidates_prev, candidates_curr, top_pairs
 
 
+def _pairtopk_v2_diag(model, memory_prev, memory_curr, memory_mask,
+                      spatial_shapes, data_samples: list, meta: dict,
+                      draw_candidates: int) -> Tuple[List[dict], List[dict], List[dict]]:
+    cfg = model.pair_proposal_cfg
+    pre_topk = int(cfg.get('pre_topk', model.num_queries * 3))
+    candidate_topk = int(cfg.get('candidate_topk', model.num_queries * 6))
+    affinity_thr = float(cfg.get('affinity_thr', 0.25))
+    proposal_quality_weight = float(cfg.get('proposal_quality_weight', 0.70))
+    learned_quality_weight = float(cfg.get('learned_quality_weight', 0.20))
+    affinity_rank_weight = float(cfg.get('affinity_rank_weight', 0.10))
+    unique_pair_selection = bool(cfg.get('unique_pair_selection', False))
+    pair_selection_mode = str(cfg.get('pair_selection_mode', 'rank'))
+    num_layers = model.decoder.num_layers
+    cls_prev_branch = model.bbox_head.cls_branches[num_layers]
+    cls_curr_branch = getattr(model.bbox_head, 'cls_branches_curr',
+                              model.bbox_head.cls_branches)[num_layers]
+    query_p, ref_p, score_p, label_p, _, idx_p = (
+        model._single_frame_topk_proposals_v2(
+            memory_prev, memory_mask, spatial_shapes, cls_prev_branch,
+            model.bbox_head.reg_branches[num_layers], pre_topk))
+    query_c, ref_c, score_c, label_c, _, idx_c = (
+        model._single_frame_topk_proposals_v2(
+            memory_curr, memory_mask, spatial_shapes, cls_curr_branch,
+            model.bbox_head.reg_branches_curr[num_layers], pre_topk))
+    angle_factor = model.decoder.angle_factor
+    candidates_prev = _rows_from_refs(
+        ref_p[0, :draw_candidates], score_p[0, :draw_candidates], meta,
+        angle_factor, idx_p[0, :draw_candidates], {
+            'label': label_p[0, :draw_candidates],
+        })
+    candidates_curr = _rows_from_refs(
+        ref_c[0, :draw_candidates], score_c[0, :draw_candidates], meta,
+        angle_factor, idx_c[0, :draw_candidates], {
+            'label': label_c[0, :draw_candidates],
+        })
+
+    img_shape = data_samples[0].metainfo.get('img_shape', (1, 1))
+    gmc = model._as_gmc_tensor(
+        data_samples, 0, memory_prev.device, memory_prev.dtype)
+    affinity = model._pair_affinity_score_v2(
+        query_p[0], query_c[0], ref_p[0], ref_c[0], score_p[0], score_c[0],
+        label_p[0], label_c[0], gmc, img_shape)
+    if pair_selection_mode == 'hungarian_affinity':
+        pair_i, pair_j = model._hungarian_affinity_pairs(
+            affinity, affinity_thr, candidate_topk)
+    else:
+        valid = affinity > affinity_thr
+        pair_i, pair_j = torch.nonzero(valid, as_tuple=True)
+        if pair_i.numel() == 0:
+            flat_scores, flat_idx = torch.topk(
+                affinity.reshape(-1), k=min(candidate_topk, affinity.numel()))
+            keep = flat_scores > -1e5
+            flat_idx = flat_idx[keep]
+            pair_i = flat_idx // affinity.size(1)
+            pair_j = flat_idx % affinity.size(1)
+        if pair_i.numel() > candidate_topk:
+            keep = torch.topk(affinity[pair_i, pair_j], k=candidate_topk).indices
+            pair_i = pair_i[keep]
+            pair_j = pair_j[keep]
+
+    top_pairs = []
+    if pair_i.numel() > 0:
+        fused = model.pair_query_fusion(
+            torch.cat([query_p[0, pair_i], query_c[0, pair_j]], dim=-1))
+        prop_quality = torch.sqrt(
+            score_p[0, pair_i].clamp(min=1e-6) *
+            score_c[0, pair_j].clamp(min=1e-6))
+        learned_quality = model.pair_quality_predictor(fused).squeeze(-1).sigmoid()
+        aff = affinity[pair_i, pair_j].clamp(min=0.0)
+        rank_score = (
+            proposal_quality_weight * prop_quality +
+            learned_quality_weight * learned_quality +
+            affinity_rank_weight * aff)
+        order = torch.argsort(rank_score, descending=True)
+        if (pair_selection_mode != 'hungarian_affinity'
+                and unique_pair_selection
+                and order.numel() > model.num_queries):
+            selected = []
+            used_prev = set()
+            used_curr = set()
+            for idx in order.tolist():
+                pi = int(pair_i[idx])
+                pj = int(pair_j[idx])
+                if pi in used_prev or pj in used_curr:
+                    continue
+                selected.append(idx)
+                used_prev.add(pi)
+                used_curr.add(pj)
+                if len(selected) >= model.num_queries:
+                    break
+            if len(selected) < model.num_queries:
+                selected_set = set(selected)
+                for idx in order.tolist():
+                    if idx not in selected_set:
+                        selected.append(idx)
+                        if len(selected) >= model.num_queries:
+                            break
+            order = order.new_tensor(selected)
+        pair_i = pair_i[order]
+        pair_j = pair_j[order]
+        rank_score = rank_score[order]
+        prop_quality = prop_quality[order]
+        learned_quality = learned_quality[order]
+        aff = aff[order]
+        for rank in range(min(model.num_queries, pair_i.numel())):
+            pi = int(pair_i[rank].detach().cpu())
+            pj = int(pair_j[rank].detach().cpu())
+            prev_box = _refs_to_original(ref_p[0, pi][None], meta, angle_factor)[0]
+            curr_box = _refs_to_original(ref_c[0, pj][None], meta, angle_factor)[0]
+            top_pairs.append({
+                'rank': rank,
+                'type': (
+                    'v2_hungarian' if pair_selection_mode == 'hungarian_affinity'
+                    else 'v2_unique' if unique_pair_selection else 'v2'),
+                'score': float(rank_score[rank].detach().cpu().item()),
+                'rank_score': float(rank_score[rank].detach().cpu().item()),
+                'prop_quality': float(prop_quality[rank].detach().cpu().item()),
+                'learned_quality': float(learned_quality[rank].detach().cpu().item()),
+                'affinity': float(aff[rank].detach().cpu().item()),
+                'prev_candidate_rank': pi,
+                'curr_candidate_rank': pj,
+                'prev_proposal_index': int(idx_p[0, pi].detach().cpu()),
+                'curr_proposal_index': int(idx_c[0, pj].detach().cpu()),
+                'prev_label': int(label_p[0, pi].detach().cpu()),
+                'curr_label': int(label_c[0, pj].detach().cpu()),
+                'prev_score': float(score_p[0, pi].detach().cpu()),
+                'curr_score': float(score_c[0, pj].detach().cpu()),
+                'prev': [float(x) for x in prev_box.tolist()],
+                'curr': [float(x) for x in curr_box.tolist()],
+            })
+
+    learned_prev = model.decoder.ref_prev_embedding.weight.sigmoid()
+    learned_curr = model.decoder.ref_curr_embedding.weight.sigmoid()
+    while len(top_pairs) < model.num_queries:
+        qi = len(top_pairs)
+        prev_box = _refs_to_original(
+            learned_prev[qi].to(memory_prev.device)[None], meta, angle_factor)[0]
+        curr_box = _refs_to_original(
+            learned_curr[qi].to(memory_prev.device)[None], meta, angle_factor)[0]
+        top_pairs.append({
+            'rank': qi,
+            'type': 'learned_pad',
+            'score': 0.0,
+            'prev_candidate_rank': None,
+            'curr_candidate_rank': None,
+            'prev_proposal_index': None,
+            'curr_proposal_index': None,
+            'prev': [float(x) for x in prev_box.tolist()],
+            'curr': [float(x) for x in curr_box.tolist()],
+        })
+    return candidates_prev, candidates_curr, top_pairs
+
+
 def _sameidx_diag(model, memory_prev, memory_curr, memory_mask, spatial_shapes,
                   meta: dict, draw_candidates: int) -> Tuple[List[dict], List[dict], List[dict]]:
     cfg = model.pair_proposal_cfg
@@ -410,6 +585,10 @@ def collect_diag(exp_name: str, model, preprocessor, pipeline, device,
             cand_prev, cand_curr, top_pairs = _sameidx_diag(
                 model, memory_prev, memory_curr, memory_mask, spatial_shapes,
                 meta, draw_candidates)
+        elif model.query_init == 'pair_topk_v2':
+            cand_prev, cand_curr, top_pairs = _pairtopk_v2_diag(
+                model, memory_prev, memory_curr, memory_mask, spatial_shapes,
+                data_samples, meta, draw_candidates)
         else:
             raise RuntimeError(f'Unsupported query_init for visualization: {model.query_init}')
     return ProposalDiag(
@@ -601,7 +780,10 @@ def _experiment_specs(args) -> Dict[str, dict]:
         specs = selected
     for name, spec in specs.items():
         spec['config_path'] = _resolve_path(spec, 'config')
-        spec['checkpoint_path'] = _resolve_path(spec, 'checkpoint')
+        if spec['checkpoint'] == 'latest':
+            spec['checkpoint_path'] = _latest_checkpoint(spec['dir'])
+        else:
+            spec['checkpoint_path'] = _resolve_path(spec, 'checkpoint')
         if not osp.isfile(spec['config_path']):
             raise FileNotFoundError(f'{name} config not found: {spec["config_path"]}')
         if not osp.isfile(spec['checkpoint_path']):

@@ -66,7 +66,8 @@ val_evaluator = dict(
         type='HSMOTPairOverfitMetric',
         score_thr=0.35,
         iou_thr=0.5,
-        pres_thr=0.5))
+        pres_thr=0.5,
+        diagnostic_mode=True))
 
 test_dataloader = val_dataloader
 test_evaluator = val_evaluator

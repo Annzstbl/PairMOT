@@ -242,7 +242,7 @@ C(q, g) = 2.0 * FocalCost(q, g)
 |------|----------|----------|
 | **训练 loss** | `PairHungarianAssigner` + 多项 cost 全局最优 | `pair_hungarian_assigner.py` |
 | **验证可视化** | 逐 GT 贪心选最高分 query（非匈牙利） | `pair_val_visualization_hook.py::_match_pred_indices` |
-| **Overfit metric** | 基于 pred score + IoU 的启发式统计 | `pair_overfit_metric.py` |
+| **Pair AP metric** | 基于 pred score + IoU 的启发式统计 | `pair_ap_metric.py` |
 
 可视化与 metric 中的 matching **仅用于评估展示**，不影响训练梯度。
 
