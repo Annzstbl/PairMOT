@@ -56,10 +56,21 @@ def _default_train_cfg():
             ]))
 
 
+def _no_presence_train_cfg():
+    cfg = copy.deepcopy(_default_train_cfg())
+    cfg['assigner']['match_costs'] = [
+        cost for cost in cfg['assigner']['match_costs']
+        if cost['type'] != 'PairPresenceBCECost'
+    ]
+    return cfg
+
+
 def _build_head(num_layers: int = 2,
                 num_classes: int = 3,
                 embed_dims: int = 32,
-                device: torch.device = torch.device('cpu')) -> PairRotatedRTDETRHead:
+                device: torch.device = torch.device('cpu'),
+                **head_kwargs) -> PairRotatedRTDETRHead:
+    train_cfg = head_kwargs.pop('train_cfg', _default_train_cfg())
     head = PairRotatedRTDETRHead(
         num_classes=num_classes,
         embed_dims=embed_dims,
@@ -83,8 +94,9 @@ def _build_head(num_layers: int = 2,
             type='mmdet.CrossEntropyLoss',
             use_sigmoid=True,
             loss_weight=1.0),
-        train_cfg=_default_train_cfg(),
+        train_cfg=train_cfg,
         test_cfg=dict(max_per_img=10),
+        **head_kwargs,
     ).to(device)
     return head
 
@@ -302,6 +314,77 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
             return
         self.assertEqual(grad_curr.grad.abs().sum().item(), 0.0)
 
+    def test_dual_cls_all_gt_single_visible_targets(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        gt = _pair_gt(
+            labels=[0],
+            prev_boxes=[_norm_rbox(0.0, 0.0, 0.1, 0.1)],
+            curr_boxes=[_norm_rbox(0.5, 0.5, 0.2, 0.2)],
+            valid_prev=[False],
+            valid_curr=[True],
+        )
+        cls_score = torch.zeros(1, 3)
+        bbox_prev = _norm_rbox(0.3, 0.3, 0.15, 0.15).unsqueeze(0)
+        bbox_curr = _norm_rbox(0.52, 0.48, 0.2, 0.2).unsqueeze(0)
+
+        targets = head.get_targets_no_presence(
+            [cls_score], [bbox_prev], [bbox_curr], [gt], [IMG_META])
+        labels_prev, labels_curr = targets[0][0], targets[1][0]
+        bbox_prev_weights = targets[4][0]
+        bbox_curr_weights = targets[6][0]
+        num_total_pos = targets[7]
+
+        self.assertEqual(num_total_pos, 1)
+        self.assertEqual(labels_prev[0].item(), head.num_classes)
+        self.assertEqual(labels_curr[0].item(), 0)
+        self.assertEqual(bbox_prev_weights[0].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
+
+    def test_pair_dn_targets_keep_all_gt(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        gt = _pair_gt(
+            labels=[0, 1],
+            prev_boxes=[
+                _norm_rbox(0.0, 0.0, 0.1, 0.1),
+                _norm_rbox(0.5, 0.5, 0.2, 0.2),
+            ],
+            curr_boxes=[
+                _norm_rbox(0.5, 0.5, 0.2, 0.2),
+                _norm_rbox(0.0, 0.0, 0.1, 0.1),
+            ],
+            valid_prev=[False, True],
+            valid_curr=[True, False],
+        )
+        dn_meta = dict(
+            num_denoising_queries=4,
+            num_denoising_groups=1,
+            max_num_dn_targets=2)
+        targets = head._get_pair_dn_targets(
+            [gt], [IMG_META], dn_meta, torch.device('cpu'))
+        labels, label_weights = targets[0][0], targets[1][0]
+        bbox_prev_weights, bbox_curr_weights = targets[3][0], targets[5][0]
+        pres_prev_targets, pres_curr_targets = targets[6][0], targets[7][0]
+        num_total_pos = targets[-1]
+
+        self.assertEqual(num_total_pos, 4)
+        self.assertEqual(labels[:2].tolist(), [0, 1])
+        self.assertEqual(labels[2:].tolist(), [0, 1])
+        self.assertEqual(label_weights.sum().item(), 4.0)
+        self.assertEqual(pres_prev_targets[:2].tolist(), [0.0, 1.0])
+        self.assertEqual(pres_curr_targets[:2].tolist(), [1.0, 0.0])
+        self.assertEqual(bbox_prev_weights[0].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_prev_weights[1].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_curr_weights[1].abs().sum().item(), 0.0)
+
 
 class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
 
@@ -354,7 +437,7 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
         bbox_p = torch.rand(1, 1, 2, 5)
         bbox_c = torch.rand(1, 1, 2, 5)
         results = head.predict_by_feat(
-            cls, pres_p, pres_c, bbox_p, bbox_c, [IMG_META])
+            cls, pres_p, pres_c, bbox_p, bbox_c, batch_img_metas=[IMG_META])
         self.assertEqual(len(results), 1)
         self.assertIsInstance(results[0], PairInstanceData)
         self.assertEqual(results[0].bboxes_prev.shape[-1], 5)
