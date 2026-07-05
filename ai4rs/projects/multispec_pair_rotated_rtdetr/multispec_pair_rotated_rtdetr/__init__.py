@@ -18,6 +18,7 @@ from .pair_dataset_epoch_hook import PairDatasetEpochHook
 from .liquid_sampler_monitor_hook import (LiquidSamplerAnnealHook,
                                           LiquidSamplerMonitorHook)
 from .pair_val_visualization_hook import HSMOTPairValVisualizationHook
+from .pair_temporal_adapter_monitor_hook import PairTemporalAdapterMonitorHook
 from .single_val_visualization_hook import HSMOTSingleValVisualizationHook
 from .timed_rotated_rtdetr import TimedRotatedRTDETR
 
@@ -40,5 +41,6 @@ __all__ = [
     'PairRotatedRTDETRHead',
     'PairRotatedRTDETRTransformerDecoder',
     'PairRotatedRTDETRTransformerDecoderLayer',
+    'PairTemporalAdapterMonitorHook',
     'TimedRotatedRTDETR',
 ]

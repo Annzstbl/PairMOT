@@ -462,6 +462,256 @@ class RTDETRFPN(BaseModule):
         return tuple(outs)
 
 
+class PairTemporalAdapter(BaseModule):
+    """Bidirectional cross-frame adapter for paired high-level features.
+
+    The batch order must be ``[prev_0..prev_N, curr_0..curr_N]``.  ``gamma`` is
+    initialized to zero, so the module is an exact identity at initialization.
+    """
+
+    def __init__(self,
+                 embed_dims: int = 256,
+                 num_heads: int = 4,
+                 dropout: float = 0.0,
+                 gamma_init: float = 0.0,
+                 init_cfg: OptMultiConfig = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        self.embed_dims = embed_dims
+        self.query_norm = nn.LayerNorm(embed_dims)
+        self.key_value_norm = nn.LayerNorm(embed_dims)
+        self.attn = nn.MultiheadAttention(
+            embed_dim=embed_dims,
+            num_heads=num_heads,
+            dropout=dropout,
+            batch_first=True)
+        self.out_proj = nn.Linear(embed_dims, embed_dims)
+        self.gamma = nn.Parameter(torch.tensor(float(gamma_init)))
+
+    def _cross_attend(self, query: Tensor, key_value: Tensor) -> Tensor:
+        query = self.query_norm(query)
+        key_value = self.key_value_norm(key_value)
+        delta = self.attn(
+            query=query,
+            key=key_value,
+            value=key_value,
+            need_weights=False)[0]
+        return self.out_proj(delta)
+
+    def forward(self, feat: Tensor) -> Tensor:
+        batch_size, channels, height, width = feat.shape
+        if batch_size % 2 != 0:
+            raise ValueError(
+                'PairTemporalAdapter expects an even batch ordered as '
+                '[prev batch, curr batch].')
+        if channels != self.embed_dims:
+            raise ValueError(
+                f'PairTemporalAdapter embed_dims={self.embed_dims}, '
+                f'but got feature channels={channels}.')
+
+        pair_batch = batch_size // 2
+        prev = feat[:pair_batch]
+        curr = feat[pair_batch:]
+        prev_seq = prev.flatten(2).transpose(1, 2).contiguous()
+        curr_seq = curr.flatten(2).transpose(1, 2).contiguous()
+
+        delta_prev = self._cross_attend(prev_seq, curr_seq)
+        delta_curr = self._cross_attend(curr_seq, prev_seq)
+        delta_prev = delta_prev.transpose(1, 2).reshape(
+            pair_batch, channels, height, width)
+        delta_curr = delta_curr.transpose(1, 2).reshape(
+            pair_batch, channels, height, width)
+
+        return torch.cat(
+            [prev + self.gamma * delta_prev,
+             curr + self.gamma * delta_curr],
+            dim=0)
+
+
+class PairTemporalPoolGateAdapter(BaseModule):
+    """Lightweight bidirectional temporal adapter using pooled P5 context.
+
+    The batch order must be ``[prev_0..prev_N, curr_0..curr_N]``.  The module
+    keeps an exact identity at initialization through a zero residual scale.
+    """
+
+    def __init__(self,
+                 embed_dims: int = 256,
+                 reduction: int = 4,
+                 gamma_init: float = 0.0,
+                 init_cfg: OptMultiConfig = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        self.embed_dims = embed_dims
+        hidden_dims = max(embed_dims // reduction, 16)
+        self.context_mlp = nn.Sequential(
+            nn.Linear(embed_dims * 4, hidden_dims),
+            nn.SiLU(inplace=True),
+            nn.Linear(hidden_dims, embed_dims),
+            nn.Sigmoid(),
+        )
+        self.delta_conv = nn.Sequential(
+            nn.Conv2d(
+                embed_dims,
+                embed_dims,
+                kernel_size=3,
+                padding=1,
+                groups=embed_dims,
+                bias=False),
+            nn.BatchNorm2d(embed_dims),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(embed_dims, embed_dims, kernel_size=1, bias=True),
+        )
+        self.gamma = nn.Parameter(torch.tensor(float(gamma_init)))
+
+    def _delta(self, query: Tensor, context: Tensor) -> Tensor:
+        query_pool = query.mean(dim=(-2, -1))
+        context_pool = context.mean(dim=(-2, -1))
+        gate_input = torch.cat(
+            [
+                query_pool,
+                context_pool,
+                context_pool - query_pool,
+                query_pool * context_pool,
+            ],
+            dim=1)
+        gate = self.context_mlp(gate_input).view(
+            query.size(0), query.size(1), 1, 1)
+        return self.delta_conv(context * gate)
+
+    def forward(self, feat: Tensor) -> Tensor:
+        batch_size, channels, _, _ = feat.shape
+        if batch_size % 2 != 0:
+            raise ValueError(
+                'PairTemporalPoolGateAdapter expects an even batch ordered as '
+                '[prev batch, curr batch].')
+        if channels != self.embed_dims:
+            raise ValueError(
+                f'PairTemporalPoolGateAdapter embed_dims={self.embed_dims}, '
+                f'but got feature channels={channels}.')
+
+        pair_batch = batch_size // 2
+        prev = feat[:pair_batch]
+        curr = feat[pair_batch:]
+        delta_prev = self._delta(prev, curr)
+        delta_curr = self._delta(curr, prev)
+        return torch.cat(
+            [prev + self.gamma * delta_prev,
+             curr + self.gamma * delta_curr],
+            dim=0)
+
+
+class PairTemporalPyramidLocalAdapter(BaseModule):
+    """Bidirectional local temporal adapter for multi-scale pair features.
+
+    The adapter runs on FPN outputs and is intentionally local: it uses pooled
+    two-frame context to gate a lightweight depthwise/grouped convolution over
+    the cross-frame feature difference.  ``gamma`` is zero-initialized per
+    feature level, so the initial forward path is an exact identity.
+    """
+
+    def __init__(self,
+                 in_channels: List[int],
+                 level_indices: Optional[List[int]] = None,
+                 reduction: int = 4,
+                 pointwise_groups: int = 8,
+                 gamma_init: float = 0.0,
+                 init_cfg: OptMultiConfig = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        self.in_channels = list(in_channels)
+        if level_indices is None:
+            level_indices = list(range(len(self.in_channels)))
+        self.level_indices = [
+            idx if idx >= 0 else len(self.in_channels) + idx
+            for idx in level_indices
+        ]
+        if any(idx < 0 or idx >= len(self.in_channels)
+               for idx in self.level_indices):
+            raise ValueError(
+                f'Invalid level_indices={level_indices} for '
+                f'{len(self.in_channels)} input levels.')
+
+        self.gate_mlps = nn.ModuleList()
+        self.local_blocks = nn.ModuleList()
+        for idx in self.level_indices:
+            channels = self.in_channels[idx]
+            hidden_dims = max(channels // reduction, 16)
+            groups = min(pointwise_groups, channels)
+            while channels % groups != 0:
+                groups -= 1
+            self.gate_mlps.append(
+                nn.Sequential(
+                    nn.Linear(channels * 4, hidden_dims),
+                    nn.SiLU(inplace=True),
+                    nn.Linear(hidden_dims, channels),
+                    nn.Sigmoid(),
+                ))
+            self.local_blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(
+                        channels,
+                        channels,
+                        kernel_size=3,
+                        padding=1,
+                        groups=channels,
+                        bias=False),
+                    nn.BatchNorm2d(channels),
+                    nn.SiLU(inplace=True),
+                    nn.Conv2d(
+                        channels,
+                        channels,
+                        kernel_size=1,
+                        groups=groups,
+                        bias=True),
+                ))
+        self.gamma = nn.Parameter(
+            torch.full((len(self.level_indices), ), float(gamma_init)))
+
+    def _delta(self, query: Tensor, context: Tensor, module_idx: int) -> Tensor:
+        query_pool = query.mean(dim=(-2, -1))
+        context_pool = context.mean(dim=(-2, -1))
+        diff_pool = context_pool - query_pool
+        gate_input = torch.cat(
+            [
+                query_pool,
+                context_pool,
+                diff_pool,
+                query_pool * context_pool,
+            ],
+            dim=1)
+        gate = self.gate_mlps[module_idx](gate_input).view(
+            query.size(0), query.size(1), 1, 1)
+        return self.local_blocks[module_idx](context - query) * gate
+
+    def forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor]:
+        outs = list(feats)
+        if not outs:
+            return feats
+        batch_size = outs[0].shape[0]
+        if batch_size % 2 != 0:
+            raise ValueError(
+                'PairTemporalPyramidLocalAdapter expects an even batch '
+                'ordered as [prev batch, curr batch].')
+        pair_batch = batch_size // 2
+
+        for module_idx, level_idx in enumerate(self.level_indices):
+            feat = outs[level_idx]
+            channels = feat.shape[1]
+            expected_channels = self.in_channels[level_idx]
+            if channels != expected_channels:
+                raise ValueError(
+                    'PairTemporalPyramidLocalAdapter expected '
+                    f'{expected_channels} channels at level {level_idx}, '
+                    f'but got {channels}.')
+            prev = feat[:pair_batch]
+            curr = feat[pair_batch:]
+            delta_prev = self._delta(prev, curr, module_idx)
+            delta_curr = self._delta(curr, prev, module_idx)
+            gamma = self.gamma[module_idx].view(1, 1, 1, 1)
+            outs[level_idx] = torch.cat(
+                [prev + gamma * delta_prev, curr + gamma * delta_curr],
+                dim=0)
+        return tuple(outs)
+
+
 class RTDETRHybridEncoder(BaseModule):
     """HybridEncoder of RTDETR.
 
@@ -478,6 +728,14 @@ class RTDETRHybridEncoder(BaseModule):
             encoding. Defaults to 10000.
         encode_before_fpn (bool, optional): Encoding the features before FPN
             layer. Defaults to True.
+        pair_temporal_adapter_cfg (:obj:`ConfigDict` or dict, optional):
+            Optional bidirectional temporal adapter applied to one encoded
+            feature level before FPN.  The intended pair batch order is
+            ``[prev batch, curr batch]``.
+        pair_temporal_adapter_idx (int, optional): Feature level index used by
+            the temporal adapter. Defaults to the last encoded level.
+        post_pair_temporal_adapter_cfg (:obj:`ConfigDict` or dict, optional):
+            Optional bidirectional temporal adapter applied to FPN outputs.
         fpn_cfg (:obj:`ConfigDict` or dict): The config dict for the FPN layer.
             Defaults to None.
         init_cfg (:obj:`ConfigDict` or dict or list[dict] or
@@ -494,6 +752,9 @@ class RTDETRHybridEncoder(BaseModule):
                  spatial_shapes: Optional[Tuple[Tuple[int, int]]] = None,
                  encode_before_fpn: bool = True,
                  with_cp: bool = False,
+                 pair_temporal_adapter_cfg: OptConfigType = None,
+                 pair_temporal_adapter_idx: Optional[int] = None,
+                 post_pair_temporal_adapter_cfg: OptConfigType = None,
                  fpn_cfg: OptConfigType = None,
                  init_cfg: OptMultiConfig = None) -> None:
         super().__init__(init_cfg=init_cfg)
@@ -501,6 +762,8 @@ class RTDETRHybridEncoder(BaseModule):
         self.use_encoder_idx = use_encoder_idx
         self.pe_temperature = pe_temperature
         self.encode_before_fpn = encode_before_fpn
+        self.pair_temporal_adapter_idx = pair_temporal_adapter_idx
+        self.post_pair_temporal_adapter = None
 
         if isinstance(num_encoder_layers, int):
             num_encoder_layers = (num_encoder_layers, ) * len(
@@ -512,6 +775,39 @@ class RTDETRHybridEncoder(BaseModule):
         # fpn layer
         self.fpn = MODELS.build(fpn_cfg) \
             if fpn_cfg is not None else nn.Identity()
+
+        self.pair_temporal_adapter = None
+        if pair_temporal_adapter_cfg is not None:
+            if not self.encode_before_fpn:
+                raise ValueError(
+                    'pair_temporal_adapter_cfg requires encode_before_fpn=True '
+                    'so the adapter runs after AIFI and before FPN.')
+            if self.pair_temporal_adapter_idx is None:
+                self.pair_temporal_adapter_idx = self.use_encoder_idx[-1]
+            adapter_cfg = dict(pair_temporal_adapter_cfg)
+            adapter_type = adapter_cfg.pop('type', 'mha')
+            adapter_cfg.setdefault(
+                'embed_dims', self.in_channels[self.pair_temporal_adapter_idx])
+            if adapter_type == 'mha':
+                self.pair_temporal_adapter = PairTemporalAdapter(**adapter_cfg)
+            elif adapter_type == 'pool_gate':
+                self.pair_temporal_adapter = PairTemporalPoolGateAdapter(
+                    **adapter_cfg)
+            else:
+                raise ValueError(
+                    f'Unsupported pair temporal adapter type: {adapter_type}')
+
+        if post_pair_temporal_adapter_cfg is not None:
+            adapter_cfg = dict(post_pair_temporal_adapter_cfg)
+            adapter_type = adapter_cfg.pop('type', 'pyramid_local')
+            adapter_cfg.setdefault('in_channels', self.in_channels)
+            if adapter_type == 'pyramid_local':
+                self.post_pair_temporal_adapter = (
+                    PairTemporalPyramidLocalAdapter(**adapter_cfg))
+            else:
+                raise ValueError(
+                    'Unsupported post pair temporal adapter type: '
+                    f'{adapter_type}')
 
         # encoder transformer
         self.transformer_blocks = nn.ModuleList([
@@ -591,8 +887,24 @@ class RTDETRHybridEncoder(BaseModule):
 
         return tuple(outs)
 
+    def pair_temporal_forward(self, inputs: Tuple[Tensor]) -> Tuple[Tensor]:
+        if self.pair_temporal_adapter is None:
+            return inputs
+        outs = list(inputs)
+        idx = self.pair_temporal_adapter_idx
+        outs[idx] = self.pair_temporal_adapter(outs[idx])
+        return tuple(outs)
+
+    def post_pair_temporal_forward(self, inputs: Tuple[Tensor]) -> Tuple[Tensor]:
+        if self.post_pair_temporal_adapter is None:
+            return inputs
+        return self.post_pair_temporal_adapter(inputs)
+
     def forward(self, inputs: Tuple[Tensor]) -> Tuple[Tensor]:
         if self.encode_before_fpn:
-            return self.fpn(self.encode_forward(inputs))
+            return self.post_pair_temporal_forward(
+                self.fpn(
+                    self.pair_temporal_forward(self.encode_forward(inputs))))
         else:
-            return self.encode_forward(self.fpn(inputs))
+            return self.post_pair_temporal_forward(
+                self.encode_forward(self.fpn(inputs)))
