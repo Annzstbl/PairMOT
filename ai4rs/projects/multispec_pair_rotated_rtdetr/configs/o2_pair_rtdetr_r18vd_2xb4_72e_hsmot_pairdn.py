@@ -95,10 +95,8 @@ custom_hooks = [
     dict(type='PairDatasetEpochHook'),
     dict(type='TrainingCurveHook'),
     dict(
-        type='EarlyStoppingHook',
-        monitor='pair/independent_AP50',
-        rule='greater',
-        min_delta=0.002,
+        type='PairTrackEarlyStoppingHook',
+        min_delta=0.001,
         patience=4,
         strict=False),
     dict(type=EMAHook, ema_type=ExpMomentumEMA, momentum=0.0001,

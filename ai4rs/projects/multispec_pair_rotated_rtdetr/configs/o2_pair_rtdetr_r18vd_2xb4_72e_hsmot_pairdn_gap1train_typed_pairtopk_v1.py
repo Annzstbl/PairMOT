@@ -44,10 +44,9 @@ val_evaluator['metrics'].update(
 test_evaluator = val_evaluator
 
 for hook in custom_hooks:
-    if hook.get('type') == 'EarlyStoppingHook':
+    if hook.get('type') in ('EarlyStoppingHook', 'PairTrackEarlyStoppingHook'):
         hook.update(
-            monitor='pair/pair_mAP50_95',
-            rule='greater',
+            type='PairTrackEarlyStoppingHook',
             min_delta=0.001,
             patience=4,
             strict=False)

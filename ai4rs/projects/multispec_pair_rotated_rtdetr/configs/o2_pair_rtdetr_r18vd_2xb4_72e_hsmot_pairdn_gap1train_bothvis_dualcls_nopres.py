@@ -1,8 +1,12 @@
 """Gap-1 both-visible pair baseline with dual cls and no presence branch."""
+from pathlib import Path
+
 from mmengine.config import read_base
 
 with read_base():
     from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train import *
+
+_pairmot_root = str(Path(__file__).resolve().parents[4])
 
 load_from = (
     '/data/users/litianhao01/PairMmot/pretrained_weights/'
@@ -44,10 +48,9 @@ train_cfg.update(max_epochs=max_epochs, val_interval=4)
 default_hooks.checkpoint.update(interval=4, max_keep_ckpts=8)
 
 for hook in custom_hooks:
-    if hook.get('type') == 'EarlyStoppingHook':
+    if hook.get('type') in ('EarlyStoppingHook', 'PairTrackEarlyStoppingHook'):
         hook.update(
-            monitor='pair/pair_mAP50_95',
-            rule='greater',
+            type='PairTrackEarlyStoppingHook',
             min_delta=0.001,
             patience=4,
             strict=False)
@@ -60,7 +63,8 @@ work_dir = (
 val_evaluator['metrics'].update(
     track_eval=True,
     track_eval_out_dir=f'{work_dir}/val_track_eval',
-    track_data_root='/data/users/litianhao01/PairMmot/data/hsmot/test',
+    track_data_root=f'{_pairmot_root}/data/hsmot/test',
+    trackeval_root=f'{_pairmot_root}/TrackEval',
     track_new_born_th=0.6,
     track_track_th=0.2,
     track_match_iou_th=0.25,

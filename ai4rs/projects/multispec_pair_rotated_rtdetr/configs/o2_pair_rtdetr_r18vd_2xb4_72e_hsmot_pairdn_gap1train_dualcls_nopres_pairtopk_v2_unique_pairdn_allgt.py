@@ -25,10 +25,9 @@ train_cfg.update(max_epochs=max_epochs)
 default_hooks.checkpoint.update(interval=4, max_keep_ckpts=12)
 
 for hook in custom_hooks:
-    if hook.get('type') == 'EarlyStoppingHook':
+    if hook.get('type') in ('EarlyStoppingHook', 'PairTrackEarlyStoppingHook'):
         hook.update(
-            monitor='pair/pair_mAP50_95',
-            rule='greater',
+            type='PairTrackEarlyStoppingHook',
             min_delta=0.001,
             patience=4,
             strict=False)
