@@ -158,6 +158,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         hidden_states: List[Tensor],
         references_prev: List[Tensor],
         references_curr: List[Tensor],
+        hidden_states_prev: Optional[List[Tensor]] = None,
+        hidden_states_curr: Optional[List[Tensor]] = None,
     ) -> Tuple[Tensor, ...]:
         """Build per-layer pair head outputs.
 
@@ -184,17 +186,24 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         all_bbox_prev: List[Tensor] = []
         all_bbox_curr: List[Tensor] = []
 
+        if hidden_states_prev is None:
+            hidden_states_prev = hidden_states
+        if hidden_states_curr is None:
+            hidden_states_curr = hidden_states
+
         for layer_id, hidden_state in enumerate(hidden_states):
-            # hidden_state: (bs, num_queries, embed_dims)
-            all_cls.append(self.cls_branches[layer_id](hidden_state))
+            hidden_prev = hidden_states_prev[layer_id]
+            hidden_curr = hidden_states_curr[layer_id]
+            # hidden_*: (bs, num_queries, embed_dims)
+            all_cls.append(self.cls_branches[layer_id](hidden_prev))
             if self.dual_cls:
                 all_cls_curr.append(
-                    self.cls_branches_curr[layer_id](hidden_state))
+                    self.cls_branches_curr[layer_id](hidden_curr))
             if self.use_presence:
                 all_pres_prev.append(
-                    self.presence_prev_branches[layer_id](hidden_state).squeeze(-1))
+                    self.presence_prev_branches[layer_id](hidden_prev).squeeze(-1))
                 all_pres_curr.append(
-                    self.presence_curr_branches[layer_id](hidden_state).squeeze(-1))
+                    self.presence_curr_branches[layer_id](hidden_curr).squeeze(-1))
             all_bbox_prev.append(references_prev[layer_id])
             all_bbox_curr.append(references_curr[layer_id])
 
@@ -1573,6 +1582,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         hidden_states: Tensor,
         references_prev: List[Tensor],
         references_curr: List[Tensor],
+        hidden_states_prev: Optional[Tensor] = None,
+        hidden_states_curr: Optional[Tensor] = None,
         enc_outputs_class: Optional[Tensor] = None,
         enc_outputs_coord: Optional[Tensor] = None,
         enc_outputs_class_prev: Optional[Tensor] = None,
@@ -1592,7 +1603,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             data_sample.metainfo for data_sample in batch_data_samples
         ]
         hidden_list = self._hidden_list(hidden_states)
-        outs = self.forward(hidden_list, references_prev, references_curr)
+        hidden_prev_list = (self._hidden_list(hidden_states_prev)
+                            if hidden_states_prev is not None else None)
+        hidden_curr_list = (self._hidden_list(hidden_states_curr)
+                            if hidden_states_curr is not None else None)
+        outs = self.forward(
+            hidden_list,
+            references_prev,
+            references_curr,
+            hidden_states_prev=hidden_prev_list,
+            hidden_states_curr=hidden_curr_list)
         return self.loss_by_feat(
             *outs,
             batch_pair_gt_instances=batch_pair_gt_instances,
@@ -1613,6 +1633,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         references_curr: List[Tensor],
         batch_data_samples: SampleList,
         rescale: bool = True,
+        hidden_states_prev: Optional[Tensor] = None,
+        hidden_states_curr: Optional[Tensor] = None,
         **kwargs,
     ) -> InstanceList:
         """Run pair post-processing without NMS."""
@@ -1621,6 +1643,15 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             data_sample.metainfo for data_sample in batch_data_samples
         ]
         hidden_list = self._hidden_list(hidden_states)
-        outs = self.forward(hidden_list, references_prev, references_curr)
+        hidden_prev_list = (self._hidden_list(hidden_states_prev)
+                            if hidden_states_prev is not None else None)
+        hidden_curr_list = (self._hidden_list(hidden_states_curr)
+                            if hidden_states_curr is not None else None)
+        outs = self.forward(
+            hidden_list,
+            references_prev,
+            references_curr,
+            hidden_states_prev=hidden_prev_list,
+            hidden_states_curr=hidden_curr_list)
         return self.predict_by_feat(
             *outs, batch_img_metas=batch_img_metas, rescale=rescale)

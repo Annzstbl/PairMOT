@@ -1266,6 +1266,19 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             self.bbox_head.reg_branches_curr[:num_layers],
         )
 
+    def _pair_decoder_cls_branches(
+        self,
+    ) -> Tuple[nn.ModuleList, nn.ModuleList]:
+        """Slice head cls branches for Pair decoder pointer updates."""
+        num_layers = self.decoder.num_layers
+        cls_prev = self.bbox_head.cls_branches[:num_layers]
+        cls_curr_all = getattr(self.bbox_head, 'cls_branches_curr', None)
+        if cls_curr_all is None:
+            cls_curr = cls_prev
+        else:
+            cls_curr = cls_curr_all[:num_layers]
+        return cls_prev, cls_curr
+
     def forward_decoder_pair(
         self,
         query: Tensor,
@@ -1276,26 +1289,40 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         spatial_shapes: Tensor,
         level_start_index: Tensor,
         self_attn_mask: Optional[Tensor] = None,
+        enc_cls_prev: Optional[Tensor] = None,
+        enc_cls_curr: Optional[Tensor] = None,
     ) -> Dict:
         """Run ``PairRotatedRTDETRTransformerDecoder``."""
         reg_branches_prev, reg_branches_curr = self._pair_decoder_reg_branches()
-        hidden_states, references_prev, references_curr = self.decoder(
+        cls_branches_prev, cls_branches_curr = self._pair_decoder_cls_branches()
+        decoder_out = self.decoder(
             memory_prev=memory_prev,
             memory_curr=memory_curr,
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             reg_branches_prev=reg_branches_prev,
             reg_branches_curr=reg_branches_curr,
+            cls_branches_prev=cls_branches_prev,
+            cls_branches_curr=cls_branches_curr,
+            initial_cls_prev=enc_cls_prev,
+            initial_cls_curr=enc_cls_curr,
             query=query,
             reference_prev=reference_prev,
             reference_curr=reference_curr,
             self_attn_mask=self_attn_mask,
         )
-        return dict(
+        hidden_states, references_prev, references_curr = decoder_out[:3]
+        outputs = dict(
             hidden_states=torch.stack(hidden_states),
             references_prev=references_prev,
             references_curr=references_curr,
         )
+        if len(decoder_out) == 5:
+            outputs.update(
+                hidden_states_prev=torch.stack(decoder_out[3]),
+                hidden_states_curr=torch.stack(decoder_out[4]),
+            )
+        return outputs
 
     def _forward_single_frame(
         self,
@@ -1408,6 +1435,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     spatial_shapes=decoder_inputs_dict['spatial_shapes'],
                     level_start_index=decoder_inputs_dict['level_start_index'],
                     self_attn_mask=self_attn_mask,
+                    enc_cls_prev=enc_cls_prev,
+                    enc_cls_curr=enc_cls_curr,
                 ))
         else:
             (query, reference_prev, reference_curr, self_attn_mask, dn_meta,
@@ -1428,6 +1457,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 spatial_shapes=decoder_inputs_dict['spatial_shapes'],
                 level_start_index=decoder_inputs_dict['level_start_index'],
                 self_attn_mask=self_attn_mask,
+                enc_cls_prev=enc_cls_prev,
+                enc_cls_curr=enc_cls_curr,
             )
         pair_decoder_out['dn_meta'] = dn_meta
         pair_decoder_out['enc_outputs_class_prev'] = enc_cls_prev

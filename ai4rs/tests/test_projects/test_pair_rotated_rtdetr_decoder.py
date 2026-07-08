@@ -46,10 +46,29 @@ def _build_reg_branches(num_layers: int,
     return branches
 
 
+def _build_cls_branches(num_layers: int,
+                        embed_dims: int,
+                        num_classes: int,
+                        device: torch.device,
+                        seed: int = 0):
+    torch.manual_seed(seed)
+    branches = torch.nn.ModuleList([
+        torch.nn.Linear(embed_dims, num_classes)
+        for _ in range(num_layers)
+    ]).to(device)
+    for branch in branches:
+        torch.nn.init.normal_(branch.weight, std=0.01)
+        torch.nn.init.zeros_(branch.bias)
+    return branches
+
+
 def _build_decoder(num_layers: int = 2,
                    num_queries: int = 8,
                    embed_dims: int = 64,
-                   device: torch.device = torch.device('cpu')):
+                   device: torch.device = torch.device('cpu'),
+                   tristate_decoder: bool = False,
+                   tristate_separate_ffn: bool = False,
+                   tristate_zero_init_coupling: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -73,6 +92,9 @@ def _build_decoder(num_layers: int = 2,
         layer_cfg=layer_cfg,
         post_norm_cfg=None,
         angle_factor=3.141592653589793,
+        tristate_decoder=tristate_decoder,
+        tristate_separate_ffn=tristate_separate_ffn,
+        tristate_zero_init_coupling=tristate_zero_init_coupling,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -146,6 +168,90 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertEqual(hidden[-1].shape[0], 2)
         self.assertEqual(refs_prev[-1].shape[0], 2)
         self.assertEqual(refs_curr[-1].shape[0], 2)
+
+    def test_tristate_decoder_outputs_frame_hidden_states(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, tristate_decoder=True)
+        cls_prev = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 4, self.device, seed=2)
+        cls_curr = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 4, self.device, seed=3)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            2, num_value, decoder.embed_dims, self.device)
+
+        out = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr,
+        )
+
+        self.assertEqual(len(out), 5)
+        hidden, refs_prev, refs_curr, hidden_prev, hidden_curr = out
+        self.assertEqual(len(hidden), decoder.num_layers)
+        self.assertEqual(len(hidden_prev), decoder.num_layers)
+        self.assertEqual(len(hidden_curr), decoder.num_layers)
+        self.assertEqual(hidden[-1].shape, (2, decoder.num_queries,
+                                            decoder.embed_dims))
+        self.assertEqual(hidden_prev[-1].shape, hidden[-1].shape)
+        self.assertEqual(hidden_curr[-1].shape, hidden[-1].shape)
+        self.assertEqual(refs_prev[-1].shape, (2, decoder.num_queries, 5))
+        self.assertEqual(refs_curr[-1].shape, (2, decoder.num_queries, 5))
+
+        loss = (hidden[-1].sum() + hidden_prev[-1].sum() +
+                hidden_curr[-1].sum() + refs_prev[-1].sum() +
+                refs_curr[-1].sum())
+        loss.backward()
+        self.assertIsNotNone(memory_prev.grad)
+        self.assertIsNotNone(memory_curr.grad)
+        self.assertGreater(memory_prev.grad.abs().sum().item(), 0.0)
+        self.assertGreater(memory_curr.grad.abs().sum().item(), 0.0)
+
+    def test_tristate_separate_ffn_forward(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device,
+            tristate_decoder=True,
+            tristate_separate_ffn=True)
+        self.assertTrue(hasattr(decoder.layers[0], 'ffn_prev'))
+        self.assertTrue(hasattr(decoder.layers[0], 'ffn_curr'))
+        cls_prev = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 4, self.device, seed=4)
+        cls_curr = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 4, self.device, seed=5)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        out = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr,
+        )
+        _, refs_prev, refs_curr, hidden_prev, hidden_curr = out
+        self.assertEqual(hidden_prev[-1].shape, hidden_curr[-1].shape)
+
+    def test_tristate_zero_init_coupling(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            tristate_decoder=True,
+            tristate_zero_init_coupling=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            for module in (layer.pointer_to_prev, layer.pointer_to_curr,
+                           layer.pointer_update):
+                self.assertEqual(module.weight.abs().sum().item(), 0.0)
+                self.assertEqual(module.bias.abs().sum().item(), 0.0)
 
     def test_references_change_across_layers(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)
