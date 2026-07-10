@@ -48,22 +48,29 @@ class LiquidSamplerMonitorHook(Hook):
         probs = getattr(stem, 'last_liquid_probs', None)
         if probs is None:
             return
+        indices = getattr(stem, 'last_liquid_indices', None)
 
         with torch.no_grad():
             probs = probs.detach()
             eps = torch.finfo(probs.dtype).eps
-            max_prob, selected = probs.max(dim=-1)
+            max_prob, raw_selected = probs.max(dim=-1)
+            selected = raw_selected if indices is None else indices.detach()
             entropy = -(probs.clamp_min(eps) * probs.clamp_min(eps).log()).sum(dim=-1)
             num_groups = probs.size(1)
             spectral_kernel = probs.size(2)
-            fixed = torch.empty(
-                num_groups,
-                spectral_kernel,
-                device=selected.device,
-                dtype=selected.dtype)
-            for group_idx in range(num_groups):
-                for kernel_idx in range(spectral_kernel):
-                    fixed[group_idx, kernel_idx] = group_idx + kernel_idx
+            sampler = getattr(stem, 'liquid_sampler', None)
+            fixed = getattr(sampler, 'init_pattern_indices', None)
+            if fixed is None:
+                fixed = torch.empty(
+                    num_groups,
+                    spectral_kernel,
+                    device=selected.device,
+                    dtype=selected.dtype)
+                for group_idx in range(num_groups):
+                    for kernel_idx in range(spectral_kernel):
+                        fixed[group_idx, kernel_idx] = group_idx + kernel_idx
+            else:
+                fixed = fixed.to(device=selected.device, dtype=selected.dtype)
             changed = (selected != fixed.unsqueeze(0)).float().mean()
 
             runner.message_hub.update_scalar(

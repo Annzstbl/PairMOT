@@ -1,6 +1,6 @@
 # Copyright (c) AI4RS. All rights reserved.
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -35,16 +35,20 @@ def uniform_gate_logit(num_bands: int) -> float:
 class LiquidSpectralSampler(nn.Module):
     """Input-conditioned spectral sampler for 3-band Conv3d windows.
 
-    The sampler outputs ``num_groups = num_spectral - spectral_kernel + 1``
-    groups. Each group contains ``spectral_kernel`` softly selected spectral
-    bands. The head bias is initialized to fixed adjacent windows, so the
-    initial sampling pattern is equivalent to unpadded Conv3d windows.
+    By default the sampler outputs
+    ``num_groups = num_spectral - spectral_kernel + 1`` adjacent groups. A
+    custom number of groups and explicit initial patterns can be supplied for
+    cyclic or task-specific spectral windows. Soft sampling remains a spectral
+    fusion distribution; hard/eval-hard sampling selects bands without
+    replacement inside each group.
     """
 
     def __init__(self,
                  num_spectral: int = 8,
                  spectral_kernel: int = STEM_SPECTRAL_KERNEL,
                  embed_dims: int = 32,
+                 num_groups: Optional[int] = None,
+                 init_patterns: Optional[Sequence[Sequence[int]]] = None,
                  tau: float = 1.0,
                  hard: bool = False,
                  init_logit: float = 8.0,
@@ -58,7 +62,9 @@ class LiquidSpectralSampler(nn.Module):
         assert num_spectral >= spectral_kernel
         self.num_spectral = num_spectral
         self.spectral_kernel = spectral_kernel
-        self.num_groups = num_spectral - spectral_kernel + 1
+        self.num_groups = int(num_groups or
+                              (num_spectral - spectral_kernel + 1))
+        assert self.num_groups > 0
         self.embed_dims = embed_dims
         self.tau = tau
         self.hard = hard
@@ -67,6 +73,10 @@ class LiquidSpectralSampler(nn.Module):
         self.lowres_grad_size = lowres_grad_size
         self.lowres_grad_downsample = lowres_grad_downsample
         self.use_lowres_grad_correction = use_lowres_grad_correction
+        init_pattern_tensor = self._build_init_patterns(init_patterns)
+        self.register_buffer(
+            'init_pattern_indices', init_pattern_tensor, persistent=False)
+        self.last_hard_indices = None
 
         self.desc_proj = nn.Linear(3, embed_dims)
         self.band_embedding = nn.Parameter(torch.zeros(num_spectral, embed_dims))
@@ -75,6 +85,34 @@ class LiquidSpectralSampler(nn.Module):
         self.head = nn.Linear(
             embed_dims, self.num_groups * spectral_kernel * num_spectral)
         self._init_weights(init_logit, head_weight_std)
+
+    def _build_init_patterns(
+            self,
+            init_patterns: Optional[Sequence[Sequence[int]]]) -> torch.Tensor:
+        if init_patterns is None:
+            patterns = []
+            for group_idx in range(self.num_groups):
+                patterns.append([
+                    (group_idx + kernel_idx) % self.num_spectral
+                    for kernel_idx in range(self.spectral_kernel)
+                ])
+        else:
+            patterns = [list(group) for group in init_patterns]
+
+        assert len(patterns) == self.num_groups, (
+            f'Expected {self.num_groups} initial spectral groups, '
+            f'got {len(patterns)}')
+        for group in patterns:
+            assert len(group) == self.spectral_kernel, (
+                f'Each initial group must have {self.spectral_kernel} bands, '
+                f'got {len(group)}')
+            assert len(set(group)) == len(group), (
+                f'Initial liquid spectral group must be unique, got {group}')
+            for band_idx in group:
+                assert 0 <= int(band_idx) < self.num_spectral, (
+                    f'Band index {band_idx} out of range [0, '
+                    f'{self.num_spectral})')
+        return torch.tensor(patterns, dtype=torch.long)
 
     def _init_weights(self, init_logit: float, head_weight_std: float) -> None:
         nn.init.zeros_(self.band_embedding)
@@ -95,21 +133,65 @@ class LiquidSpectralSampler(nn.Module):
             self.num_spectral)
         for group_idx in range(self.num_groups):
             for kernel_idx in range(self.spectral_kernel):
-                bias[group_idx, kernel_idx, group_idx + kernel_idx] = init_logit
+                band_idx = self.init_pattern_indices[group_idx, kernel_idx]
+                bias[group_idx, kernel_idx, band_idx] = init_logit
         with torch.no_grad():
             self.head.bias.copy_(bias.reshape(-1))
 
-    def _sample(self, logits: torch.Tensor) -> torch.Tensor:
+    def _dedup_hard_indices(self, logits: torch.Tensor) -> torch.Tensor:
+        with torch.no_grad():
+            masked_logits = logits.detach().clone()
+            selected = []
+            for kernel_idx in range(self.spectral_kernel):
+                indices = masked_logits[:, :, kernel_idx].argmax(dim=-1)
+                selected.append(indices)
+                if kernel_idx + 1 < self.spectral_kernel:
+                    for next_idx in range(kernel_idx + 1,
+                                          self.spectral_kernel):
+                        masked_logits[:, :, next_idx].scatter_(
+                            -1, indices.unsqueeze(-1), -float('inf'))
+            return torch.stack(selected, dim=-1)
+
+    def _sample_hard_unique(self, logits: torch.Tensor) -> torch.Tensor:
         if self.training or not self.deterministic_eval:
+            masked_logits = logits.clone()
+            hard_probs = []
+            for kernel_idx in range(self.spectral_kernel):
+                probs = F.gumbel_softmax(
+                    masked_logits[:, :, kernel_idx],
+                    tau=self.tau,
+                    hard=True,
+                    dim=-1)
+                hard_probs.append(probs)
+                if kernel_idx + 1 < self.spectral_kernel:
+                    indices = probs.detach().argmax(dim=-1)
+                    for next_idx in range(kernel_idx + 1,
+                                          self.spectral_kernel):
+                        masked_logits[:, :, next_idx].scatter_(
+                            -1, indices.unsqueeze(-1), -float('inf'))
+            probs = torch.stack(hard_probs, dim=2)
+            self.last_hard_indices = probs.detach().argmax(dim=-1)
+            return probs
+
+        probs = F.softmax(logits / self.tau, dim=-1)
+        indices = self._dedup_hard_indices(logits)
+        self.last_hard_indices = indices
+        hard_probs = torch.zeros_like(probs).scatter_(
+            -1, indices.unsqueeze(-1), 1.0)
+        return hard_probs - probs.detach() + probs
+
+    def _sample(self, logits: torch.Tensor) -> torch.Tensor:
+        self.last_hard_indices = self._dedup_hard_indices(logits)
+        if self.training or not self.deterministic_eval:
+            if self.hard:
+                return self._sample_hard_unique(logits)
             return F.gumbel_softmax(
                 logits, tau=self.tau, hard=self.hard, dim=-1)
 
         probs = F.softmax(logits / self.tau, dim=-1)
         if not self.eval_hard:
             return probs
-        indices = probs.argmax(dim=-1, keepdim=True)
-        hard_probs = torch.zeros_like(probs).scatter_(-1, indices, 1.0)
-        return hard_probs - probs.detach() + probs
+        return self._sample_hard_unique(logits)
 
     def _lowres_size(self, height: int, width: int) -> Tuple[int, int]:
         if self.lowres_grad_size is None:
@@ -177,6 +259,127 @@ class LiquidSpectralSampler(nn.Module):
         return sampled, probs
 
 
+class LiquidAwareFusion(nn.Module):
+    """Generate SE logit residuals from liquid sampling patterns.
+
+    The branch sees both the conv3d group response and the source-band
+    distribution ``P``. Pattern tokens communicate across groups, so the gate
+    can react to coverage shifts and duplicated spectral emphasis.
+    """
+
+    def __init__(self,
+                 num_groups: int,
+                 num_spectral: int,
+                 spectral_kernel: int,
+                 embed_dims: int = 32,
+                 num_heads: int = 4,
+                 spatial_kernel: int = 3,
+                 dropout: float = 0.0,
+                 init_std: float = 1e-3,
+                 use_overlap_context: bool = False,
+                 use_spatial_mixer: bool = True) -> None:
+        super().__init__()
+        assert embed_dims > 0
+        assert embed_dims % num_heads == 0, (
+            f'embed_dims={embed_dims} must be divisible by '
+            f'num_heads={num_heads}')
+        self.num_groups = num_groups
+        self.num_spectral = num_spectral
+        self.spectral_kernel = spectral_kernel
+        self.use_overlap_context = use_overlap_context
+        self.use_spatial_mixer = use_spatial_mixer
+
+        pattern_dims = spectral_kernel * num_spectral
+        self.pattern_proj = nn.Linear(pattern_dims, embed_dims)
+        self.response_proj = nn.Linear(2, embed_dims)
+        if use_overlap_context:
+            self.overlap_proj = nn.Linear(embed_dims, embed_dims)
+        else:
+            self.overlap_proj = None
+        self.group_embedding = nn.Parameter(torch.zeros(num_groups, embed_dims))
+        self.norm1 = nn.LayerNorm(embed_dims)
+        self.attn = nn.MultiheadAttention(
+            embed_dims,
+            num_heads,
+            dropout=dropout,
+            batch_first=True)
+        self.norm2 = nn.LayerNorm(embed_dims)
+        self.ffn = nn.Sequential(
+            nn.Linear(embed_dims, embed_dims * 2),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(embed_dims * 2, embed_dims),
+        )
+        self.token_to_bias = nn.Linear(embed_dims, 1)
+        self.token_to_gain = nn.Linear(embed_dims, 1)
+        if use_spatial_mixer:
+            self.spatial_mixer = nn.Conv2d(
+                num_groups,
+                num_groups,
+                kernel_size=spatial_kernel,
+                padding=spatial_kernel // 2,
+                bias=True)
+        else:
+            self.spatial_mixer = None
+        self.out_proj = nn.Conv2d(num_groups, num_groups, kernel_size=1)
+        self._init_weights(init_std)
+
+    def _init_weights(self, init_std: float) -> None:
+        nn.init.trunc_normal_(self.group_embedding, std=init_std)
+        nn.init.xavier_uniform_(self.pattern_proj.weight)
+        nn.init.zeros_(self.pattern_proj.bias)
+        nn.init.xavier_uniform_(self.response_proj.weight)
+        nn.init.zeros_(self.response_proj.bias)
+        if self.overlap_proj is not None:
+            nn.init.xavier_uniform_(self.overlap_proj.weight)
+            nn.init.zeros_(self.overlap_proj.bias)
+        if self.spatial_mixer is not None:
+            nn.init.xavier_uniform_(self.spatial_mixer.weight)
+            nn.init.zeros_(self.spatial_mixer.bias)
+        nn.init.normal_(self.token_to_bias.weight, std=init_std)
+        nn.init.zeros_(self.token_to_bias.bias)
+        nn.init.normal_(self.token_to_gain.weight, std=init_std)
+        nn.init.zeros_(self.token_to_gain.bias)
+        nn.init.normal_(self.out_proj.weight, std=init_std)
+        nn.init.zeros_(self.out_proj.bias)
+
+    def forward(self, x_se: torch.Tensor,
+                probs: torch.Tensor) -> torch.Tensor:
+        batch_size, num_groups, height, width = x_se.shape
+        assert num_groups == self.num_groups
+        pattern = probs.reshape(batch_size, num_groups, -1)
+        spatial_mean = x_se.mean(dim=(-2, -1))
+        spatial_std = x_se.flatten(2).std(dim=-1)
+        response = torch.stack([spatial_mean, spatial_std], dim=-1)
+
+        token = (self.pattern_proj(pattern) + self.response_proj(response) +
+                 self.group_embedding.unsqueeze(0))
+        if self.overlap_proj is not None:
+            coverage = probs.sum(dim=2)
+            coverage = F.normalize(coverage, p=1, dim=-1)
+            overlap = torch.bmm(coverage, coverage.transpose(1, 2))
+            overlap = overlap / overlap.sum(dim=-1, keepdim=True).clamp_min(
+                1e-6)
+            token = token + self.overlap_proj(torch.bmm(overlap, token))
+        attn_input = self.norm1(token)
+        token = token + self.attn(attn_input, attn_input, attn_input)[0]
+        token = token + self.ffn(self.norm2(token))
+
+        pattern_bias = self.token_to_bias(token).transpose(1, 2).view(
+            batch_size, 1, num_groups, 1, 1)
+        pattern_gain = self.token_to_gain(token).transpose(1, 2).view(
+            batch_size, 1, num_groups, 1, 1)
+
+        if self.spatial_mixer is not None:
+            spatial = self.spatial_mixer(x_se).unsqueeze(1)
+            delta = torch.tanh(pattern_gain) * spatial + pattern_bias
+            delta = delta.squeeze(1)
+        else:
+            delta = pattern_bias.squeeze(1).expand(
+                batch_size, num_groups, height, width)
+        return self.out_proj(F.gelu(delta))
+
+
 @MODELS.register_module()
 class MultispecStemConv3dSE(nn.Module):
     """Replace deep-stem first 3x3 Conv2d with 3D conv + pixel-wise SE fusion.
@@ -238,11 +441,13 @@ class MultispecStemConv3dSE(nn.Module):
 
         if self.use_liquid_sampler:
             sampler_cfg = dict(liquid_sampler)
+            fusion_cfg = sampler_cfg.pop('liquid_aware_fusion', None)
             sampler_cfg.setdefault('num_spectral', num_spectral)
             sampler_cfg.setdefault('spectral_kernel', spectral_kernel)
             self.liquid_sampler = LiquidSpectralSampler(**sampler_cfg)
             temporal_output_size = self.liquid_sampler.num_groups
         else:
+            fusion_cfg = None
             self.liquid_sampler = None
             temporal_output_size = calc_temporal_output_size(
                 num_spectral, spectral_padding, spectral_kernel, 1)
@@ -263,8 +468,20 @@ class MultispecStemConv3dSE(nn.Module):
             padding=1,
             bias=True)
         self.num_bands = temporal_output_size
+        if fusion_cfg is True:
+            fusion_cfg = {}
+        if fusion_cfg is not None:
+            fusion_cfg = dict(fusion_cfg)
+            fusion_cfg.setdefault('num_groups', temporal_output_size)
+            fusion_cfg.setdefault('num_spectral', num_spectral)
+            fusion_cfg.setdefault('spectral_kernel', spectral_kernel)
+            self.liquid_aware_fusion = LiquidAwareFusion(**fusion_cfg)
+        else:
+            self.liquid_aware_fusion = None
         self.last_liquid_groups = None
         self.last_liquid_probs = None
+        self.last_liquid_indices = None
+        self.last_liquid_aware_delta = None
         self._init_se_weights()
 
     def _init_se_weights(self) -> None:
@@ -303,6 +520,7 @@ class MultispecStemConv3dSE(nn.Module):
             groups=self.conv3d.groups)
         self.last_liquid_groups = groups
         self.last_liquid_probs = probs
+        self.last_liquid_indices = self.liquid_sampler.last_hard_indices
         return groups
 
     def forward(self,
@@ -314,7 +532,15 @@ class MultispecStemConv3dSE(nn.Module):
             x = self._forward_fixed(x)
 
         x_se = x.mean(dim=1)
-        gate = torch.sigmoid(self.se_conv2(F.relu(self.se_conv1(x_se))))
+        gate_logits = self.se_conv2(F.relu(self.se_conv1(x_se)))
+        if self.liquid_aware_fusion is not None:
+            assert self.last_liquid_probs is not None
+            self.last_liquid_aware_delta = self.liquid_aware_fusion(
+                x_se, self.last_liquid_probs)
+            gate_logits = gate_logits + self.last_liquid_aware_delta
+        else:
+            self.last_liquid_aware_delta = None
+        gate = torch.sigmoid(gate_logits)
         x = x * gate.unsqueeze(1)
         out = x.sum(dim=2)
         if return_sampling:

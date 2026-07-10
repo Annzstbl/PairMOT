@@ -74,6 +74,139 @@ class TestMultispecPretrainUtils(unittest.TestCase):
         ])
         torch.testing.assert_close(probs[0].argmax(dim=-1), expected)
 
+    def test_liquid_spectral_sampler_cyclic_initial_windows(self):
+        init_patterns = [
+            [7, 0, 1],
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+            [6, 7, 0],
+        ]
+        stem = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=dict(
+                embed_dims=32,
+                num_groups=8,
+                init_patterns=init_patterns,
+                tau=1.0,
+                hard=True),
+        ).eval()
+        x = torch.randn(2, 8, 32, 32)
+        out, groups, probs = stem(x, return_sampling=True)
+
+        self.assertEqual(out.shape, (2, 16, 16, 16))
+        self.assertEqual(groups.shape, (2, 16, 8, 16, 16))
+        self.assertEqual(probs.shape, (2, 8, 3, 8))
+        expected = torch.tensor(init_patterns)
+        torch.testing.assert_close(probs[0].argmax(dim=-1), expected)
+
+    def test_liquid_sampler_eval_hard_samples_without_replacement(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=2,
+            init_patterns=[[7, 0, 1], [0, 1, 2]],
+            embed_dims=16,
+            tau=1.0,
+            hard=False,
+            eval_hard=True,
+        ).eval()
+        logits = torch.zeros(2, 2, 3, 8)
+        logits[:, :, :, 2] = 10.0
+
+        probs = sampler._sample(logits)
+        selected = probs.argmax(dim=-1)
+
+        self.assertEqual(probs.shape, (2, 2, 3, 8))
+        for batch_idx in range(selected.size(0)):
+            for group_idx in range(selected.size(1)):
+                self.assertEqual(
+                    len(set(selected[batch_idx, group_idx].tolist())), 3)
+
+    def test_liquid_aware_fusion_outputs_se_logit_delta(self):
+        init_patterns = [
+            [7, 0, 1],
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+            [6, 7, 0],
+        ]
+        stem = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=dict(
+                embed_dims=32,
+                num_groups=8,
+                init_patterns=init_patterns,
+                tau=1.0,
+                hard=False,
+                eval_hard=False,
+                liquid_aware_fusion=dict(embed_dims=16, num_heads=4)),
+        ).train()
+        x = torch.randn(2, 8, 32, 32, requires_grad=True)
+        out, groups, probs = stem(x, return_sampling=True)
+
+        self.assertEqual(out.shape, (2, 16, 16, 16))
+        self.assertEqual(groups.shape, (2, 16, 8, 16, 16))
+        self.assertEqual(probs.shape, (2, 8, 3, 8))
+        self.assertIsNotNone(stem.last_liquid_aware_delta)
+        self.assertEqual(stem.last_liquid_aware_delta.shape, (2, 8, 16, 16))
+
+        loss = out.square().mean()
+        loss.backward()
+        self.assertIsNotNone(x.grad)
+        self.assertIsNotNone(stem.liquid_aware_fusion.out_proj.weight.grad)
+        self.assertGreater(
+            stem.liquid_aware_fusion.out_proj.weight.grad.abs().sum().item(),
+            0)
+
+    def test_liquid_aware_fusion_overlap_pattern_bias(self):
+        stem = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=dict(
+                embed_dims=16,
+                num_groups=8,
+                init_patterns=[
+                    [7, 0, 1],
+                    [0, 1, 2],
+                    [1, 2, 3],
+                    [2, 3, 4],
+                    [3, 4, 5],
+                    [4, 5, 6],
+                    [5, 6, 7],
+                    [6, 7, 0],
+                ],
+                tau=1.0,
+                hard=False,
+                eval_hard=False,
+                liquid_aware_fusion=dict(
+                    embed_dims=16,
+                    num_heads=4,
+                    use_overlap_context=True,
+                    use_spatial_mixer=False)),
+        ).train()
+        x = torch.randn(2, 8, 32, 32, requires_grad=True)
+        out, _, _ = stem(x, return_sampling=True)
+
+        self.assertEqual(out.shape, (2, 16, 16, 16))
+        self.assertIsNone(stem.liquid_aware_fusion.spatial_mixer)
+        self.assertIsNotNone(stem.liquid_aware_fusion.overlap_proj)
+        self.assertEqual(stem.last_liquid_aware_delta.shape, (2, 8, 16, 16))
+
+        out.mean().backward()
+        self.assertIsNotNone(stem.liquid_aware_fusion.overlap_proj.weight.grad)
+
     def test_liquid_sampler_lowres_grad_correction(self):
         sampler = LiquidSpectralSampler(
             num_spectral=8,
