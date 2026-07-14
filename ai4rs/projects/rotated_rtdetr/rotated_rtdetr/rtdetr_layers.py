@@ -439,7 +439,14 @@ class RTDETRFPN(BaseModule):
                 feat_high)
             inner_outs[0] = feat_high
 
-            upsample_feat = self.upsample(feat_high)
+            if feat_high.dtype == torch.bfloat16:
+                # PyTorch 2.0/CUDA 11.8 has no BF16 nearest2d kernel.
+                with torch.autocast(
+                        device_type=feat_high.device.type, enabled=False):
+                    upsample_feat = self.upsample(feat_high.float()).to(
+                        feat_high.dtype)
+            else:
+                upsample_feat = self.upsample(feat_high)
 
             inner_out = self.top_down_blocks[len(self.in_channels) - 1 - idx](
                 torch.cat([upsample_feat, feat_low], 1))

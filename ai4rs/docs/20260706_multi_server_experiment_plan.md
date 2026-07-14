@@ -291,3 +291,167 @@ Workdirs:
 /data4/litianhao/PairMmot/workdir_252/0713_03_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_longtail_proto_gate
 /data4/litianhao/PairMmot/workdir_99/0713_04_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_longtail_residual_adapter
 ```
+
+## 2026-07-14 AMP Acceleration
+
+This change keeps the `0704_01` model and loss definition and switches training
+to `AmpOptimWrapper`.  Backbone and neck use AMP; transformer/deformable
+attention remain FP32 because FP16 produced non-finite gradients and the CUDA
+operator does not support BF16.  GDLoss filters only zero-weight missing pair
+sides, restores the original `1e-3` width/height clamp, and runs directly in
+FP32.  It does not silently discard non-finite visible samples or perform
+per-loss covariance checks and GPU-to-CPU synchronization.
+
+| server | experiment | change | status |
+|---|---|---|---|
+| 99 | `tmp_profile_0714_pair_amp_fastgdloss_v1` | Single-GPU AMP smoke test for the current pair-valid-fill baseline, `find_unused_parameters=False`, dynamic loss scale initialized at `128`, with fast GDLoss fallback. | Passed 40 iters on GPU2. Loss and all logged components stayed finite; `grad_norm` stayed finite from iter 5 to 40. Mean `iter_wall` was `0.654s` vs `0.671s` for FP32 and `0.733s` for the earlier always-filtered AMP path. Memory was about `6.84GB`, compared with about `11.02GB` for FP32. |
+| 252 | `0714_01_0704_resume_coco365_full_unique_allgt_amp` | Formal full-data COCO+Objects365-adapted `0704_resume` baseline with AMP. | Fast GDLoss AMP code synced to `/data/users/litianhao01/PairMmot/ai4rs`, but the queued screen `pairmot_0714_amp_queue` was canceled before launch on 2026-07-14 16:57 CST per request. No 252 AMP training process was started. |
+| 197 | `0714_02_0704_01_half_unique_allgt_amp_fp32transformer` | Initial half-data stability run. It used `find_unused_parameters=True` and a defensive GDLoss implementation that changed the width/height clamp to `1.0`, silently dropped invalid rows, and introduced repeated synchronization. | Stopped on 2026-07-14 after the implementation review. The workdir and completed evaluation outputs are retained as diagnostic history and must not be used for the final AMP comparison. |
+| 197 | `tmp_validate_0714_amp_fixed_gpu5` | Corrected hybrid AMP CUDA/DDP validation with `find_unused_parameters=False`, original GDLoss semantics, and no silent non-finite fallback. | Passed 100 consecutive iterations on GPU `5`. All loss components and `grad_norm` remained finite; stable time reached `0.69s/iter` over iterations 60-100. |
+| 197 | `0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed` | Formal half-data `0704_01` AMP performance-parity run using the corrected implementation. Backbone/neck use AMP; transformer/deformable attention and GDLoss use FP32; DDP uses `find_unused_parameters=False`. | Fresh two-GPU run launched in screen `pairmot_0714_03_hybrid_amp_fixed` on GPUs `2,3`, port `29827`, at 2026-07-14 20:39 CST. Epoch 4 validation completed and epoch 5 training was active at 21:11 CST: training losses and gradients remained finite, `0.7772s/iter`, about `8.5GB` per GPU. Full AP and TrackEval evaluation remain enabled. The `pair/gt_pairs: nan`-style validation diagnostics are unavailable placeholders, not non-finite model losses. |
+
+### 99 precision-boundary audit
+
+On 2026-07-14, additional 99 profiles tested narrower FP32 boundaries against
+the corrected full-transformer FP32 fallback.  Forcing only decoder deformable
+attention to FP32 initially passed 120 random iterations and used about
+`7.47GB`, but a fixed-order stress run produced a visible-sample NaN in
+`d1.dn_loss_iou_curr`.  A follow-up audit found that the corresponding
+`d1.dn_loss_bbox_curr` was finite, so this does not prove that the decoder's
+refined box was non-finite.  Missing single-side DN targets are zero boxes, but
+their box weights are also zero and `_loss_iou_valid` removes them before
+GDLoss.  A scan of all 584,534 real boxes found no zero-area or non-finite
+valid GT, and direct zero-missing-side DN regression plus 60-iteration
+single-process and DDP diagnostics stayed finite.  The isolated NaN is
+therefore more consistent with a borderline finite-box GD/KLD covariance
+calculation than with an unsupervised zero box entering the loss; it was not
+reproduced deterministically.  Running the whole transformer under AMP also
+passed one seed but did not
+improve sustained speed on RTX 3090 because the FP16 deformable-attention path
+was slower.  Keeping only the pair decoder in FP32 was stable but slower than
+the full-transformer FP32 fallback.  Enabling TF32 did not accelerate the
+measured encoder/decoder path.
+
+Decision: retain the `0714_03` boundary for formal training: backbone and neck
+under AMP, the complete transformer in FP32, and only valid visible-box GDLoss
+rows in explicit FP32.  The selective-decoder/deformable-attention and TF32
+experiments remain only in the 99 workdirs; their temporary code/config flags
+were removed.  The useful speed optimization remains AMP on the convolutional
+feature extractor plus the synchronization-free, semantics-preserving GDLoss
+path.
+
+### 2026-07-14 BF16 implementation and stability audit
+
+The source configs were subsequently changed from FP16 to BF16 for future
+launches.  This does not change the already-running 197 `0714_03` process,
+which loaded the earlier FP16/full-transformer-FP32 config when it started.
+
+Current BF16 boundaries:
+
+- `AmpOptimWrapper(dtype='bfloat16', loss_scale=1.0)`; BF16 does not need FP16
+  gradient scaling.
+- The retained boundary uses BF16 only for backbone, neck, and the shared
+  encoder.  Encoder outputs are converted once to FP32; query initialization,
+  decoder, head, matching, and all losses remain FP32.
+- BF16 decoder support and its deformable-attention casting path have been
+  removed.  Decoder BF16 is no longer a supported or planned configuration.
+- RT-DETR nearest-neighbor FPN upsampling remains FP32 because PyTorch
+  2.0/CUDA 11.8 has no BF16 `upsample_nearest2d` kernel.
+- GDLoss remains FP32.  The active `xy_wh_r` KLD path uses a direct analytical
+  formula in the predicted box's principal-axis frame, avoiding covariance
+  construction, determinant and matrix inverse entirely.  It clamps width and
+  height before reciprocal/log and enforces the analytical non-negative KL
+  bound before `log1p`.  The generic covariance path retains determinant
+  protection for non-`xy_wh_r` representations and other GD loss variants.
+
+The fixed-order BF16 stress run initially reproduced the prior NaN at about
+iteration 90 only in `d1.dn_loss_iou_prev/curr`.  The corresponding L1 losses
+were finite, confirming that BF16 itself cannot fix an FP32 GDLoss covariance
+failure.  After the KLD stability correction, the same seed and sample order
+completed 200 DDP iterations with no NaN, Inf, exception, or unused-parameter
+failure.  At iteration 200, total loss was `26.9892`, grad norm was `139.1643`,
+and memory was about `7.45GB` on RTX 3090.
+
+The first stable BF16 run measured `0.7586s/iter` versus `0.5677s` for the
+controlled FP16/broad-FP32 profile.  A same-code repeat showed that this was
+not a reliable precision-only comparison: its fixed first 60 batches ran at
+`0.5885s/iter`, while an immediately preceding analytical-KLD run measured
+`0.7691s/iter` on the same GPU.  The 31% same-code swing indicates transient
+GPU load, clock, thermal, or resource contention in the slower profiles.  The
+repeatable clean result currently puts BF16 about 3.7% behind FP16, not 33.6%.
+BF16 is therefore numerically validated and close to FP16 throughput, but a
+longer isolated A/B is still required before claiming either format is faster.
+
+A direct hybrid-boundary comparison then limited AMP to backbone/neck and ran
+the complete transformer and head in FP32.  On the same fixed first 60 batches,
+BF16 hybrid measured `0.5768s/iter` versus `0.5677s/iter` for FP16 hybrid, so
+BF16 was about 1.6% slower.  Memory was effectively identical at about
+`8.45GB`, because the FP32 transformer dominates activation storage.  This is
+kept only as a historical throughput comparison: FP16 is no longer used due
+to the numerical-stability requirement.
+
+The retained BF16 boundary includes backbone, neck, and the shared RT-DETR encoder,
+then converts encoder outputs to FP32 once and disables autocast for query
+initialization, decoder, head, matching, and GDLoss.  A new
+`fp32_after_encoder_loss` model flag implements this boundary without repeated
+per-layer casts.  The conversion is reported separately as
+`encoder_to_fp32`, and loss, raw-forward, and prediction head calls are also
+protected from an enclosing autocast context.  An automated CUDA test checks
+the BF16 encoder output, FP32 post-encoder boundary, and finite gradients
+through the cast.  On adjacent fixed-order 60-iteration runs, full FP32 measured
+`0.7358s/iter` and `11.02GB`, while BF16-through-encoder measured
+`0.6871s/iter` and `7.18GB`: about 6.6% faster and 34.9% less memory.  Component
+timings showed backbone/neck improving from `0.0537s` to `0.0385s` and encoder
+from `0.0251s` to `0.0175s`.  All logged losses and gradients remained finite.
+One additional BF16 run was affected by the same whole-GPU timing variability
+seen in earlier profiles, so the component-level gain is more reliable than a
+single total-iteration percentage.
+
+After removing the unsupported BF16-decoder path, the repaired boundary was
+validated on local GPU0 for 20 fixed-order iterations with
+`find_unused_parameters=False`.  The run completed without NaN, Inf, unused
+parameters, or runtime errors; iteration 20 reported loss `33.2643`, finite
+grad norm `1862.9223`, and `7.18GB` memory.  The explicit encoder-output cast
+cost about `0.0003s/iter`, while encoder and decoder measured about `0.016s`
+and `0.011s`.  The smoke-test workdir is
+`/data4/litianhao/PairMmot/workdir_99/tmp_profile_0715_bf16_boundary_fixed`.
+
+The first covariance-stabilized KLD implementation was added at about 22:43
+on 2026-07-14 after the fixed-order run reproduced the DN IoU NaN.  A follow-up
+analytical `xy_wh_r` implementation removed its matrix overhead.  In isolated
+forward/backward benchmarks it was 30-39% faster than the stabilized
+covariance implementation.  In the controlled first-60-iteration BF16 run it
+reduced mean `head_loss` from `0.3156s` to `0.3039s` (3.7%); the corresponding
+`iter_wall` change from `0.7788s` to `0.7691s` is only a noisy 1.25%.  A fresh
+120-iteration fixed-order stability run crossed the former iteration-90 NaN
+sample with all losses and gradients finite.  PairGDCost timing did not change because
+Hungarian matching uses a separate KLD implementation in
+`projects/rotated_dino/rotated_dino/match_cost.py`; therefore the earlier
+33.6% BF16 slowdown cannot be attributed to GDLoss covariance protection.
+
+Workdirs and logs:
+
+```text
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_amp_findunused_false_v4
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_amp_fastgdloss_v1
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_selective_amp
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_control_selective
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_control_fp32_decoder
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_control_broad
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_control_broad_tf32
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_ddp_stable
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_analytic_gdloss
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_analytic_gdloss_stability
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_backbone_neck_fp32_rest
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_through_encoder
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_bf16_through_encoder_repeat
+/data4/litianhao/PairMmot/workdir_99/tmp_profile_0714_pair_fp32_fixed60
+/data4/litianhao/PairMmot/workdir_252/0714_01_0704_resume_coco365_full_unique_allgt_amp
+/data4/litianhao/PairMmot/workdir_252/0714_01_0704_resume_coco365_full_unique_allgt_amp/queue_amp.log
+/data4/litianhao/PairMmot/workdir_252/0714_01_0704_resume_coco365_full_unique_allgt_amp/launch_amp.log
+/data4/litianhao/PairMmot/workdir_197/0714_02_0704_01_half_unique_allgt_amp_fp32transformer
+/data4/litianhao/PairMmot/workdir_197/0714_02_0704_01_half_unique_allgt_amp_fp32transformer/launch.log
+/data4/litianhao/PairMmot/workdir_197/tmp_validate_0714_amp_fixed_gpu5
+/data4/litianhao/PairMmot/workdir_197/0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed
+/data4/litianhao/PairMmot/workdir_197/0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed/launch.log
+```

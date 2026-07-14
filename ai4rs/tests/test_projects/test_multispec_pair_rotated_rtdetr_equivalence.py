@@ -5,6 +5,7 @@ import copy
 import os.path as osp
 import sys
 import unittest
+from types import MethodType
 
 import torch
 from mmengine.config import Config
@@ -153,6 +154,62 @@ class TestMultispecPairRotatedRTDETREquivalence(unittest.TestCase):
 
         self.assertEqual(flat[:4], [0.0, 2.0, 4.0, 6.0])
         self.assertEqual(flat[4:], [1.0, 3.0, 5.0, 7.0])
+
+    @unittest.skipUnless(torch.cuda.is_available(), 'CUDA is required')
+    def test_bf16_encoder_fp32_post_boundary_preserves_gradient(self):
+        """Encoder may use BF16, but every later stage must see FP32."""
+        model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.fp32_after_encoder_loss = True
+        model._active_timer = None
+        model.encoder_weight = torch.nn.Parameter(
+            torch.randn(4, 4, device='cuda'))
+        observed = {}
+
+        def split_pair_batch(self, flat_batch):
+            return flat_batch // 2, None
+
+        def pre_transformer(self, img_feats, batch_data_samples):
+            return dict(source=img_feats[0]), dict()
+
+        def forward_encoder(self, source):
+            memory = source @ self.encoder_weight
+            observed['encoder_dtype'] = memory.dtype
+            return dict(
+                memory=memory,
+                memory_mask=None,
+                spatial_shapes=torch.tensor(
+                    [[1, source.shape[1]]], device=source.device))
+
+        def forward_after_encoder(self, encoder_outputs_dict,
+                                  decoder_inputs_dict, batch_data_samples,
+                                  pair_batch, timer):
+            memory = encoder_outputs_dict['memory']
+            observed['post_dtype'] = memory.dtype
+            observed['post_autocast'] = torch.is_autocast_enabled()
+            return memory.square().mean()
+
+        model._split_pair_batch = MethodType(split_pair_batch, model)
+        model.pre_transformer = MethodType(pre_transformer, model)
+        model.forward_encoder = MethodType(forward_encoder, model)
+        model._forward_after_encoder = MethodType(
+            forward_after_encoder, model)
+
+        source = torch.randn(
+            2, 3, 4, device='cuda', requires_grad=True)
+        with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+            loss = model.forward_transformer((source, ), None)
+        loss.backward()
+
+        self.assertEqual(observed['encoder_dtype'], torch.bfloat16)
+        self.assertEqual(observed['post_dtype'], torch.float32)
+        self.assertFalse(observed['post_autocast'])
+        self.assertEqual(loss.dtype, torch.float32)
+        self.assertIsNotNone(source.grad)
+        self.assertTrue(torch.isfinite(source.grad).all().item())
+        self.assertIsNotNone(model.encoder_weight.grad)
+        self.assertTrue(
+            torch.isfinite(model.encoder_weight.grad).all().item())
 
 
 class TestMultispecPairRotatedRTDETRDebugShapes(unittest.TestCase):

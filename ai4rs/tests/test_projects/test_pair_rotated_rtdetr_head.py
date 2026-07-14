@@ -314,6 +314,43 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
             return
         self.assertEqual(grad_curr.grad.abs().sum().item(), 0.0)
 
+    def test_missing_nan_box_is_excluded_from_gd_loss(self):
+        head = _build_head(num_layers=1)
+        preds = torch.tensor([
+            [400.0, 320.0, 80.0, 64.0, 0.0],
+            [float('nan'), float('nan'), float('nan'), float('nan'),
+             float('nan')],
+        ], requires_grad=True)
+        targets = torch.tensor([
+            [410.0, 315.0, 80.0, 64.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ])
+        weights = torch.tensor([
+            [1.0, 1.0, 1.0, 1.0, 1.0],
+            [0.0, 0.0, 0.0, 0.0, 0.0],
+        ])
+
+        loss = head._loss_iou_valid(
+            preds, targets, weights, avg_factor=1.0)
+        self.assertTrue(torch.isfinite(loss))
+        loss.backward()
+        self.assertTrue(torch.isfinite(preds.grad).all())
+        self.assertEqual(preds.grad[1].abs().sum().item(), 0.0)
+
+    def test_all_missing_nan_boxes_return_finite_graph_zero(self):
+        head = _build_head(num_layers=1)
+        preds = torch.full((2, 5), float('nan'), requires_grad=True)
+        targets = torch.zeros_like(preds)
+        weights = torch.zeros_like(preds)
+
+        loss = head._loss_iou_valid(
+            preds, targets, weights, avg_factor=1.0)
+        self.assertTrue(torch.isfinite(loss))
+        self.assertEqual(loss.item(), 0.0)
+        loss.backward()
+        self.assertTrue(torch.isfinite(preds.grad).all())
+        self.assertEqual(preds.grad.abs().sum().item(), 0.0)
+
     def test_dual_cls_all_gt_single_visible_targets(self):
         head = _build_head(
             num_layers=1,
@@ -384,6 +421,40 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
         self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
         self.assertGreater(bbox_prev_weights[1].abs().sum().item(), 0.0)
         self.assertEqual(bbox_curr_weights[1].abs().sum().item(), 0.0)
+
+    def test_pair_dn_zero_missing_side_does_not_enter_gd_loss(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        gt = _pair_gt(
+            labels=[0],
+            prev_boxes=[_norm_rbox(0.0, 0.0, 0.0, 0.0)],
+            curr_boxes=[_norm_rbox(0.5, 0.5, 0.2, 0.2)],
+            valid_prev=[False],
+            valid_curr=[True],
+        )
+        dn_meta = dict(
+            num_denoising_queries=2,
+            num_denoising_groups=1,
+            max_num_dn_targets=1)
+        cls_prev = torch.zeros(1, 2, head.cls_out_channels)
+        cls_curr = torch.zeros_like(cls_prev)
+        bbox_prev = torch.tensor([[[0.3, 0.3, 0.1, 0.1, 0.0],
+                                   [0.4, 0.4, 0.1, 0.1, 0.0]]])
+        bbox_curr = torch.tensor([[[0.5, 0.5, 0.2, 0.2, 0.0],
+                                   [0.6, 0.6, 0.2, 0.2, 0.0]]])
+
+        losses = head._loss_pair_dn_dual_cls_single(
+            cls_prev, cls_curr, bbox_prev, bbox_curr,
+            batch_pair_gt_instances=[gt],
+            batch_img_metas=[IMG_META],
+            dn_meta=dn_meta)
+
+        self.assertTrue(all(torch.isfinite(loss) for loss in losses))
+        self.assertEqual(losses[-2].item(), 0.0)
+        self.assertGreater(losses[-1].item(), 0.0)
 
 
 class TestPairRotatedRTDETRHeadForward(unittest.TestCase):

@@ -1,6 +1,7 @@
 # Copyright (c) AI4RS. All rights reserved.
 """Pair-frame multispec Rotated RT-DETR."""
 
+from contextlib import nullcontext
 from typing import Dict, List, Literal, Optional, Tuple
 
 import torch
@@ -45,6 +46,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  gt_ref_noise_scale: float = 0.02,
                  pair_dn_cfg: Optional[Dict] = None,
                  pair_proposal_cfg: Optional[Dict] = None,
+                 fp32_transformer_loss: bool = False,
+                 fp32_after_encoder_loss: bool = False,
                  **kwargs) -> None:
         if query_init not in ('learned', 'gt_noised', 'dual_topk',
                               'pair_topk_v1', 'pair_topk_sameidx_v1',
@@ -59,6 +62,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         self.gt_ref_noise_scale = gt_ref_noise_scale
         self.pair_dn_cfg = pair_dn_cfg
         self.pair_proposal_cfg = pair_proposal_cfg or {}
+        self.fp32_transformer_loss = fp32_transformer_loss
+        self.fp32_after_encoder_loss = fp32_after_encoder_loss
+        if fp32_transformer_loss and fp32_after_encoder_loss:
+            raise ValueError('fp32_transformer_loss and '
+                             'fp32_after_encoder_loss are mutually exclusive')
         super().__init__(*args, **kwargs)
         self.debug_shapes = debug_shapes
         self.pair_dn_query_generator = None
@@ -1400,6 +1408,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         """Run ``PairRotatedRTDETRTransformerDecoder``."""
         reg_branches_prev, reg_branches_curr = self._pair_decoder_reg_branches()
         cls_branches_prev, cls_branches_curr = self._pair_decoder_cls_branches()
+
         decoder_out = self.decoder(
             memory_prev=memory_prev,
             memory_curr=memory_curr,
@@ -1480,6 +1489,48 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 img_feats, batch_data_samples)
             encoder_outputs_dict = self.forward_encoder(**encoder_inputs_dict)
 
+        if self.fp32_after_encoder_loss:
+            def cast_fn():
+                return self._cast_floating_tensors_fp32(
+                    encoder_outputs_dict)
+
+            if timer is not None:
+                encoder_outputs_dict = timer.record(
+                    'encoder_to_fp32', cast_fn)
+            else:
+                encoder_outputs_dict = cast_fn()
+            with torch.cuda.amp.autocast(enabled=False):
+                return self._forward_after_encoder(
+                    encoder_outputs_dict, decoder_inputs_dict,
+                    batch_data_samples, pair_batch, timer)
+        return self._forward_after_encoder(
+            encoder_outputs_dict, decoder_inputs_dict,
+            batch_data_samples, pair_batch, timer)
+
+    @staticmethod
+    def _cast_floating_tensors_fp32(values: Dict) -> Dict:
+        """Cast top-level floating tensors while preserving autograd."""
+        return {
+            key: (value.float() if isinstance(value, Tensor)
+                  and value.is_floating_point() else value)
+            for key, value in values.items()
+        }
+
+    def _post_encoder_fp32_context(self):
+        """Keep stages after the encoder in FP32 for the BF16 boundary."""
+        if self.fp32_after_encoder_loss:
+            return torch.cuda.amp.autocast(enabled=False)
+        return nullcontext()
+
+    def _forward_after_encoder(
+        self,
+        encoder_outputs_dict: Dict,
+        decoder_inputs_dict: Dict,
+        batch_data_samples: OptSampleList,
+        pair_batch: int,
+        timer: Optional[CudaComponentTimer],
+    ) -> Dict:
+        """Run query initialization and decoding after the shared encoder."""
         memory = encoder_outputs_dict['memory']
         memory_prev = memory[:pair_batch]
         memory_curr = memory[pair_batch:]
@@ -1581,13 +1632,25 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             img_feats = timer.record(
                 'backbone_neck',
                 lambda: self.extract_feat(batch_inputs))
-            head_inputs_dict = self.forward_transformer(
-                img_feats, batch_data_samples)
-            losses = timer.record(
-                'head_loss',
-                lambda: self.bbox_head.loss(
-                    **head_inputs_dict,
-                    batch_data_samples=batch_data_samples))
+            if self.fp32_transformer_loss:
+                img_feats = tuple(feat.float() for feat in img_feats)
+                with torch.cuda.amp.autocast(enabled=False):
+                    head_inputs_dict = self.forward_transformer(
+                        img_feats, batch_data_samples)
+                    losses = timer.record(
+                        'head_loss',
+                        lambda: self.bbox_head.loss(
+                            **head_inputs_dict,
+                            batch_data_samples=batch_data_samples))
+            else:
+                head_inputs_dict = self.forward_transformer(
+                    img_feats, batch_data_samples)
+                with self._post_encoder_fp32_context():
+                    losses = timer.record(
+                        'head_loss',
+                        lambda: self.bbox_head.loss(
+                            **head_inputs_dict,
+                            batch_data_samples=batch_data_samples))
         finally:
             self._active_timer = None
         timings = timer.get_durations()
@@ -1605,19 +1668,20 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         """Return head outputs (pair mode) or dual-branch outputs (M2)."""
         img_feats = self.extract_feat(batch_inputs)
         head_inputs = self.forward_transformer(img_feats, batch_data_samples)
-        if not self.pair_mode:
-            prev_out = self.bbox_head.forward(**head_inputs['prev'])
-            curr_out = self.bbox_head.forward(**head_inputs['curr'])
-            self._log_shape('prev_output_cls[0]', prev_out[0][0])
-            self._log_shape('prev_output_coord[0]', prev_out[1][0])
-            self._log_shape('curr_output_cls[0]', curr_out[0][0])
-            self._log_shape('curr_output_coord[0]', curr_out[1][0])
-            return dict(prev=prev_out, curr=curr_out)
-        return self.bbox_head.forward(
-            head_inputs['hidden_states'],
-            head_inputs['references_prev'],
-            head_inputs['references_curr'],
-        )
+        with self._post_encoder_fp32_context():
+            if not self.pair_mode:
+                prev_out = self.bbox_head.forward(**head_inputs['prev'])
+                curr_out = self.bbox_head.forward(**head_inputs['curr'])
+                self._log_shape('prev_output_cls[0]', prev_out[0][0])
+                self._log_shape('prev_output_coord[0]', prev_out[1][0])
+                self._log_shape('curr_output_cls[0]', curr_out[0][0])
+                self._log_shape('curr_output_coord[0]', curr_out[1][0])
+                return dict(prev=prev_out, curr=curr_out)
+            return self.bbox_head.forward(
+                head_inputs['hidden_states'],
+                head_inputs['references_prev'],
+                head_inputs['references_curr'],
+            )
 
     def predict(
         self,
@@ -1632,25 +1696,26 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         img_feats = self.extract_feat(batch_inputs)
         head_inputs = self.forward_transformer(img_feats, batch_data_samples)
 
-        if not self.pair_mode:
-            prev_results = self.bbox_head.predict(
-                **head_inputs['prev'],
-                rescale=rescale,
-                batch_data_samples=batch_data_samples)
-            curr_results = self.bbox_head.predict(
-                **head_inputs['curr'],
-                rescale=rescale,
-                batch_data_samples=batch_data_samples)
-            for sample, prev_inst, curr_inst in zip(batch_data_samples,
-                                                    prev_results, curr_results):
-                sample.pred_instances = prev_inst
-                sample.set_field(curr_inst, 'pred_instances_curr')
-            return batch_data_samples
+        with self._post_encoder_fp32_context():
+            if not self.pair_mode:
+                prev_results = self.bbox_head.predict(
+                    **head_inputs['prev'],
+                    rescale=rescale,
+                    batch_data_samples=batch_data_samples)
+                curr_results = self.bbox_head.predict(
+                    **head_inputs['curr'],
+                    rescale=rescale,
+                    batch_data_samples=batch_data_samples)
+                for sample, prev_inst, curr_inst in zip(
+                        batch_data_samples, prev_results, curr_results):
+                    sample.pred_instances = prev_inst
+                    sample.set_field(curr_inst, 'pred_instances_curr')
+                return batch_data_samples
 
-        results_list = self.bbox_head.predict(
-            **head_inputs,
-            batch_data_samples=batch_data_samples,
-            rescale=rescale)
+            results_list = self.bbox_head.predict(
+                **head_inputs,
+                batch_data_samples=batch_data_samples,
+                rescale=rescale)
         for sample, pred in zip(batch_data_samples, results_list):
             sample.set_field(pred, 'pred_pair_instances')
         return batch_data_samples

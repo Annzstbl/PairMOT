@@ -374,29 +374,6 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             self.assertFalse(torch.isnan(tensor).any().item())
             self.assertFalse(torch.isinf(tensor).any().item())
 
-    def test_amp_fp16_forward(self):
-        if not torch.cuda.is_available():
-            self.skipTest('CUDA required for autocast smoke test')
-        device = torch.device('cuda')
-        decoder, reg_prev, reg_curr = _build_decoder(device=device)
-        spatial_shapes, level_start_index, num_value = _spatial_meta(device)
-        memory_prev = torch.randn(
-            1, num_value, decoder.embed_dims, device=device)
-        memory_curr = torch.randn(
-            1, num_value, decoder.embed_dims, device=device)
-        with torch.autocast(device_type='cuda', dtype=torch.float16):
-            hidden, refs_prev, refs_curr = decoder(
-                memory_prev=memory_prev,
-                memory_curr=memory_curr,
-                spatial_shapes=spatial_shapes,
-                level_start_index=level_start_index,
-                reg_branches_prev=reg_prev,
-                reg_branches_curr=reg_curr,
-            )
-        self.assertFalse(torch.isnan(hidden[-1]).any().item())
-        self.assertFalse(torch.isnan(refs_prev[-1]).any().item())
-        self.assertFalse(torch.isnan(refs_curr[-1]).any().item())
-
     def test_static_import_from_package(self):
         from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr import (  # noqa: E501
             PairRotatedRTDETRTransformerDecoder as ImportedDecoder,

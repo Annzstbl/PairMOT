@@ -80,6 +80,7 @@ class PairComponentTimerHook(Hook):
             'backbone_neck',
             'pre_transformer',
             'encoder',
+            'encoder_to_fp32',
             'query_init',
             'decoder',
             'decoder_prev',

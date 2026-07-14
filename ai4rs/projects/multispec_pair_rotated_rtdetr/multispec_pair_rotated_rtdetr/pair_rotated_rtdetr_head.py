@@ -1438,23 +1438,26 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         explicitly and keep a zero-valued graph path for DDP.
         """
         valid = bbox_weights[:, :4].sum(dim=-1) > 0
-        valid = (
-            valid & torch.isfinite(bbox_preds).all(dim=-1) &
-            torch.isfinite(bbox_targets).all(dim=-1))
-        if not valid.any():
-            return bbox_preds.sum() * 0.0
-        preds = bbox_preds[valid]
-        targets = bbox_targets[valid]
-        preds = torch.cat(
-            [preds[:, :2], preds[:, 2:4].clamp(min=1e-3), preds[:, 4:]],
-            dim=-1)
+        preds = bbox_preds[valid].float()
+        if preds.numel() == 0:
+            # Indexing keeps the zero loss connected to bbox_preds while also
+            # remaining finite if an unsupervised prediction contains NaN.
+            return preds.sum()
+        targets = bbox_targets[valid].float()
+        weights = bbox_weights[valid].float()
+        preds = torch.cat([
+            preds[:, :2],
+            preds[:, 2:4].clamp(min=1e-3),
+            preds[:, 4:],
+        ], dim=-1)
         targets = torch.cat([
             targets[:, :2],
             targets[:, 2:4].clamp(min=1e-3),
-            targets[:, 4:]
+            targets[:, 4:],
         ], dim=-1)
-        return self.loss_iou(
-            preds, targets, bbox_weights[valid], avg_factor=avg_factor)
+        with torch.cuda.amp.autocast(enabled=False):
+            return self.loss_iou(
+                preds, targets, weights, avg_factor=avg_factor)
 
     def get_targets(
         self,

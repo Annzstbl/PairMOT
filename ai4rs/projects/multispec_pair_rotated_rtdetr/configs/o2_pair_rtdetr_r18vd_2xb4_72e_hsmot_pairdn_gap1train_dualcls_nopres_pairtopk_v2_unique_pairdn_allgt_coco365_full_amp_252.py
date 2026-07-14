@@ -1,8 +1,8 @@
-"""Temporary single-GPU AMP profile for 0714 full-data COCO365 baseline."""
+"""0714 full-data COCO365 baseline with BF16 AMP training."""
 from mmengine.config import read_base
 
 with read_base():
-    from .tmp_profile_0714_coco365_full_single_gpu import *  # noqa: F401,F403
+    from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_coco365_full_252 import *  # noqa: F401,F403
 
 optim_wrapper.update(
     type='AmpOptimWrapper',
@@ -14,4 +14,4 @@ model.update(
 
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_252/'
-    'tmp_profile_0714_coco365_full_single_gpu_amp')
+    '0714_01_0704_resume_coco365_full_unique_allgt_amp')

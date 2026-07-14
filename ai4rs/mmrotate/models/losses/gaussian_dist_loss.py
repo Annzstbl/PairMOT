@@ -178,10 +178,26 @@ def kld_loss(pred, target, fun='log1p', tau=1.0, alpha=1.0, sqrt=True):
     Sigma_p = Sigma_p.reshape(-1, 2, 2)
     Sigma_t = Sigma_t.reshape(-1, 2, 2)
 
+    # Extremely thin rotated boxes can make the covariance numerically
+    # singular in FP32 even though it is positive definite analytically.
+    # A scale-relative diagonal jitter bounds the condition number without
+    # changing well-conditioned boxes at representable precision.
+    finfo = torch.finfo(Sigma_p.dtype)
+    eye = torch.eye(2, dtype=Sigma_p.dtype, device=Sigma_p.device)
+    scale_p = Sigma_p.diagonal(dim1=-2, dim2=-1).abs().amax(
+        dim=-1).clamp_min(1.0)
+    scale_t = Sigma_t.diagonal(dim1=-2, dim2=-1).abs().amax(
+        dim=-1).clamp_min(1.0)
+    Sigma_p = Sigma_p + eye * (scale_p * finfo.eps).view(-1, 1, 1)
+    Sigma_t = Sigma_t + eye * (scale_t * finfo.eps).view(-1, 1, 1)
+
+    Sigma_p_det = Sigma_p.det().clamp_min(finfo.tiny)
+    Sigma_t_det = Sigma_t.det().clamp_min(finfo.tiny)
+
     Sigma_p_inv = torch.stack((Sigma_p[..., 1, 1], -Sigma_p[..., 0, 1],
                                -Sigma_p[..., 1, 0], Sigma_p[..., 0, 0]),
                               dim=-1).reshape(-1, 2, 2)
-    Sigma_p_inv = Sigma_p_inv / Sigma_p.det().unsqueeze(-1).unsqueeze(-1)
+    Sigma_p_inv = Sigma_p_inv / Sigma_p_det.unsqueeze(-1).unsqueeze(-1)
 
     dxy = (xy_p - xy_t).unsqueeze(-1)
     xy_distance = 0.5 * dxy.permute(0, 2, 1).bmm(Sigma_p_inv).bmm(dxy).view(-1)
@@ -189,16 +205,62 @@ def kld_loss(pred, target, fun='log1p', tau=1.0, alpha=1.0, sqrt=True):
     whr_distance = 0.5 * Sigma_p_inv.bmm(Sigma_t).diagonal(
         dim1=-2, dim2=-1).sum(dim=-1)
 
-    Sigma_p_det_log = Sigma_p.det().log()
-    Sigma_t_det_log = Sigma_t.det().log()
+    Sigma_p_det_log = Sigma_p_det.log()
+    Sigma_t_det_log = Sigma_t_det.log()
     whr_distance = whr_distance + 0.5 * (Sigma_p_det_log - Sigma_t_det_log)
     whr_distance = whr_distance - 1
-    distance = (xy_distance / (alpha * alpha) + whr_distance)
+    # KL divergence is non-negative.  Explicitly enforce the analytical
+    # bound before log1p when cancellation leaves a small negative residue.
+    distance = (xy_distance / (alpha * alpha) + whr_distance).clamp_min(0)
     if sqrt:
         distance = distance.clamp(1e-7).sqrt()
 
     distance = distance.reshape(_shape[:-1])
 
+    return postprocess(distance, fun=fun, tau=tau)
+
+
+@weighted_loss
+def kld_loss_xywhr(pred,
+                   target,
+                   fun='log1p',
+                   tau=1.0,
+                   alpha=1.0,
+                   sqrt=True):
+    """Stable analytical KLD for aligned ``xywhr`` boxes.
+
+    Working in the predicted box's principal-axis frame avoids explicitly
+    constructing, regularizing, and inverting 2x2 covariance matrices.
+    """
+    xy_p, wh_p, r_p = pred[..., :2], pred[..., 2:4], pred[..., 4]
+    xy_t, wh_t, r_t = target[..., :2], target[..., 2:4], target[..., 4]
+    wh_p = wh_p.clamp(min=1e-7, max=1e7)
+    wh_t = wh_t.clamp(min=1e-7, max=1e7)
+
+    dxy = xy_p - xy_t
+    cos_p, sin_p = torch.cos(r_p), torch.sin(r_p)
+    dx_local = cos_p * dxy[..., 0] + sin_p * dxy[..., 1]
+    dy_local = -sin_p * dxy[..., 0] + cos_p * dxy[..., 1]
+    xy_distance = 2 * (
+        dx_local.square() / wh_p[..., 0].square() +
+        dy_local.square() / wh_p[..., 1].square())
+
+    delta = r_t - r_p
+    cos_delta_sq = torch.cos(delta).square()
+    sin_delta_sq = torch.sin(delta).square()
+    wp_sq, hp_sq = wh_p[..., 0].square(), wh_p[..., 1].square()
+    wt_sq, ht_sq = wh_t[..., 0].square(), wh_t[..., 1].square()
+    trace = (
+        (cos_delta_sq * wt_sq + sin_delta_sq * ht_sq) / wp_sq +
+        (sin_delta_sq * wt_sq + cos_delta_sq * ht_sq) / hp_sq)
+    log_det_ratio_half = (
+        wh_p.log().sum(dim=-1) - wh_t.log().sum(dim=-1))
+    whr_distance = 0.5 * trace + log_det_ratio_half - 1
+
+    distance = (xy_distance / (alpha * alpha) +
+                whr_distance).clamp_min(0)
+    if sqrt:
+        distance = distance.clamp_min(1e-7).sqrt()
     return postprocess(distance, fun=fun, tau=tau)
 
 
@@ -354,6 +416,8 @@ class GDLoss(nn.Module):
         assert loss_type in self.BAG_GD_LOSS
         self.loss = self.BAG_GD_LOSS[loss_type]
         self.preprocess = self.BAG_PREP[representation]
+        self.use_xywhr_kld = (
+            loss_type == 'kld' and representation == 'xy_wh_r')
         self.fun = fun
         self.tau = tau
         self.alpha = alpha
@@ -396,10 +460,14 @@ class GDLoss(nn.Module):
         _kwargs = deepcopy(self.kwargs)
         _kwargs.update(kwargs)
 
-        pred = self.preprocess(pred)
-        target = self.preprocess(target)
+        if self.use_xywhr_kld:
+            loss = kld_loss_xywhr
+        else:
+            pred = self.preprocess(pred)
+            target = self.preprocess(target)
+            loss = self.loss
 
-        return self.loss(
+        return loss(
             pred,
             target,
             fun=self.fun,
@@ -409,4 +477,3 @@ class GDLoss(nn.Module):
             avg_factor=avg_factor,
             reduction=reduction,
             **_kwargs) * self.loss_weight
-

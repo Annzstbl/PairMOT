@@ -7,9 +7,50 @@ from parameterized import parameterized
 from mmrotate.models.losses import (BCConvexGIoULoss, ConvexGIoULoss, GDLoss,
                                     GDLoss_v1, H2RBoxConsistencyLoss, KFLoss,
                                     RotatedIoULoss, SpatialBorderLoss)
+from mmrotate.models.losses.gaussian_dist_loss import (
+    kld_loss, kld_loss_xywhr, xy_wh_r_2_xy_sigma)
 
 
 class TestGDLoss(unittest.TestCase):
+
+    def test_analytical_kld_matches_covariance_form(self):
+        torch.manual_seed(7)
+        pred = torch.rand(64, 5, dtype=torch.float64)
+        target = torch.rand(64, 5, dtype=torch.float64)
+        pred[:, :4] = pred[:, :4] * 100 + 1
+        target[:, :4] = target[:, :4] * 100 + 1
+        pred.requires_grad_(True)
+
+        analytical = kld_loss_xywhr(
+            pred, target, fun='none', tau=0, sqrt=False,
+            reduction='none')
+        covariance = kld_loss(
+            xy_wh_r_2_xy_sigma(pred),
+            xy_wh_r_2_xy_sigma(target),
+            fun='none', tau=0, sqrt=False, reduction='none')
+        grad_analytical, = torch.autograd.grad(
+            analytical.sum(), pred, retain_graph=True)
+        grad_covariance, = torch.autograd.grad(covariance.sum(), pred)
+
+        self.assertTrue(torch.allclose(
+            analytical, covariance, rtol=1e-9, atol=1e-9))
+        self.assertTrue(torch.allclose(
+            grad_analytical, grad_covariance, rtol=1e-8, atol=1e-8))
+
+    def test_kld_extreme_rotated_boxes_is_finite(self):
+        pred = torch.tensor(
+            [[400.0, 500.0, 1e-7, 1200.0, 0.71],
+             [300.0, 250.0, 1200.0, 1e-7, -0.83]],
+            requires_grad=True)
+        target = torch.tensor(
+            [[401.0, 499.0, 0.25, 1100.0, 0.70],
+             [299.0, 251.0, 1000.0, 0.25, -0.82]])
+        loss = GDLoss('kld', fun='log1p', tau=1.0, sqrt=False)(
+            pred, target)
+
+        self.assertTrue(torch.isfinite(loss))
+        loss.backward()
+        self.assertTrue(torch.isfinite(pred.grad).all())
 
     def test_loss_with_reduction_override(self):
         pred = torch.rand((10, 5))
@@ -260,4 +301,3 @@ class TestH2RBoxConsistencyLoss(unittest.TestCase):
         # Test loss forward with avg_factor
         loss = loss_class()(pred, target, weight, avg_factor=10)
         assert isinstance(loss, torch.Tensor)
-
