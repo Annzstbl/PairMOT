@@ -71,6 +71,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 **pair_dn_cfg)
         if self.pair_mode and self.query_init == 'learned':
             self._freeze_unused_learned_pair_params()
+        if self.pair_mode:
+            self._freeze_unused_pair_structure_params()
 
     def _freeze_unused_learned_pair_params(self) -> None:
         """Freeze params skipped by pair ``learned`` init (no encoder top-k)."""
@@ -96,6 +98,56 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             ):
                 for param in branch.parameters():
                     param.requires_grad = False
+
+    @staticmethod
+    def _freeze_module_params(module: Optional[nn.Module]) -> None:
+        if module is None:
+            return
+        for param in module.parameters():
+            param.requires_grad = False
+
+    def _freeze_decoder_learned_query_params(self) -> None:
+        """Freeze learned query/reference fallback params for proposal init."""
+        for name in (
+            'query_embedding',
+            'ref_prev_embedding',
+            'ref_curr_embedding',
+        ):
+            self._freeze_module_params(getattr(self.decoder, name, None))
+
+    def _freeze_pair_encoder_proposal_params(self) -> None:
+        """Freeze proposal-only encoder output heads for pair top-k init."""
+        self._freeze_module_params(getattr(self, 'memory_trans_fc', None))
+        self._freeze_module_params(getattr(self, 'memory_trans_norm', None))
+        enc_idx = self.decoder.num_layers
+        branch_groups = [
+            getattr(self.bbox_head, 'cls_branches', None),
+            getattr(self.bbox_head, 'reg_branches', None),
+            getattr(self.bbox_head, 'cls_branches_curr', None),
+            getattr(self.bbox_head, 'reg_branches_curr', None),
+        ]
+        for branches in branch_groups:
+            if branches is not None and len(branches) > enc_idx:
+                self._freeze_module_params(branches[enc_idx])
+
+    def _freeze_unused_pair_structure_params(self) -> None:
+        """Disable trainable params that are inactive for the chosen structure.
+
+        DDP with ``find_unused_parameters=False`` requires every trainable
+        parameter to receive gradients every iteration.  Several PairMOT query
+        init variants keep learned-query fallback modules for shape safety, or
+        use auxiliary quality predictors only inside non-differentiable ranking.
+        Those modules must be frozen unless they are part of the differentiable
+        forward path for the selected structure.
+        """
+        if self.query_init in ('dual_topk', 'pair_topk_v1',
+                               'pair_topk_sameidx_v1', 'pair_topk_v2',
+                               'typed_pair_topk_v1'):
+            self._freeze_decoder_learned_query_params()
+
+        # The quality predictor is only used inside ranking under no_grad; it
+        # has no training signal even when learned_quality_weight is non-zero.
+        self._freeze_module_params(getattr(self, 'pair_quality_predictor', None))
 
     def _init_layers(self) -> None:
         """Initialize encoder/decoder; pair mode swaps in Pair decoder."""
@@ -152,11 +204,13 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
 
     def extract_feat(self, batch_inputs: Tensor) -> Tuple[Tensor, ...]:
         """Extract features from pair or single-frame inputs."""
+        pair_batch_size = None
         if batch_inputs.dim() == 5:
             b, num_frames, c, h, w = batch_inputs.shape
             if num_frames != self.PAIR_NUM_FRAMES:
                 raise ValueError(
                     f'Expected {self.PAIR_NUM_FRAMES} frames, got {num_frames}')
+            pair_batch_size = b
             self._log_shape('input_pair', batch_inputs)
             # Keep all previous frames before all current frames.  The pair
             # transformer later splits encoder memory as ``[:B]`` and ``[B:]``.
@@ -168,7 +222,12 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 f'(B, 2, C, H, W) or (B, C, H, W), got {batch_inputs.shape}')
 
         self._log_shape('input_flat', batch_inputs)
+        stem0 = getattr(getattr(self.backbone, 'stem', None), '0', None)
+        if hasattr(stem0, 'set_pair_batch_size'):
+            stem0.set_pair_batch_size(pair_batch_size)
         x = self.backbone(batch_inputs)
+        if hasattr(stem0, 'set_pair_batch_size'):
+            stem0.set_pair_batch_size(None)
         if self.with_neck:
             x = self.neck(x)
         for lvl, feat in enumerate(x):
@@ -234,6 +293,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             memory, memory_mask, spatial_shapes)
         enc_cls = self.bbox_head.cls_branches[num_layers](output_memory)
         scores = enc_cls.sigmoid().max(-1)[0]
+        valid = torch.isfinite(output_proposals).all(dim=-1)
+        scores = scores.masked_fill(~valid, -1.0)
         topk_idx = torch.topk(scores, k=k, dim=1)[1]
         query = torch.gather(
             output_memory, 1,
@@ -262,6 +323,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         enc_cls = cls_branch(output_memory)
         probs = enc_cls.sigmoid()
         scores, labels = probs.max(dim=-1)
+        valid = torch.isfinite(output_proposals).all(dim=-1)
+        scores = scores.masked_fill(~valid, -1.0)
         topk_idx = torch.topk(scores, k=k, dim=1)[1]
         query = torch.gather(
             output_memory, 1,
@@ -480,6 +543,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
 
         invalid = center_dist > max_center_dist
         affinity = affinity.masked_fill(invalid, -1e6)
+        affinity = torch.nan_to_num(
+            affinity, nan=-1e6, posinf=1.0, neginf=-1e6)
         return affinity.clamp(max=1.0)
 
     @staticmethod
@@ -488,7 +553,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         affinity_thr: float,
         candidate_topk: int,
     ) -> Tuple[Tensor, Tensor]:
-        """Select one-to-one proposal pairs by maximizing affinity."""
+        """Select one-to-one proposal pairs by maximizing legal affinity."""
         try:
             from scipy.optimize import linear_sum_assignment
         except ImportError as exc:
@@ -496,22 +561,58 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 'pair_selection_mode="hungarian_affinity" requires scipy.'
             ) from exc
 
-        valid = affinity > affinity_thr
-        if valid.any():
-            cost = torch.where(valid, -affinity, affinity.new_full((), 1e6))
-        else:
-            flat_scores, flat_idx = torch.topk(
-                affinity.reshape(-1),
-                k=min(candidate_topk, affinity.numel()))
-            keep = flat_scores > -1e5
-            return flat_idx[keep] // affinity.size(1), flat_idx[keep] % affinity.size(1)
+        legal = affinity > -1e5
+        if not legal.any():
+            empty = torch.zeros((0,), dtype=torch.long, device=affinity.device)
+            return empty, empty
+        cost = torch.where(legal, -affinity, affinity.new_full((), 1e6))
 
         row_ind, col_ind = linear_sum_assignment(
             cost.detach().cpu().float().numpy())
         rows = torch.as_tensor(row_ind, device=affinity.device, dtype=torch.long)
         cols = torch.as_tensor(col_ind, device=affinity.device, dtype=torch.long)
-        keep = valid[rows, cols]
-        return rows[keep], cols[keep]
+        keep = legal[rows, cols]
+        rows = rows[keep]
+        cols = cols[keep]
+        if rows.numel() > candidate_topk:
+            scores = affinity[rows, cols]
+            keep = torch.topk(scores, k=candidate_topk).indices
+            rows = rows[keep]
+            cols = cols[keep]
+        return rows, cols
+
+    @staticmethod
+    def _ranked_affinity_pairs(
+        affinity: Tensor,
+        affinity_thr: float,
+        candidate_topk: int,
+    ) -> Tuple[Tensor, Tensor]:
+        """Rank legal pairs, using the affinity threshold as a preference."""
+        legal = affinity > -1e5
+        if not legal.any():
+            empty = torch.zeros((0,), dtype=torch.long, device=affinity.device)
+            return empty, empty
+
+        flat_affinity = affinity.reshape(-1)
+
+        def select_from(mask: Tensor, k: int) -> Tensor:
+            flat_mask = mask.reshape(-1)
+            flat_idx = torch.nonzero(flat_mask, as_tuple=False).squeeze(1)
+            if k <= 0 or flat_idx.numel() == 0:
+                return flat_idx.new_zeros((0,))
+            scores = flat_affinity[flat_idx]
+            keep = torch.topk(scores, k=min(k, flat_idx.numel())).indices
+            return flat_idx[keep]
+
+        high = legal & (affinity > affinity_thr)
+        high_idx = select_from(high, candidate_topk)
+        if high_idx.numel() < candidate_topk:
+            low_idx = select_from(legal & ~high, candidate_topk - high_idx.numel())
+            flat_idx = torch.cat([high_idx, low_idx], dim=0)
+        else:
+            flat_idx = high_idx
+
+        return flat_idx // affinity.size(1), flat_idx % affinity.size(1)
 
     def _unique_pair_order(self, order: Tensor, pair_i: Tensor,
                            pair_j: Tensor) -> Tensor:
@@ -635,22 +736,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 pair_i, pair_j = self._hungarian_affinity_pairs(
                     affinity, affinity_thr, candidate_topk)
             else:
-                valid = affinity > affinity_thr
-                pair_i, pair_j = torch.nonzero(valid, as_tuple=True)
-                if pair_i.numel() == 0:
-                    flat_scores, flat_idx = torch.topk(
-                        affinity.reshape(-1),
-                        k=min(candidate_topk, affinity.numel()))
-                    keep = flat_scores > -1e5
-                    flat_idx = flat_idx[keep]
-                    pair_i = flat_idx // affinity.size(1)
-                    pair_j = flat_idx % affinity.size(1)
-                if pair_i.numel() > candidate_topk:
-                    flat_valid_scores = affinity[pair_i, pair_j]
-                    keep = torch.topk(
-                        flat_valid_scores, k=candidate_topk).indices
-                    pair_i = pair_i[keep]
-                    pair_j = pair_j[keep]
+                pair_i, pair_j = self._ranked_affinity_pairs(
+                    affinity, affinity_thr, candidate_topk)
 
             if pair_i.numel() > 0:
                 prop_quality = torch.sqrt(
@@ -756,21 +843,37 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             ep_parts = []
             ec_parts = []
             type_parts = []
+            query_anchor = self.pair_query_fusion(
+                torch.cat([query_p[b, :1], query_c[b, :1]], dim=-1)
+            ).sum() * 0.0
+            prev_cls_anchor = logits_p[b, :1].sum() * 0.0
+            curr_cls_anchor = logits_c[b, :1].sum() * 0.0
+            prev_box_anchor = ref_p[b, :1].sum() * 0.0
+            curr_box_anchor = ref_c[b, :1].sum() * 0.0
             for q, rp, rc, ep, ec, target, qtype, learned_offset in groups:
                 pad = target - q.size(0)
                 if pad > 0:
                     start = learned_offset + q.size(0)
                     end = start + pad
-                    q = torch.cat([q, learned_query[start:end]], dim=0)
-                    rp = torch.cat([rp, learned_prev[start:end]], dim=0)
-                    rc = torch.cat([rc, learned_curr[start:end]], dim=0)
+                    q_pad = learned_query[start:end] + query_anchor
+                    q = torch.cat([q, q_pad], dim=0)
+                    rp_pad = learned_prev[start:end] + prev_box_anchor
+                    rc_pad = learned_curr[start:end] + curr_box_anchor
+                    ep_pad = (
+                        logits_p.new_zeros((pad, logits_p.size(-1))) +
+                        prev_cls_anchor)
+                    ec_pad = (
+                        logits_c.new_zeros((pad, logits_c.size(-1))) +
+                        curr_cls_anchor)
+                    rp = torch.cat([rp, rp_pad], dim=0)
+                    rc = torch.cat([rc, rc_pad], dim=0)
                     ep = torch.cat([
                         ep,
-                        logits_p.new_zeros((pad, logits_p.size(-1)))
+                        ep_pad
                     ], dim=0)
                     ec = torch.cat([
                         ec,
-                        logits_c.new_zeros((pad, logits_c.size(-1)))
+                        ec_pad
                     ], dim=0)
                 q_parts.append(q[:target])
                 rp_parts.append(rp[:target])
@@ -868,22 +971,8 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 pair_i, pair_j = self._hungarian_affinity_pairs(
                     affinity, affinity_thr, candidate_topk)
             else:
-                valid = affinity > affinity_thr
-                pair_i, pair_j = torch.nonzero(valid, as_tuple=True)
-                if pair_i.numel() == 0:
-                    flat_scores, flat_idx = torch.topk(
-                        affinity.reshape(-1),
-                        k=min(candidate_topk, affinity.numel()))
-                    keep = flat_scores > -1e5
-                    flat_idx = flat_idx[keep]
-                    pair_i = flat_idx // affinity.size(1)
-                    pair_j = flat_idx % affinity.size(1)
-                if pair_i.numel() > candidate_topk:
-                    flat_valid_scores = affinity[pair_i, pair_j]
-                    keep = torch.topk(
-                        flat_valid_scores, k=candidate_topk).indices
-                    pair_i = pair_i[keep]
-                    pair_j = pair_j[keep]
+                pair_i, pair_j = self._ranked_affinity_pairs(
+                    affinity, affinity_thr, candidate_topk)
 
             if pair_i.numel() > 0:
                 prop_quality = torch.sqrt(
@@ -929,16 +1018,32 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
 
             pad = self.num_queries - q.size(0)
             if pad > 0:
-                q = torch.cat([q, learned_query[:pad]], dim=0)
-                rp = torch.cat([rp, learned_prev[:pad]], dim=0)
-                rc = torch.cat([rc, learned_curr[:pad]], dim=0)
+                query_anchor = self.pair_query_fusion(
+                    torch.cat([query_p[b, :1], query_c[b, :1]], dim=-1)
+                ).sum() * 0.0
+                prev_cls_anchor = logits_p[b, :1].sum() * 0.0
+                curr_cls_anchor = logits_c[b, :1].sum() * 0.0
+                prev_box_anchor = ref_p[b, :1].sum() * 0.0
+                curr_box_anchor = ref_c[b, :1].sum() * 0.0
+                q_pad = learned_query[:pad] + query_anchor
+                rp_pad = learned_prev[:pad] + prev_box_anchor
+                rc_pad = learned_curr[:pad] + curr_box_anchor
+                ep_pad = (
+                    logits_p.new_zeros((pad, logits_p.size(-1))) +
+                    prev_cls_anchor)
+                ec_pad = (
+                    logits_c.new_zeros((pad, logits_c.size(-1))) +
+                    curr_cls_anchor)
+                q = torch.cat([q, q_pad], dim=0)
+                rp = torch.cat([rp, rp_pad], dim=0)
+                rc = torch.cat([rc, rc_pad], dim=0)
                 ep = torch.cat([
                     ep,
-                    logits_p.new_zeros((pad, logits_p.size(-1)))
+                    ep_pad
                 ], dim=0)
                 ec = torch.cat([
                     ec,
-                    logits_c.new_zeros((pad, logits_c.size(-1)))
+                    ec_pad
                 ], dim=0)
 
             batch_queries.append(q[:self.num_queries])

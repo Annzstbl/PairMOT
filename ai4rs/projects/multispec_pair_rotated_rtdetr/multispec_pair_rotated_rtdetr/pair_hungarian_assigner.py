@@ -6,8 +6,10 @@ from __future__ import annotations
 import time
 from typing import Dict, List, Optional, Union
 
+import logging
 import torch
 from mmengine.config import ConfigDict
+from mmengine.logging import print_log
 from mmengine.structures import InstanceData
 from mmdet.models.task_modules import AssignResult
 from mmdet.models.task_modules.assigners import BaseAssigner
@@ -27,6 +29,7 @@ class PairHungarianAssigner(BaseAssigner):
         self,
         match_costs: Union[List[Union[dict, ConfigDict]], dict, ConfigDict],
         profile_costs: bool = False,
+        sanitize_nonfinite: bool = True,
     ) -> None:
         if isinstance(match_costs, dict):
             match_costs = [match_costs]
@@ -35,6 +38,7 @@ class PairHungarianAssigner(BaseAssigner):
             TASK_UTILS.build(match_cost) for match_cost in match_costs
         ]
         self.profile_costs = profile_costs
+        self.sanitize_nonfinite = sanitize_nonfinite
         self._timings: Dict[str, float] = {}
 
     def _record_time(self, name: str, elapsed: float) -> None:
@@ -80,21 +84,47 @@ class PairHungarianAssigner(BaseAssigner):
                 max_overlaps=None,
                 labels=assigned_labels)
 
-        cost_list = []
+        cost = None
         for index, cost_fn in enumerate(self.match_costs):
             if self.profile_costs and torch.cuda.is_available():
                 torch.cuda.synchronize(device)
             start = time.perf_counter()
-            cost_list.append(
-                cost_fn(pred_instances, gt_instances, img_meta, **kwargs))
+            cost_i = cost_fn(pred_instances, gt_instances, img_meta, **kwargs)
+            if self.sanitize_nonfinite and not torch.isfinite(cost_i).all():
+                finite = cost_i[torch.isfinite(cost_i)]
+                replacement = (
+                    finite.max() + 1e6 if finite.numel() > 0
+                    else cost_i.new_tensor(1e6))
+                cost_i = torch.where(torch.isfinite(cost_i), cost_i,
+                                     replacement)
+                if not getattr(self, '_warned_nonfinite_cost', False):
+                    print_log(
+                        'PairHungarianAssigner replaced non-finite match '
+                        f'cost values from {self._cost_timer_name(cost_fn, index)} '
+                        'with a large finite penalty.',
+                        logger='current',
+                        level=logging.WARNING)
+                    self._warned_nonfinite_cost = True
+            cost = cost_i if cost is None else cost + cost_i
             if self.profile_costs:
                 if torch.cuda.is_available():
                     torch.cuda.synchronize(device)
                 self._record_time(
                     self._cost_timer_name(cost_fn, index),
                     time.perf_counter() - start)
-        # (num_preds, num_gts)
-        cost = torch.stack(cost_list, dim=0).sum(dim=0)
+        if self.sanitize_nonfinite and not torch.isfinite(cost).all():
+            finite = cost[torch.isfinite(cost)]
+            replacement = (
+                finite.max() + 1e6 if finite.numel() > 0
+                else cost.new_tensor(1e6))
+            cost = torch.where(torch.isfinite(cost), cost, replacement)
+            if not getattr(self, '_warned_nonfinite_total_cost', False):
+                print_log(
+                    'PairHungarianAssigner replaced non-finite summed match '
+                    'cost values with a large finite penalty.',
+                    logger='current',
+                    level=logging.WARNING)
+                self._warned_nonfinite_total_cost = True
         if self.profile_costs and torch.cuda.is_available():
             torch.cuda.synchronize(device)
         start = time.perf_counter()

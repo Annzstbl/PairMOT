@@ -65,10 +65,28 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  use_presence: bool = True,
                  dual_cls: bool = False,
                  train_both_visible_only: bool = False,
+                 cls_pos_loss_weights: Optional[List[float]] = None,
+                 cls_pos_logit_margins: Optional[List[float]] = None,
+                 cls_proto_gate: bool = False,
+                 cls_proto_gate_scale: float = 0.1,
+                 cls_proto_gate_weights: Optional[List[float]] = None,
+                 cls_residual_adapter: bool = False,
+                 cls_residual_hidden_ratio: float = 0.25,
+                 cls_residual_scale: float = 0.1,
+                 cls_residual_weights: Optional[List[float]] = None,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
         self.dual_cls = bool(dual_cls)
         self.train_both_visible_only = bool(train_both_visible_only)
+        self.cls_pos_loss_weights_cfg = cls_pos_loss_weights
+        self.cls_pos_logit_margins_cfg = cls_pos_logit_margins
+        self.cls_proto_gate = bool(cls_proto_gate)
+        self.cls_proto_gate_scale = float(cls_proto_gate_scale)
+        self.cls_proto_gate_weights_cfg = cls_proto_gate_weights
+        self.cls_residual_adapter = bool(cls_residual_adapter)
+        self.cls_residual_hidden_ratio = float(cls_residual_hidden_ratio)
+        self.cls_residual_scale = float(cls_residual_scale)
+        self.cls_residual_weights_cfg = cls_residual_weights
         if loss_presence is None:
             loss_presence = dict(
                 type='mmdet.CrossEntropyLoss',
@@ -84,6 +102,134 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             self.varifocal_loss_iou_type = 'hbox_iou'
         super(RotatedRTDETRHead, self).__init__(*args, **kwargs)
         self.loss_presence = MODELS.build(loss_presence) if self.use_presence else None
+        self._init_cls_adjustment_buffers()
+
+    def _init_cls_adjustment_buffers(self) -> None:
+        """Optional positive-class adjustments for long-tail class learning."""
+        if self.cls_pos_loss_weights_cfg is None:
+            cls_pos_loss_weights = torch.ones(self.num_classes)
+        else:
+            cls_pos_loss_weights = torch.tensor(
+                self.cls_pos_loss_weights_cfg, dtype=torch.float32)
+            if cls_pos_loss_weights.numel() != self.num_classes:
+                raise ValueError(
+                    'cls_pos_loss_weights length must equal num_classes: '
+                    f'{cls_pos_loss_weights.numel()} != {self.num_classes}')
+        if self.cls_pos_logit_margins_cfg is None:
+            cls_pos_logit_margins = torch.zeros(self.num_classes)
+        else:
+            cls_pos_logit_margins = torch.tensor(
+                self.cls_pos_logit_margins_cfg, dtype=torch.float32)
+            if cls_pos_logit_margins.numel() != self.num_classes:
+                raise ValueError(
+                    'cls_pos_logit_margins length must equal num_classes: '
+                    f'{cls_pos_logit_margins.numel()} != {self.num_classes}')
+        self.register_buffer(
+            'cls_pos_loss_weights', cls_pos_loss_weights, persistent=False)
+        self.register_buffer(
+            'cls_pos_logit_margins', cls_pos_logit_margins, persistent=False)
+
+        if self.cls_proto_gate_weights_cfg is None:
+            cls_proto_gate_weights = torch.ones(self.num_classes)
+        else:
+            cls_proto_gate_weights = torch.tensor(
+                self.cls_proto_gate_weights_cfg, dtype=torch.float32)
+            if cls_proto_gate_weights.numel() != self.num_classes:
+                raise ValueError(
+                    'cls_proto_gate_weights length must equal num_classes: '
+                    f'{cls_proto_gate_weights.numel()} != {self.num_classes}')
+        self.register_buffer(
+            'cls_proto_gate_weights',
+            cls_proto_gate_weights,
+            persistent=False)
+
+        if self.cls_residual_weights_cfg is None:
+            cls_residual_weights = torch.ones(self.num_classes)
+        else:
+            cls_residual_weights = torch.tensor(
+                self.cls_residual_weights_cfg, dtype=torch.float32)
+            if cls_residual_weights.numel() != self.num_classes:
+                raise ValueError(
+                    'cls_residual_weights length must equal num_classes: '
+                    f'{cls_residual_weights.numel()} != {self.num_classes}')
+        self.register_buffer(
+            'cls_residual_weights',
+            cls_residual_weights,
+            persistent=False)
+
+    def _apply_cls_proto_gate(self, cls_scores: Tensor,
+                              hidden_state: Tensor) -> Tensor:
+        """Add lightweight class-prototype bias to classification logits."""
+        if not self.cls_proto_gate:
+            return cls_scores
+        hidden_norm = torch.nn.functional.normalize(hidden_state, dim=-1)
+        proto_norm = torch.nn.functional.normalize(
+            self.cls_proto_embeddings.to(hidden_state.device), dim=-1)
+        proto_bias = torch.matmul(
+            hidden_norm, proto_norm.t()).to(cls_scores.dtype)
+        gate_weights = self.cls_proto_gate_weights.to(
+            device=cls_scores.device, dtype=cls_scores.dtype)
+        scale = self.cls_proto_gate_log_scale.exp().to(cls_scores.dtype)
+        proto_bias = proto_bias * gate_weights * scale
+        adjusted = cls_scores.clone()
+        adjusted[..., :self.num_classes] = (
+            adjusted[..., :self.num_classes] + proto_bias)
+        return adjusted
+
+    def _apply_cls_residual_adapter(self, cls_scores: Tensor,
+                                    hidden_state: Tensor) -> Tensor:
+        """Add a learnable long-tail residual classifier branch."""
+        if not self.cls_residual_adapter:
+            return cls_scores
+        residual = self.cls_residual_branch(hidden_state).to(cls_scores.dtype)
+        residual_weights = self.cls_residual_weights.to(
+            device=cls_scores.device, dtype=cls_scores.dtype)
+        scale = self.cls_residual_log_scale.exp().to(cls_scores.dtype)
+        residual = residual * residual_weights * scale
+        adjusted = cls_scores.clone()
+        adjusted[..., :self.num_classes] = (
+            adjusted[..., :self.num_classes] + residual)
+        return adjusted
+
+    def _apply_cls_logit_adapters(self, cls_scores: Tensor,
+                                  hidden_state: Tensor) -> Tensor:
+        cls_scores = self._apply_cls_proto_gate(cls_scores, hidden_state)
+        cls_scores = self._apply_cls_residual_adapter(
+            cls_scores, hidden_state)
+        return cls_scores
+
+    def _adjust_cls_scores_for_loss(self, cls_scores: Tensor,
+                                    labels: Tensor) -> Tensor:
+        margins = self.cls_pos_logit_margins.to(cls_scores.device)
+        if not torch.any(margins > 0):
+            return cls_scores
+        bg_class_ind = self.num_classes
+        pos_inds = ((labels >= 0) & (labels < bg_class_ind)).nonzero().squeeze(1)
+        if pos_inds.numel() == 0:
+            return cls_scores
+        pos_labels = labels[pos_inds]
+        pos_margins = margins[pos_labels].to(cls_scores.dtype)
+        if not torch.any(pos_margins > 0):
+            return cls_scores
+        adjusted = cls_scores.clone()
+        adjusted[pos_inds, pos_labels] = (
+            adjusted[pos_inds, pos_labels] - pos_margins)
+        return adjusted
+
+    def _build_cls_loss_weights(self, cls_scores: Tensor,
+                                labels: Tensor) -> Optional[Tensor]:
+        class_weights = self.cls_pos_loss_weights.to(cls_scores.device)
+        if not torch.any(class_weights != 1):
+            return None
+        bg_class_ind = self.num_classes
+        pos_inds = ((labels >= 0) & (labels < bg_class_ind)).nonzero().squeeze(1)
+        if pos_inds.numel() == 0:
+            return None
+        pos_labels = labels[pos_inds]
+        loss_weights = cls_scores.new_ones(cls_scores.shape)
+        loss_weights[pos_inds, pos_labels] = class_weights[pos_labels].to(
+            cls_scores.dtype)
+        return loss_weights
 
     def _init_layers(self) -> None:
         super()._init_layers()
@@ -103,6 +249,23 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             self.presence_curr_branches = nn.ModuleList([
                 copy.deepcopy(pres_branch) for _ in range(num_layers)
             ])
+        if self.cls_proto_gate:
+            self.cls_proto_embeddings = nn.Parameter(
+                torch.empty(self.num_classes, self.embed_dims))
+            self.cls_proto_gate_log_scale = nn.Parameter(
+                torch.tensor(np.log(self.cls_proto_gate_scale),
+                             dtype=torch.float32))
+        if self.cls_residual_adapter:
+            hidden_dims = max(
+                16, int(self.embed_dims * self.cls_residual_hidden_ratio))
+            self.cls_residual_branch = nn.Sequential(
+                Linear(self.embed_dims, hidden_dims),
+                nn.ReLU(inplace=True),
+                Linear(hidden_dims, self.num_classes),
+            )
+            self.cls_residual_log_scale = nn.Parameter(
+                torch.tensor(np.log(self.cls_residual_scale),
+                             dtype=torch.float32))
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -122,6 +285,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         super().init_weights()
         self._sync_cls_branches_curr_from_prev()
         self._sync_reg_branches_curr_from_prev()
+        if self.cls_proto_gate:
+            nn.init.normal_(self.cls_proto_embeddings, std=0.02)
+        if self.cls_residual_adapter:
+            nn.init.zeros_(self.cls_residual_branch[-1].weight)
+            nn.init.zeros_(self.cls_residual_branch[-1].bias)
 
     def load_state_dict(self, state_dict, strict: bool = True):
         has_curr = any(
@@ -195,10 +363,14 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             hidden_prev = hidden_states_prev[layer_id]
             hidden_curr = hidden_states_curr[layer_id]
             # hidden_*: (bs, num_queries, embed_dims)
-            all_cls.append(self.cls_branches[layer_id](hidden_prev))
+            cls_prev = self.cls_branches[layer_id](hidden_prev)
+            cls_prev = self._apply_cls_logit_adapters(cls_prev, hidden_prev)
+            all_cls.append(cls_prev)
             if self.dual_cls:
-                all_cls_curr.append(
-                    self.cls_branches_curr[layer_id](hidden_curr))
+                cls_curr = self.cls_branches_curr[layer_id](hidden_curr)
+                cls_curr = self._apply_cls_logit_adapters(
+                    cls_curr, hidden_curr)
+                all_cls_curr.append(cls_curr)
             if self.use_presence:
                 all_pres_prev.append(
                     self.presence_prev_branches[layer_id](hidden_prev).squeeze(-1))
@@ -577,12 +749,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         num_total_pos_val = torch.clamp(
             reduce_mean(num_total_pos_tensor), min=1).item()
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
-        loss_iou_prev = self.loss_iou(
+        loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors,
             bbox_prev_targets * factors,
             bbox_prev_weights,
             avg_factor=num_total_pos_val)
-        loss_iou_curr = self.loss_iou(
+        loss_iou_curr = self._loss_iou_valid(
             bbox_curr_flat * factors,
             bbox_curr_targets * factors,
             bbox_curr_weights,
@@ -879,10 +1051,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
-        loss_iou_prev = self.loss_iou(
+        loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors, bbox_prev_targets * factors,
             bbox_prev_weights, avg_factor=num_pos)
-        loss_iou_curr = self.loss_iou(
+        loss_iou_curr = self._loss_iou_valid(
             bbox_curr_flat * factors, bbox_curr_targets * factors,
             bbox_curr_weights, avg_factor=num_pos)
         loss_bbox_prev = self.loss_bbox(
@@ -956,10 +1128,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         num_pos = max(float(reduce_mean(loss_cls_prev.new_tensor(
             [num_total_pos])).item()), 1.0)
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
-        loss_iou_prev = self.loss_iou(
+        loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors, bbox_prev_targets * factors,
             bbox_prev_weights, avg_factor=num_pos)
-        loss_iou_curr = self.loss_iou(
+        loss_iou_curr = self._loss_iou_valid(
             bbox_curr_flat * factors, bbox_curr_targets * factors,
             bbox_curr_weights, avg_factor=num_pos)
         loss_bbox_prev = self.loss_bbox(
@@ -1061,12 +1233,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         bboxes_prev_gt = bbox_prev_targets * factors
         bboxes_curr_gt = bbox_curr_targets * factors
 
-        loss_iou_prev = self.loss_iou(
+        loss_iou_prev = self._loss_iou_valid(
             bboxes_prev,
             bboxes_prev_gt,
             bbox_prev_weights,
             avg_factor=num_total_pos_val)
-        loss_iou_curr = self.loss_iou(
+        loss_iou_curr = self._loss_iou_valid(
             bboxes_curr,
             bboxes_curr_gt,
             bbox_curr_weights,
@@ -1099,6 +1271,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         batch_img_metas: List[dict],
         cls_avg_factor: float,
     ) -> Tensor:
+        cls_scores = self._adjust_cls_scores_for_loss(cls_scores, labels)
+        cls_loss_weights = self._build_cls_loss_weights(cls_scores, labels)
         if isinstance(self.loss_cls, VarifocalLoss):
             bg_class_ind = self.num_classes
             pos_inds = ((labels >= 0)
@@ -1119,7 +1293,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 )
                 cls_iou_targets[pos_inds, pos_labels] = iou_targets
             return self.loss_cls(
-                cls_scores, cls_iou_targets, avg_factor=cls_avg_factor)
+                cls_scores,
+                cls_iou_targets,
+                weight=cls_loss_weights,
+                avg_factor=cls_avg_factor)
+        if cls_loss_weights is not None:
+            label_weights = label_weights[:, None] * cls_loss_weights
         return self.loss_cls(
             cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
 
@@ -1248,6 +1427,34 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             factors.append(factor)
         return torch.cat(factors, 0).repeat_interleave(
             bbox_prev.size(1), dim=0)
+
+    def _loss_iou_valid(self, bbox_preds: Tensor, bbox_targets: Tensor,
+                        bbox_weights: Tensor, avg_factor: float) -> Tensor:
+        """Compute GD loss only on real visible boxes.
+
+        Missing pair sides use zero targets with zero weights.  Some rotated
+        geometric losses still form distributions from the zero-width boxes
+        before applying weights, which can create NaNs.  Filter those rows
+        explicitly and keep a zero-valued graph path for DDP.
+        """
+        valid = bbox_weights[:, :4].sum(dim=-1) > 0
+        valid = (
+            valid & torch.isfinite(bbox_preds).all(dim=-1) &
+            torch.isfinite(bbox_targets).all(dim=-1))
+        if not valid.any():
+            return bbox_preds.sum() * 0.0
+        preds = bbox_preds[valid]
+        targets = bbox_targets[valid]
+        preds = torch.cat(
+            [preds[:, :2], preds[:, 2:4].clamp(min=1e-3), preds[:, 4:]],
+            dim=-1)
+        targets = torch.cat([
+            targets[:, :2],
+            targets[:, 2:4].clamp(min=1e-3),
+            targets[:, 4:]
+        ], dim=-1)
+        return self.loss_iou(
+            preds, targets, bbox_weights[valid], avg_factor=avg_factor)
 
     def get_targets(
         self,

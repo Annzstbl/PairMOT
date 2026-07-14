@@ -57,7 +57,10 @@ class LiquidSpectralSampler(nn.Module):
                  eval_hard: bool = True,
                  lowres_grad_size: Optional[Union[int, Tuple[int, int]]] = None,
                  lowres_grad_downsample: int = 4,
-                 use_lowres_grad_correction: bool = True) -> None:
+                 use_lowres_grad_correction: bool = True,
+                 use_band_attention: bool = False,
+                 band_attention_heads: int = 4,
+                 band_attention_dropout: float = 0.0) -> None:
         super().__init__()
         assert num_spectral >= spectral_kernel
         self.num_spectral = num_spectral
@@ -73,6 +76,7 @@ class LiquidSpectralSampler(nn.Module):
         self.lowres_grad_size = lowres_grad_size
         self.lowres_grad_downsample = lowres_grad_downsample
         self.use_lowres_grad_correction = use_lowres_grad_correction
+        self.use_band_attention = use_band_attention
         init_pattern_tensor = self._build_init_patterns(init_patterns)
         self.register_buffer(
             'init_pattern_indices', init_pattern_tensor, persistent=False)
@@ -84,6 +88,28 @@ class LiquidSpectralSampler(nn.Module):
         self.w2 = nn.Linear(embed_dims * 2, embed_dims)
         self.head = nn.Linear(
             embed_dims, self.num_groups * spectral_kernel * num_spectral)
+        if use_band_attention:
+            assert embed_dims % band_attention_heads == 0, (
+                f'embed_dims={embed_dims} must be divisible by '
+                f'band_attention_heads={band_attention_heads}')
+            self.band_norm1 = nn.LayerNorm(embed_dims)
+            self.band_attn = nn.MultiheadAttention(
+                embed_dims,
+                band_attention_heads,
+                dropout=band_attention_dropout,
+                batch_first=True)
+            self.band_norm2 = nn.LayerNorm(embed_dims)
+            self.band_ffn = nn.Sequential(
+                nn.Linear(embed_dims, embed_dims * 2),
+                nn.GELU(),
+                nn.Dropout(band_attention_dropout),
+                nn.Linear(embed_dims * 2, embed_dims),
+            )
+        else:
+            self.band_norm1 = None
+            self.band_attn = None
+            self.band_norm2 = None
+            self.band_ffn = None
         self._init_weights(init_logit, head_weight_std)
 
     def _build_init_patterns(
@@ -122,6 +148,11 @@ class LiquidSpectralSampler(nn.Module):
         nn.init.zeros_(self.w1.bias)
         nn.init.xavier_uniform_(self.w2.weight)
         nn.init.zeros_(self.w2.bias)
+        if self.band_ffn is not None:
+            for module in self.band_ffn:
+                if isinstance(module, nn.Linear):
+                    nn.init.xavier_uniform_(module.weight)
+                    nn.init.zeros_(module.bias)
         if head_weight_std > 0:
             nn.init.normal_(self.head.weight, mean=0.0, std=head_weight_std)
         else:
@@ -243,6 +274,10 @@ class LiquidSpectralSampler(nn.Module):
         maxv = x.amax(dim=(-2, -1))
         desc = torch.stack([mean, std, maxv], dim=-1)
         desc = self.desc_proj(desc) + self.band_embedding.unsqueeze(0)
+        if self.band_attn is not None:
+            attn_input = self.band_norm1(desc)
+            desc = desc + self.band_attn(attn_input, attn_input, attn_input)[0]
+            desc = desc + self.band_ffn(self.band_norm2(desc))
 
         hidden = desc.new_zeros(desc.size(0), self.embed_dims)
         for band_idx in range(self.num_spectral):
@@ -380,6 +415,130 @@ class LiquidAwareFusion(nn.Module):
         return self.out_proj(F.gelu(delta))
 
 
+class LiquidGroupModulator(nn.Module):
+    """Reweight liquid conv3d groups from sampling coverage descriptors."""
+
+    def __init__(self,
+                 num_groups: int,
+                 num_spectral: int,
+                 spectral_kernel: int,
+                 hidden_dims: int = 16,
+                 init_std: float = 1e-3) -> None:
+        super().__init__()
+        self.num_groups = num_groups
+        self.num_spectral = num_spectral
+        self.spectral_kernel = spectral_kernel
+        self.group_embedding = nn.Parameter(torch.zeros(num_groups, hidden_dims))
+        self.mlp = nn.Sequential(
+            nn.Linear(num_spectral + 3, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, 1),
+        )
+        self._init_weights(init_std)
+
+    def _init_weights(self, init_std: float) -> None:
+        nn.init.trunc_normal_(self.group_embedding, std=init_std)
+        for module in self.mlp:
+            if isinstance(module, nn.Linear):
+                nn.init.xavier_uniform_(module.weight)
+                nn.init.zeros_(module.bias)
+        nn.init.normal_(self.mlp[-1].weight, std=init_std)
+
+    def forward(self, x: torch.Tensor, probs: torch.Tensor) -> torch.Tensor:
+        batch_size, channels, num_groups, height, width = x.shape
+        assert num_groups == self.num_groups
+        coverage = probs.sum(dim=2)
+        coverage = coverage / coverage.sum(dim=-1, keepdim=True).clamp_min(
+            1e-6)
+        entropy = -(coverage.clamp_min(1e-6) *
+                    coverage.clamp_min(1e-6).log()).sum(dim=-1, keepdim=True)
+        entropy = entropy / math.log(self.num_spectral)
+        peak = coverage.amax(dim=-1, keepdim=True)
+        response = x.detach().abs().mean(dim=(1, 3, 4), keepdim=False)
+        response = response.unsqueeze(-1)
+        descriptor = torch.cat([coverage, entropy, peak, response], dim=-1)
+        hidden = self.mlp[0](descriptor) + self.group_embedding.unsqueeze(0)
+        hidden = self.mlp[1](hidden)
+        gain = self.mlp[2](hidden).view(batch_size, 1, num_groups, 1, 1)
+        return x * (1.0 + torch.tanh(gain))
+
+
+class PairAwareLiquidFusion(nn.Module):
+    """Generate paired-frame SE residuals from liquid descriptors.
+
+    The module is intentionally not a band-attention block.  It sees only
+    compact per-frame group descriptors and predicts a residual for each
+    frame's SE gate using prev/curr difference and agreement cues.
+    """
+
+    def __init__(self,
+                 num_groups: int,
+                 num_spectral: int,
+                 spectral_kernel: int,
+                 hidden_dims: int = 32,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True) -> None:
+        super().__init__()
+        self.num_groups = num_groups
+        self.num_spectral = num_spectral
+        self.spectral_kernel = spectral_kernel
+        descriptor_dims = num_spectral + 3
+        pair_dims = descriptor_dims * 4
+        self.group_embedding = nn.Parameter(torch.zeros(num_groups, hidden_dims))
+        self.mlp = nn.Sequential(
+            nn.Linear(pair_dims, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, 1),
+        )
+        self._init_weights(init_std, zero_init)
+
+    def _init_weights(self, init_std: float, zero_init: bool) -> None:
+        nn.init.trunc_normal_(self.group_embedding, std=init_std)
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        if zero_init:
+            nn.init.zeros_(self.mlp[-1].weight)
+        else:
+            nn.init.normal_(self.mlp[-1].weight, std=init_std)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def _descriptor(self, x_se: torch.Tensor,
+                    probs: torch.Tensor) -> torch.Tensor:
+        coverage = probs.sum(dim=2)
+        coverage = coverage / coverage.sum(dim=-1, keepdim=True).clamp_min(
+            1e-6)
+        entropy = -(coverage.clamp_min(1e-6) *
+                    coverage.clamp_min(1e-6).log()).sum(dim=-1, keepdim=True)
+        entropy = entropy / math.log(self.num_spectral)
+        peak = coverage.amax(dim=-1, keepdim=True)
+        response = x_se.detach().abs().mean(dim=(-2, -1), keepdim=False)
+        response = response.unsqueeze(-1)
+        return torch.cat([coverage, entropy, peak, response], dim=-1)
+
+    def forward(self, x_se: torch.Tensor, probs: torch.Tensor,
+                pair_batch_size: Optional[int]) -> torch.Tensor:
+        batch_size, num_groups, height, width = x_se.shape
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return x_se.new_zeros(batch_size, num_groups, height, width)
+        assert num_groups == self.num_groups
+        desc = self._descriptor(x_se, probs)
+        prev_desc = desc[:pair_batch_size]
+        curr_desc = desc[pair_batch_size:]
+
+        def _pair_input(src: torch.Tensor, other: torch.Tensor) -> torch.Tensor:
+            return torch.cat(
+                [src, other, src - other, src * other], dim=-1)
+
+        prev_pair = _pair_input(prev_desc, curr_desc)
+        curr_pair = _pair_input(curr_desc, prev_desc)
+        pair_desc = torch.cat([prev_pair, curr_pair], dim=0)
+        hidden = self.mlp[0](pair_desc) + self.group_embedding.unsqueeze(0)
+        hidden = self.mlp[1](hidden)
+        delta = self.mlp[2](hidden).view(batch_size, num_groups, 1, 1)
+        return delta.expand(batch_size, num_groups, height, width)
+
+
 @MODELS.register_module()
 class MultispecStemConv3dSE(nn.Module):
     """Replace deep-stem first 3x3 Conv2d with 3D conv + pixel-wise SE fusion.
@@ -431,6 +590,7 @@ class MultispecStemConv3dSE(nn.Module):
         self.spectral_padding = spectral_padding
         self.spatial_padding = spatial_padding
         self.use_liquid_sampler = liquid_sampler is not None
+        self.pair_batch_size = None
         self.conv3d = nn.Conv3d(
             in_channels=1,
             out_channels=out_channels,
@@ -442,12 +602,18 @@ class MultispecStemConv3dSE(nn.Module):
         if self.use_liquid_sampler:
             sampler_cfg = dict(liquid_sampler)
             fusion_cfg = sampler_cfg.pop('liquid_aware_fusion', None)
+            pair_fusion_cfg = sampler_cfg.pop('pair_aware_liquid_fusion',
+                                              None)
+            group_modulator_cfg = sampler_cfg.pop('liquid_group_modulator',
+                                                  None)
             sampler_cfg.setdefault('num_spectral', num_spectral)
             sampler_cfg.setdefault('spectral_kernel', spectral_kernel)
             self.liquid_sampler = LiquidSpectralSampler(**sampler_cfg)
             temporal_output_size = self.liquid_sampler.num_groups
         else:
             fusion_cfg = None
+            pair_fusion_cfg = None
+            group_modulator_cfg = None
             self.liquid_sampler = None
             temporal_output_size = calc_temporal_output_size(
                 num_spectral, spectral_padding, spectral_kernel, 1)
@@ -470,19 +636,55 @@ class MultispecStemConv3dSE(nn.Module):
         self.num_bands = temporal_output_size
         if fusion_cfg is True:
             fusion_cfg = {}
+        output_residual_cfg = None
         if fusion_cfg is not None:
             fusion_cfg = dict(fusion_cfg)
+            output_residual_cfg = fusion_cfg.pop('output_residual', None)
             fusion_cfg.setdefault('num_groups', temporal_output_size)
             fusion_cfg.setdefault('num_spectral', num_spectral)
             fusion_cfg.setdefault('spectral_kernel', spectral_kernel)
             self.liquid_aware_fusion = LiquidAwareFusion(**fusion_cfg)
         else:
             self.liquid_aware_fusion = None
+        if pair_fusion_cfg is True:
+            pair_fusion_cfg = {}
+        if pair_fusion_cfg is not None:
+            pair_fusion_cfg = dict(pair_fusion_cfg)
+            pair_fusion_cfg.setdefault('num_groups', temporal_output_size)
+            pair_fusion_cfg.setdefault('num_spectral', num_spectral)
+            pair_fusion_cfg.setdefault('spectral_kernel', spectral_kernel)
+            self.pair_aware_liquid_fusion = PairAwareLiquidFusion(
+                **pair_fusion_cfg)
+        else:
+            self.pair_aware_liquid_fusion = None
+        if group_modulator_cfg is True:
+            group_modulator_cfg = {}
+        if group_modulator_cfg is not None:
+            group_modulator_cfg = dict(group_modulator_cfg)
+            group_modulator_cfg.setdefault('num_groups', temporal_output_size)
+            group_modulator_cfg.setdefault('num_spectral', num_spectral)
+            group_modulator_cfg.setdefault('spectral_kernel', spectral_kernel)
+            self.liquid_group_modulator = LiquidGroupModulator(
+                **group_modulator_cfg)
+        else:
+            self.liquid_group_modulator = None
+        if output_residual_cfg is True:
+            output_residual_cfg = {}
+        if output_residual_cfg is not None:
+            init_value = float(output_residual_cfg.get('init_value', 0.05))
+            self.liquid_output_residual_scale = nn.Parameter(
+                torch.tensor(init_value, dtype=torch.float32))
+        else:
+            self.liquid_output_residual_scale = None
         self.last_liquid_groups = None
         self.last_liquid_probs = None
         self.last_liquid_indices = None
         self.last_liquid_aware_delta = None
+        self.last_pair_aware_liquid_delta = None
         self._init_se_weights()
+
+    def set_pair_batch_size(self, pair_batch_size: Optional[int]) -> None:
+        self.pair_batch_size = pair_batch_size
 
     def _init_se_weights(self) -> None:
         """Init SE so gate starts uniform: each band weight is ``1 / T``.
@@ -531,6 +733,10 @@ class MultispecStemConv3dSE(nn.Module):
         else:
             x = self._forward_fixed(x)
 
+        if self.liquid_group_modulator is not None:
+            assert self.last_liquid_probs is not None
+            x = self.liquid_group_modulator(x, self.last_liquid_probs)
+
         x_se = x.mean(dim=1)
         gate_logits = self.se_conv2(F.relu(self.se_conv1(x_se)))
         if self.liquid_aware_fusion is not None:
@@ -540,9 +746,22 @@ class MultispecStemConv3dSE(nn.Module):
             gate_logits = gate_logits + self.last_liquid_aware_delta
         else:
             self.last_liquid_aware_delta = None
+        if self.pair_aware_liquid_fusion is not None:
+            assert self.last_liquid_probs is not None
+            self.last_pair_aware_liquid_delta = self.pair_aware_liquid_fusion(
+                x_se, self.last_liquid_probs, self.pair_batch_size)
+            gate_logits = gate_logits + self.last_pair_aware_liquid_delta
+        else:
+            self.last_pair_aware_liquid_delta = None
         gate = torch.sigmoid(gate_logits)
         x = x * gate.unsqueeze(1)
         out = x.sum(dim=2)
+        if (self.liquid_output_residual_scale is not None
+                and self.last_liquid_aware_delta is not None):
+            residual_gate = torch.tanh(
+                self.last_liquid_aware_delta).unsqueeze(1)
+            out = out + self.liquid_output_residual_scale * (
+                x * residual_gate).sum(dim=2)
         if return_sampling:
             return out, x, self.last_liquid_probs
         return out
