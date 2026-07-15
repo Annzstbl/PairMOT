@@ -8,6 +8,10 @@ from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
 from anchors import Anchors
 import losses
 from lib.nms import cython_soft_nms_wrapper
+from rotated_losses import RotatedCTrackerLoss
+from rotated_ops import (decode_hboxes_to_rboxes,
+                         multiclass_rotated_soft_nms)
+from stem_conv3d_se import SpectralStemConv3dSE
 
 
 model_urls = {
@@ -69,7 +73,8 @@ class PyramidFeatures(nn.Module):
 
 
 class RegressionModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=1, feature_size=256):
+    def __init__(self, num_features_in, num_anchors=1, feature_size=256,
+                 output_dims=8):
         super(RegressionModel, self).__init__()
         
         self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
@@ -84,7 +89,9 @@ class RegressionModel(nn.Module):
         self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
         self.act4 = nn.ReLU()
 
-        self.output = nn.Conv2d(feature_size, num_anchors*8, kernel_size=3, padding=1)
+        self.output_dims = output_dims
+        self.output = nn.Conv2d(
+            feature_size, num_anchors * output_dims, kernel_size=3, padding=1)
 
     def forward(self, x):
 
@@ -105,7 +112,7 @@ class RegressionModel(nn.Module):
         # out is B x C x W x H, with C = 4*num_anchors
         out = out.permute(0, 2, 3, 1)
 
-        return out.contiguous().view(out.shape[0], -1, 8)
+        return out.contiguous().view(out.shape[0], -1, self.output_dims)
 
 class ClassificationModel(nn.Module):
     def __init__(self, num_features_in, num_anchors=1, num_classes=80, prior=0.01, feature_size=256):
@@ -193,10 +200,21 @@ class ReidModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers):
+    def __init__(self, num_classes, block, layers, num_spectral=3,
+                 use_3d_se_stem=False, se_reduction=4, rotated=False):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.num_spectral = num_spectral
+        self.use_3d_se_stem = use_3d_se_stem
+        self.rotated = rotated
+        if use_3d_se_stem:
+            self.conv1 = SpectralStemConv3dSE(
+                out_channels=64, num_spectral=num_spectral,
+                reduction=se_reduction)
+        else:
+            self.conv1 = nn.Conv2d(
+                num_spectral, 64, kernel_size=7, stride=2, padding=3,
+                bias=False)
         self.bn1 = nn.BatchNorm2d(64)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -212,11 +230,14 @@ class ResNet(nn.Module):
 
         self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
         self.num_classes = num_classes
+        self.reid_channels = 1 if rotated else num_classes
 
-        self.regressionModel = RegressionModel(512)
+        self.regressionModel = RegressionModel(
+            512, output_dims=10 if rotated else 8)
         #print(num_classes)
         self.classificationModel = ClassificationModel(512, num_classes=num_classes)
-        self.reidModel = ReidModel(512, num_classes=num_classes)
+        self.reidModel = ReidModel(
+            512, num_classes=self.reid_channels)
 
 
         self.anchors = Anchors()
@@ -225,6 +246,8 @@ class ResNet(nn.Module):
         
         self.focalLoss = losses.FocalLoss()
         self.reidfocalLoss = losses.FocalLossReid()
+        self.rotatedLoss = (
+            RotatedCTrackerLoss(num_classes) if rotated else None)
                 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -233,6 +256,12 @@ class ResNet(nn.Module):
             elif isinstance(m, nn.BatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
+
+        if self.use_3d_se_stem:
+            nn.init.kaiming_normal_(
+                self.conv1.conv3d.weight, mode='fan_out',
+                nonlinearity='relu')
+            self.conv1.reset_se_parameters()
 
         prior = 0.01
 
@@ -277,9 +306,15 @@ class ResNet(nn.Module):
 
     def forward(self, inputs, last_feat=None):
         if self.training:
-            img_batch_1, annotations_1, img_batch_2, annotations_2 = inputs
+            if isinstance(inputs, dict):
+                img_batch_1 = inputs['img_prev']
+                img_batch_2 = inputs['img_curr']
+                pair_targets = inputs['targets']
+                annotations_1 = annotations_2 = None
+            else:
+                img_batch_1, annotations_1, img_batch_2, annotations_2 = inputs
+                pair_targets = None
             img_batch = torch.cat([img_batch_1, img_batch_2], 0)
-            annotations = torch.cat([annotations_1, annotations_2], 0)
         else:
             img_batch = inputs
             
@@ -300,8 +335,9 @@ class ResNet(nn.Module):
         )
 
         if self.training:
-            annotations_1 = annotations_1.to(img_batch.device)
-            annotations_2 = annotations_2.to(img_batch.device)
+            if not self.rotated:
+                annotations_1 = annotations_1.to(img_batch.device)
+                annotations_2 = annotations_2.to(img_batch.device)
             track_features = []
             for ind, featmap in enumerate(features):
                 featmap_t, featmap_t1 = torch.chunk(featmap, chunks = 2, dim = 0)
@@ -315,14 +351,16 @@ class ResNet(nn.Module):
 
                 reid_feat = reid_mask.permute(0, 2, 3, 1)
                 batch_size, width, height, _ = reid_feat.shape
-                reid_feat = reid_feat.contiguous().view(batch_size, -1, self.num_classes)
+                reid_feat = reid_feat.contiguous().view(
+                    batch_size, -1, self.reid_channels)
 
                 cls_mask = self.classificationModel(feature)
 
                 cls_feat = cls_mask.permute(0, 2, 3, 1)
                 cls_feat = cls_feat.contiguous().view(batch_size, -1, self.num_classes)
 
-                reg_in = feature * reid_mask * cls_mask
+                cls_gate = cls_mask.max(dim=1, keepdim=True)[0]
+                reg_in = feature * reid_mask * cls_gate
 
                 reg_feat = self.regressionModel(reg_in)
                 
@@ -333,10 +371,20 @@ class ResNet(nn.Module):
             classification = torch.cat(cls_features, dim=1)
             reid = torch.cat(reid_features, dim=1)
 
+            if self.rotated:
+                return self.rotatedLoss(
+                    classification, regression, reid, anchors, pair_targets)
             return self.focalLoss(classification, regression, anchors, annotations_1, annotations_2), self.reidfocalLoss(reid, anchors, annotations_1, annotations_2)
 
         else:
             if last_feat is None:
+                if self.rotated:
+                    empty = dict(
+                        scores=img_batch.new_zeros((0,)),
+                        paired_boxes=img_batch.new_zeros((0, 10)),
+                        labels=torch.zeros(
+                            0, dtype=torch.long, device=img_batch.device))
+                    return empty, features
                 return torch.zeros(0), torch.zeros(0, 4), features
             track_features = []
             for ind, featmap in enumerate(features):
@@ -352,14 +400,16 @@ class ResNet(nn.Module):
                 # out is B x C x W x H, with C = n_classes + n_anchors
                 reid_feat = reid_mask.permute(0, 2, 3, 1)
                 batch_size, width, height, _ = reid_feat.shape
-                reid_feat = reid_feat.contiguous().view(batch_size, -1, self.num_classes)
+                reid_feat = reid_feat.contiguous().view(
+                    batch_size, -1, self.reid_channels)
 
                 cls_mask = self.classificationModel(feature)
                 # out is B x C x W x H, with C = n_classes + n_anchors
                 cls_feat = cls_mask.permute(0, 2, 3, 1)
                 cls_feat = cls_feat.contiguous().view(batch_size, -1, self.num_classes)
 
-                reg_in = feature * reid_mask * cls_mask
+                cls_gate = cls_mask.max(dim=1, keepdim=True)[0]
+                reg_in = feature * reid_mask * cls_gate
 
                 reg_feat = self.regressionModel(reg_in)
                 
@@ -369,6 +419,29 @@ class ResNet(nn.Module):
             regression = torch.cat(reg_features, dim=1)
             classification = torch.cat(cls_features, dim=1)
             reid_score = torch.cat(reid_features, dim=1)
+
+            if self.rotated:
+                scores, labels = classification[0].max(dim=1)
+                keep = scores > 0.05
+                if not keep.any():
+                    empty = dict(
+                        scores=scores.new_zeros((0,)),
+                        paired_boxes=regression.new_zeros((0, 10)),
+                        labels=labels.new_zeros((0,), dtype=torch.long))
+                    return empty, features
+                kept_anchors = anchors[0, keep]
+                kept_regression = regression[0, keep]
+                prev_boxes = decode_hboxes_to_rboxes(
+                    kept_anchors, kept_regression[:, :5])
+                curr_boxes = decode_hboxes_to_rboxes(
+                    kept_anchors, kept_regression[:, 5:])
+                paired_boxes = torch.cat((prev_boxes, curr_boxes), dim=1)
+                paired_boxes, scores, labels = multiclass_rotated_soft_nms(
+                    paired_boxes, scores[keep], labels[keep], sigma=0.5)
+                return dict(
+                    scores=scores,
+                    paired_boxes=paired_boxes,
+                    labels=labels), features
 
             # anchors = np.concatenate((anchors, anchors), axis=1)
             anchors = torch.cat((anchors, anchors), dim=2)
@@ -401,7 +474,7 @@ def resnet18(num_classes, pretrained=False, **kwargs):
     """
     model = ResNet(num_classes, BasicBlock, [2, 2, 2, 2], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18'], model_dir='.'), strict=False)
+        _load_pretrained(model, model_urls['resnet18'])
     return model
 
 
@@ -412,7 +485,7 @@ def resnet34(num_classes, pretrained=False, **kwargs):
     """
     model = ResNet(num_classes, BasicBlock, [3, 4, 6, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet34'], model_dir='.'), strict=False)
+        _load_pretrained(model, model_urls['resnet34'])
     return model
 
 
@@ -423,7 +496,7 @@ def resnet50(num_classes, pretrained=False, **kwargs):
     """
     model = ResNet(num_classes, Bottleneck, [3, 4, 6, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet50'], model_dir='.'), strict=False)
+        _load_pretrained(model, model_urls['resnet50'])
     return model
 
 def resnet101(num_classes, pretrained=False, **kwargs):
@@ -433,7 +506,7 @@ def resnet101(num_classes, pretrained=False, **kwargs):
     """
     model = ResNet(num_classes, Bottleneck, [3, 4, 23, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet101'], model_dir='.'), strict=False)
+        _load_pretrained(model, model_urls['resnet101'])
     return model
 
 
@@ -444,5 +517,13 @@ def resnet152(num_classes, pretrained=False, **kwargs):
     """
     model = ResNet(num_classes, Bottleneck, [3, 8, 36, 3], **kwargs)
     if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet152'], model_dir='.'), strict=False)
+        _load_pretrained(model, model_urls['resnet152'])
     return model
+
+
+def _load_pretrained(model, url):
+    state_dict = model_zoo.load_url(url)
+    if model.use_3d_se_stem:
+        rgb_weight = state_dict.pop('conv1.weight')
+        model.conv1.load_rgb_weight(rgb_weight)
+    model.load_state_dict(state_dict, strict=False)

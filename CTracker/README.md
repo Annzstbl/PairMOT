@@ -115,6 +115,52 @@ Use `--device cpu` for CPU execution, `--device cuda:0` to select a GPU,
 `--data_parallel` to use all visible GPUs, and `--skip_test` to stop after
 training. `--workers` and `--batch_size` can be used to fit local resources.
 
+## HSMOT/MMOT rotated training
+
+The HSMOT path consumes paired 8-band images through the existing MMRotate
+`HSMOTPairDataset`. Its ResNet stem is a spectral `Conv3d(3, 7, 7)` followed by
+a pixel-wise spectral SE gate. The detector predicts all eight HSMOT classes,
+a separate one-channel association gate, and paired `le90` rotated boxes. Box
+training combines horizontal-anchor assignment with rotated delta Smooth L1
+and decoded KLD losses.
+
+From the repository root, start the R18 baseline with:
+
+```
+bash CTracker/train_hsmot_r18.sh
+```
+
+The launcher uses `data/hsmot/train`, `data/hsmot/train_half.txt`, 800x1200 training
+scale, batch size 4, and writes checkpoints to
+`workdir/ctracker_hsmot_r18_3dse_rotated`. HSMOT batches contain variable
+numbers of targets, so this implementation intentionally trains on one GPU;
+change `--device cuda:0` in the launcher to select another GPU.
+
+To resume from the latest checkpoint, run the equivalent command directly and
+add:
+
+```
+--resume workdir/ctracker_hsmot_r18_3dse_rotated/checkpoint_latest.pt
+```
+
+`checkpoint_latest.pt` contains model, optimizer, scheduler, epoch, and
+iteration state. `model_final.pt` is the complete inference model.
+
+Run tracking on an HSMOT split with:
+
+```
+cd CTracker
+conda run -n py310 python test_hsmot.py \
+  --data_root ../data/hsmot/test/npy2jpg \
+  --model ../workdir/ctracker_hsmot_r18_3dse_rotated/model_final.pt \
+  --output_dir ../workdir/ctracker_hsmot_r18_3dse_rotated/results \
+  --device cuda:0
+```
+
+Each sequence result uses the HSMOT 13-column format:
+`frame,track_id,x1,y1,...,x4,y4,score,class_id,0`. It can be evaluated with
+the repository's `TrackEval/scripts/run_hsmot_8ch.py` workflow.
+
 ## Testing
 
 A trained model is available at [Google Drive](https://drive.google.com/file/d/1-5f-3QwcDoFL6b3_81tcsYTWsU43aBaz/view?usp=sharing)/[Tencent Weiyun](https://share.weiyun.com/KgWrWCv3), run the following commands to start testing:
