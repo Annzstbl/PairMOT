@@ -1,5 +1,53 @@
 import numpy as np
-from .cython_nms.cpu_nms import greedy_nms, soft_nms
+
+
+def soft_nms(boxes_in, sigma=0.5, threshold=0.3, score_threshold=0.001,
+             method=0):
+    """Pure NumPy Soft-NMS for CTracker's paired 8-coordinate boxes."""
+    boxes = np.asarray(boxes_in, dtype=np.float32).copy()
+    count = boxes.shape[0]
+    indices = np.arange(count)
+
+    i = 0
+    while i < count:
+        max_pos = i + np.argmax(boxes[i:count, 8])
+        if max_pos != i:
+            boxes[[i, max_pos]] = boxes[[max_pos, i]]
+            indices[[i, max_pos]] = indices[[max_pos, i]]
+
+        pos = i + 1
+        while pos < count:
+            xx1 = max(boxes[i, 0], boxes[pos, 0])
+            yy1 = max(boxes[i, 1], boxes[pos, 1])
+            xx2 = min(boxes[i, 2], boxes[pos, 2])
+            yy2 = min(boxes[i, 3], boxes[pos, 3])
+            width = max(0.0, xx2 - xx1 + 1.0)
+            height = max(0.0, yy2 - yy1 + 1.0)
+
+            if width > 0 and height > 0:
+                area_i = ((boxes[i, 2] - boxes[i, 0] + 1.0) *
+                          (boxes[i, 3] - boxes[i, 1] + 1.0))
+                area_pos = ((boxes[pos, 2] - boxes[pos, 0] + 1.0) *
+                            (boxes[pos, 3] - boxes[pos, 1] + 1.0))
+                overlap = width * height / (area_i + area_pos - width * height)
+
+                if method == 1:
+                    weight = 1.0 - overlap if overlap > threshold else 1.0
+                elif method == 2:
+                    weight = np.exp(-(overlap * overlap) / sigma)
+                else:
+                    weight = 0.0 if overlap > threshold else 1.0
+                boxes[pos, 8] *= weight
+
+                if boxes[pos, 8] < score_threshold:
+                    boxes[pos] = boxes[count - 1]
+                    indices[pos] = indices[count - 1]
+                    count -= 1
+                    continue
+            pos += 1
+        i += 1
+
+    return boxes[:count], indices[:count]
 
 
 def cython_soft_nms_wrapper(thresh, sigma=0.5, score_thresh=0.001, method='linear'):
@@ -7,11 +55,9 @@ def cython_soft_nms_wrapper(thresh, sigma=0.5, score_thresh=0.001, method='linea
     assert method in methods, 'Unknown soft_nms method: {}'.format(method)
     def _nms(dets):
         dets, _ = soft_nms(
-                    np.ascontiguousarray(dets, dtype=np.float32),
-                    np.float32(sigma),
-                    np.float32(thresh),
-                    np.float32(score_thresh),
-                    np.uint8(methods[method]))
+            np.ascontiguousarray(dets, dtype=np.float32), sigma, thresh,
+            score_thresh, methods[method]
+        )
         return dets
     return _nms
 
@@ -24,7 +70,7 @@ def py_nms_wrapper(thresh):
 
 def cpu_nms_wrapper(thresh):
     def _nms(dets):
-        return greedy_nms(dets, thresh)[0]
+        return nms(dets, thresh)
     return _nms
 
 

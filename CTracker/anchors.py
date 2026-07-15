@@ -15,7 +15,7 @@ class Anchors(nn.Module):
             self.ratios = np.array([2.90, ])
         if scales is None:
             self.scales = [np.array([38.,]), np.array([86.,]), np.array([112.,]), np.array([156.,]), np.array([328.,])]
-    def forward(self, image_shape):
+    def forward(self, image_shape, device=None, dtype=torch.float32):
         
         image_shape = np.array(image_shape)
         image_shapes = [(image_shape + 2 ** x - 1) // (2 ** x) for x in self.pyramid_levels]
@@ -30,7 +30,7 @@ class Anchors(nn.Module):
 
         all_anchors = np.expand_dims(all_anchors, axis=0)
 
-        return torch.from_numpy(all_anchors.astype(np.float32)).cuda()
+        return torch.from_numpy(all_anchors.astype(np.float32)).to(device=device, dtype=dtype)
 
 def generate_anchors(ratios=None, scales=None):
     """
@@ -85,4 +85,3 @@ def shift(shape, stride, anchors):
     all_anchors = all_anchors.reshape((K * A, 4))
 
     return all_anchors
-

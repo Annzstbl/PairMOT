@@ -51,8 +51,8 @@ class FocalLoss(nn.Module):
 
             # return zero loss if no gt boxes exist
             if bbox_annotation.shape[0] == 0:
-                regression_losses.append(torch.tensor(0).float().cuda())
-                classification_losses.append(torch.tensor(0).float().cuda())
+                regression_losses.append(classifications.new_zeros(()))
+                classification_losses.append(classifications.new_zeros(()))
                 continue
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
@@ -66,8 +66,7 @@ class FocalLoss(nn.Module):
                 best_truth_idx[best_prior_idx[j]] = j
 
             # compute the label for classification
-            targets = torch.ones(classification.shape) * -1
-            targets = targets.cuda()
+            targets = classification.new_full(classification.shape, -1)
 
             targets[torch.lt(best_truth_overlap, 0.4), :] = 0
 
@@ -81,7 +80,7 @@ class FocalLoss(nn.Module):
             targets[positive_indices, assigned_annotations[positive_indices, 4].long()] = 1
 
             # compute the loss for classification
-            alpha_factor = torch.ones(targets.shape).cuda() * alpha
+            alpha_factor = torch.full_like(targets, alpha)
 
             alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
             focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
@@ -91,7 +90,7 @@ class FocalLoss(nn.Module):
 
             cls_loss = focal_weight * bce
 
-            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).cuda())
+            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros_like(cls_loss))
 
             classification_losses.append(cls_loss.sum()/torch.clamp(num_positive_anchors.float(), min=1.0))
 
@@ -101,7 +100,7 @@ class FocalLoss(nn.Module):
                 # assigned_annotations_next = assigned_annotations_next[positive_indices, :]
                 assigned_ids = assigned_annotations[:, 5]
                 assigned_annotations_next = torch.zeros_like(assigned_annotations)
-                reg_mask = torch.ones(assigned_annotations.shape[0], 8).cuda()
+                reg_mask = regression.new_ones((assigned_annotations.shape[0], 8))
                 # only learn regression for chained-anchors, whose id of target in two frames are the same
                 for m in range(assigned_annotations_next.shape[0]):
                     assigned_id = assigned_annotations[m, 5]
@@ -113,7 +112,7 @@ class FocalLoss(nn.Module):
                             break
                     if match_flag == False:
                         reg_mask[m, 4:] = 0
-    
+
                 anchor_widths_pi = anchor_widths[positive_indices]
                 anchor_heights_pi = anchor_heights[positive_indices]
                 anchor_ctr_x_pi = anchor_ctr_x[positive_indices]
@@ -150,7 +149,9 @@ class FocalLoss(nn.Module):
                 targets = torch.stack((targets_dx, targets_dy, targets_dw, targets_dh, targets_dx_next, targets_dy_next, targets_dw_next, targets_dh_next))
                 targets = targets.t()
 
-                targets = targets/torch.Tensor([[0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.2]]).cuda()
+                targets = targets / regression.new_tensor(
+                    [[0.1, 0.1, 0.2, 0.2, 0.1, 0.1, 0.2, 0.2]]
+                )
                 # compute losses
                 regression_diff = torch.abs(targets - regression[positive_indices, :]) * reg_mask
 
@@ -162,7 +163,7 @@ class FocalLoss(nn.Module):
 
                 regression_losses.append(regression_loss.mean())
             else:
-                regression_losses.append(torch.tensor(0).float().cuda())
+                regression_losses.append(classifications.new_zeros(()))
 
         return torch.stack(classification_losses).mean(dim=0, keepdim=True), torch.stack(regression_losses).mean(dim=0, keepdim=True)
 
@@ -185,14 +186,13 @@ class FocalLossReid(nn.Module):
             bbox_annotation_next = bbox_annotation_next[bbox_annotation_next[:, 4] != -1]
             # return zero loss if no gt boxes exist
             if bbox_annotation.shape[0] == 0:
-                classification_losses.append(torch.tensor(0).float().cuda())
+                classification_losses.append(classifications.new_zeros(()))
                 continue
 
             classification = torch.clamp(classification, 1e-4, 1.0 - 1e-4)
 
             # compute the label for classification
-            targets = torch.ones(classification.shape) * -1
-            targets = targets.cuda()
+            targets = classification.new_full(classification.shape, -1)
 
             # IoU matching for latter anchors' label assign, current frame
             IoU = calc_iou(anchors[0, :, :], bbox_annotation[:, :4]) # num_anchors x num_annotations
@@ -231,7 +231,7 @@ class FocalLossReid(nn.Module):
             num_positive_anchors = positive_indices.sum()
 
             # compute losses
-            alpha_factor = torch.ones(targets.shape).cuda() * alpha
+            alpha_factor = torch.full_like(targets, alpha)
 
             alpha_factor = torch.where(torch.eq(targets, 1.), alpha_factor, 1. - alpha_factor)
             focal_weight = torch.where(torch.eq(targets, 1.), 1. - classification, classification)
@@ -241,10 +241,8 @@ class FocalLossReid(nn.Module):
 
             cls_loss = focal_weight * bce
 
-            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).cuda())
+            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros_like(cls_loss))
 
             classification_losses.append(cls_loss.sum()/torch.clamp(num_positive_anchors.float(), min=1.0))
 
         return torch.stack(classification_losses).mean(dim=0, keepdim=True)
-
-    

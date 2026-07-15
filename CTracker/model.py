@@ -295,9 +295,13 @@ class ResNet(nn.Module):
 
         features = self.fpn([x2, x3, x4])
 
-        anchors = self.anchors(img_batch.shape[2:])
+        anchors = self.anchors(
+            img_batch.shape[2:], device=img_batch.device, dtype=img_batch.dtype
+        )
 
         if self.training:
+            annotations_1 = annotations_1.to(img_batch.device)
+            annotations_2 = annotations_2.to(img_batch.device)
             track_features = []
             for ind, featmap in enumerate(features):
                 featmap_t, featmap_t1 = torch.chunk(featmap, chunks = 2, dim = 0)

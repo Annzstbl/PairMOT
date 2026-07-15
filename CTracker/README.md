@@ -4,13 +4,35 @@ Official implementation in PyTorch of **Chained-Tracker** as described in [Chain
  
 The introduction video of CTracker is uploaded to [Youtube](https://www.youtube.com/watch?v=UovwAgKys88).
 
-The codes is tested with PyTorch 0.4.1. It may not run with other versions.
+This vendored version has been adapted for Python 3.10 and PyTorch 2.0. The
+original implementation targeted Python 3.6 and PyTorch 0.4.1.
+
+## Python 3.10 environment
+
+The compatibility baseline in this workspace is Python 3.10.20, PyTorch
+2.0.1+cu118, torchvision 0.15.2+cu118, and an NVIDIA CUDA-capable GPU. The old
+Cython/CUDA NMS extension is no longer required; inference uses the compatible
+NumPy implementation in `lib/nms.py`.
+
+Activate the existing environment and install only packages that are missing:
+
+```
+conda activate py310
+python -m pip install --no-deps scikit-image==0.22.0 lazy-loader==0.4 \
+    imageio==2.37.0 tifffile==2025.5.10
+python smoke_test.py
+```
+
+Using `--no-deps` leaves packages already installed in the environment
+unchanged. A normal installation into a new, empty Python 3.10 environment can
+instead use `python -m pip install -r requirements.txt` after installing the
+appropriate PyTorch/CUDA build.
 
 ## Video demos on MOT challenge test set
 <img src="demos/MOT17-03.gif" width="400"/>   <img src="demos/MOT17-07.gif" width="400"/>
 <img src="demos/MOT17-08.gif" width="400"/>   <img src="demos/MOT17-12.gif" width="400"/>
 
-## Installation
+## Original installation (legacy)
 * Clone this repo into a directory named CTRACKER_ROOT
 * Install the required packages
 ```
@@ -89,6 +111,10 @@ CUDA_VISIBLE_DEVICES=0 python train.py --root_path MOT17_ROOT --model_dir ./ctra
 ```
 By default, testing will start immediately after training finished.
 
+Use `--device cpu` for CPU execution, `--device cuda:0` to select a GPU,
+`--data_parallel` to use all visible GPUs, and `--skip_test` to stop after
+training. `--workers` and `--batch_size` can be used to fit local resources.
+
 ## Testing
 
 A trained model is available at [Google Drive](https://drive.google.com/file/d/1-5f-3QwcDoFL6b3_81tcsYTWsU43aBaz/view?usp=sharing)/[Tencent Weiyun](https://share.weiyun.com/KgWrWCv3), run the following commands to start testing:
@@ -96,6 +122,9 @@ A trained model is available at [Google Drive](https://drive.google.com/file/d/1
 ```
 CUDA_VISIBLE_DEVICES=0 python test.py --dataset_path MOT17_ROOT --model_dir ./trained_model/
 ```
+
+Both `train.py` and `test.py` automatically select CUDA when it is available;
+the selection can be overridden with `--device`.
 
 
 ## Acknowledgements

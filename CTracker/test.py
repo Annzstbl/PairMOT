@@ -19,8 +19,6 @@ from torchvision import datasets, models, transforms
 from dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, UnNormalizer, Normalizer, RGB_MEAN, RGB_STD
 from scipy.optimize import linear_sum_assignment
 
-assert torch.__version__.split('.')[1] == '4'
-
 print('CUDA available: {}'.format(torch.cuda.is_available()))
 
 color_list = [(0, 0, 255), (255, 0, 0), (0, 255, 0), (255, 0, 255), (0, 255, 255), (255, 255, 0), (128, 0, 255), 
@@ -131,8 +129,10 @@ def draw_caption(image, box, caption, color):
 	cv2.putText(image, caption, (b[0], b[1] - 8), cv2.FONT_HERSHEY_PLAIN, 2, color, 2)
 
 
-def run_each_dataset(model_dir, retinanet, dataset_path, subset, cur_dataset):	
+def run_each_dataset(model_dir, retinanet, dataset_path, subset, cur_dataset, device=None):
 	print(cur_dataset)
+	if device is None:
+		device = next(retinanet.parameters()).device
 
 	img_list = os.listdir(os.path.join(dataset_path, subset, cur_dataset, 'img1'))
 	img_list = [os.path.join(dataset_path, subset, cur_dataset, 'img1', _) for _ in img_list if ('jpg' in _) or ('png' in _)]
@@ -171,7 +171,9 @@ def run_each_dataset(model_dir, retinanet, dataset_path, subset, cur_dataset):
 			img1 = (img1.astype(np.float32) / 255.0 - np.array([[RGB_MEAN]])) / np.array([[RGB_STD]])
 			img1 = torch.from_numpy(img1).permute(2, 0, 1).view(1, 3, resize_h, resize_w)
 
-			scores, transformed_anchors, last_feat = retinanet(img1.cuda().float(), last_feat=last_feat)
+			scores, transformed_anchors, last_feat = retinanet(
+				img1.to(device=device, dtype=torch.float32), last_feat=last_feat
+			)
 			if idx > 0:
 				idxs = np.where(scores>0.1)
 
@@ -271,49 +273,48 @@ def run_each_dataset(model_dir, retinanet, dataset_path, subset, cur_dataset):
 
 		cv2.imwrite(os.path.join(save_img_dir, str(i + 1).zfill(6) + '.jpg'), img)
 		videoWriter.write(img)
-		cv2.waitKey(0)
+		cv2.waitKey(1)
 
 	fout_tracking.close()
 	videoWriter.release()
 
-def run_from_train(model_dir, root_path):
+def _load_model(model_path, device):
+	return torch.load(model_path, map_location=device)
+
+
+def run_from_train(model_dir, root_path, device=None):
 	if not os.path.exists(os.path.join(model_dir, 'results')):
 		os.makedirs(os.path.join(model_dir, 'results'))
-	retinanet = torch.load(os.path.join(model_dir, 'model_final.pt'))
-
-	use_gpu = True
-
-	if use_gpu: retinanet = retinanet.cuda()
+	device = torch.device(device or ('cuda' if torch.cuda.is_available() else 'cpu'))
+	retinanet = _load_model(os.path.join(model_dir, 'model_final.pt'), device).to(device)
 
 	retinanet.eval()
 
 	for seq_num in [2, 4, 5, 9, 10, 11, 13]:
-		run_each_dataset(model_dir, retinanet, root_path, 'train', 'MOT17-{:02d}'.format(seq_num))
+		run_each_dataset(model_dir, retinanet, root_path, 'train', 'MOT17-{:02d}'.format(seq_num), device)
 	for seq_num in [1, 3, 6, 7, 8, 12, 14]:
-		run_each_dataset(model_dir, retinanet, root_path, 'test', 'MOT17-{:02d}'.format(seq_num))
+		run_each_dataset(model_dir, retinanet, root_path, 'test', 'MOT17-{:02d}'.format(seq_num), device)
 			
 def main(args=None):
 	parser = argparse.ArgumentParser(description='Simple script for testing a CTracker network.')
 	parser.add_argument('--dataset_path', default='/dockerdata/home/jeromepeng/data/MOT/MOT17/', type=str, help='Dataset path, location of the images sequence.')
 	parser.add_argument('--model_dir', default='./trained_model/', help='Path to model (.pt) file.')
+	parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 
 	parser = parser.parse_args(args)
 
 	if not os.path.exists(os.path.join(parser.model_dir, 'results')):
 		os.makedirs(os.path.join(parser.model_dir, 'results'))
 
-	retinanet = torch.load(os.path.join(parser.model_dir, 'model_final.pt'))
-
-	use_gpu = True
-
-	if use_gpu: retinanet = retinanet.cuda()
+	device = torch.device(parser.device)
+	retinanet = _load_model(os.path.join(parser.model_dir, 'model_final.pt'), device).to(device)
 
 	retinanet.eval()
 
 	for seq_num in [2, 4, 5, 9, 10, 11, 13]:
-		run_each_dataset(parser.model_dir, retinanet, parser.dataset_path, 'train', 'MOT17-{:02d}'.format(seq_num))
+		run_each_dataset(parser.model_dir, retinanet, parser.dataset_path, 'train', 'MOT17-{:02d}'.format(seq_num), device)
 	for seq_num in [1, 3, 6, 7, 8, 12, 14]:
-		run_each_dataset(parser.model_dir, retinanet, parser.dataset_path, 'test', 'MOT17-{:02d}'.format(seq_num))
+		run_each_dataset(parser.model_dir, retinanet, parser.dataset_path, 'test', 'MOT17-{:02d}'.format(seq_num), device)
 
 if __name__ == '__main__':
 	main()
