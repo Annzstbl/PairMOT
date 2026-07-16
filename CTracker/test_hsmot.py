@@ -27,37 +27,88 @@ class Detection:
         self.label = int(label)
         self.track_id = -1
 
+    @property
+    def position(self):
+        return self.prev_box[:2]
+
+    @property
+    def size(self):
+        return self.prev_box[2:4]
+
 
 class Track:
     def __init__(self, detection):
         self.track_id = detection.track_id
         self.label = detection.label
+        self.detections = [detection]
+        self.num_detections = 1
         self.last = detection
-        self.missed = 0
+        self.last_frame = detection.frame_id
+        self.no_match_frame = 0
 
     def update(self, detection):
+        self.detections.append(detection)
+        self.num_detections += 1
         self.last = detection
-        self.missed = 0
+        self.last_frame = detection.frame_id
+
+    @property
+    def velocity(self):
+        if self.num_detections < 2:
+            return self.last.position.new_zeros(2)
+        if self.num_detections < 6:
+            last = self.detections[-1]
+            previous = self.detections[-2]
+            return ((last.position - previous.position) /
+                    (last.frame_id - previous.frame_id))
+        first = ((self.detections[-1].position -
+                  self.detections[-4].position) /
+                 (self.detections[-1].frame_id -
+                  self.detections[-4].frame_id))
+        second = ((self.detections[-2].position -
+                   self.detections[-5].position) /
+                  (self.detections[-2].frame_id -
+                   self.detections[-5].frame_id))
+        third = ((self.detections[-3].position -
+                  self.detections[-6].position) /
+                 (self.detections[-3].frame_id -
+                  self.detections[-6].frame_id))
+        return (first + second + third) / 3
+
+
+def rotated_iou(box1, box2):
+    return float(box_iou_rotated(
+        box1[None].float(), box2[None].float())[0, 0])
+
+
+def track_detection_similarity(track, detection):
+    """Original CTracker association, adapted only from HBB to RBB IoU."""
+    if detection.frame_id <= track.last_frame:
+        return 0.0
+    if detection.label != track.label:
+        return 0.0
+    frame_delta = detection.frame_id - track.last_frame
+    if frame_delta == 1:
+        return rotated_iou(track.last.curr_box, detection.prev_box)
+    predicted = track.last.prev_box.clone()
+    predicted[:2] += track.velocity * frame_delta
+    return rotated_iou(predicted, detection.prev_box)
 
 
 def match_tracks(tracks, detections, iou_threshold):
     if not tracks or not detections:
         return [], list(range(len(tracks))), list(range(len(detections)))
-    device = tracks[0].last.curr_box.device
-    predicted = torch.stack([track.last.curr_box for track in tracks])
-    observed = torch.stack([detection.prev_box for detection in detections])
-    overlaps = box_iou_rotated(predicted.float(), observed.float())
-    track_labels = torch.tensor(
-        [track.label for track in tracks], device=device)[:, None]
-    detection_labels = torch.tensor(
-        [detection.label for detection in detections], device=device)[None]
-    overlaps = overlaps.masked_fill(track_labels != detection_labels, 0)
-    rows, cols = linear_sum_assignment((-overlaps).cpu().numpy())
+    costs = torch.zeros(len(tracks), len(detections))
+    for track_index, track in enumerate(tracks):
+        for detection_index, detection in enumerate(detections):
+            costs[track_index, detection_index] = -track_detection_similarity(
+                track, detection)
+    rows, cols = linear_sum_assignment(costs.numpy())
     matches = []
     unmatched_tracks = set(range(len(tracks)))
     unmatched_detections = set(range(len(detections)))
     for row, col in zip(rows, cols):
-        if float(overlaps[row, col]) >= iou_threshold:
+        if float(costs[row, col]) <= -iou_threshold:
             matches.append((int(row), int(col)))
             unmatched_tracks.discard(int(row))
             unmatched_detections.discard(int(col))
@@ -112,7 +163,7 @@ def write_results(path, frame_detections, scale):
 
 
 def run_sequence(network, sequence_dir, output_path, device, image_scale,
-                 score_threshold=0.35, iou_threshold=0.5, retention=10):
+                 score_threshold=0.4, iou_threshold=0.5, retention=10):
     paths = sorted(glob.glob(osp.join(sequence_dir, '*_p1.jpg')))
     if not paths:
         raise FileNotFoundError(f'No HSMOT frames found in {sequence_dir}')
@@ -142,8 +193,11 @@ def run_sequence(network, sequence_dir, output_path, device, image_scale,
             detection.track_id = tracks[track_index].track_id
             tracks[track_index].update(detection)
         for track_index in unmatched_tracks:
-            tracks[track_index].missed += 1
-        tracks = [track for track in tracks if track.missed < retention]
+            tracks[track_index].no_match_frame += 1
+        tracks = [
+            track for track in tracks
+            if track.no_match_frame < retention
+        ]
         for detection_index in unmatched_detections:
             detection = detections[detection_index]
             detection.track_id = next_track_id
@@ -164,7 +218,7 @@ def main(args=None):
                         else 'cpu')
     parser.add_argument('--image_scale', nargs=2, type=int,
                         default=(900, 1200), metavar=('H', 'W'))
-    parser.add_argument('--score_threshold', type=float, default=0.35)
+    parser.add_argument('--score_threshold', type=float, default=0.4)
     parser.add_argument('--iou_threshold', type=float, default=0.5)
     parsed = parser.parse_args(args)
 

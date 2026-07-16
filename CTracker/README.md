@@ -185,6 +185,13 @@ Each sequence result uses the HSMOT 13-column format:
 `frame,track_id,x1,y1,...,x4,y4,score,class_id,0`. It can be evaluated with
 the repository's `TrackEval/scripts/run_hsmot_8ch.py` workflow.
 
+The HSMOT tracker preserves the original CTracker association policy: paired
+next/current box matching for adjacent frames, the original history-based
+linear velocity extrapolation across missed frames, Hungarian assignment at
+IoU 0.5, confidence threshold 0.4, and ten-frame track retention. Only the
+required multi-class constraint and rotated IoU/qbox output differ from the
+single-class horizontal-box implementation.
+
 ## Testing
 
 A trained model is available at [Google Drive](https://drive.google.com/file/d/1-5f-3QwcDoFL6b3_81tcsYTWsU43aBaz/view?usp=sharing)/[Tencent Weiyun](https://share.weiyun.com/KgWrWCv3), run the following commands to start testing:
