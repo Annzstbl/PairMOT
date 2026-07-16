@@ -21,13 +21,18 @@ STATE_DIR="$FS_RESULT_ROOT/finalizer_state"
 mkdir -p "$STATE_DIR"
 exec >> "$STATE_DIR/finalizer.log" 2>&1
 
+power_off() {
+  rm -f "$DEPLOY_KEY" "$DEPLOY_KEY.pub" || true
+  sync
+  /usr/bin/shutdown
+}
+
 shutdown_after_error() {
   code=$?
   line=$1
   printf 'finalizer_error exit=%s line=%s artifacts_root=%s\n' \
     "$code" "$line" "$FS_RESULT_ROOT" > "$STATE_DIR/status"
-  sync
-  /usr/bin/shutdown
+  power_off
   exit "$code"
 }
 trap 'shutdown_after_error $LINENO' ERR
@@ -44,8 +49,7 @@ if [[ ! -s "$WORK_DIR/epoch_72.pth" ]]; then
   mkdir -p "$FS_RESULT_ROOT/artifacts"
   cp -a "$WORK_DIR/launch.log" "$FS_RESULT_ROOT/artifacts/" || true
   printf 'training_failed\n' > "$STATE_DIR/status"
-  sync
-  /usr/bin/shutdown
+  power_off
   exit 1
 fi
 
@@ -63,8 +67,7 @@ while true; do
     echo "Timed out waiting for asynchronous TrackEval; preserving artifacts."
     printf 'async_eval_timeout completed=%s expected=%s\n' \
       "$completed" "$EXPECTED_EVALS" > "$STATE_DIR/status"
-    sync
-    /usr/bin/shutdown
+    power_off
     exit 1
   fi
   sleep "$POLL_SECONDS"
@@ -112,8 +115,7 @@ done
 if [[ "$cloned" -ne 1 ]]; then
   printf 'publish_failed_clone artifacts_preserved best_epoch=%s\n' \
     "$best_epoch" > "$STATE_DIR/status"
-  sync
-  /usr/bin/shutdown
+  power_off
   exit 0
 fi
 git -C "$PUBLISH_ROOT" checkout -b "$GITHUB_BRANCH"
@@ -142,6 +144,5 @@ else
   printf 'publish_failed artifacts_preserved best_epoch=%s\n' "$best_epoch" \
     > "$STATE_DIR/status"
 fi
-sync
 echo "[$(date '+%F %T')] finalization complete; shutting down AutoDL"
-/usr/bin/shutdown
+power_off
