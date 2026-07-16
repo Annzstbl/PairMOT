@@ -176,14 +176,22 @@ Run tracking on an HSMOT split with:
 cd CTracker
 conda run -n py310 python test_hsmot.py \
   --data_root ../data/hsmot/test/npy2jpg \
-  --model ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/model_final.pt \
+  --model ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/checkpoint_epoch_009.pt \
   --output_dir ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/results \
-  --device cuda:0
+  --tracker_name ctracker_epoch009 \
+  --device cuda:0 \
+  --evaluate \
+  --gt_dir ../data/hsmot/test/mot \
+  --trackeval_root ../TrackEval
 ```
 
-Each sequence result uses the HSMOT 13-column format:
-`frame,track_id,x1,y1,...,x4,y4,score,class_id,0`. It can be evaluated with
-the repository's `TrackEval/scripts/run_hsmot_8ch.py` workflow.
+Both complete models and `checkpoint_epoch_*.pt` training checkpoints are
+accepted. Pair detections are saved in `results/val_det`, tracking predictions
+in `results/trackers/ctracker_epoch009/preds`, and TrackEval CSV/plot outputs
+in `results/trackers/ctracker_epoch009/eval`. `results/metrics.json` provides a
+machine-readable summary and `results/trackeval_stdout.log` retains the full
+evaluation log. Each tracking result uses the HSMOT 13-column format:
+`frame,track_id,x1,y1,...,x4,y4,score,class_id,0`.
 
 The HSMOT tracker preserves the original CTracker association policy: paired
 next/current box matching for adjacent frames, the original history-based

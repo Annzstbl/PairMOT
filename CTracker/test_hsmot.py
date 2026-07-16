@@ -1,9 +1,13 @@
 """Run rotated CTracker on HSMOT 8-channel sequences."""
 
 import argparse
+import csv
 import glob
+import json
 import os
 import os.path as osp
+import subprocess
+import sys
 
 import torch
 import torch.nn.functional as F
@@ -16,6 +20,8 @@ from mmrotate.datasets.transforms.loading_hsmot_pair import (
     _load_multichannel_image)
 from mmcv.ops import box_iou_rotated
 from rotated_ops import rboxes_to_qboxes
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_mot_tracker import (  # noqa: E501
+    PairDetection, PairFrameRecord, write_pair_det_txt)
 
 
 class Detection:
@@ -132,7 +138,7 @@ def preprocess(path, image_scale, device):
     pad_h = (32 - resized_h % 32) % 32
     pad_w = (32 - resized_w % 32) % 32
     tensor = F.pad(tensor, (0, pad_w, 0, pad_h))
-    return tensor.to(device), scale
+    return tensor.to(device), scale, (height, width)
 
 
 def detections_from_output(output, frame_id, score_threshold):
@@ -162,8 +168,48 @@ def write_results(path, frame_detections, scale):
                     f'{detection.score:.6f},{detection.label},0\n')
 
 
-def run_sequence(network, sequence_dir, output_path, device, image_scale,
-                 score_threshold=0.4, iou_threshold=0.5, retention=10):
+def _pair_record(output, seq_name, prev_path, curr_path, prev_frame_id,
+                 curr_frame_id, scale, original_shape):
+    paired_boxes = output['paired_boxes'].detach().cpu().clone()
+    paired_boxes[:, :4] /= scale
+    paired_boxes[:, 5:9] /= scale
+    scores = output['scores'].detach().cpu()
+    labels = output['labels'].detach().cpu()
+    detections = []
+    for index, (boxes, score, label) in enumerate(
+            zip(paired_boxes, scores, labels)):
+        value = float(score)
+        detections.append(PairDetection(
+            index=index,
+            prev_bbox=[float(item) for item in boxes[:5]],
+            curr_bbox=[float(item) for item in boxes[5:]],
+            score=value,
+            cls_score=value,
+            label=int(label),
+            score_prev=value,
+            score_curr=value,
+            label_prev=int(label),
+            label_curr=int(label),
+        ))
+    height, width = original_shape
+    return PairFrameRecord(
+        seq_name=seq_name,
+        prev_frame_id=prev_frame_id,
+        curr_frame_id=curr_frame_id,
+        frame_gap=curr_frame_id - prev_frame_id,
+        prev_img_path=prev_path,
+        curr_img_path=curr_path,
+        img_shape=[round(height * scale), round(width * scale)],
+        ori_shape=[height, width],
+        scale_factor=[scale, scale],
+        detections=detections,
+        is_first_pair=False,
+    )
+
+
+def run_sequence(network, sequence_dir, output_path, pair_output_path, device,
+                 image_scale, score_threshold=0.4, iou_threshold=0.5,
+                 retention=10):
     paths = sorted(glob.glob(osp.join(sequence_dir, '*_p1.jpg')))
     if not paths:
         raise FileNotFoundError(f'No HSMOT frames found in {sequence_dir}')
@@ -172,10 +218,12 @@ def run_sequence(network, sequence_dir, output_path, device, image_scale,
     frame_detections = {}
     previous_features = None
     last_scale = 1.0
+    pair_records = []
+    sequence_name = osp.basename(sequence_dir)
 
     # Duplicate the final frame to flush CTracker's one-frame delayed output.
     for index, path in enumerate(paths + [paths[-1]]):
-        tensor, scale = preprocess(path, image_scale, device)
+        tensor, scale, original_shape = preprocess(path, image_scale, device)
         last_scale = scale
         with torch.no_grad():
             output, features = network(tensor, last_feat=previous_features)
@@ -184,6 +232,13 @@ def run_sequence(network, sequence_dir, output_path, device, image_scale,
             continue
         emitted_path = paths[index - 1]
         frame_id = int(osp.basename(emitted_path).split('_', 1)[0])
+        if index < len(paths):
+            current_path = paths[index]
+            current_frame_id = int(
+                osp.basename(current_path).split('_', 1)[0])
+            pair_records.append(_pair_record(
+                output, sequence_name, emitted_path, current_path, frame_id,
+                current_frame_id, scale, original_shape))
         detections = detections_from_output(
             output, frame_id, score_threshold)
         matches, unmatched_tracks, unmatched_detections = match_tracks(
@@ -206,13 +261,92 @@ def run_sequence(network, sequence_dir, output_path, device, image_scale,
         frame_detections[frame_id] = detections
 
     write_results(output_path, frame_detections, last_scale)
+    write_pair_det_txt(pair_output_path, pair_records)
     return sum(len(value) for value in frame_detections.values())
+
+
+def load_network(path, device):
+    payload = torch.load(path, map_location='cpu', weights_only=False)
+    if isinstance(payload, torch.nn.DataParallel):
+        payload = payload.module
+    if isinstance(payload, torch.nn.Module):
+        return payload.to(device).eval(), None
+    if not isinstance(payload, dict) or 'model' not in payload:
+        raise ValueError(f'Unsupported model/checkpoint format: {path}')
+    args = payload.get('args', {})
+    depth = int(args.get('depth', 50))
+    factories = {
+        18: model.resnet18,
+        34: model.resnet34,
+        50: model.resnet50,
+        101: model.resnet101,
+        152: model.resnet152,
+    }
+    if depth not in factories:
+        raise ValueError(f'Unsupported checkpoint depth: {depth}')
+    network = factories[depth](
+        num_classes=len(HSMOT_CLASSES), pretrained=False,
+        num_spectral=8, use_3d_se_stem=True, rotated=True)
+    network.load_state_dict(payload['model'], strict=True)
+    checkpoint_info = dict(
+        epoch=int(payload.get('epoch', -1)) + 1,
+        total_iter=int(payload.get('total_iter', 0)),
+    )
+    return network.to(device).eval(), checkpoint_info
+
+
+def run_trackeval(output_dir, tracker_name, tracker_sub_folder, gt_dir,
+                  img_dir, trackeval_root):
+    cmd = [
+        sys.executable,
+        osp.join(osp.abspath(trackeval_root), 'scripts/run_hsmot_8ch.py'),
+        '--USE_PARALLEL', 'False',
+        '--METRICS', 'HOTA', 'CLEAR', 'Identity',
+        '--TRACKERS_TO_EVAL', tracker_name,
+        '--TRACKER_SUB_FOLDER', tracker_sub_folder,
+        '--GT_FOLDER', osp.abspath(gt_dir),
+        '--IMG_FOLDER', osp.abspath(img_dir),
+        '--TRACKERS_FOLDER', osp.abspath(osp.join(output_dir, 'trackers')),
+        '--OUTPUT_FOLDER', osp.abspath(osp.join(output_dir, 'trackers')),
+    ]
+    pairmot_root = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+    ai4rs_root = osp.join(pairmot_root, 'ai4rs')
+    hsmot_root = osp.join(pairmot_root, 'hsmot')
+    env = os.environ.copy()
+    env['PYTHONPATH'] = os.pathsep.join(
+        [pairmot_root, ai4rs_root, hsmot_root] +
+        ([env['PYTHONPATH']] if env.get('PYTHONPATH') else []))
+    completed = subprocess.run(
+        cmd, cwd=osp.abspath(trackeval_root), check=False, env=env,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    stdout_path = osp.join(output_dir, 'trackeval_stdout.log')
+    with open(stdout_path, 'w', encoding='utf-8') as output_file:
+        output_file.write(completed.stdout)
+    if completed.returncode:
+        raise RuntimeError(
+            f'TrackEval failed with exit code {completed.returncode}; '
+            f'see {stdout_path}')
+
+    eval_dir = osp.join(
+        output_dir, 'trackers', tracker_name, 'eval')
+    metrics = {}
+    for path in sorted(glob.glob(osp.join(eval_dir, '*_summary.csv'))):
+        with open(path, encoding='utf-8') as input_file:
+            row = next(csv.DictReader(input_file), None)
+        if row is not None:
+            metrics[osp.basename(path)[:-len('_summary.csv')]] = row
+    metrics_path = osp.join(output_dir, 'metrics.json')
+    with open(metrics_path, 'w', encoding='utf-8') as output_file:
+        json.dump(metrics, output_file, indent=2, ensure_ascii=False)
+    return metrics_path, stdout_path
 
 
 def main(args=None):
     parser = argparse.ArgumentParser()
     parser.add_argument('--data_root', required=True)
-    parser.add_argument('--model', required=True)
+    parser.add_argument(
+        '--model', required=True,
+        help='Complete model_final.pt or training checkpoint_epoch_*.pt.')
     parser.add_argument('--output_dir', required=True)
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available()
                         else 'cpu')
@@ -220,30 +354,51 @@ def main(args=None):
                         default=(900, 1200), metavar=('H', 'W'))
     parser.add_argument('--score_threshold', type=float, default=0.4)
     parser.add_argument('--iou_threshold', type=float, default=0.5)
+    parser.add_argument('--tracker_name', default='ctracker')
+    parser.add_argument('--tracker_sub_folder', default='preds')
+    parser.add_argument('--evaluate', action='store_true')
+    parser.add_argument('--gt_dir', default='')
+    parser.add_argument('--trackeval_root', default='../TrackEval')
     parsed = parser.parse_args(args)
 
     device = torch.device(parsed.device)
-    network = torch.load(
-        parsed.model, map_location=device,
-        weights_only=False).to(device).eval()
+    network, checkpoint_info = load_network(parsed.model, device)
     if not getattr(network, 'rotated', False):
         raise ValueError('The checkpoint is not a rotated CTracker model')
+    if checkpoint_info is not None:
+        print(f'Loaded checkpoint: {checkpoint_info}')
     os.makedirs(parsed.output_dir, exist_ok=True)
+    pair_output_dir = osp.join(parsed.output_dir, 'val_det')
+    track_output_dir = osp.join(
+        parsed.output_dir, 'trackers', parsed.tracker_name,
+        parsed.tracker_sub_folder)
+    os.makedirs(pair_output_dir, exist_ok=True)
+    os.makedirs(track_output_dir, exist_ok=True)
     sequence_dirs = sorted(
         path for path in glob.glob(osp.join(parsed.data_root, '*'))
         if osp.isdir(path))
     total = 0
     for sequence_dir in sequence_dirs:
         sequence = osp.basename(sequence_dir)
-        output_path = osp.join(parsed.output_dir, f'{sequence}.txt')
+        output_path = osp.join(track_output_dir, f'{sequence}.txt')
+        pair_output_path = osp.join(pair_output_dir, f'{sequence}.txt')
         count = run_sequence(
-            network, sequence_dir, output_path, device,
+            network, sequence_dir, output_path, pair_output_path, device,
             tuple(parsed.image_scale), parsed.score_threshold,
             parsed.iou_threshold)
         total += count
         print(f'{sequence}: {count} detections -> {output_path}')
     print(f'Completed {len(sequence_dirs)} sequences, {total} detections; '
           f'classes={HSMOT_CLASSES}')
+    if parsed.evaluate:
+        gt_dir = parsed.gt_dir or osp.join(
+            osp.dirname(parsed.data_root), 'mot')
+        metrics_path, stdout_path = run_trackeval(
+            parsed.output_dir, parsed.tracker_name,
+            parsed.tracker_sub_folder, gt_dir, parsed.data_root,
+            parsed.trackeval_root)
+        print(f'TrackEval metrics -> {metrics_path}')
+        print(f'TrackEval stdout -> {stdout_path}')
 
 
 if __name__ == '__main__':
