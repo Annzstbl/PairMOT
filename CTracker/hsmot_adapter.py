@@ -17,13 +17,16 @@ HSMOT_CLASSES = (
 
 def build_hsmot_pair_dataset(data_root, ann_file='', ann_subdir='mot',
                              img_subdir='npy2jpg', img_format='3jpg',
-                             training=True, image_scale=(800, 1200),
+                             training=True, image_scale=(900, 1200),
                              augment=True, same_frame=False):
+    # The CLI uses the conventional (height, width) order, while MMDet
+    # Resize expects (width, height).
+    resize_scale = (image_scale[1], image_scale[0])
     pipeline = [
         dict(type='mmrotate.LoadHSMOTPairImages', to_float32=False),
         dict(type='mmrotate.HSMOTPairLoadAnnotations', box_type='qbox'),
         dict(type='mmrotate.ConvertPairBoxType', dst_box_type='rbox'),
-        dict(type='mmrotate.PairSharedResize', scale=image_scale, keep_ratio=True,
+        dict(type='mmrotate.PairSharedResize', scale=resize_scale, keep_ratio=True,
              clip_object_border=False),
     ]
     if training and augment:
@@ -49,7 +52,7 @@ def build_hsmot_pair_dataset(data_root, ann_file='', ann_subdir='mot',
     if ann_file:
         kwargs['ann_file'] = ann_file
     if training:
-        kwargs.update(random_interval_range=(1, 1), sample_seed=3407)
+        kwargs.update(frame_intervals=(1,), sample_seed=3407)
     else:
         kwargs.update(frame_intervals=(1,))
     return HSMOTPairDataset(**kwargs)
@@ -91,9 +94,24 @@ def ctracker_collate(samples, pad_divisor=32):
         metas.append(dict(data_sample.metainfo))
 
     pairs = torch.stack(pairs, dim=0)
+    max_objects = max(len(target['labels']) for target in targets)
+    batch_size = len(targets)
+    padded_targets = dict(
+        bboxes_prev=torch.zeros(batch_size, max_objects, 5),
+        bboxes_curr=torch.zeros(batch_size, max_objects, 5),
+        labels=torch.zeros(batch_size, max_objects, dtype=torch.long),
+        track_ids=torch.full(
+            (batch_size, max_objects), -1, dtype=torch.long),
+        valid_prev=torch.zeros(batch_size, max_objects, dtype=torch.bool),
+        valid_curr=torch.zeros(batch_size, max_objects, dtype=torch.bool),
+    )
+    for batch_index, target in enumerate(targets):
+        count = len(target['labels'])
+        for key in padded_targets:
+            padded_targets[key][batch_index, :count] = target[key]
     return dict(
         img_prev=pairs[:, 0],
         img_curr=pairs[:, 1],
-        targets=targets,
+        targets=padded_targets,
         img_metas=metas,
     )

@@ -163,7 +163,7 @@ def main(args=None):
     parser.add_argument('--device', default='cuda' if torch.cuda.is_available()
                         else 'cpu')
     parser.add_argument('--image_scale', nargs=2, type=int,
-                        default=(800, 1200))
+                        default=(900, 1200), metavar=('H', 'W'))
     parser.add_argument('--score_threshold', type=float, default=0.35)
     parser.add_argument('--iou_threshold', type=float, default=0.5)
     parsed = parser.parse_args(args)

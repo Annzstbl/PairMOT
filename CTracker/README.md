@@ -124,23 +124,36 @@ a separate one-channel association gate, and paired `le90` rotated boxes. Box
 training combines horizontal-anchor assignment with rotated delta Smooth L1
 and decoded KLD losses.
 
-From the repository root, start the R18 baseline with:
+From the repository root, start the R50 baseline with:
 
 ```
-bash CTracker/train_hsmot_r18.sh
+bash CTracker/train_hsmot_r50.sh
 ```
 
-The launcher uses `data/hsmot/train`, `data/hsmot/train_half.txt`, 800x1200 training
-scale, batch size 4, and writes checkpoints to
-`workdir/ctracker_hsmot_r18_3dse_rotated`. HSMOT batches contain variable
-numbers of targets, so this implementation intentionally trains on one GPU;
-change `--device cuda:0` in the launcher to select another GPU.
+The launcher follows the original CTracker training setup: ResNet-50, 100
+epochs, global batch size 8, 32 data workers, Adam at `5e-5`, gradient clipping
+at 0.1, and ReduceLROnPlateau scheduling. It uses the mainline 900x1200
+(height x width) image geometry, trains on the full HSMOT train split, and
+initializes from
+`/data4/litianhao/PairMmot/pretrained_weights/ctracker_model_final.pt`. The
+spectral 3D Stem is the only 10x learning-rate parameter group (`5e-4`).
+Checkpoints are written to
+`workdir/ctracker_hsmot_r50_3dse_rotated_1200x900`.
+As in the mainline data preprocessor, the 900x1200 resized frame is padded to
+the next multiple of 32, so the tensor entering the network is 928x1216.
+
+The launcher enables `DataParallel`, matching the original multi-GPU CTracker
+training. Use `CUDA_VISIBLE_DEVICES` to select GPUs, for example:
+
+```
+CUDA_VISIBLE_DEVICES=2,3 bash CTracker/train_hsmot_r50.sh
+```
 
 To resume from the latest checkpoint, run the equivalent command directly and
 add:
 
 ```
---resume workdir/ctracker_hsmot_r18_3dse_rotated/checkpoint_latest.pt
+--resume workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/checkpoint_latest.pt
 ```
 
 `checkpoint_latest.pt` contains model, optimizer, scheduler, epoch, and
@@ -152,8 +165,8 @@ Run tracking on an HSMOT split with:
 cd CTracker
 conda run -n py310 python test_hsmot.py \
   --data_root ../data/hsmot/test/npy2jpg \
-  --model ../workdir/ctracker_hsmot_r18_3dse_rotated/model_final.pt \
-  --output_dir ../workdir/ctracker_hsmot_r18_3dse_rotated/results \
+  --model ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/model_final.pt \
+  --output_dir ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900/results \
   --device cuda:0
 ```
 

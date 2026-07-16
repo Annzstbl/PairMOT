@@ -52,6 +52,10 @@ def main(args=None):
 	parser.add_argument('--workers', type=int, default=8)
 	parser.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
 	parser.add_argument('--no_pretrained', action='store_true', help='Do not load ImageNet pretrained weights.')
+	parser.add_argument('--pretrained_model', default='',
+	                    help='Original CTracker final.pt to adapt for HSMOT.')
+	parser.add_argument('--lr', type=float, default=5e-5)
+	parser.add_argument('--stem_lr_multiplier', type=float, default=1.0)
 	parser.add_argument('--data_parallel', action='store_true', help='Use all visible CUDA devices.')
 	parser.add_argument('--skip_test', action='store_true', help='Do not run MOT17 evaluation after training.')
 	parser.add_argument('--ann_file', default='', help='Optional HSMOT sequence split file.')
@@ -59,7 +63,7 @@ def main(args=None):
 	parser.add_argument('--img_subdir', default='npy2jpg')
 	parser.add_argument('--img_format', choices=('npy', '3jpg'), default='3jpg')
 	parser.add_argument('--image_scale', type=int, nargs=2,
-	                    default=(800, 1200), metavar=('H', 'W'))
+	                    default=(900, 1200), metavar=('H', 'W'))
 	parser.add_argument('--no_augment', action='store_true')
 	parser.add_argument('--max_iters', type=int, default=0,
 	                    help='Stop after this many iterations; 0 means unlimited.')
@@ -110,34 +114,48 @@ def main(args=None):
 			num_spectral=8, use_3d_se_stem=True, rotated=True)
 
 	# Create the model
+	use_imagenet_pretrain = not parser.no_pretrained and not parser.pretrained_model
 	if parser.depth == 18:
-		retinanet = model.resnet18(num_classes=num_classes, pretrained=not parser.no_pretrained, **model_kwargs)
+		retinanet = model.resnet18(num_classes=num_classes, pretrained=use_imagenet_pretrain, **model_kwargs)
 	elif parser.depth == 34:
-		retinanet = model.resnet34(num_classes=num_classes, pretrained=not parser.no_pretrained, **model_kwargs)
+		retinanet = model.resnet34(num_classes=num_classes, pretrained=use_imagenet_pretrain, **model_kwargs)
 	elif parser.depth == 50:
-		retinanet = model.resnet50(num_classes=num_classes, pretrained=not parser.no_pretrained, **model_kwargs)
+		retinanet = model.resnet50(num_classes=num_classes, pretrained=use_imagenet_pretrain, **model_kwargs)
 	elif parser.depth == 101:
-		retinanet = model.resnet101(num_classes=num_classes, pretrained=not parser.no_pretrained, **model_kwargs)
+		retinanet = model.resnet101(num_classes=num_classes, pretrained=use_imagenet_pretrain, **model_kwargs)
 	elif parser.depth == 152:
-		retinanet = model.resnet152(num_classes=num_classes, pretrained=not parser.no_pretrained, **model_kwargs)
+		retinanet = model.resnet152(num_classes=num_classes, pretrained=use_imagenet_pretrain, **model_kwargs)
 	else:
 		raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')		
 
+	if parser.pretrained_model:
+		load_report = model.load_legacy_ctracker(
+			retinanet, parser.pretrained_model)
+		print('Loaded legacy CTracker weights: {}'.format(load_report))
 	retinanet = retinanet.to(device)
 	if parser.data_parallel:
 		if device.type != 'cuda':
 			raise ValueError('--data_parallel requires a CUDA device.')
-		if parser.dataset == 'hsmot':
-			raise ValueError(
-				'HSMOT variable-length targets currently require single-device '
-				'training. Select one GPU with --device cuda:N.')
 		retinanet = torch.nn.DataParallel(retinanet)
 	model_without_wrapper = retinanet.module if isinstance(retinanet, torch.nn.DataParallel) else retinanet
 
 	retinanet.training = True
 
-	# optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
-	optimizer = optim.Adam(retinanet.parameters(), lr=5e-5)
+	stem_parameters = [
+		parameter for parameter in model_without_wrapper.conv1.parameters()
+		if parameter.requires_grad]
+	stem_parameter_ids = {id(parameter) for parameter in stem_parameters}
+	base_parameters = [
+		parameter for parameter in model_without_wrapper.parameters()
+		if parameter.requires_grad and id(parameter) not in stem_parameter_ids]
+	optimizer = optim.Adam([
+		dict(params=base_parameters, lr=parser.lr),
+		dict(params=stem_parameters,
+		     lr=parser.lr * parser.stem_lr_multiplier),
+	], lr=parser.lr)
+	print('Optimizer learning rates: base={}, stem={} ({}x)'.format(
+		parser.lr, parser.lr * parser.stem_lr_multiplier,
+		parser.stem_lr_multiplier))
 
 	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
 	start_epoch = 0
@@ -179,7 +197,10 @@ def main(args=None):
 						img_prev=data['img_prev'].to(device),
 						img_curr=data['img_curr'].to(device),
 						targets=data['targets'])
-					loss_dict = retinanet(model_inputs)
+					loss_dict = {
+						name: value.mean()
+						for name, value in retinanet(model_inputs).items()
+					}
 					loss = sum(loss_dict.values())
 				else:
 					(classification_loss, regression_loss), reid_loss = retinanet([

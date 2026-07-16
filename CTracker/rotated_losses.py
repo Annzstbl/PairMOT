@@ -67,6 +67,11 @@ class RotatedCTrackerLoss(nn.Module):
 
     def forward(self, classifications, regressions, associations, anchors,
                 targets):
+        if isinstance(targets, dict):
+            targets = [
+                {key: value[index] for key, value in targets.items()}
+                for index in range(classifications.size(0))
+            ]
         anchor = anchors[0]
         cls_losses = []
         delta_losses = []

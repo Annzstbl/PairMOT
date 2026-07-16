@@ -11,6 +11,7 @@ from rotated_ops import (decode_hboxes_to_rboxes,
                          encode_hboxes_to_rboxes,
                          multiclass_rotated_soft_nms)
 from stem_conv3d_se import SpectralStemConv3dSE
+import model
 
 
 class TestSpectralStem(unittest.TestCase):
@@ -83,6 +84,27 @@ class TestRotatedLoss(unittest.TestCase):
         self.assertTrue(torch.isfinite(classification.grad).all())
         self.assertTrue(torch.isfinite(regression.grad).all())
         self.assertTrue(torch.isfinite(association.grad).all())
+
+
+class TestLegacyCTrackerPretrain(unittest.TestCase):
+    def test_original_r50_adaptation(self):
+        path = ('/data4/litianhao/PairMmot/pretrained_weights/'
+                'ctracker_model_final.pt')
+        if not os.path.isfile(path):
+            self.skipTest(f'Legacy CTracker checkpoint unavailable: {path}')
+        network = model.resnet50(
+            num_classes=8, num_spectral=8,
+            use_3d_se_stem=True, rotated=True)
+        report = model.load_legacy_ctracker(network, path)
+        self.assertGreaterEqual(report['copied'], 300)
+        stem = network.conv1.conv3d.weight.detach()
+        self.assertEqual(stem.shape, (64, 1, 3, 7, 7))
+        cls = network.classificationModel.output.weight.detach()
+        torch.testing.assert_close(cls, cls[:1].expand_as(cls))
+        reg = network.regressionModel.output.weight.detach()
+        self.assertEqual(reg.shape[0], 10)
+        self.assertTrue(torch.count_nonzero(reg[4]) == 0)
+        self.assertTrue(torch.count_nonzero(reg[9]) == 0)
 
 
 if __name__ == '__main__':

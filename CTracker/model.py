@@ -2,6 +2,7 @@ import numpy as np
 import torch.nn as nn
 import torch
 import math
+import warnings
 import time
 import torch.utils.model_zoo as model_zoo
 from utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
@@ -527,3 +528,74 @@ def _load_pretrained(model, url):
         rgb_weight = state_dict.pop('conv1.weight')
         model.conv1.load_rgb_weight(rgb_weight)
     model.load_state_dict(state_dict, strict=False)
+
+
+def load_legacy_ctracker(model, path):
+    """Adapt an original RGB/axis-aligned CTracker model for rotated HSMOT."""
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            'ignore', category=torch.serialization.SourceChangeWarning)
+        checkpoint = torch.load(path, map_location='cpu')
+    if isinstance(checkpoint, nn.DataParallel):
+        checkpoint = checkpoint.module
+    if isinstance(checkpoint, nn.Module):
+        source = checkpoint.state_dict()
+    elif isinstance(checkpoint, dict):
+        source = checkpoint.get('model', checkpoint.get('state_dict',
+                                                         checkpoint))
+    else:
+        raise TypeError(f'Unsupported CTracker checkpoint: {type(checkpoint)}')
+    source = {
+        key.removeprefix('module.'): value
+        for key, value in source.items()
+    }
+    target = model.state_dict()
+
+    # Refuse silent partial backbone loading (for example R50 -> R18).
+    incompatible = []
+    for name, _ in model.named_parameters():
+        if name.startswith('conv1.') or '.output.' in name:
+            continue
+        if name not in source or source[name].shape != target[name].shape:
+            incompatible.append(name)
+    if incompatible:
+        preview = ', '.join(incompatible[:5])
+        raise ValueError(
+            'Legacy CTracker backbone does not match the requested model '
+            f'(first incompatible parameters: {preview}). Use --depth 50 '
+            'with ctracker_model_final.pt.')
+
+    copied = 0
+    for key, value in source.items():
+        if key in target and target[key].shape == value.shape:
+            target[key] = value
+            copied += 1
+
+    rgb_stem = source.get('conv1.weight')
+    stem_key = 'conv1.conv3d.weight'
+    if rgb_stem is None or stem_key not in target:
+        raise ValueError('Expected RGB conv1 and a Conv3d target stem')
+    if target[stem_key].shape != rgb_stem.unsqueeze(1).shape:
+        raise ValueError('RGB conv1 cannot be mapped to the target Conv3d stem')
+    target[stem_key] = rgb_stem.unsqueeze(1)
+
+    for suffix in ('weight', 'bias'):
+        old_cls = source[f'classificationModel.output.{suffix}']
+        cls_key = f'classificationModel.output.{suffix}'
+        repeats = [model.num_classes] + [1] * (old_cls.ndim - 1)
+        target[cls_key] = old_cls.repeat(*repeats)
+
+        old_reg = source[f'regressionModel.output.{suffix}']
+        reg_key = f'regressionModel.output.{suffix}'
+        adapted_reg = torch.zeros_like(target[reg_key])
+        adapted_reg[:4] = old_reg[:4]
+        adapted_reg[5:9] = old_reg[4:8]
+        target[reg_key] = adapted_reg
+
+    model.load_state_dict(target, strict=True)
+    return dict(
+        copied=copied,
+        stem='RGB 7x7 -> spectral Conv3d 3x7x7',
+        classification=f'1 -> {model.num_classes} classes',
+        regression='paired 4+4 -> rotated 5+5 (angles zero initialized)',
+    )
