@@ -158,3 +158,16 @@ AP 侧与 HOTA 侧方向一致但排序不同。`0705_04` 的 AP 最强，说明
 3. `0705_04 slowgate` 可作为 det/AP 方向的 ablation，但不建议替代 `0705_01` 作为综合 HOTA 主线。
 4. encoder temporal 的收益明显高于 decoder tri-state 系列：当前 encoder 最优相对 baseline `+1.781`，decoder 最优为 `+0.988`。
 5. 后续若与 liquid 组合，应优先选择 `0705_01` 或 `0705_03` 作为 encoder 侧结构；前者追求综合最优，后者结构更简洁且后期趋势更稳。
+
+## 8. 论文全量组合复验
+
+`0716_05`将本报告唯一最佳的`0705_01 p5temporal_pyramidlocal`叠加到论文正式
+Base + Liquid group-set-unique配置。相对同步运行的`0716_04`，唯一模型变化是P5 global
+temporal与post-FPN三尺度pyramid-local adapter；仍从同一个COCO-only适配权重fresh训练，
+使用全量8297个正序pair、1200x900、BF16、`find_unused_parameters=False`和完整72-epoch
+评测。
+
+2026-07-16在252 GPU 0/1完成30项单测和100 iter DDP验证后启动正式训练。epoch 1 iter 50
+的loss和grad均有限，两个零初始化gate已经打开且其内部模块收到梯度，框架统计显存
+`11387 MB/rank`。正式目录为
+`/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。

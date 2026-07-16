@@ -517,9 +517,72 @@ Conv3D、SE、sampler、pair-band encoder、band-context fusion、wide LAF 与 g
 252 的第一次 22:01 启动在模型构建前退出，因为远端仍停留在不支持当前 BF16 边界参数的
 旧 detector 代码。同步本机稳定的 detector、head、RT-DETR layer 和 GDLoss 实现后，
 正式 fresh run 于 2026-07-15 22:05 在 GPUs `0,1`、port `29878` 启动，没有 resume。
-已验证到 epoch 1 iter 200：`0.9636 s/iter`、日志显存 `8444 MiB`，loss/grad finite，
-初始 pattern 为 `701 / 012 / 123 / 234 / 345 / 456 / 567 / 670`，没有 unused-parameter、
-dtype、GMC 或 DDP 错误。当前 ETA 约 20 小时 29 分。
+实验已完成 72 epochs、18 个 validation 和全部 18 个 TrackEval 点，训练期间没有
+unused-parameter、dtype、GMC 或 DDP 错误。
+
+### 15.1 完整结果
+
+严格按 `cls_HOTA + det_HOTA` 选择唯一最佳，最佳点为 `val_track_0017`，payload
+`step=67`，对应训练 epoch 68 / val_det epoch 67。最终 epoch 72 的选择分数从
+`112.194` 回落到 `112.050`，因此不使用最后一个 checkpoint。指标保持 cls/det 分离
+展示，二者之和只用于选择 checkpoint：
+
+| experiment | unique best epoch | cls HOTA | det HOTA | cls MOTA | cls IDF1 | det MOTA | det IDF1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| full baseline `0714_01` | 72 | 52.374 | 60.318 | 44.159 | 62.126 | 57.407 | 70.957 |
+| pair transport `0715_05` | 72 | 53.472 | 60.907 | 44.951 | 62.704 | 58.652 | 71.215 |
+| band context `0715_06` | 68 | 51.817 | 60.377 | 43.162 | 60.815 | 56.502 | 70.348 |
+| `0715_06` vs baseline | - | -0.557 | +0.059 | -0.997 | -1.311 | -0.905 | -0.609 |
+| `0715_06` vs `0715_05` | - | -1.655 | -0.530 | -1.789 | -1.889 | -2.150 | -0.867 |
+
+用于唯一 checkpoint 选择的分数分别为 baseline `112.692`、`0715_05` `114.379`、
+`0715_06` `112.194`。因此 band context 略微提高 det HOTA，但 cls HOTA 的下降更大，
+综合结果比 baseline 低 `0.498`，比 pair transport 低 `2.185`。其后期轨迹仍在上升，
+epoch 60/64/68 的选择分数为 `111.717/111.774/112.194`，但 epoch 72 已开始回落，
+不存在通过继续选择最后 checkpoint 扭转结论的依据。
+
+AP 独立按 pair mAP 选择，`0715_06` 的 AP 最佳也为 epoch 68：
+
+| experiment | AP epoch | pair mAP | pair AP50 | both mAP | both AP50 |
+|---|---:|---:|---:|---:|---:|
+| full baseline `0714_01` | 72 | 0.2928 | 0.5062 | 0.3011 | 0.5209 |
+| pair transport `0715_05` | 72 | 0.2988 | 0.5115 | 0.3070 | 0.5256 |
+| band context `0715_06` | 68 | 0.2920 | 0.4957 | 0.3001 | 0.5097 |
+| `0715_06` vs baseline | - | -0.0009 | -0.0105 | -0.0010 | -0.0112 |
+| `0715_06` vs `0715_05` | - | -0.0068 | -0.0157 | -0.0068 | -0.0159 |
+
+唯一最佳 HOTA 点的逐类 cls HOTA 为：
+
+| class | full baseline | `0715_05` | `0715_06` | `0715_06` vs baseline | `0715_06` vs `0715_05` |
+|---|---:|---:|---:|---:|---:|
+| car | 80.004 | 81.115 | 80.633 | +0.629 | -0.482 |
+| bike | 41.266 | 41.597 | 40.584 | -0.682 | -1.013 |
+| pedestrian | 42.192 | 42.325 | 41.844 | -0.348 | -0.481 |
+| van | 61.745 | 62.166 | 59.655 | -2.090 | -2.511 |
+| truck | 39.610 | 40.150 | 35.824 | -3.786 | -4.326 |
+| bus | 71.302 | 71.378 | 70.405 | -0.897 | -0.973 |
+| tricycle | 37.831 | 42.903 | 38.795 | +0.964 | -4.108 |
+| awning-bike | 45.040 | 46.140 | 46.796 | +1.756 | +0.656 |
+
+Band context 对 awning-bike、tricycle 和 car 有局部收益，其中 awning-bike 还超过
+`0715_05`；但 truck、van、bus、bike 和 pedestrian 均下降。尤其 truck `-3.786` 和
+van `-2.090` 主导了 cls-side 回落。该结果说明逐物理波段的 pair context 具有类别互补
+信息，但当前“同一 context 同时修正 descriptor、sampler logits 和 LAF token”的注入
+过强或存在偏置，不能替代 `0715_05` 的 pair sampler router + coverage transport。
+
+### 15.2 Sampler 多样性诊断
+
+两个实验都只保证单个三波段 group 内无重复，不约束不同 group 选择相同波段集合。
+`0715_06` 后期 epoch 69--72 平均只有 `6.19/8` 个不同有序组合；忽略排列后只有
+`5.19/8` 个不同波段集合，且所有监控点均存在跨 group 重复。`0715_05` 同期分别为
+`5.89/8` 和 `4.89/8`，塌缩更严重。`0715_06` 的较高多样性没有转化为更高 tracking
+指标，说明“不同组合更多”本身不足以证明 pair context 有效；但两个模型均未真正实现
+8 个有效不同谱段组，这也是当前 Liquid 仍需修正的共同结构缺陷。
+
+后续不增加辅助 loss，而是在 hard train/eval 中使用全局集合唯一的 straight-through
+分配：8 个 group 从 `C(8,3)=56` 个无序三波段集合中选择互不相同的集合，集合内部保留
+得分最高的排列；soft fusion 阶段保持连续融合不变。该改动应首先在当前最强的
+`0715_05` 结构上做严格复验，`0715_06` 保留为类别互补分析分支。
 
 ## 16. 论文严格 Base + Liquid 消融
 
@@ -532,5 +595,58 @@ sampler、wide overlap-aware LAF、group modulation、pair sampler router和pair
 2026-07-16 17:15 CST在197的GPU 0/3启动，workdir为
 `/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
 epoch 1 iter 50为`1.0818 s/iter`、日志显存`10692 MB`，loss和grad有限，无CUDA、NCCL、
-NaN、OOM、unused parameter或DDP错误。该实验完成后将与`0716_02`按唯一最佳
+NaN、OOM、unused parameter或DDP错误。该运行在epoch 21 iter 50主动停止，不resume；
+原因是soft阶段的argmax预览已经出现`432/431`等相同无序波段集合，继续运行不能解决
+跨group坍塌。
+
+`0716_04`在完全相同的最终Liquid结构和论文训练协议上只增加hard group-set unique
+assignment。每个样本先对`C(8,3)=56`个无序三波段集合枚举内部6种排列，以三个slot的
+logit和选择最佳排列，再使用regret-first GPU greedy为8个group分配互不相同的集合。
+hard train/eval使用该离散结果；straight-through反向仍经过对应soft概率。soft fusion阶段
+不屏蔽任何group且数学路径保持不变，不增加辅助loss。
+
+新实验于2026-07-16 23:22 CST在197 GPU 0/3 fresh启动，独立workdir为
+`/data4/litianhao/PairMmot/workdir_197/0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
+远端20项sampler/stem测试全部通过；epoch 1 iter 50为`0.9771 s/iter`、loss和grad有限，
+监控为`hard=False, unique_sets=8.00, max_set_repeat=1.00`。完成后将与`0716_02`按唯一最佳
 `cls_HOTA + det_HOTA` epoch进行严格比较。
+
+## 17. Set-Transport Liquid
+
+### 17.1 动机与结构
+
+`0716_04`只在hard train/eval保证8个group使用不同无序三波段集合，soft阶段仍按
+`[group, slot, band]`独立归一化。因此模型可能先在soft阶段形成相同集合偏好，到hard
+切换时才把低置信的次优集合分配给其他group，存在明显的soft/hard目标错位。
+
+`0717_01`新增无参数的Set-Transport Liquid Sampler。它在pair sampler router之后将slot
+概率提升为`C(8,3)=56`个无序集合，每个集合内部显式保留6种排列；再加入48个slack
+token，将8个真实group与56个集合构成方阵，通过16次log-domain Sinkhorn得到行质量为1、
+每个集合容量不超过1的连续分配。集合分配与排列概率最后还原为原接口`[B,8,3,8]`，因此
+Conv3D、wide LAF、group modulation和pair transport均不改变。该结构不增加loss和可学习
+参数，pair router产生的双帧条件logits直接参与集合竞争。
+
+Set-Transport强度从epoch 0的0线性增加到epoch 12的1，初始前向严格等价`0716_04`；
+epoch 12后soft梯度完全经过集合容量投影，epoch 36进入hard时straight-through梯度仍经过
+同一投影。这样在不禁止soft谱段融合的前提下，使soft学习逐步接近hard唯一分配流形。
+
+### 17.2 正确性、开销与实验状态
+
+23项sampler/stem测试全部通过，包括零强度精确等价、极端8-group同集合输入下容量上限、
+概率归一化、soft梯度和hard straight-through梯度。正式初始化下仍保持
+`701/012/123/234/345/456/567/670`，平均概率改变量仅`0.0086`。纯sampler前反向增加约
+`20 ms/iter`，完整训练预计增加约2%--2.5%，参数量增加0。
+
+本机GPU 2/3的100-iter双卡DDP测试通过，`find_unused_parameters=False`无报错，显存
+`10695 MB/rank`，loss和grad有限。正式`0717_01`于2026-07-17 00:15 CST fresh启动；
+epoch 1 iter 50为`0.9347 s/iter`、`loss=36.0532`、`grad_norm=177.8087`，监控为
+`set_transport=0.004, set_max_load=0.250`。workdir为
+`/data4/litianhao/PairMmot/workdir_99/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
+
+该实验是相对`0716_04`的单变量Liquid结构候选，不在结果出来前替代论文主线。两者均按
+各自全部18个评测点的唯一最佳`cls_HOTA + det_HOTA`进行比较，指标分别展示。
+
+2026-07-17按用户要求在epoch 2 iter 250主动取消本机正式训练，原因是GPU 2/3存在历史
+掉卡风险，不是模型loss、显存或DDP错误。对应进程组和screen已全部清理，GPU 2/3显存均
+释放到约10 MiB；GPU 0/1上的Base训练不受影响。该不完整运行不产生性能结论，后续若转移
+到稳定服务器，应使用新workdir fresh训练，不从本机早期状态续跑。

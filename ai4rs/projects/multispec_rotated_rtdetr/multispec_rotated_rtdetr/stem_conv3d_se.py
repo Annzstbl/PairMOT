@@ -1,5 +1,6 @@
 # Copyright (c) AI4RS. All rights reserved.
 import math
+from itertools import combinations, permutations
 from typing import Optional, Sequence, Tuple, Union
 
 import torch
@@ -40,7 +41,8 @@ class LiquidSpectralSampler(nn.Module):
     custom number of groups and explicit initial patterns can be supplied for
     cyclic or task-specific spectral windows. Soft sampling remains a spectral
     fusion distribution; hard/eval-hard sampling selects bands without
-    replacement inside each group.
+    replacement inside each group. Optionally, hard sampling can also assign
+    a distinct unordered band set to every group.
     """
 
     def __init__(self,
@@ -62,6 +64,8 @@ class LiquidSpectralSampler(nn.Module):
                  use_band_attention: bool = False,
                  band_attention_heads: int = 4,
                  band_attention_dropout: float = 0.0,
+                 hard_group_unique_sets: bool = False,
+                 soft_group_set_transport: Optional[dict] = None,
                  pair_sampler_router: Optional[dict] = None,
                  pair_band_context: Optional[dict] = None) -> None:
         super().__init__()
@@ -85,10 +89,54 @@ class LiquidSpectralSampler(nn.Module):
                 f'{lowres_grad_upsample_mode!r}')
         self.lowres_grad_upsample_mode = lowres_grad_upsample_mode
         self.use_band_attention = use_band_attention
+        self.hard_group_unique_sets = hard_group_unique_sets
+        if soft_group_set_transport is True:
+            soft_group_set_transport = {}
+        transport_cfg = dict(soft_group_set_transport or {})
+        self.use_soft_group_set_transport = soft_group_set_transport is not None
+        self.set_transport_num_iters = int(
+            transport_cfg.get('num_iters', 16))
+        self.set_transport_temperature = float(
+            transport_cfg.get('temperature', 1.0))
+        self.set_transport_strength = float(
+            transport_cfg.get('initial_strength', 0.0))
+        assert self.set_transport_num_iters > 0
+        assert self.set_transport_temperature > 0
+        assert 0.0 <= self.set_transport_strength <= 1.0
         init_pattern_tensor = self._build_init_patterns(init_patterns)
         self.register_buffer(
             'init_pattern_indices', init_pattern_tensor, persistent=False)
+        if hard_group_unique_sets or self.use_soft_group_set_transport:
+            candidate_sets = list(combinations(
+                range(num_spectral), spectral_kernel))
+            assert self.num_groups <= len(candidate_sets), (
+                'Group-set routing requires at least as many '
+                f'band sets as groups, got {len(candidate_sets)} sets for '
+                f'{self.num_groups} groups')
+            candidate_permutations = [
+                list(permutations(candidate_set))
+                for candidate_set in candidate_sets
+            ]
+            self.register_buffer(
+                'hard_candidate_permutations',
+                torch.tensor(candidate_permutations, dtype=torch.long),
+                persistent=False)
+            if self.use_soft_group_set_transport:
+                candidate_one_hot = F.one_hot(
+                    self.hard_candidate_permutations,
+                    num_classes=num_spectral).to(torch.float32)
+                self.register_buffer(
+                    'set_candidate_one_hot',
+                    candidate_one_hot,
+                    persistent=False)
+            else:
+                self.set_candidate_one_hot = None
+        else:
+            self.hard_candidate_permutations = None
+            self.set_candidate_one_hot = None
         self.last_hard_indices = None
+        self.last_set_assignment = None
+        self.last_set_max_load = None
 
         self.desc_proj = nn.Linear(3, embed_dims)
         self.band_embedding = nn.Parameter(torch.zeros(num_spectral, embed_dims))
@@ -201,8 +249,130 @@ class LiquidSpectralSampler(nn.Module):
         with torch.no_grad():
             self.head.bias.copy_(bias.reshape(-1))
 
+    def _assign_unique_band_sets(self, logits: torch.Tensor) -> torch.Tensor:
+        """Assign one distinct unordered band set to every hard group."""
+        assert self.hard_candidate_permutations is not None
+        candidates = self.hard_candidate_permutations
+        num_sets, num_permutations, spectral_kernel = candidates.shape
+        batch_size, num_groups = logits.shape[:2]
+
+        expanded_logits = logits[:, :, None, None].expand(
+            -1, -1, num_sets, num_permutations, -1, -1)
+        gather_indices = candidates.view(
+            1, 1, num_sets, num_permutations, spectral_kernel, 1).expand(
+                batch_size, num_groups, -1, -1, -1, -1)
+        permutation_scores = expanded_logits.gather(
+            -1, gather_indices).squeeze(-1).sum(dim=-1)
+        set_scores, best_permutation = permutation_scores.max(dim=-1)
+
+        # Regret-first greedy matching avoids fixed group-order priority. With
+        # only 8 groups and 56 candidate sets this remains entirely on GPU.
+        available_sets = torch.ones(
+            batch_size, num_sets, dtype=torch.bool, device=logits.device)
+        unassigned_groups = torch.ones(
+            batch_size, num_groups, dtype=torch.bool, device=logits.device)
+        selected_sets = torch.full(
+            (batch_size, num_groups), -1, dtype=torch.long,
+            device=logits.device)
+        batch_indices = torch.arange(batch_size, device=logits.device)
+
+        for _ in range(num_groups):
+            available_scores = set_scores.masked_fill(
+                ~available_sets[:, None], -float('inf'))
+            available_scores = available_scores.masked_fill(
+                ~unassigned_groups[:, :, None], -float('inf'))
+            top_scores, top_sets = available_scores.topk(2, dim=-1)
+            confidence = top_scores[..., 0] - top_scores[..., 1]
+            confidence = confidence.masked_fill(
+                ~unassigned_groups, -float('inf'))
+            next_group = confidence.argmax(dim=-1)
+            next_set = top_sets[batch_indices, next_group, 0]
+            selected_sets[batch_indices, next_group] = next_set
+            unassigned_groups[batch_indices, next_group] = False
+            available_sets[batch_indices, next_set] = False
+
+        group_indices = torch.arange(num_groups, device=logits.device)
+        group_indices = group_indices.unsqueeze(0).expand(batch_size, -1)
+        selected_permutations = best_permutation[
+            batch_indices[:, None], group_indices, selected_sets]
+        return candidates[selected_sets, selected_permutations]
+
+    def _project_soft_group_sets(self,
+                                 raw_probs: torch.Tensor) -> torch.Tensor:
+        """Project slot probabilities onto capacity-limited band sets.
+
+        Slack rows turn the rectangular group-to-set assignment into a square
+        transport problem. Each real group keeps unit mass while each
+        unordered set has capacity one; unused capacity is absorbed by slack.
+        """
+        assert self.hard_candidate_permutations is not None
+        assert self.set_candidate_one_hot is not None
+        candidates = self.hard_candidate_permutations
+        num_sets, num_permutations, spectral_kernel = candidates.shape
+        batch_size, num_groups = raw_probs.shape[:2]
+
+        # The transport matrix is tiny (at most 56x56), so log-domain FP32
+        # gives stable Sinkhorn gradients without touching spatial features.
+        log_probs = raw_probs.float().clamp_min(1e-12).log()
+        expanded = log_probs[:, :, None, None].expand(
+            -1, -1, num_sets, num_permutations, -1, -1)
+        gather_indices = candidates.view(
+            1, 1, num_sets, num_permutations, spectral_kernel, 1).expand(
+                batch_size, num_groups, -1, -1, -1, -1)
+        permutation_log_mass = expanded.gather(
+            -1, gather_indices).squeeze(-1).sum(dim=-1)
+        set_log_mass = torch.logsumexp(permutation_log_mass, dim=-1)
+        permutation_probs = F.softmax(permutation_log_mass, dim=-1)
+
+        real_scores = set_log_mass / self.set_transport_temperature
+        num_slack = num_sets - num_groups
+        if num_slack > 0:
+            slack_scores = real_scores.new_zeros(
+                batch_size, num_slack, num_sets)
+            transport_logits = torch.cat([real_scores, slack_scores], dim=1)
+        else:
+            transport_logits = real_scores
+
+        for _ in range(self.set_transport_num_iters):
+            transport_logits = transport_logits - torch.logsumexp(
+                transport_logits, dim=-1, keepdim=True)
+            transport_logits = transport_logits - torch.logsumexp(
+                transport_logits, dim=-2, keepdim=True)
+        transport_logits = transport_logits - torch.logsumexp(
+            transport_logits, dim=-1, keepdim=True)
+        set_assignment = transport_logits[:, :num_groups].exp()
+
+        candidate_one_hot = self.set_candidate_one_hot.to(
+            device=raw_probs.device)
+        projected = torch.einsum(
+            'bgs,bgsp,spkc->bgkc',
+            set_assignment,
+            permutation_probs,
+            candidate_one_hot)
+        projected = projected / projected.sum(dim=-1, keepdim=True).clamp_min(
+            1e-12)
+        self.last_set_assignment = set_assignment.detach()
+        self.last_set_max_load = set_assignment.sum(dim=1).amax(
+            dim=-1).detach()
+        return projected.to(dtype=raw_probs.dtype)
+
+    def _apply_soft_group_set_transport(
+            self, raw_probs: torch.Tensor) -> torch.Tensor:
+        if (not self.use_soft_group_set_transport
+                or self.set_transport_strength <= 0.0):
+            self.last_set_assignment = None
+            self.last_set_max_load = None
+            return raw_probs
+        projected = self._project_soft_group_sets(raw_probs)
+        strength = min(max(self.set_transport_strength, 0.0), 1.0)
+        probs = torch.lerp(raw_probs, projected, strength)
+        return probs / probs.sum(dim=-1, keepdim=True).clamp_min(
+            torch.finfo(probs.dtype).eps)
+
     def _dedup_hard_indices(self, logits: torch.Tensor) -> torch.Tensor:
         with torch.no_grad():
+            if self.hard_group_unique_sets:
+                return self._assign_unique_band_sets(logits.detach())
             masked_logits = logits.detach().clone()
             selected = []
             for kernel_idx in range(self.spectral_kernel):
@@ -216,6 +386,23 @@ class LiquidSpectralSampler(nn.Module):
             return torch.stack(selected, dim=-1)
 
     def _sample_hard_unique(self, logits: torch.Tensor) -> torch.Tensor:
+        if self.hard_group_unique_sets:
+            if self.training or not self.deterministic_eval:
+                eps = torch.finfo(logits.dtype).eps
+                uniform = torch.rand_like(logits).clamp_(eps, 1 - eps)
+                gumbel = -torch.log(-torch.log(uniform))
+                sample_logits = (logits + gumbel) / self.tau
+            else:
+                sample_logits = logits / self.tau
+            soft_probs = F.softmax(sample_logits, dim=-1)
+            soft_probs = self._apply_soft_group_set_transport(soft_probs)
+            with torch.no_grad():
+                indices = self._assign_unique_band_sets(sample_logits)
+            self.last_hard_indices = indices
+            hard_probs = torch.zeros_like(soft_probs).scatter_(
+                -1, indices.unsqueeze(-1), 1.0)
+            return hard_probs - soft_probs.detach() + soft_probs
+
         if self.training or not self.deterministic_eval:
             masked_logits = logits.clone()
             hard_probs = []
@@ -248,12 +435,13 @@ class LiquidSpectralSampler(nn.Module):
         if self.training or not self.deterministic_eval:
             if self.hard:
                 return self._sample_hard_unique(logits)
-            return F.gumbel_softmax(
+            probs = F.gumbel_softmax(
                 logits, tau=self.tau, hard=self.hard, dim=-1)
+            return self._apply_soft_group_set_transport(probs)
 
         probs = F.softmax(logits / self.tau, dim=-1)
         if not self.eval_hard:
-            return probs
+            return self._apply_soft_group_set_transport(probs)
         return self._sample_hard_unique(logits)
 
     def _lowres_size(self, height: int, width: int) -> Tuple[int, int]:

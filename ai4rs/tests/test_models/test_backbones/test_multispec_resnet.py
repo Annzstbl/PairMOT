@@ -129,6 +129,152 @@ class TestMultispecPretrainUtils(unittest.TestCase):
                 self.assertEqual(
                     len(set(selected[batch_idx, group_idx].tolist())), 3)
 
+    def test_liquid_sampler_eval_hard_assigns_unique_group_sets(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            tau=1.0,
+            hard=False,
+            eval_hard=True,
+            hard_group_unique_sets=True,
+        ).eval()
+        logits = torch.zeros(2, 8, 3, 8)
+        logits[:, :, 0, 4] = 10.0
+        logits[:, :, 1, 2] = 10.0
+        logits[:, :, 2, 1] = 10.0
+
+        selected = sampler._sample(logits).argmax(dim=-1)
+
+        for batch_selected in selected:
+            canonical_sets = {
+                tuple(sorted(group.tolist())) for group in batch_selected
+            }
+            self.assertEqual(len(canonical_sets), 8)
+            for group in batch_selected:
+                self.assertEqual(len(set(group.tolist())), 3)
+
+    def test_liquid_sampler_group_set_constraint_keeps_soft_sampling(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            tau=1.0,
+            hard=False,
+            eval_hard=False,
+            hard_group_unique_sets=True,
+        ).eval()
+        logits = torch.randn(2, 1, 3, 8).expand(-1, 8, -1, -1).clone()
+
+        probs = sampler._sample(logits)
+
+        torch.testing.assert_close(probs[:, 0], probs[:, 1])
+        torch.testing.assert_close(probs, F.softmax(logits, dim=-1))
+
+    def test_liquid_sampler_group_set_hard_st_has_gradients(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            tau=1.0,
+            hard=True,
+            hard_group_unique_sets=True,
+        ).train()
+        logits = torch.randn(2, 8, 3, 8, requires_grad=True)
+
+        probs = sampler._sample(logits)
+        weights = torch.randn_like(probs)
+        (probs * weights).sum().backward()
+
+        self.assertTrue(torch.isfinite(logits.grad).all())
+        self.assertGreater(logits.grad.abs().sum().item(), 0)
+        selected = probs.detach().argmax(dim=-1)
+        for batch_selected in selected:
+            canonical_sets = {
+                tuple(sorted(group.tolist())) for group in batch_selected
+            }
+            self.assertEqual(len(canonical_sets), 8)
+
+    def test_liquid_set_transport_zero_strength_is_exact_identity(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            hard_group_unique_sets=True,
+            soft_group_set_transport=dict(initial_strength=0.0),
+        )
+        raw_probs = F.softmax(torch.randn(2, 8, 3, 8), dim=-1)
+
+        projected = sampler._apply_soft_group_set_transport(raw_probs)
+
+        self.assertIs(projected, raw_probs)
+        self.assertIsNone(sampler.last_set_assignment)
+
+    def test_liquid_set_transport_caps_collapsed_set_demand(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            hard_group_unique_sets=True,
+            soft_group_set_transport=dict(
+                initial_strength=1.0,
+                num_iters=16,
+                temperature=1.0),
+        )
+        logits = torch.zeros(2, 8, 3, 8, requires_grad=True)
+        with torch.no_grad():
+            logits[:, :, 0, 4] = 10.0
+            logits[:, :, 1, 2] = 10.0
+            logits[:, :, 2, 1] = 10.0
+
+        projected = sampler._apply_soft_group_set_transport(
+            F.softmax(logits, dim=-1))
+        weights = torch.randn_like(projected)
+        (projected * weights).sum().backward()
+
+        torch.testing.assert_close(
+            projected.sum(dim=-1),
+            torch.ones_like(projected[..., 0]),
+            atol=1e-6,
+            rtol=1e-6)
+        row_mass = sampler.last_set_assignment.sum(dim=-1)
+        torch.testing.assert_close(
+            row_mass, torch.ones_like(row_mass), atol=1e-5, rtol=1e-5)
+        self.assertLessEqual(
+            sampler.last_set_assignment.sum(dim=1).max().item(), 1.001)
+        self.assertTrue(torch.isfinite(logits.grad).all())
+        self.assertGreater(logits.grad.abs().sum().item(), 0)
+
+    def test_liquid_set_transport_hard_st_has_gradients(self):
+        sampler = LiquidSpectralSampler(
+            num_spectral=8,
+            spectral_kernel=3,
+            num_groups=8,
+            init_patterns=[[0, 1, 2]] * 8,
+            embed_dims=16,
+            hard=True,
+            hard_group_unique_sets=True,
+            soft_group_set_transport=dict(initial_strength=1.0),
+        ).train()
+        logits = torch.randn(2, 8, 3, 8, requires_grad=True)
+
+        probs = sampler._sample(logits)
+        (probs * torch.randn_like(probs)).sum().backward()
+
+        self.assertTrue(torch.isfinite(logits.grad).all())
+        self.assertGreater(logits.grad.abs().sum().item(), 0)
+        self.assertIsNotNone(sampler.last_set_assignment)
+
     def test_liquid_sampler_band_attention_forward(self):
         sampler = LiquidSpectralSampler(
             num_spectral=8,

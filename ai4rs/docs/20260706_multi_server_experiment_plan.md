@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-07-16 15:46 CST.
+Last updated: 2026-07-17 05:42 CST.
 
 ## Server Status
 
@@ -14,6 +14,7 @@ Last updated: 2026-07-16 15:46 CST.
 | `10.106.14.197` | execution resource | `ssh -i ~/.ssh/litianhao01@10.106.14.197/id_rsa litianhao@10.106.14.197` | `/data/users/litianhao/PairMOT/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_197` | `/data/users/litianhao/anaconda3/envs/py310` |
 | `10.106.15.178` | available resource, not verified this turn | key folder exists under `~/.ssh/litianhao01@10.106.15.178` | unknown | `/data4/litianhao/PairMmot` expected | unknown | unknown |
 | `10.106.15.252` | available resource, not verified this turn | key folder exists under `~/.ssh/litianhao01@10.106.15.252` | unknown | `/data4/litianhao/PairMmot` expected | unknown | unknown |
+| AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | temporary two-GPU execution resource | transient password SSH; local command is ignored under `autodl/ssh.md` | `/root/PairMOT/ai4rs` | `/root/autodl-fs/PairMOT_assets` | `/root/autodl-tmp/work_dirs` | image base Python, PyTorch `2.8.0+cu128` retained |
 
 SSH directory convention: subdirectory names under `~/.ssh` are
 `username@ip+port`, with port omitted for default `22`.  The 197 key directory
@@ -59,6 +60,9 @@ Current allocation state:
 | --- | --- | --- | --- | --- |
 | 2026-07-16 | `0716_02` | paper Base R18, COCO-only, full data, 1200x900, BF16 | 99 | `0716_03` |
 | 2026-07-16 | `0716_03` | paper Base + final Liquid R18, COCO-only, full data, 1200x900, BF16 | 197 | `0716_04` |
+| 2026-07-16 | `0716_04` | paper Base + final Liquid + hard group-set uniqueness, full data, 1200x900, BF16 | 197 | `0716_05` |
+| 2026-07-16 | `0716_05` | paper Base + final Liquid group-set uniqueness + temporal/pyramid Encoder, full data, 1200x900, BF16 | 252 | `0716_06` |
+| 2026-07-17 | `0717_01` | paper Liquid Set-Transport candidate, full data, 1200x900, BF16; same-ID fresh rerun migrated after the 99 cancellation | AutoDL | `0717_02` |
 
 ## Current Paper Runs
 
@@ -66,7 +70,11 @@ Current allocation state:
 | --- | --- | --- | --- | --- | --- |
 | 2026-07-16 | local `10.106.14.99` | `0716_02_paper_base_r18_coco_full_1200x900_bf16_orderedpairs_reboot_fresh` | `0,1` | running normally after reboot; fresh start at 17:10 CST, verified through epoch 1 iter 50 at 0.8307 s/iter with finite losses/gradients; all four GPUs healthy after reboot | `/data4/litianhao/PairMmot/workdir_99/0716_02_paper_base_r18_coco_full_1200x900_bf16_orderedpairs_reboot_fresh/launch.log` |
 | 2026-07-16 | local `10.106.14.99` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs` | `2,3` | canceled and fully cleaned at 16:41 CST after GPU 2 hardware drop (`0000:B1:00.0: Unknown Error`); stopped in epoch 1 after iter 1000, no formal checkpoint, must fresh train on healthy GPUs; GPU 0/1 Base unaffected | `/data4/litianhao/PairMmot/workdir_99/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs/launch.log` |
-| 2026-07-16 | `10.106.14.197` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | running normally; code synced and fresh start at 17:15 CST, verified through epoch 1 iter 50 at 1.0818 s/iter with finite losses/gradients; GPUs 1/2/4 belong to other users | `/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-16 | `10.106.14.197` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | stopped intentionally at epoch 21 iter 50 without resume after confirming cross-group set collapse in the soft argmax preview; retained as diagnostic history | `/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-16 | `10.106.14.197` | `0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | running; fresh start at 23:22 CST after 20/20 remote sampler tests; epoch 1 iter 50 is 0.9771 s/iter with finite losses/gradients and hard preview `unique_sets=8.00`, `max_set_repeat=1.00` | `/data4/litianhao/PairMmot/workdir_197/0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-16 | `10.106.15.252` | `0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | running; 30 unit tests and a separate 100-iter DDP validation passed before fresh launch at 23:36 CST; formal epoch 1 iter 50 has finite losses/gradients, both temporal branches learning, memory 11387 MiB/rank, and Liquid hard preview `unique_sets=8.00` | `/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-17 | local `10.106.14.99` | `0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `2,3` | canceled intentionally at epoch 2 iter 250 because local GPUs 2/3 have prior drop-card risk; full process group and screen removed, both GPUs released to 10 MiB; model code, 23 tests and separate 100-iter DDP validation are retained, but this incomplete run is not a result | `/data4/litianhao/PairMmot/workdir_99/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-17 | AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | `0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh` | `0,1` | running fresh from COCO-adapted pretrain; epoch 1 iter 50 at 05:41 CST is 0.9282 s/iter with finite losses/gradients, 10703 MiB framework memory/rank, Set-Transport strength 0.004, `unique_sets=8.00`, and `max_set_repeat=1.00`; ETA about 19 h | `/root/autodl-tmp/work_dirs/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh/launch.log` |
 
 ## Current 0708 Runs
 

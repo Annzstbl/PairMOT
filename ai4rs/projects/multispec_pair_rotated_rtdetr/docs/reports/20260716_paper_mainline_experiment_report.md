@@ -68,7 +68,9 @@ COCO 80类分类头不加载；HSMOT 8类 prev/curr 分类头重新初始化。R
 | ID | 实验 | 服务器/GPU | 配置 | 状态 |
 | --- | --- | --- | --- | --- |
 | `0716_02` | Paper Base R18 COCO full 1200x900 BF16 | 99 / GPU 0,1 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_coco_full_1200x900_bf16_reboot_fresh_99.py` | 服务器重启后已fresh恢复；正常训练，已验收到epoch 1 iter 50 |
-| `0716_03` | Paper Base + Liquid R18 COCO full 1200x900 BF16 | 197 / GPU 0,3 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_coco_full_1200x900_bf16_197.py` | 已在197 fresh恢复；正常训练，已验收到epoch 1 iter 50 |
+| `0716_04` | Paper Base + Liquid group-set-unique R18 COCO full 1200x900 BF16 | 197 / GPU 0,3 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_groupsetunique_coco_full_1200x900_bf16_197.py` | 正常训练；已验收到epoch 1 iter 150 |
+| `0716_05` | Paper Base + Liquid group-set-unique + Encoder R18 COCO full 1200x900 BF16 | 252 / GPU 0,1 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_groupsetunique_encoder_coco_full_1200x900_bf16_252.py` | 30项单测和100 iter DDP测试通过；正式训练已验收到epoch 1 iter 50 |
+| `0717_01` | Parallel Liquid Set-Transport structural candidate | 99 / GPU 2,3 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_settransport_coco_full_1200x900_bf16_99.py` | 23项单测和100 iter DDP测试通过；正式运行因GPU 2/3掉卡风险在epoch 2 iter 250主动取消，不作为结果 |
 
 工作目录：
 
@@ -82,7 +84,11 @@ COCO 80类分类头不加载；HSMOT 8类 prev/curr 分类头重新初始化。R
 
 当前正式 Base + Liquid 运行：
 
-`/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh`
+`/data4/litianhao/PairMmot/workdir_197/0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh`
+
+当前正式 Base + Liquid + Encoder 运行：
+
+`/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh`
 
 ## 7. 结果表
 
@@ -92,6 +98,7 @@ Tracking 表在实验完成后填写：
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | A Base | - | - | - | - | - | - | - |
 | B Base + Liquid | - | - | - | - | - | - | - |
+| C Base + Liquid + Encoder | - | - | - | - | - | - | - |
 
 AP 独立结果：
 
@@ -99,6 +106,7 @@ AP 独立结果：
 | --- | ---: | ---: | ---: |
 | A Base | - | - | - |
 | B Base + Liquid | - | - | - |
+| C Base + Liquid + Encoder | - | - | - |
 
 ## 8. 可复现性记录
 
@@ -250,3 +258,72 @@ NaN、OOM、unused parameter或DDP reduction错误。正式日志为
 SHA256为`7dd1c5f3cb15d109045e17668586d8c06fb91b5f0e1ec796575907a964b54e20`；完整源码快照
 `source_snapshot_20260716_base_plus_liquid_197.tar.gz` SHA256为
 `b79da8e6f0ef78ada288d02f11c6bbf3a1b75755c49bd8b6500d6faba5fa3b51`。
+
+该运行在epoch 21 iter 50主动停止且不resume。soft sampler的argmax预览已经出现
+`432/431`等相同无序三波段集合，说明原实现只保证group内部不重复，不能阻止跨group
+坍塌，因而不再作为最终论文Liquid运行。
+
+### 8.8 Base + Liquid group-set-unique fresh run on 197
+
+`0716_04`保持`0716_03`的模型、数据、初始化、优化器、BF16边界和评测协议，只在hard
+train/eval增加跨group的无序波段集合唯一分配。8个group从`C(8,3)=56`个候选集合中
+选择互不相同的集合，集合内部保留最高分排列；采用GPU上的regret-first greedy和
+straight-through反向，不增加loss。soft fusion仍保留所有连续谱段权重，不做互斥屏蔽。
+
+本地及197均通过20项sampler/stem测试。实验于2026-07-16 23:22 CST在197 GPU 0/3以
+独立workdir完全fresh启动。epoch 1 iter 50为`time=0.9771 s/iter`、日志显存
+`10692 MB`、`loss=35.9972`、`grad_norm=169.3626`，主损失、PairDN和encoder proposal
+loss均有限。监控为`hard=False, unique_sets=8.00, max_set_repeat=1.00`，确认hard预览的
+8组集合全部唯一。正式日志位于
+`/data4/litianhao/PairMmot/workdir_197/0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log`。
+
+### 8.9 Base + Liquid group-set-unique + Encoder on 252
+
+`0716_05`严格继承`0716_04`的最终Liquid和论文协议，只加入历史encoder最佳
+`0705_01 p5temporal_pyramidlocal`：shared AIFI后的P5 global pair temporal adapter，以及
+CCFF/FPN后的P3/P4/P5 pyramid-local pair adapter。两条残差gate均为零初始化；adapter参数
+使用`lr_mult=2.0`，gate gamma使用`lr_mult=20.0, decay_mult=0.0`，其余参数学习率不变。
+
+252上的20项Liquid/stem测试和10项temporal adapter测试全部通过。正式启动前使用GPU 0/1
+完成100 iter双卡DDP测试：`find_unused_parameters=False`无报错，框架统计显存
+`11387 MB/rank`，两个gate和attention/local block均收到梯度，全部loss有限。测试进程组已
+完整停止并释放显存，未写入正式目录。
+
+正式实验于2026-07-16 23:36 CST在252 GPU 0/1 fresh启动，workdir为
+`/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
+epoch 1 iter 50为`time=1.5238 s/iter`、`memory=11387 MB`、`loss=35.8960`、
+`grad_norm=178.3931`；Liquid hard预览为`unique_sets=8.00, max_set_repeat=1.00`，未出现
+CUDA、NCCL、OOM、NaN、unused parameter或DDP错误。
+
+### 8.10 Parallel Liquid Set-Transport candidate
+
+`0717_01`是相对`0716_04`的单变量结构探索。它不修改最终Liquid的pair router、wide LAF、
+group modulation或pair transport，而是在soft sampler中增加无参数的集合容量传输：将
+三slot概率映射到56个无序三波段集合及其6种排列，利用48个slack token和16次log-Sinkhorn
+得到容量受限的连续group-set分配，再还原到原波段概率接口。结构强度在前12 epochs从0
+增加到1，hard阶段的ST梯度也通过该投影，不增加辅助loss。
+
+23项单测及GPU 2/3上的100 iter双卡DDP测试通过。正式运行于2026-07-17 00:15 CST fresh
+启动，epoch 1 iter 50为`time=0.9347 s/iter`、`memory=10695 MB`、`loss=36.0532`、
+`grad_norm=177.8087`，未出现异常。workdir为
+`/data4/litianhao/PairMmot/workdir_99/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
+
+该实验目前作为并行Liquid候选，不改变A/B/C主链定义。完成后与`0716_04`分别按唯一最佳
+`cls_HOTA + det_HOTA`比较，只有在两个HOTA方向和稳定性均有依据时才考虑替换主线B。
+
+本机正式训练于2026-07-17在epoch 2 iter 250主动取消。取消原因是GPU 2/3存在历史掉卡
+风险，而非模型异常；进程组、worker和screen均已完整清理，GPU显存释放。此次不完整运行
+不进入结果表，Set-Transport实现和已通过的单元/DDP验证保留，后续在稳定服务器上应fresh
+重跑。
+
+同一科学实验保留`0717_01`编号，于2026-07-17 05:40 CST迁移到双卡AutoDL实例并从
+COCO适配权重fresh重跑，不使用99上的任何checkpoint。AutoDL路径覆盖配置只修改HSMOT、
+GMC、预训练和workdir位置；模型、每卡batch 4、全局batch 8、`lr=1e-4`、BF16边界、
+`find_unused_parameters=False`、72 epochs和每4 epoch完整评测均与99原运行一致。workdir为
+`/root/autodl-tmp/work_dirs/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh`。
+
+epoch 1 iter 50为`time=0.9282 s/iter`、`memory=10703 MB/rank`、`loss=35.7344`、
+`grad_norm=193.7061`，与99原运行的`0.9347 s/iter`相符。两卡`nvidia-smi`占用约
+18.8 GB/GPU；Set-Transport监控为`strength=0.004`、`unique_sets=8.00`、
+`max_set_repeat=1.00`、`set_max_load=0.250`，无CUDA、NCCL、OOM、NaN或unused parameter
+错误。当前ETA约19小时，早期99运行仍不计入最终结果。
