@@ -535,7 +535,8 @@ def load_legacy_ctracker(model, path):
     with warnings.catch_warnings():
         warnings.filterwarnings(
             'ignore', category=torch.serialization.SourceChangeWarning)
-        checkpoint = torch.load(path, map_location='cpu')
+        checkpoint = torch.load(
+            path, map_location='cpu', weights_only=False)
     if isinstance(checkpoint, nn.DataParallel):
         checkpoint = checkpoint.module
     if isinstance(checkpoint, nn.Module):

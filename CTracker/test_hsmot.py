@@ -169,7 +169,9 @@ def main(args=None):
     parsed = parser.parse_args(args)
 
     device = torch.device(parsed.device)
-    network = torch.load(parsed.model, map_location=device).to(device).eval()
+    network = torch.load(
+        parsed.model, map_location=device,
+        weights_only=False).to(device).eval()
     if not getattr(network, 'rotated', False):
         raise ValueError('The checkpoint is not a rotated CTracker model')
     os.makedirs(parsed.output_dir, exist_ok=True)

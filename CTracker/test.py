@@ -279,7 +279,7 @@ def run_each_dataset(model_dir, retinanet, dataset_path, subset, cur_dataset, de
 	videoWriter.release()
 
 def _load_model(model_path, device):
-	return torch.load(model_path, map_location=device)
+	return torch.load(model_path, map_location=device, weights_only=False)
 
 
 def run_from_train(model_dir, root_path, device=None):

@@ -149,6 +149,17 @@ training. Use `CUDA_VISIBLE_DEVICES` to select GPUs, for example:
 CUDA_VISIBLE_DEVICES=2,3 bash CTracker/train_hsmot_r50.sh
 ```
 
+Server 178 has RTX 5090 GPUs and a PyTorch 2.7/CUDA 12.8 `py310`
+environment. For single-GPU training there, use micro-batch 4 with two-step
+gradient accumulation, which retains the original effective batch size of 8:
+
+```
+CUDA_VISIBLE_DEVICES=0 bash CTracker/train_hsmot_r50_single_gpu_178.sh
+```
+
+Full-model loads explicitly disable PyTorch 2.7's default weights-only mode so
+the original serialized `ctracker_model_final.pt` remains loadable.
+
 To resume from the latest checkpoint, run the equivalent command directly and
 add:
 

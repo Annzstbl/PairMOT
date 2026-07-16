@@ -56,6 +56,8 @@ def main(args=None):
 	                    help='Original CTracker final.pt to adapt for HSMOT.')
 	parser.add_argument('--lr', type=float, default=5e-5)
 	parser.add_argument('--stem_lr_multiplier', type=float, default=1.0)
+	parser.add_argument('--accumulation_steps', type=int, default=1,
+	                    help='Micro-batches per optimizer step.')
 	parser.add_argument('--data_parallel', action='store_true', help='Use all visible CUDA devices.')
 	parser.add_argument('--skip_test', action='store_true', help='Do not run MOT17 evaluation after training.')
 	parser.add_argument('--ann_file', default='', help='Optional HSMOT sequence split file.')
@@ -71,6 +73,8 @@ def main(args=None):
 	parser.add_argument('--checkpoint_interval', type=int, default=1)
 
 	parser = parser.parse_args(args)
+	if parser.accumulation_steps < 1:
+		raise ValueError('--accumulation_steps must be at least one.')
 	print(parser)
 	device = torch.device(parser.device)
 	if device.type == 'cuda' and not torch.cuda.is_available():
@@ -161,7 +165,8 @@ def main(args=None):
 	start_epoch = 0
 	total_iter = 0
 	if parser.resume:
-		checkpoint = torch.load(parser.resume, map_location=device)
+		checkpoint = torch.load(
+			parser.resume, map_location=device, weights_only=False)
 		model_without_wrapper.load_state_dict(checkpoint['model'])
 		optimizer.load_state_dict(checkpoint['optimizer'])
 		if 'scheduler' in checkpoint:
@@ -185,12 +190,12 @@ def main(args=None):
 		model_without_wrapper.freeze_bn()
 		
 		epoch_loss = []
+		pending_micro_batches = 0
+		optimizer.zero_grad()
 		
 		for iter_num, data in enumerate(dataloader_train):
 			try:
 				total_iter = total_iter + 1
-				optimizer.zero_grad()
-
 
 				if parser.dataset == 'hsmot':
 					model_inputs = dict(
@@ -219,11 +224,18 @@ def main(args=None):
 				if bool(loss == 0):
 					continue
 
-				loss.backward()
-
-				torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.1)
-
-				optimizer.step()
+				(loss / parser.accumulation_steps).backward()
+				pending_micro_batches += 1
+				reached_limit = (
+					parser.max_iters and total_iter >= parser.max_iters)
+				should_step = (
+					pending_micro_batches >= parser.accumulation_steps or
+					iter_num + 1 == len(dataloader_train) or reached_limit)
+				if should_step:
+					torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.1)
+					optimizer.step()
+					optimizer.zero_grad()
+					pending_micro_batches = 0
 
 				loss_hist.append(float(loss))
 				epoch_loss.append(float(loss))
@@ -231,8 +243,10 @@ def main(args=None):
 				loss_text = ' | '.join(
 					'{}: {:.5f}'.format(name, float(value.detach()))
 					for name, value in loss_dict.items())
-				print('Epoch: {} | Iter: {} | {} | Running loss: {:.5f}'.format(
-					epoch_num, iter_num, loss_text, np.mean(loss_hist)))
+				print(('Epoch: {} | Iter: {} | {} | Running loss: {:.5f} | '
+				       'Optimizer step: {}').format(
+					epoch_num, iter_num, loss_text, np.mean(loss_hist),
+					should_step))
 			except Exception as e:
 				print(e)
 				if parser.dataset == 'hsmot':
