@@ -7,7 +7,7 @@ CONDA_BIN="${CONDA_BIN:-/data1/users/litianhao01/anaconda3/bin/conda}"
 
 # RTX 5090 single-GPU profile: micro-batch 4 x accumulation 2 preserves the
 # original CTracker effective batch size of 8.
-"${CONDA_BIN}" run -n py310 python train.py \
+"${CONDA_BIN}" run --no-capture-output -n py310 python -u train.py \
   --dataset hsmot \
   --root_path ../data/hsmot/train \
   --ann_subdir mot \
@@ -24,4 +24,4 @@ CONDA_BIN="${CONDA_BIN:-/data1/users/litianhao01/anaconda3/bin/conda}"
   --lr 5e-5 \
   --stem_lr_multiplier 10 \
   --checkpoint_interval 1 \
-  --model_dir ../workdir/ctracker_hsmot_r50_3dse_rotated_1200x900_single_gpu
+  --model_dir /data4/litianhao/PairMmot/workdir_178/ctracker_hsmot_r50_3dse_rotated_1200x900_bs4_acc2

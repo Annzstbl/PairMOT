@@ -161,7 +161,7 @@ def main(args=None):
 		parser.lr, parser.lr * parser.stem_lr_multiplier,
 		parser.stem_lr_multiplier))
 
-	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+	scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3)
 	start_epoch = 0
 	total_iter = 0
 	if parser.resume:
