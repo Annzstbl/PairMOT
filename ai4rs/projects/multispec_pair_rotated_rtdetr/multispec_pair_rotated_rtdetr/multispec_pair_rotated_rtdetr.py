@@ -505,16 +505,135 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         warped_xy = warped[:, :2] / denom
         return (warped_xy / refs.new_tensor([img_w, img_h])).clamp(0.0, 1.0)
 
+    def _elliptical_motion_score(self, ref_prev: Tensor, ref_curr: Tensor,
+                                 warped_prev_xy: Tensor,
+                                 gmc: Tensor,
+                                 img_shape: Tuple[int, int]) -> Tensor:
+        """Score GMC residuals in each proposal's long/short-axis frame."""
+        cfg = self.pair_proposal_cfg
+        img_h, img_w = img_shape
+        eps = 1e-6
+
+        delta_px = (
+            warped_prev_xy[:, None, :] - ref_curr[None, :, :2])
+        delta_px = delta_px * ref_prev.new_tensor([img_w, img_h])
+
+        theta = ref_prev[:, 4] * float(self.decoder.angle_factor)
+        width_px = ref_prev[:, 2].clamp(min=1e-4) * img_w
+        height_px = ref_prev[:, 3].clamp(min=1e-4) * img_h
+        width_is_long = width_px >= height_px
+        long_theta = theta + (~width_is_long).to(theta.dtype) * (torch.pi / 2)
+        long_axis = torch.stack(
+            [long_theta.cos(), long_theta.sin()], dim=-1)
+
+        # GMC is normally affine. Transforming the direction with its 2x2
+        # block keeps the ellipse aligned after camera rotation/scale.
+        long_axis = long_axis @ gmc[:2, :2].transpose(0, 1)
+        long_axis = F.normalize(long_axis, dim=-1, eps=eps)
+        short_axis = torch.stack([-long_axis[:, 1], long_axis[:, 0]], dim=-1)
+
+        long_len = torch.maximum(width_px, height_px)
+        short_len = torch.minimum(width_px, height_px).clamp(min=1.0)
+        aspect = (long_len / short_len).sqrt().clamp(
+            max=float(cfg.get('ellipse_max_aspect_sqrt', 2.0)))
+        base_sigma = float(cfg.get('geom_sigma', 0.06)) * (
+            float(img_h * img_w)**0.5)
+        long_power = float(cfg.get('ellipse_long_power', 1.0))
+        short_power = float(cfg.get('ellipse_short_power', 1.0))
+        sigma_long = (base_sigma * aspect.pow(long_power)).clamp(min=1.0)
+        sigma_short = (base_sigma / aspect.pow(short_power)).clamp(min=1.0)
+
+        parallel = (delta_px * long_axis[:, None, :]).sum(dim=-1)
+        perpendicular = (delta_px * short_axis[:, None, :]).sum(dim=-1)
+        elliptical_dist = torch.sqrt(
+            (parallel / sigma_long[:, None]).square() +
+            (perpendicular / sigma_short[:, None]).square() + eps)
+        return torch.exp(-elliptical_dist)
+
+    def _box_spectral_descriptors(self, frame_inputs: Tensor,
+                                  refs: Tensor) -> Tensor:
+        """Sample five in-box spectra and return normalized box descriptors.
+
+        Sampling directly from the normalized model input avoids constructing a
+        dense spectral-angle image. Only the sampled values are de-normalized.
+        """
+        theta = refs[..., 4] * float(self.decoder.angle_factor)
+        cos_theta = theta.cos()
+        sin_theta = theta.sin()
+        sample_offset = float(
+            self.pair_proposal_cfg.get('spectral_sample_offset', 0.25))
+        img_h, img_w = frame_inputs.shape[-2:]
+
+        dx_w = sample_offset * refs[..., 2] * cos_theta
+        dy_w = (sample_offset * refs[..., 2] * sin_theta *
+                (float(img_w) / float(img_h)))
+        dx_h = (-sample_offset * refs[..., 3] * sin_theta *
+                (float(img_h) / float(img_w)))
+        dy_h = sample_offset * refs[..., 3] * cos_theta
+        center = refs[..., :2]
+        grid = torch.stack([
+            center,
+            center + torch.stack([dx_w, dy_w], dim=-1),
+            center - torch.stack([dx_w, dy_w], dim=-1),
+            center + torch.stack([dx_h, dy_h], dim=-1),
+            center - torch.stack([dx_h, dy_h], dim=-1),
+        ], dim=-2)
+        grid = grid.mul(2.0).sub(1.0).clamp(-1.0, 1.0)
+
+        sampled = F.grid_sample(
+            frame_inputs.float(), grid, mode='bilinear', padding_mode='border',
+            align_corners=False)
+        preprocessor = self.data_preprocessor
+        if getattr(preprocessor, '_enable_normalize', False):
+            mean = preprocessor.mean.to(sampled).view(1, -1, 1, 1)
+            std = preprocessor.std.to(sampled).view(1, -1, 1, 1)
+            sampled = sampled * std + mean
+        sampled = sampled.clamp(min=0.0)
+        pool_mode = str(
+            self.pair_proposal_cfg.get('spectral_pool_mode', 'mean'))
+        if pool_mode == 'median':
+            pooled = sampled.median(dim=-1).values.transpose(1, 2)
+        elif pool_mode == 'mean':
+            pooled = sampled.mean(dim=-1).transpose(1, 2)
+        else:
+            raise ValueError(f'Unsupported spectral_pool_mode: {pool_mode}')
+
+        descriptor_mode = str(
+            self.pair_proposal_cfg.get('spectral_descriptor_mode', 'raw'))
+        raw_descriptor = F.normalize(pooled, dim=-1, eps=1e-6)
+        if descriptor_mode == 'raw':
+            return raw_descriptor
+        if descriptor_mode != 'raw_log_chroma':
+            raise ValueError(
+                f'Unsupported spectral_descriptor_mode: {descriptor_mode}')
+
+        log_spectrum = pooled.clamp(min=1.0).log()
+        log_chroma = log_spectrum - log_spectrum.mean(dim=-1, keepdim=True)
+        log_chroma = F.normalize(log_chroma, dim=-1, eps=1e-6)
+        raw_weight = float(
+            self.pair_proposal_cfg.get('spectral_raw_weight', 0.5))
+        raw_weight = min(max(raw_weight, 0.0), 1.0)
+        chroma_weight = 1.0 - raw_weight
+        constant = torch.ones_like(raw_descriptor[..., :1])
+        return torch.cat([
+            raw_descriptor * raw_weight**0.5,
+            log_chroma * (0.5 * chroma_weight)**0.5,
+            constant * (0.5 * chroma_weight)**0.5,
+        ], dim=-1)
+
     def _pair_affinity_score_v2(self, query_prev: Tensor, query_curr: Tensor,
                                 ref_prev: Tensor, ref_curr: Tensor,
                                 score_prev: Tensor, score_curr: Tensor,
                                 label_prev: Tensor, label_curr: Tensor,
-                                gmc: Tensor, img_shape: Tuple[int, int]) -> Tensor:
+                                gmc: Tensor, img_shape: Tuple[int, int],
+                                spectral_prev: Optional[Tensor] = None,
+                                spectral_curr: Optional[Tensor] = None) -> Tensor:
         """Pairing affinity used as a constraint, not the primary top-k rank."""
         cfg = self.pair_proposal_cfg
         sim_weight = float(cfg.get('sim_weight', 0.25))
         geom_weight = float(cfg.get('geom_weight', 0.5))
         score_weight = float(cfg.get('score_weight', 0.25))
+        spectral_weight = float(cfg.get('spectral_weight', 0.0))
         class_mismatch_penalty = float(cfg.get('class_mismatch_penalty', 0.5))
         class_aware = bool(cfg.get('class_aware', True))
         geom_sigma = float(cfg.get('geom_sigma', 0.08))
@@ -529,7 +648,27 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             ref_prev, gmc, img_shape)
         center_delta = warped_prev_xy[:, None, :] - ref_curr[None, :, :2]
         center_dist = center_delta.norm(dim=-1)
-        center_score = torch.exp(-center_dist / max(geom_sigma, 1e-6))
+        isotropic_center_score = torch.exp(
+            -center_dist / max(geom_sigma, 1e-6))
+        if bool(cfg.get('elliptical_motion', False)):
+            center_score = self._elliptical_motion_score(
+                ref_prev, ref_curr, warped_prev_xy, gmc, img_shape)
+            isotropic_label = torch.zeros_like(label_prev, dtype=torch.bool)
+            isotropic_class_ids = tuple(
+                int(x) for x in cfg.get('ellipse_isotropic_class_ids', ()))
+            if isotropic_class_ids:
+                for class_id in isotropic_class_ids:
+                    isotropic_label |= label_prev == class_id
+            isotropic_max_area = cfg.get(
+                'ellipse_isotropic_max_area', None)
+            if isotropic_max_area is not None:
+                prev_area = ref_prev[:, 2] * ref_prev[:, 3]
+                isotropic_label |= prev_area <= float(isotropic_max_area)
+            center_score = torch.where(
+                isotropic_label[:, None], isotropic_center_score,
+                center_score)
+        else:
+            center_score = isotropic_center_score
 
         wh_prev = ref_prev[:, None, 2:4].clamp(min=1e-4)
         wh_curr = ref_curr[None, :, 2:4].clamp(min=1e-4)
@@ -543,6 +682,65 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         affinity = (
             sim_weight * sim + geom_weight * geom +
             score_weight * cls_prior)
+        if spectral_weight != 0.0:
+            if spectral_prev is None or spectral_curr is None:
+                raise ValueError(
+                    'spectral_weight requires pair inputs for descriptors')
+            spectral_sim = torch.matmul(
+                spectral_prev, spectral_curr.transpose(0, 1)).clamp(0.0, 1.0)
+            spectral_area_legal = torch.ones_like(
+                spectral_sim, dtype=torch.bool)
+            spectral_max_pair_area = cfg.get(
+                'spectral_max_pair_area', None)
+            if spectral_max_pair_area is not None:
+                area_prev = (ref_prev[:, 2] * ref_prev[:, 3]).clamp(min=0.0)
+                area_curr = (ref_curr[:, 2] * ref_curr[:, 3]).clamp(min=0.0)
+                pair_area = torch.sqrt(
+                    area_prev[:, None] * area_curr[None, :])
+                spectral_area_legal = pair_area <= float(
+                    spectral_max_pair_area)
+            spectral_mode = str(
+                cfg.get('spectral_affinity_mode', 'absolute'))
+            if spectral_mode == 'absolute':
+                spectral_score = spectral_sim.masked_fill(
+                    ~spectral_area_legal, 0.0)
+            elif spectral_mode == 'relative':
+                spectral_legal = (
+                    center_dist <= max_center_dist) & spectral_area_legal
+                if class_aware:
+                    spectral_legal = spectral_legal & (
+                        label_prev[:, None] == label_curr[None, :])
+                spectral_class_ids = tuple(
+                    int(x) for x in cfg.get('spectral_class_ids', ()))
+                if spectral_class_ids:
+                    reliable_prev = torch.zeros_like(
+                        label_prev, dtype=torch.bool)
+                    reliable_curr = torch.zeros_like(
+                        label_curr, dtype=torch.bool)
+                    for class_id in spectral_class_ids:
+                        reliable_prev |= label_prev == class_id
+                        reliable_curr |= label_curr == class_id
+                    spectral_legal = spectral_legal & (
+                        reliable_prev[:, None] & reliable_curr[None, :])
+                legal_float = spectral_legal.to(spectral_sim.dtype)
+                row_mean = (
+                    (spectral_sim * legal_float).sum(dim=1, keepdim=True) /
+                    legal_float.sum(dim=1, keepdim=True).clamp(min=1.0))
+                col_mean = (
+                    (spectral_sim * legal_float).sum(dim=0, keepdim=True) /
+                    legal_float.sum(dim=0, keepdim=True).clamp(min=1.0))
+                residual = spectral_sim - 0.5 * (row_mean + col_mean)
+                temperature = max(float(
+                    cfg.get('spectral_relative_temperature', 0.02)), 1e-6)
+                spectral_score = torch.tanh(residual / temperature)
+                if bool(cfg.get('spectral_relative_positive_only', False)):
+                    spectral_score = spectral_score.clamp(min=0.0)
+                spectral_score = spectral_score.masked_fill(
+                    ~spectral_legal, 0.0)
+            else:
+                raise ValueError(
+                    f'Unsupported spectral_affinity_mode: {spectral_mode}')
+            affinity = affinity + spectral_weight * spectral_score
 
         if class_aware:
             same_cls = label_prev[:, None] == label_curr[None, :]
@@ -925,6 +1123,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         memory_mask: Optional[Tensor],
         spatial_shapes: Tensor,
         batch_data_samples: OptSampleList = None,
+        pair_inputs: Optional[Tensor] = None,
     ) -> Tuple[Tensor, Tensor, Tensor, Optional[Tensor], Optional[Tensor],
                Optional[Tensor], Optional[Tensor]]:
         """Proposal-quality-first pair proposals with GMC-constrained affinity."""
@@ -952,6 +1151,16 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 memory_curr, memory_mask, spatial_shapes, cls_curr_branch,
                 self.bbox_head.reg_branches_curr[num_layers], pre_topk))
 
+        spectral_p = spectral_c = None
+        if float(cfg.get('spectral_weight', 0.0)) != 0.0:
+            if pair_inputs is None or pair_inputs.dim() != 5:
+                raise ValueError(
+                    'Spectral proposal affinity expects (B, 2, C, H, W) inputs')
+            spectral_p = self._box_spectral_descriptors(
+                pair_inputs[:, 0], ref_p)
+            spectral_c = self._box_spectral_descriptors(
+                pair_inputs[:, 1], ref_c)
+
         learned_query = self.decoder.query_embedding.weight.to(
             device=memory_prev.device, dtype=memory_prev.dtype)
         learned_prev = self.decoder.ref_prev_embedding.weight.sigmoid().to(
@@ -974,7 +1183,9 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 batch_data_samples, b, memory_prev.device, memory_prev.dtype)
             affinity = self._pair_affinity_score_v2(
                 query_p[b], query_c[b], ref_p[b], ref_c[b], score_p[b],
-                score_c[b], label_p[b], label_c[b], gmc, img_shape)
+                score_c[b], label_p[b], label_c[b], gmc, img_shape,
+                None if spectral_p is None else spectral_p[b],
+                None if spectral_c is None else spectral_c[b])
             if pair_selection_mode == 'hungarian_affinity':
                 pair_i, pair_j = self._hungarian_affinity_pairs(
                     affinity, affinity_thr, candidate_topk)
@@ -1278,6 +1489,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         memory_mask: Optional[Tensor],
         spatial_shapes: Tensor,
         batch_data_samples: OptSampleList = None,
+        pair_inputs: Optional[Tensor] = None,
     ) -> Tuple[Optional[Tensor], Optional[Tensor], Optional[Tensor],
                Optional[Tensor], Optional[Dict], Optional[Tensor],
                Optional[Tensor], Optional[Tensor], Optional[Tensor]]:
@@ -1324,6 +1536,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                      memory_mask,
                      spatial_shapes,
                      batch_data_samples=batch_data_samples,
+                     pair_inputs=pair_inputs,
                  ))
         elif self.query_init == 'typed_pair_topk_v1':
             (query, reference_prev, reference_curr, enc_cls_prev,
@@ -1470,6 +1683,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         self,
         img_feats: Tuple[Tensor, ...],
         batch_data_samples: OptSampleList = None,
+        pair_inputs: Optional[Tensor] = None,
     ) -> Dict:
         """Shared encoder; M2 dual decoders or M5 pair decoder."""
         timer: Optional[CudaComponentTimer] = getattr(
@@ -1500,12 +1714,20 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             else:
                 encoder_outputs_dict = cast_fn()
             with torch.cuda.amp.autocast(enabled=False):
+                if pair_inputs is None:
+                    return self._forward_after_encoder(
+                        encoder_outputs_dict, decoder_inputs_dict,
+                        batch_data_samples, pair_batch, timer)
                 return self._forward_after_encoder(
                     encoder_outputs_dict, decoder_inputs_dict,
-                    batch_data_samples, pair_batch, timer)
+                    batch_data_samples, pair_batch, timer, pair_inputs)
+        if pair_inputs is None:
+            return self._forward_after_encoder(
+                encoder_outputs_dict, decoder_inputs_dict,
+                batch_data_samples, pair_batch, timer)
         return self._forward_after_encoder(
             encoder_outputs_dict, decoder_inputs_dict,
-            batch_data_samples, pair_batch, timer)
+            batch_data_samples, pair_batch, timer, pair_inputs)
 
     @staticmethod
     def _cast_floating_tensors_fp32(values: Dict) -> Dict:
@@ -1529,6 +1751,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         batch_data_samples: OptSampleList,
         pair_batch: int,
         timer: Optional[CudaComponentTimer],
+        pair_inputs: Optional[Tensor] = None,
     ) -> Dict:
         """Run query initialization and decoding after the shared encoder."""
         memory = encoder_outputs_dict['memory']
@@ -1579,6 +1802,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                     encoder_outputs_dict['memory_mask'],
                     encoder_outputs_dict['spatial_shapes'],
                     batch_data_samples=batch_data_samples,
+                    pair_inputs=pair_inputs,
                 ))
             pair_decoder_out = timer.record(
                 'decoder',
@@ -1603,6 +1827,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  encoder_outputs_dict['memory_mask'],
                  encoder_outputs_dict['spatial_shapes'],
                  batch_data_samples=batch_data_samples,
+                 pair_inputs=pair_inputs,
              )
             pair_decoder_out = self.forward_decoder_pair(
                 query=query,
@@ -1628,6 +1853,9 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         """Forward + loss with per-component CUDA timing."""
         timer = CudaComponentTimer()
         self._active_timer = timer
+        pair_inputs = (batch_inputs if float(
+            self.pair_proposal_cfg.get('spectral_weight', 0.0)) != 0.0
+                       else None)
         try:
             img_feats = timer.record(
                 'backbone_neck',
@@ -1636,7 +1864,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 img_feats = tuple(feat.float() for feat in img_feats)
                 with torch.cuda.amp.autocast(enabled=False):
                     head_inputs_dict = self.forward_transformer(
-                        img_feats, batch_data_samples)
+                        img_feats, batch_data_samples, pair_inputs)
                     losses = timer.record(
                         'head_loss',
                         lambda: self.bbox_head.loss(
@@ -1644,7 +1872,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                             batch_data_samples=batch_data_samples))
             else:
                 head_inputs_dict = self.forward_transformer(
-                    img_feats, batch_data_samples)
+                    img_feats, batch_data_samples, pair_inputs)
                 with self._post_encoder_fp32_context():
                     losses = timer.record(
                         'head_loss',
@@ -1667,7 +1895,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
     ):
         """Return head outputs (pair mode) or dual-branch outputs (M2)."""
         img_feats = self.extract_feat(batch_inputs)
-        head_inputs = self.forward_transformer(img_feats, batch_data_samples)
+        pair_inputs = (batch_inputs if float(
+            self.pair_proposal_cfg.get('spectral_weight', 0.0)) != 0.0
+                       else None)
+        head_inputs = self.forward_transformer(
+            img_feats, batch_data_samples, pair_inputs)
         with self._post_encoder_fp32_context():
             if not self.pair_mode:
                 prev_out = self.bbox_head.forward(**head_inputs['prev'])
@@ -1694,7 +1926,11 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
             rescale = self.test_cfg.get('rescale', rescale)
 
         img_feats = self.extract_feat(batch_inputs)
-        head_inputs = self.forward_transformer(img_feats, batch_data_samples)
+        pair_inputs = (batch_inputs if float(
+            self.pair_proposal_cfg.get('spectral_weight', 0.0)) != 0.0
+                       else None)
+        head_inputs = self.forward_transformer(
+            img_feats, batch_data_samples, pair_inputs)
 
         with self._post_encoder_fp32_context():
             if not self.pair_mode:

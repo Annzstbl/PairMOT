@@ -232,3 +232,305 @@ Tracking 仍按唯一规则选择最佳点：`cls_HOTA + det_HOTA` 最大的 asy
 2. 如果需要 AP 表格，可以保留 `0711_03 wide_groupmod_bandattn` 作为 AP-oriented variant。
 3. 后续不要继续加 output residual；更值得做的是 class-aware/group-aware regularization，目标是保住 `tricycle/truck/bus/bike/van` 的收益，同时抑制 `pedestrian/awning-bike` 的下降。
 4. 做最终报告时，HOTA 主表用 `0711_01`，AP 辅表可报告 `0711_03`，但必须明确二者不是同一最佳选择规则。
+
+## 10. 2026-07-15 Pair-aware liquid descriptor
+
+本节补充本机 99 的 `0714_01 liquid8_pairaware_laf_wide`。Tracking 仍只按
+`cls_HOTA + det_HOTA` 选择唯一最佳 epoch，不与其他 epoch 的 AP 或其他指标拼接。
+
+### 10.1 直接 baseline 与模型改动
+
+该实验的直接结构 baseline 是 `0709_04 liquid8_laf_wide_overlap`，不是
+`0704_01 resume`，也不是包含额外 `LiquidGroupModulator` 的 `0711_01`。配置直接继承
+`0709_04`，保留 8-group liquid sampler、`embed_dims=64` 的 wide LAF、overlap context
+和 spatial mixer，仅新增 `PairAwareLiquidFusion`。
+
+`PairAwareLiquidFusion` 允许 prev/curr 两帧继续独立采样。它在 sampler 之后分别提取
+每个 group 的源谱段 coverage、coverage entropy、peak coverage 和响应强度，再组合
+`[src, other, src-other, src*other]` 描述两帧的差异与一致性，输出逐 group 的
+SE-logit residual。该分支采用 zero initialization，动机是让 fusion 显式感知两帧
+采样 pattern 的变化，同时不在训练初始阶段破坏已有 wide LAF。
+
+### 10.2 HOTA 结果
+
+| exp | role | unique best epoch | cls HOTA | det HOTA | cls+det | vs direct baseline | vs 0704 resume |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `0704_01 resume` | global baseline | best resume point | 45.523 | 58.120 | 103.643 | -1.921 | 0.000 |
+| `0709_04 laf_wide_overlap` | direct structural baseline | epoch 72 | 47.314 | 58.250 | 105.564 | 0.000 | +1.921 |
+| `0714_01 pairaware_laf_wide` | pair-aware experiment | epoch 72 | 46.782 | 58.077 | 104.859 | -0.705 | +1.216 |
+
+相对直接 baseline，`0714_01` 的 `cls_HOTA` 下降 `0.532`，`det_HOTA` 下降
+`0.173`，两者没有一项提升。相对当前 liquid tracking 最优
+`0711_01 wide_groupmod` 的 `105.905`，总和低 `1.046`。因此当前证据不支持把该 pair-aware
+descriptor 加入默认 liquid 模型。
+
+### 10.3 AP 辅助观察
+
+AP 单独按 `pair_mAP50:95` 选择，`0714_01` 的最佳点为 epoch 64：
+`pair_mAP=0.2435`、`pair_AP50=0.4310`、`both_mAP=0.2505`、
+`both_AP50=0.4437`。它也低于直接 baseline `0709_04` 的
+`pair_mAP=0.2495`、`pair_AP50=0.4367`。此 AP 点不用于上面的 HOTA 行。
+
+结论：pair-aware 的问题定义仍合理，但当前把紧凑 pair descriptor 作为附加
+SE-logit residual，与 wide LAF 已有的 pattern-aware gate 存在功能重叠，且响应强度
+在 descriptor 中被 detach，分支只能学习如何调 gate，不能反向塑造 group response。
+现有实现没有形成互补增益，应保留为负结果；liquid 默认候选仍是
+`0711_01 liquid8 + wide LAF + groupmod`。
+
+## 11. Pair-Consistent Spectral Transport
+
+针对 `0714_01` 的负结果，下一版不再向 SE gate 追加一个独立 pair residual，而是让
+sampler 和 wide LAF 通过实际采样分布形成同一条 pair-aware 路径。严格 baseline 选择
+`0711_01 liquid8 + wide LAF + groupmod`，其指标为 `cls_HOTA=47.484`、
+`det_HOTA=58.421`、`cls+det=105.905`。
+
+新结构包含两个耦合部分：
+
+1. `PairCoupledSamplerRouter`：prev/curr 仍独立选择谱段，但各自的 sampler hidden 与
+   paired hidden 组成 `[src, other, src-other, src*other]`，双向预测 sampler-logit
+   residual。该设计让选择过程感知另一帧，同时不强迫两帧使用相同 pattern。
+2. `PairTransportTokenCoupling`：根据两帧 sampler 输出的源谱段 coverage 计算
+   group-to-group transport matrix。wide LAF 不按固定 group index 对齐，而是聚合另一帧
+   中谱段覆盖最相关的 group token，再以同样的差异/一致性关系更新当前 token。
+
+这两个模块的最后一层均为 zero initialization，因此训练起点严格等价于 `0711_01`；
+groupmod、wide LAF、overlap context 和 spatial mixer 均保持不变。相比 `0714_01`，该设计
+的关键区别是 pair sampler 的结果直接决定 pair fusion 的跨帧对齐关系，而不是在已有
+fusion 后重复增加 SE bias。soft sampling 保持连续融合和可导 transport，hard/eval-hard
+仍通过原有去重逻辑保证每个 group 内谱段唯一。
+
+实验配置为 `0715_02 liquid8_laf_wide_groupmod_pairtransport`。首次运行按要求在 epoch 1
+iter 200 后停止，没有生成 checkpoint。随后于 2026-07-15 01:52 在本机 99 的 GPU
+`2,3` fresh restart，不使用 resume，并改为 `setsid + nohup` 独立会话。rerun 已通过
+epoch 1 iter 50，loss 正常。该运行随后到达 epoch 70 iter 400，但物理 GPU2
+（PCI `0000:b1:00.0`）掉卡；驱动当前返回 `Unknown Error`，PCI 设备显示 `rev ff` 且
+VBIOS 不可读。DDP 两个 rank 等待 30 分钟后触发 NCCL ALLREDUCE timeout。故障前 loss、
+grad norm 和显存均正常，没有 OOM、NaN 或模型 traceback，因此归因为 GPU/PCIe 硬件
+故障。最后可恢复 checkpoint 为 epoch 68；epoch-67 validation 与 async TrackEval 17
+已经完成。服务器重启后四张 GPU 已恢复正常识别。该历史运行启动早于统一 AMP 约定，
+实际配置为 FP32 `OptimWrapper` 和 `find_unused_parameters=True`，不能误记为 BF16 实验。
+重启后使用完整 `epoch_68.pth` 在 GPUs `0,1` 显式 resume；model、optimizer、scheduler、
+message hub、EMA 和 early-stopping 状态均成功恢复。续训已验证至 epoch 69 iter 100，
+loss `10.9303`、grad norm `40.2505`，速度 `0.8573 s/iter`。续训随后完成 epoch 72、
+最终 AP 验证和 TrackEval。由于 resume 后异步评测计数从 1 重新开始，最终 epoch 72
+（payload `step=71`）结果写入并覆盖了 `val_track_0001`，不能把该目录误认为 epoch 4。
+
+按 `cls_HOTA + det_HOTA` 选择唯一最佳点，最终 epoch 72 同时也是该实验最佳点：
+`cls_HOTA=47.520`、`det_HOTA=58.600`、总和 `106.120`。相对严格结构 baseline
+`0711_01 wide_groupmod`，分别变化 `+0.036`、`+0.179`、总和 `+0.215`；相对
+`0704_01 resume` 总和提高 `+2.477`。最终 AP 为 `pair_mAP=0.2540`、
+`pair_AP50=0.4448`、`both_mAP=0.2611`、`both_AP50=0.4575`，仅作为辅助指标。
+因此 Pair Transport 是当前 liquid 的 HOTA 新最优，并且预期的 det-side 改善已经出现，
+但相对 `0711_01` 的增幅较小，应视为边际正收益，后续最好在统一 BF16 基准上复验。
+
+效率验证使用 RTX 3090、每卡 4 pairs（展平 8 帧）和 `400x600` 输入，对 baseline 与
+新结构各重复三轮 CUDA event 测时并取中位数。stem 前向由 `10.349 ms` 增至
+`10.463 ms`（`+1.10%`），stem 前向反向由 `33.878 ms` 增至 `34.903 ms`
+（`+3.03%`），峰值显存增加不超过 `0.7 MiB`。新增计算只有约 6.27 万参数，主要作用于
+每帧全局 hidden、`8x8` transport matrix 和 64 维 group token，不在高分辨率特征图上
+执行跨帧 attention；因此放到完整模型和实际更大输入中，占总迭代时间的比例预计低于
+约 `0.2%`。
+
+实际训练日志报告显存 `13412 MiB`；直接 baseline `0711_01` 的历史显存中位数为
+`13453 MiB`、最大值为 `13481 MiB`。`nvidia-smi` 显示的约 `18.4 GiB` 还包含 CUDA
+caching allocator、cuDNN workspace 和上下文保留，不能视为新增模块的有效激活占用。
+
+## 12. Band-Aligned Pair Context
+
+为避免只依赖 `0715_02 Pair Transport`，新增结构互补的 `0715_03`。严格 baseline 仍为
+`0711_01 liquid8 + wide LAF + groupmod`，不叠加 Pair Transport。
+
+`PairBandContextEncoder` 在 sampler 的物理谱段 token 上逐 band 对齐 prev/curr，以
+`[src, common, src-other, src*other]` 建模稳定谱段信息和帧间变化。该 context 通过两条
+共享路径进入模型：一条修正 sampler band descriptor 并直接产生 sampler-logit residual；
+另一条由实际采样 coverage 从 band context 池化为 group context，再注入 wide LAF token。
+因此 sampler 和 fusion 使用同一份谱段级 pair 表征，而不是分别学习无关联的 pair 分支。
+
+该设计相对 Pair Transport 的潜在优势是：pair 交互发生在具有固定物理含义的 8 个源谱段
+上，不需要等待 sampler 先形成稳定 group pattern 才能可靠对齐；同时保留每帧独立选择，
+不会强制 prev/curr 使用相同谱段。sampler descriptor、sampler logits 和 LAF token 的注入
+均为 zero initialization，训练起点严格等价于 baseline。
+
+新增参数为 `24384`，只操作 `8x32` band token 和 `8x64` group token，不在空间特征图上
+做跨帧运算。15 个单元测试已通过，包括 baseline 前向等价、sampler/fusion 首步梯度、
+单帧回退以及现有 hard 去重逻辑。实验尚未启动：原 GPU `2,3` 队列曾被 `0715_02` 的
+残留进程阻塞，服务器重启后该队列与残留进程均已消失。后续如启动，需要按当前统一的
+BF16-through-encoder、`find_unused_parameters=False` 配置重新建立启动任务。
+停止新结构后，又在同一 GPU `2,3`、同一 batch 和 FP32 设置下临时运行 `0711_01`
+baseline 到 epoch 1 iter 50。baseline 的 `nvidia-smi` 为 `18575/18469 MiB`，训练日志
+为 `13457 MiB`；新结构对应为 `18437/18451 MiB` 和 `13411--13464 MiB`。两者等价，
+没有观察到可归因于 pair-aware 模块的显存增长；临时 baseline 随后也已停止。
+
+## 13. Pair Change-Gated Liquid Fusion
+
+`0715_04` 从 `0711_01 liquid8 + wide LAF + groupmod` 结构出发，但不叠加 Pair Transport
+或 Band Context。它解决的问题是：两帧中稳定谱段适合共享，而真实运动、遮挡或光谱变化
+不应被无条件平均。模块先按相同 group index 计算两帧采样 coverage 的 histogram
+intersection、L1 distance，以及 conv3d group 响应均值/方差的相对变化，再产生逐 group
+reliability gate。高可靠性 group 偏向共享 token，低可靠性 group 偏向带方向的
+frame-specific change token，最后以 zero-initialized residual 注入 wide LAF。
+
+该结构不做新的 self-attention、group-to-group 矩阵或高分辨率跨帧卷积，新增计算只作用于
+8 个 64 维 group token。新增参数 `12833`。RTX 3090、8 帧、`400x600` 输入的三轮相邻
+stem 前向微基准中，baseline 为 `9.112--9.137 ms`，新结构为
+`9.234--9.251 ms`，增幅 `1.25%--1.34%`；放到完整模型中的占比更低。单元测试验证了
+zero-init 时与 `0711_01` 输出严格一致，并确认所有新增参数均接入梯度，可使用
+`find_unused_parameters=False`。
+
+实验遵循 2026-07-15 后的新训练基准：BF16 through encoder、后续 FP32、
+`find_unused_parameters=False`、fresh train，并保留 validation 与 TrackEval，只关闭绘图。
+197 GPUs `2,3` 上的正式运行已到 epoch 1 iter 100，loss `24.7166`、grad norm
+`58.0278` 均有限，8-group pattern 正常。iter 50 含启动预热为 `2.251 s/iter`，iter 100
+恢复到 `1.037 s/iter`；服务器同时存在 GPU0 满载任务，因此该总迭代速度不用于估计模块
+自身开销。截至 2026-07-15 21:50，训练已进入 epoch 61，约 `1.04 s/iter`，loss 和 grad
+norm 正常，训练 ETA 约 1 小时 45 分。按 `cls_HOTA + det_HOTA` 选择的当前唯一最佳点为
+epoch 52 / payload `step=51`：`cls_HOTA=46.298`、`det_HOTA=57.768`、总和 `104.066`。
+epoch 56 回落到 `45.989 + 57.701 = 103.690`；epoch 60 的 TrackEval 正在异步执行。
+当前最好点高于 `0704_01 resume`，但仍比历史 FP32 `0711_01` 最终总和 `105.905` 低
+`1.839`。后半程仍有 12 个 epoch，是否能证明 change gate 有正收益必须等待最终唯一最佳点。
+
+### 13.1 与 Pair Transport 的有限对比
+
+将 `0715_04 change gate` 与本机 `0715_02 pair transport` 按相同 epoch 对齐。该比较只能
+判断候选竞争力，不能解释为单模块消融：`0715_02` 同时包含 pair sampler router 和
+pair transport，使用 FP32 与 `find_unused_parameters=True`；`0715_04` 只加入 change
+gate，使用 BF16 与 `find_unused_parameters=False`。两者 sampler seed 均为 `3407`，数据、
+训练轮数和评测间隔一致。
+
+| Epoch | Transport cls_HOTA | Transport det_HOTA | Change gate cls_HOTA | Change gate det_HOTA | 选择分数差值 |
+| ---: | ---: | ---: | ---: | ---: | ---: |
+| 32 | 46.756 | 57.568 | 45.531 | 56.800 | -1.993 |
+| 40 | 46.603 | 57.790 | 45.982 | 57.353 | -1.058 |
+| 48 | 46.870 | 57.802 | 45.995 | 57.582 | -1.095 |
+| 52 | 46.808 | 57.988 | 46.298 | 57.768 | -0.730 |
+| 56 | 46.787 | 57.953 | 45.989 | 57.701 | -1.050 |
+
+epoch 8--56 的 13 个共同评测点中，change gate 的 `cls_HOTA + det_HOTA` 均未超过
+pair transport。差距在后期缩小，说明模型仍在收敛，但 epoch 56 再次回落，当前轨迹不支持
+其作为 pair transport 的替代方案。epoch 52 的逐类 HOTA 显示 change gate 对 bike
+`+1.064`、tricycle `+0.635`、van `+0.593`、pedestrian `+0.085`，但 awning-bike
+`-3.074`、bus `-2.450`、truck `-0.544`、car `-0.392`。因此它有有限的类别互补潜力，
+尤其是 bike/tricycle/van，但现有 reliability gate 存在类别偏置。合理定位是保留其机制
+用于后续“transport 后的轻量置信门控”设计，而不是把当前 `0715_04` 升为默认 Liquid。
+
+## 14. Final Pair-Only Liquid On Full Data
+
+`0715_05` 将 liquid 收敛为完整的 pair-aware stem：8-group sampler、pair-conditioned
+sampler router、Conv3D group encoding、group modulator、wide overlap-aware LAF 和
+coverage-based pair transport。sampler router 与 transported-token relation 均只使用有序
+`[x,y]`，不再显式拼接 `x-y` 或 `x*y`。历史 relation 模式仍保留为默认选项以保证旧配置
+和 checkpoint 可复现；本实验在两处显式选择 `relation_mode='pair'`。
+
+实验使用全部 75 个训练序列、COCO+Objects365 direct adapted checkpoint、全局 batch 8、
+72 epochs、2000-iter warmup、BF16 through encoder、后续 FP32，以及
+`find_unused_parameters=False`。普通 backbone 保持 `lr=1e-5`；Conv3D/SE 和全部新
+liquid 参数均通过最终解析配置确认使用 `lr=1e-4`。
+
+PyTorch 2.0.1/CUDA 11.8 不实现 BF16 `bilinear` 或 `nearest` interpolate。首次启动在
+sampler low-resolution gradient correction 处报 dtype 错误，未完成任何 iteration。
+短暂的 FP32-bilinear fallback 随后按要求停止。代码保留了经过前向和反向对照测试的
+自定义纯 BF16 bilinear 作为可选项，但为避免自实现插值成为正式实验的风险变量，最终配置
+显式选择 `lowres_grad_upsample_mode='nearest'`。该方案保留 full-resolution
+`P.detach()` 前向和 1/4-resolution sampler 概率梯度，再用纯 BF16 `index_select` 将
+零值 correction 最近邻展开到原尺寸。correction 前向严格为零，因此真实 sampled
+feature 不变；nearest 只决定 sampler 近似梯度的空间聚合方式。
+
+固定压力测试张量 `8x8x800x1200` 的 sampler BF16 前后向测试通过，head gradient 和输出
+均有限。正式 HSMOT pipeline 对 `1200x900` 原图等比例缩放到约 `1067x800`，再按 32
+对齐 pad 到 `1088x800`；该压力测试尺寸不代表正式数据的实际 resize 输出。
+正式 fresh run 于 2026-07-15 18:35 在 99 GPUs `0,1` 启动，已验证到 epoch 1 iter 150；
+iter 100/150 分别为 `0.8195/0.8087 s/iter`，训练日志显存约 `8.36 GiB`，loss/grad
+finite，初始 pattern 为
+`701 / 012 / 123 / 234 / 345 / 456 / 567 / 670`，没有 unused-parameter 或 dtype 错误。
+与临时 FP32-bilinear 路径的早期速度处于同一波动区间；nearest 方案的主要收益是实现
+简单、纯 BF16 执行和去除 full-resolution FP32 correction 临时张量，目前不能声称有
+显著速度提升。
+
+### 14.1 Full-data 完整结果
+
+`0715_05` 已完成 72 epochs、18 个 validation 和对应的 18 个 TrackEval 点。严格按
+`cls_HOTA + det_HOTA` 选择唯一最佳，最佳点为最终 `val_track_0018`，payload
+`step=71`，对应 val_det epoch 71：
+
+| experiment | cls HOTA | det HOTA | cls MOTA | cls IDF1 | det MOTA | det IDF1 |
+|---|---:|---:|---:|---:|---:|---:|
+| full baseline `0714_01` | 52.374 | 60.318 | 44.159 | 62.126 | 57.407 | 70.957 |
+| full liquid `0715_05` | 53.472 | 60.907 | 44.951 | 62.704 | 58.652 | 71.215 |
+| delta | +1.098 | +0.589 | +0.792 | +0.578 | +1.245 | +0.258 |
+
+用于唯一最佳点选择的两项 HOTA 之和从 `112.692` 提高到 `114.379`，变化 `+1.687`。
+指标展示仍保持 cls/det 分离；该和只用于选择唯一 checkpoint。
+
+AP 独立按 pair mAP 选择，双方最优均为 epoch 72：
+
+| experiment | pair mAP | pair AP50 | both mAP | both AP50 |
+|---|---:|---:|---:|---:|
+| full baseline `0714_01` | 0.2928 | 0.5062 | 0.3011 | 0.5209 |
+| full liquid `0715_05` | 0.2988 | 0.5115 | 0.3070 | 0.5256 |
+| delta | +0.0059 | +0.0052 | +0.0058 | +0.0047 |
+
+最佳 HOTA 点的逐类 cls HOTA：
+
+| class | full baseline | full liquid | delta |
+|---|---:|---:|---:|
+| car | 80.004 | 81.115 | +1.111 |
+| bike | 41.266 | 41.597 | +0.331 |
+| pedestrian | 42.192 | 42.325 | +0.133 |
+| van | 61.745 | 62.166 | +0.421 |
+| truck | 39.610 | 40.150 | +0.540 |
+| bus | 71.302 | 71.378 | +0.076 |
+| tricycle | 37.831 | 42.903 | +5.072 |
+| awning-bike | 45.040 | 46.140 | +1.100 |
+
+八个类别的 cls HOTA 均提高，最大收益来自 tricycle `+5.072`，其次是 car `+1.111` 和
+awning-bike `+1.100`。这说明最终 Liquid 不只是提高总体 detection association，也改善了
+多个类别的分类一致性；但 bike、pedestrian 和 bus 的增益较小，仍有继续优化空间。
+
+该对比的数据集、COCO+Objects365 adapted initialization、72 epochs 和评测协议一致，
+但不是严格的单变量 Liquid 消融：`0714_01` 使用 FP32 `OptimWrapper` 和
+`find_unused_parameters=True`，`0715_05` 使用 BF16 through encoder、
+`find_unused_parameters=False`，并包含同期的 DDP/KLD 稳定性修正。因此可以确认当前
+full liquid 系统稳定超过 full baseline 性能锚点，不能把全部 `+1.098/+0.589` HOTA
+增益都归因于 Liquid 模块本身。严格归因仍需要同一 BF16 代码基线的 full-data rerun。
+
+## 15. Pair-Only Band Context On Full Data
+
+`0715_06` 将未运行的 `0715_03` 更新为当前统一规范并在 252 上执行全量实验。模型以
+`liquid8 + wide LAF + groupmod` 为主体，在 8 个具有固定物理含义的源谱段上构建双向
+pair context；同一 context 一路修正 sampler descriptor 与 logits，另一路按实际 sampling
+coverage 池化为 group context 后注入 wide LAF。这样 sampler 与 fusion 共享同一份 pair
+证据，同时仍允许两帧独立选择谱段。
+
+`PairBandContextEncoder` 新增可复现的 `relation_mode`。历史默认
+`pair_diff_product` 保留用于旧配置，本实验显式使用 `relation_mode='pair'`，关系输入仅为
+有序 `[src, other]`。实验不包含 pair sampler router、pair transport 或 change gate；
+band-context fusion 只消费已经编码的 context，不再次构造差值或乘积。两个注入出口保持
+zero initialization，单元测试确认初始输出与 wide-groupmod baseline 一致，并确认 sampler
+与 fusion 两条新增路径均有非零梯度。
+
+训练使用全部 75 个序列、COCO+Objects365 direct adapted checkpoint、全局 batch 8、
+72 epochs、2000-iter warmup、BF16 through encoder、后续 FP32、nearest sampler gradient
+expansion 和 `find_unused_parameters=False`。基础 LR 为 `1e-4`；实际构建优化器后确认
+Conv3D、SE、sampler、pair-band encoder、band-context fusion、wide LAF 与 groupmod 均为
+`1e-4`，普通 backbone 参数为 `1e-5`。
+
+252 的第一次 22:01 启动在模型构建前退出，因为远端仍停留在不支持当前 BF16 边界参数的
+旧 detector 代码。同步本机稳定的 detector、head、RT-DETR layer 和 GDLoss 实现后，
+正式 fresh run 于 2026-07-15 22:05 在 GPUs `0,1`、port `29878` 启动，没有 resume。
+已验证到 epoch 1 iter 200：`0.9636 s/iter`、日志显存 `8444 MiB`，loss/grad finite，
+初始 pattern 为 `701 / 012 / 123 / 234 / 345 / 456 / 567 / 670`，没有 unused-parameter、
+dtype、GMC 或 DDP 错误。当前 ETA 约 20 小时 29 分。
+
+## 16. 论文严格 Base + Liquid 消融
+
+`0716_03` 使用论文统一协议重新验证最终 Liquid：COCO-only初始化、原生1200x900输入、
+全量数据的8297个唯一有序 `t-1 -> t` pair、BF16、`find_unused_parameters=False`和完整
+72-epoch评测。相对同步运行的`0716_02`，唯一模型变化是8-group最终Liquid，包括独立
+sampler、wide overlap-aware LAF、group modulation、pair sampler router和pair transport。
+
+本机GPU 2故障导致首次运行在epoch 1作废且不resume。代码同步后，正式fresh run于
+2026-07-16 17:15 CST在197的GPU 0/3启动，workdir为
+`/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh`。
+epoch 1 iter 50为`1.0818 s/iter`、日志显存`10692 MB`，loss和grad有限，无CUDA、NCCL、
+NaN、OOM、unused parameter或DDP错误。该实验完成后将与`0716_02`按唯一最佳
+`cls_HOTA + det_HOTA` epoch进行严格比较。

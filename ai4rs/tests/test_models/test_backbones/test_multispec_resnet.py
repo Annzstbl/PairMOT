@@ -4,6 +4,7 @@ import unittest
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 
 from projects.multispec_rotated_rtdetr.multispec_rotated_rtdetr.pretrain_utils import (
     adapt_state_dict_in_channels, adapt_state_dict_stem_conv3d_se,
@@ -278,6 +279,234 @@ class TestMultispecPretrainUtils(unittest.TestCase):
             stem.liquid_group_modulator.mlp[-1].weight.grad.abs().sum().item(),
             0)
 
+    def test_pair_transport_starts_from_wide_groupmod_baseline(self):
+        init_patterns = [
+            [7, 0, 1],
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+            [6, 7, 0],
+        ]
+        common_sampler = dict(
+            embed_dims=16,
+            num_groups=8,
+            init_patterns=init_patterns,
+            tau=1.0,
+            hard=False,
+            eval_hard=False,
+            liquid_aware_fusion=dict(
+                embed_dims=16,
+                num_heads=4,
+                use_overlap_context=True,
+                use_spatial_mixer=True),
+            liquid_group_modulator=dict(hidden_dims=8),
+        )
+        baseline = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=common_sampler,
+        ).eval()
+        pair_sampler = dict(common_sampler)
+        pair_sampler['liquid_aware_fusion'] = dict(
+            common_sampler['liquid_aware_fusion'],
+            pair_transport=dict(
+                hidden_dims=32,
+                temperature=0.25,
+                zero_init=True,
+                relation_mode='pair'))
+        pair_sampler['pair_sampler_router'] = dict(
+            hidden_dims=16, zero_init=True, relation_mode='pair')
+        paired = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=pair_sampler,
+        ).eval()
+        incompatible = paired.load_state_dict(
+            baseline.state_dict(), strict=False)
+        self.assertFalse(incompatible.unexpected_keys)
+        self.assertTrue(all(
+            'pair_sampler_router' in key or 'pair_transport' in key
+            for key in incompatible.missing_keys))
+        self.assertEqual(
+            paired.liquid_sampler.pair_sampler_router.mlp[0].in_features,
+            32)
+        self.assertEqual(
+            paired.liquid_aware_fusion.pair_transport.mlp[0].in_features,
+            32)
+
+        x = torch.randn(4, 8, 24, 20)
+        baseline_out, _, baseline_probs = baseline(
+            x, return_sampling=True)
+        paired.set_pair_batch_size(2)
+        paired_out, _, paired_probs = paired(x, return_sampling=True)
+        torch.testing.assert_close(paired_probs, baseline_probs)
+        torch.testing.assert_close(paired_out, baseline_out)
+        transport = paired.liquid_aware_fusion.last_pair_transport
+        self.assertEqual(transport.shape, (2, 2, 8, 8))
+        torch.testing.assert_close(
+            transport.sum(dim=-1), torch.ones_like(transport[..., 0]))
+
+        paired.train()
+        x = torch.randn(4, 8, 24, 20, requires_grad=True)
+        out = paired(x)
+        out.square().mean().backward()
+        sampler_grad = paired.liquid_sampler.pair_sampler_router.mlp[-1]
+        fusion_grad = paired.liquid_aware_fusion.pair_transport.mlp[-1]
+        self.assertGreater(sampler_grad.weight.grad.abs().sum().item(), 0)
+        self.assertGreater(fusion_grad.weight.grad.abs().sum().item(), 0)
+
+        paired.eval()
+        paired.liquid_sampler.eval_hard = True
+        _, _, hard_probs = paired(x.detach(), return_sampling=True)
+        selected = hard_probs.argmax(dim=-1)
+        for batch_idx in range(selected.size(0)):
+            for group_idx in range(selected.size(1)):
+                self.assertEqual(
+                    len(set(selected[batch_idx, group_idx].tolist())), 3)
+
+    def test_pair_band_context_starts_from_wide_groupmod_baseline(self):
+        init_patterns = [
+            [7, 0, 1],
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+            [6, 7, 0],
+        ]
+        common_sampler = dict(
+            embed_dims=16,
+            num_groups=8,
+            init_patterns=init_patterns,
+            tau=1.0,
+            hard=False,
+            eval_hard=False,
+            liquid_aware_fusion=dict(
+                embed_dims=16,
+                num_heads=4,
+                use_overlap_context=True,
+                use_spatial_mixer=True),
+            liquid_group_modulator=dict(hidden_dims=8),
+        )
+        baseline = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=common_sampler,
+        ).eval()
+        pair_sampler = dict(common_sampler)
+        pair_sampler['pair_band_context'] = dict(
+            hidden_dims=32, zero_init=True, relation_mode='pair')
+        pair_sampler['liquid_aware_fusion'] = dict(
+            common_sampler['liquid_aware_fusion'],
+            pair_band_context_fusion=dict(
+                context_dims=16, hidden_dims=32, zero_init=True))
+        paired = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=pair_sampler,
+        ).eval()
+        incompatible = paired.load_state_dict(
+            baseline.state_dict(), strict=False)
+        self.assertFalse(incompatible.unexpected_keys)
+        self.assertTrue(all(
+            'pair_band_context' in key
+            for key in incompatible.missing_keys))
+
+        x = torch.randn(4, 8, 24, 20)
+        baseline_out, _, baseline_probs = baseline(
+            x, return_sampling=True)
+        paired.set_pair_batch_size(2)
+        paired_out, _, paired_probs = paired(x, return_sampling=True)
+        torch.testing.assert_close(paired_probs, baseline_probs)
+        torch.testing.assert_close(paired_out, baseline_out)
+        self.assertEqual(
+            paired.liquid_sampler.last_pair_band_context.shape, (4, 8, 16))
+
+        paired.train()
+        out = paired(torch.randn(4, 8, 24, 20))
+        out.square().mean().backward()
+        sampler_grad = paired.liquid_sampler.pair_band_context.logit_delta
+        fusion = paired.liquid_aware_fusion.pair_band_context_fusion
+        self.assertGreater(sampler_grad.weight.grad.abs().sum().item(), 0)
+        self.assertGreater(fusion.mlp[-1].weight.grad.abs().sum().item(), 0)
+
+    def test_pair_change_gate_starts_from_wide_groupmod_baseline(self):
+        init_patterns = [
+            [7, 0, 1],
+            [0, 1, 2],
+            [1, 2, 3],
+            [2, 3, 4],
+            [3, 4, 5],
+            [4, 5, 6],
+            [5, 6, 7],
+            [6, 7, 0],
+        ]
+        common_sampler = dict(
+            embed_dims=16,
+            num_groups=8,
+            init_patterns=init_patterns,
+            tau=1.0,
+            hard=False,
+            eval_hard=False,
+            liquid_aware_fusion=dict(
+                embed_dims=16,
+                num_heads=4,
+                use_overlap_context=True,
+                use_spatial_mixer=True),
+            liquid_group_modulator=dict(hidden_dims=8),
+        )
+        baseline = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=common_sampler,
+        ).eval()
+        pair_sampler = dict(common_sampler)
+        pair_sampler['liquid_aware_fusion'] = dict(
+            common_sampler['liquid_aware_fusion'],
+            pair_change_gate=dict(hidden_dims=8, zero_init=True))
+        paired = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=pair_sampler,
+        ).eval()
+        incompatible = paired.load_state_dict(baseline.state_dict(), strict=False)
+        self.assertFalse(incompatible.unexpected_keys)
+        self.assertTrue(all(
+            'pair_change_gate' in key for key in incompatible.missing_keys))
+
+        x = torch.randn(4, 8, 24, 20)
+        baseline_out, _, baseline_probs = baseline(x, return_sampling=True)
+        paired.set_pair_batch_size(2)
+        paired_out, _, paired_probs = paired(x, return_sampling=True)
+        torch.testing.assert_close(paired_probs, baseline_probs)
+        torch.testing.assert_close(paired_out, baseline_out)
+        reliability = paired.liquid_aware_fusion.last_pair_change_reliability
+        self.assertEqual(reliability.shape, (4, 8, 1))
+        self.assertTrue(torch.all((reliability > 0) & (reliability < 1)))
+
+        paired.train()
+        out = paired(torch.randn(4, 8, 24, 20))
+        out.square().mean().backward()
+        coupling = paired.liquid_aware_fusion.pair_change_gate
+        self.assertGreater(coupling.out_proj.weight.grad.abs().sum().item(), 0)
+        self.assertTrue(all(
+            parameter.grad is not None
+            for parameter in coupling.parameters() if parameter.requires_grad))
+
+        paired.set_pair_batch_size(None)
+        paired(torch.randn(2, 8, 24, 20))
+        self.assertIsNone(paired.liquid_sampler.last_pair_band_context)
+
     def test_liquid_aware_output_residual_forward(self):
         stem = MultispecStemConv3dSE(
             out_channels=16,
@@ -340,6 +569,28 @@ class TestMultispecPretrainUtils(unittest.TestCase):
         self.assertGreater(x.grad.abs().sum().item(), 0)
         self.assertIsNotNone(sampler.head.bias.grad)
         self.assertGreater(sampler.head.bias.grad.abs().sum().item(), 0)
+
+    def test_liquid_sampler_bilinear_expand_matches_interpolate(self):
+        source = torch.randn(2, 5, 4, 7, requires_grad=True)
+        reference_source = source.detach().clone().requires_grad_(True)
+
+        actual = LiquidSpectralSampler._bilinear_expand(source, (15, 22))
+        expected = F.interpolate(
+            reference_source,
+            size=(15, 22),
+            mode='bilinear',
+            align_corners=False)
+        torch.testing.assert_close(actual, expected, rtol=1e-5, atol=1e-6)
+
+        gradient = torch.randn_like(actual)
+        actual.backward(gradient)
+        expected.backward(gradient)
+        torch.testing.assert_close(
+            source.grad, reference_source.grad, rtol=1e-5, atol=1e-6)
+
+        bf16_output = LiquidSpectralSampler._bilinear_expand(
+            source.detach().to(torch.bfloat16), (15, 22))
+        self.assertEqual(bf16_output.dtype, torch.bfloat16)
 
 
 if __name__ == '__main__':

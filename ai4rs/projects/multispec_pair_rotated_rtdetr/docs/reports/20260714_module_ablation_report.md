@@ -1,6 +1,6 @@
 # Module Ablation Report
 
-更新时间：2026-07-14 14:35 CST
+更新时间：2026-07-16 CST
 
 ## 1. 新基准定义
 
@@ -8,9 +8,25 @@
 
 | 实验 | 配置 | workdir | 状态 |
 | --- | --- | --- | --- |
-| `0714_01_0704_resume_coco365_full_unique_allgt` | `projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_coco365_full_252.py` | `/data4/litianhao/PairMmot/workdir_252/0714_01_0704_resume_coco365_full_unique_allgt` | 252 训练中，2026-07-14 14:02 已到 epoch 11 iter 50 |
+| `0714_01_0704_resume_coco365_full_unique_allgt` | `projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_coco365_full_252.py` | `/data4/litianhao/PairMmot/workdir_252/0714_01_0704_resume_coco365_full_unique_allgt` | 已完成 72 epochs 和全部 18 个 TrackEval 点；唯一最佳 HOTA 和 AP 最优均在最后一个评测周期 |
 
 这个实验作为后续 `+long-tail`、`+liquid`、`+encoder`、`+decoder` 的统一模块消融 baseline。
+
+### 1.1 2026-07-15 后续实验统一训练基准
+
+从 2026-07-15 起，新启动的实验统一以 99 上已完成的
+`0715_01_0704_01_half_unique_allgt_bf16_encoder_findfalse` 作为训练配置模板：
+
+- `AmpOptimWrapper(dtype='bfloat16', loss_scale=1.0)`；
+- backbone、neck 和 shared RT-DETR encoder 使用 BF16，encoder 输出只转换一次 FP32；
+- query initialization、decoder、head、matching 和 loss 保持 FP32；
+- DDP 固定使用 `find_unused_parameters=False`；新结构必须保证所有应训练参数具有有效梯度；
+- 保留 validation、detection evaluation 和 TrackEval，只关闭图像绘制；
+- 默认 fresh train、`resume=False`。初始化权重和 half/full 数据集仍由具体消融任务决定，不因 AMP 模板而强制统一。
+
+对 half-data、原始 `0704_01` 结构的后续实验，性能基准改为 `0715_01` 的唯一最佳
+HOTA 点：`cls_HOTA=46.531`、`det_HOTA=58.484`、两者之和 `105.015`。历史实验及其
+既有报告继续保留 `0704_01 resume` 对照，避免回溯性改写结论。
 
 ## 2. 与旧 0704_resume 的差异
 
@@ -60,6 +76,32 @@
 | Pair-only 参数 | `pair_quality_predictor`、`pair_query_fusion`、`pair_dn_query_generator` 等保持目标初始化 |
 
 部分复制的 key 包括 `decoder.ref_point_head.layers.0.weight` 以及前 3 个 decoder layer 的 `reg_branches.*.4.{weight,bias}` / `reg_branches_curr.*.4.{weight,bias}`。目标第 4 个 decoder/head layer 没有源模型对应层，保持初始化。
+
+### 3.1 R18/R34/R50 COCO 统一预训练（2026-07-16）
+
+后续正式模型族改用官方 COCO-only RT-DETR 权重，三种规模使用同一预训练数据来源：
+
+| backbone | 官方 checkpoint | decoder | 完全复制 | Conv3D | 4D→5D 部分复制 | 未匹配候选 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| R18 | `rtdetr_r18vd_dec3_6x_coco_from_paddle.pth` | 3 | 470 | 1 | 17 | 0 |
+| R34 | `rtdetr_r34vd_dec4_6x_coco_from_paddle.pth` | 4 | 588 | 1 | 21 | 0 |
+| R50 | `rtdetr_r50vd_6x_coco_from_paddle.pth` | 6 | 763 | 1 | 29 | 0 |
+
+文件统一位于 `/data4/litianhao/PairMmot/pretrained_weights`，下载来源、SHA256、目标配置、
+输出 checkpoint 和逐 key 适配统计记录在
+`rtdetr_coco_pair_family_manifest.json`。生成入口为
+`projects/multispec_pair_rotated_rtdetr/tools/prepare_coco_pair_family_pretrain.py`。
+
+新版适配器不写死 backbone 深度或 decoder 层数：R18/R34 BasicBlock、R50 Bottleneck、
+FPN/PAN、shared encoder 和 3/4/6 层 decoder 均按目标结构适配。源 RGB stem 的
+`(C,3,3,3)` 权重直接重排为 Conv3D `(C,1,3,3,3)`，不做平均或缩放；旋转框新增 angle
+维保持目标初始化。Liquid sampler/fusion、temporal encoder、tristate decoder 等目标独有
+扩展不伪造源参数，保持各自初始化，并在 JSON 的 `target_only_keys` 中记录。
+
+注意：第 3 节记录的是 `0714_01` 已实际使用的旧 COCO+Objects365 适配文件，不能用新版
+统计回溯替换。复查发现旧生成器曾遗漏 FPN/PAN block 映射，且 Conv3D stem 使用了均值缩放；
+新版已修复并通过逐 tensor 加载检查。因此后续严格模块消融应以本节 COCO-only 新权重重新
+训练统一 baseline，`0714_01` 保留为历史 full-data 性能锚点。
 
 ## 4. 启动与记录规则
 
@@ -152,7 +194,9 @@ DDP `find_unused=True` 与非 DDP profile 对比：
 
 结论更新：单帧 encoder aux 试验虽然能绕开 DDP unused 报错，但与 PairMOT 的核心监督目标不一致，已从代码中撤回。当前保留的合理修正只有 `_single_frame_topk_proposals(_v2)` 在 top-k 前屏蔽 invalid proposal；`pair_topk_v2` / `typed_pair_topk_v1` 的 encoder aux loss 仍监督 pair-selected proposal，使 proposal 与 pair GT 通过同一个 pair assigner 建立联系。
 
-因此，当前不采用会改变数值行为的 assigner 快速路径；AMP 仍不接入正式训练。`find_unused_parameters=False` 已可作为后续训练加速选项，但切换正式实验前应在目标结构配置上先做同样的 40 iter smoke test。如果后续继续推进 AMP，需要先对 `pair_rotated_rtdetr_head.py` 中所有 `loss_iou` / `GDLoss` 路径做 FP32 island。
+因此，当时的阶段性结论是不采用会改变数值行为的 assigner 快速路径，且在完成 FP32
+island 前不把 AMP 接入正式训练。后续修正和完整训练结果见第 5 节；
+`find_unused_parameters=False` 已通过目标结构验证。
 
 后续模块消融建议按同一个新 baseline 逐项累加：
 
@@ -165,3 +209,93 @@ DDP `find_unused=True` 与非 DDP profile 对比：
 | `+decoder` | 在前序最佳设置上加入 decoder 结构改动 |
 
 报告比较时不合并指标展示；每个实验仍按 `cls_HOTA + det_HOTA` 选择唯一最佳 epoch。
+
+## 5. AMP 完整训练性能核验
+
+本节只纳入完成 72 epochs 且保持正式评测的两个实验：99 的 `0715_01` BF16-through-encoder
+和 197 的 `0714_03` corrected hybrid FP16。197 的 `0714_02` 改变过 GDLoss 数学实现，
+不参与比较。baseline 使用 `0704_01 resume` 高指标。
+
+Tracking 严格按 `cls_HOTA + det_HOTA` 从每个实验全部 18 个评测点中选择唯一最佳 epoch：
+
+| experiment | precision | unique track point | cls HOTA | det HOTA | cls+det | delta cls | delta det | delta sum |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| `0704_01 resume` | FP32 baseline | async 7 / val_det epoch 67 | 45.523 | 58.120 | 103.643 | 0.000 | 0.000 | 0.000 |
+| `0715_01` 99 | BF16 through encoder | async 18 / val_det epoch 71 | 46.531 | 58.484 | 105.015 | +1.008 | +0.364 | +1.372 |
+| `0714_03` 197 | FP16 backbone/neck, FP32 transformer | async 16 / val_det epoch 63 | 46.271 | 58.381 | 104.652 | +0.748 | +0.261 | +1.009 |
+
+AP 单独按 `pair_mAP50:95` 选择，不与上表的 HOTA epoch 拼接：
+
+| experiment | AP epoch | pair mAP | pair AP50 | both mAP | both AP50 | delta pair mAP |
+|---|---:|---:|---:|---:|---:|---:|
+| `0704_01 resume` | 68 | 0.2383 | 0.4157 | 0.2448 | 0.4275 | 0.0000 |
+| `0715_01` 99 | 72 | 0.2445 | 0.4257 | 0.2514 | 0.4382 | +0.0062 |
+| `0714_03` 197 | 72 | 0.2424 | 0.4215 | 0.2492 | 0.4337 | +0.0042 |
+
+结论：两个正式 AMP 实验在 HOTA 和 AP 上均未出现相对 baseline 的性能下降。99 BF16
+观察结果最好，也支持保留 BF16 方案；197 FP16 虽然指标未下降，但由于此前的数值稳定性
+风险，不恢复为默认精度。需要注意，这不是严格的同 seed 精度消融：AMP 实验是 fresh
+rerun，且包含同期的 DDP/KLD 稳定性修正，因此可以得出“没有观察到退化”，不能把观察到
+的提升全部归因于 AMP。
+
+分项上唯一明确下降是 197 FP16 最佳 HOTA 点的 `cls_MOTA=34.208`，比 baseline
+`34.750` 低 `0.542`；但同一点的 cls HOTA、cls IDF1 以及全部 det tracking 指标均提高。
+99 BF16 的 cls/det HOTA、MOTA、IDF1 六项则全部高于 baseline。
+
+基于完整训练的稳定性和性能核验，`0715_01` 的 BF16-through-encoder 边界从
+2026-07-15 起成为所有新实验的默认精度与 DDP 配置。FP32 `0704_01 resume` 仅保留为
+历史指标锚点，不再作为新实验的默认启动配置。
+
+## 6. Full-data COCO+Objects365 baseline 完整结果
+
+252 的 `0714_01_0704_resume_coco365_full_unique_allgt` 已完成 72 epochs。Tracking 从全部
+18 个评测点中严格按 `cls_HOTA + det_HOTA` 选择唯一最佳：`val_track_0018`，对应
+`val_det epoch 71`。
+
+| track point | cls HOTA | det HOTA | cls+det | cls MOTA | cls IDF1 | det MOTA | det IDF1 |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `val_track_0018 / val_det epoch 71` | 52.374 | 60.318 | 112.692 | 44.159 | 62.126 | 57.407 | 70.957 |
+
+AP 单独按 `pair_mAP50:95` 选择，最优为训练 epoch 72，不与上面的 tracking epoch 合并：
+
+| AP epoch | pair mAP | pair AP50 | both mAP | both AP50 |
+|---:|---:|---:|---:|---:|
+| 72 | 0.2928 | 0.5062 | 0.3011 | 0.5209 |
+
+相对历史 half-data `0704_01 resume`，full-data baseline 的 `cls_HOTA` 提升 `+6.851`，
+`det_HOTA` 提升 `+2.198`，两者之和提升 `+9.049`。相对 99 的 half-data BF16
+`0715_01`，对应提升为 `+5.843`、`+1.834` 和 `+7.677`。该增益来自 29 到 75 个训练
+序列、COCO+Objects365 直接适配初始化以及 fresh 72-epoch 训练的联合变化，不能归因于
+单一因素。
+
+该历史 full-data 实验本身使用 FP32 `OptimWrapper` 和
+`find_unused_parameters=True`。它是当前 full-data 性能锚点；2026-07-15 后新启动的
+full-data 模块消融仍应使用统一的 BF16-through-encoder、
+`find_unused_parameters=False` 训练配置，并在报告中注明这一训练配置差异。
+
+### 6.1 Full-data Liquid 候选结果
+
+99 的 `0715_05_liquid8_final_pairtransport_paironly_coco365_full_bf16` 已完成 72 epochs 和
+全部 18 个 TrackEval 点。它使用 8-group sampler、pair-conditioned router、wide
+overlap-aware LAF、group modulation 和 coverage-based pair transport；两个关系 MLP
+只消费有序 `[x,y]`。Tracking 唯一最佳为最终 `val_track_0018 / step 71`：
+
+| experiment | cls HOTA | det HOTA | cls MOTA | cls IDF1 | det MOTA | det IDF1 |
+|---|---:|---:|---:|---:|---:|---:|
+| full baseline `0714_01` | 52.374 | 60.318 | 44.159 | 62.126 | 57.407 | 70.957 |
+| `+liquid` candidate `0715_05` | 53.472 | 60.907 | 44.951 | 62.704 | 58.652 | 71.215 |
+| delta | +1.098 | +0.589 | +0.792 | +0.578 | +1.245 | +0.258 |
+
+AP 独立最优均为 epoch 72：full baseline pair mAP `0.2928`、pair AP50 `0.5062`；
+`0715_05` pair mAP `0.2988`、pair AP50 `0.5115`。
+
+该结果支持 full liquid 候选整体优于 full baseline，但当前只能列为 `+liquid candidate`，
+不能视为严格单模块消融：baseline 为 FP32 + `find_unused=True`，Liquid 为 BF16 through
+encoder + `find_unused=False`，且后者包含同期稳定性修正。严格模块链结论需要补跑同一
+BF16 代码版本、相同 seed 的 full-data baseline。
+
+## 相关独立报告
+
+Proposal affinity 的 zero-shot 分析不属于 baseline 模块逐项训练消融主线，已迁移至独立报告：
+
+- [Proposal Zero-shot: Elliptical Motion + Spectral Similarity](20260716_proposal_zeroshot_elliptical_spectral_report.md)

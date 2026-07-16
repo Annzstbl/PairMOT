@@ -58,16 +58,13 @@ class PairSideBoxMatchCost(BaseMatchCost):
         pred_side = InstanceData(
             bboxes=getattr(pred_instances, pred_key).float())
         valid = getattr(gt_instances, valid_key).bool()  # (num_gt,)
-        if valid.any():
-            gt_side = InstanceData(
-                bboxes=getattr(gt_instances, gt_key)[valid].float())
-            with torch.cuda.amp.autocast(enabled=False):
-                valid_cost = self.box_cost(
-                    pred_side, gt_side, img_meta, **kwargs)
-            cost = valid_cost.new_zeros((num_pred, num_gt))
-            cost[:, valid] = valid_cost
-        else:
-            cost = pred_instances.scores.new_zeros((num_pred, num_gt))
+        gt_side = InstanceData(
+            bboxes=getattr(gt_instances, gt_key)[valid].float())
+        with torch.cuda.amp.autocast(enabled=False):
+            valid_cost = self.box_cost(
+                pred_side, gt_side, img_meta, **kwargs)
+        cost = valid_cost.new_zeros((num_pred, num_gt))
+        cost[:, valid] = valid_cost
         return cost * self.weight
 
 

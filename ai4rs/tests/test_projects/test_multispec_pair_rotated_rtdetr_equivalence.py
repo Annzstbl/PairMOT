@@ -5,7 +5,7 @@ import copy
 import os.path as osp
 import sys
 import unittest
-from types import MethodType
+from types import MethodType, SimpleNamespace
 
 import torch
 from mmengine.config import Config
@@ -154,6 +154,104 @@ class TestMultispecPairRotatedRTDETREquivalence(unittest.TestCase):
 
         self.assertEqual(flat[:4], [0.0, 2.0, 4.0, 6.0])
         self.assertEqual(flat[4:], [1.0, 3.0, 5.0, 7.0])
+
+    def test_elliptical_motion_prefers_long_axis(self):
+        model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = SimpleNamespace(angle_factor=torch.pi)
+        model.pair_proposal_cfg = dict(
+            geom_sigma=0.06, ellipse_max_aspect_sqrt=2.0)
+        ref_prev = torch.tensor([[0.5, 0.5, 0.20, 0.05, 0.0]])
+        ref_curr = torch.tensor([
+            [0.55, 0.50, 0.20, 0.05, 0.0],
+            [0.50, 0.55, 0.20, 0.05, 0.0],
+        ])
+        score = model._elliptical_motion_score(
+            ref_prev, ref_curr, ref_prev[:, :2], torch.eye(3), (100, 100))
+        self.assertGreater(score[0, 0].item(), score[0, 1].item())
+
+    def test_box_spectral_descriptor_is_normalized(self):
+        model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = SimpleNamespace(angle_factor=torch.pi)
+        model.pair_proposal_cfg = dict(spectral_sample_offset=0.2)
+        model.data_preprocessor = torch.nn.Module()
+        model.data_preprocessor._enable_normalize = False
+        frame = torch.rand(2, 8, 32, 48)
+        refs = torch.tensor([
+            [[0.25, 0.25, 0.2, 0.1, 0.0],
+             [0.75, 0.75, 0.1, 0.2, 0.5]],
+        ]).expand(2, -1, -1)
+        descriptor = model._box_spectral_descriptors(frame, refs)
+        self.assertEqual(descriptor.shape, (2, 2, 8))
+        self.assertTrue(torch.isfinite(descriptor).all().item())
+        self.assertTrue(torch.allclose(
+            descriptor.norm(dim=-1), torch.ones(2, 2), atol=1e-5))
+
+    def test_small_proposals_use_isotropic_motion(self):
+        model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = SimpleNamespace(angle_factor=torch.pi)
+        model.pair_proposal_cfg = dict(
+            sim_weight=0.0,
+            geom_weight=1.0,
+            score_weight=0.0,
+            spectral_weight=0.0,
+            class_aware=False,
+            geom_sigma=0.06,
+            max_center_dist=1.0,
+            max_log_scale=1.0,
+            elliptical_motion=True,
+            ellipse_max_aspect_sqrt=2.0,
+            ellipse_isotropic_max_area=0.001,
+        )
+        query = torch.ones(1, 2)
+        score = torch.ones(1)
+        label = torch.zeros(1, dtype=torch.long)
+
+        def motion_scores(width, height):
+            ref_prev = torch.tensor([[0.5, 0.5, width, height, 0.0]])
+            ref_curr = torch.tensor([
+                [0.52, 0.50, width, height, 0.0],
+                [0.50, 0.52, width, height, 0.0],
+            ])
+            return model._pair_affinity_score_v2(
+                query, query.expand(2, -1), ref_prev, ref_curr,
+                score, score.expand(2), label, label.expand(2),
+                torch.eye(3), (100, 100))
+
+        small = motion_scores(0.02, 0.01)
+        large = motion_scores(0.20, 0.05)
+        self.assertTrue(torch.allclose(small[0, 0], small[0, 1]))
+        self.assertGreater(large[0, 0].item(), large[0, 1].item())
+
+    def test_spectral_score_is_limited_by_pair_area(self):
+        model = object.__new__(MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = SimpleNamespace(angle_factor=torch.pi)
+        model.pair_proposal_cfg = dict(
+            sim_weight=0.0,
+            geom_weight=0.0,
+            score_weight=0.0,
+            spectral_weight=1.0,
+            spectral_affinity_mode='absolute',
+            spectral_max_pair_area=0.001,
+            class_aware=False,
+            max_center_dist=1.0,
+        )
+        query = torch.ones(2, 2)
+        refs = torch.tensor([
+            [0.5, 0.5, 0.02, 0.01, 0.0],
+            [0.5, 0.5, 0.20, 0.05, 0.0],
+        ])
+        score = torch.ones(2)
+        label = torch.zeros(2, dtype=torch.long)
+        spectral = torch.tensor([[1.0, 0.0], [1.0, 0.0]])
+        affinity = model._pair_affinity_score_v2(
+            query, query, refs, refs, score, score, label, label,
+            torch.eye(3), (100, 100), spectral, spectral)
+        self.assertEqual(affinity[0, 0].item(), 1.0)
+        self.assertEqual(affinity[1, 1].item(), 0.0)
 
     @unittest.skipUnless(torch.cuda.is_available(), 'CUDA is required')
     def test_bf16_encoder_fp32_post_boundary_preserves_gradient(self):

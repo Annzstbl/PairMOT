@@ -729,25 +729,33 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         cls_prev_flat = cls_prev.reshape(-1, self.cls_out_channels)
         cls_curr_flat = cls_curr.reshape(-1, self.cls_out_channels)
         if self.sync_cls_avg_factor:
-            cls_avg_factor = reduce_mean(
-                cls_prev_flat.new_tensor([cls_avg_factor]))
-        cls_avg_factor = max(cls_avg_factor, 1)
+            cls_avg_factor = torch.clamp(
+                reduce_mean(cls_prev_flat.new_tensor([cls_avg_factor])),
+                min=1)
+        else:
+            cls_avg_factor = max(cls_avg_factor, 1)
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
+        cls_iou_targets_prev, cls_iou_targets_curr = (
+            self._build_dual_cls_iou_targets(
+                cls_prev_flat, labels_prev, labels_curr, label_weights,
+                bbox_prev_flat, bbox_curr_flat, bbox_prev_targets,
+                bbox_curr_targets, bbox_prev_weights, bbox_curr_weights,
+                batch_img_metas))
         loss_cls_prev = self._loss_cls(
             cls_prev_flat, labels_prev, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
-            cls_avg_factor)
+            cls_avg_factor, cls_iou_targets=cls_iou_targets_prev)
         loss_cls_curr = self._loss_cls(
             cls_curr_flat, labels_curr, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
-            cls_avg_factor)
+            cls_avg_factor, cls_iou_targets=cls_iou_targets_curr)
 
         num_total_pos_tensor = loss_cls_prev.new_tensor([num_total_pos])
         num_total_pos_val = torch.clamp(
-            reduce_mean(num_total_pos_tensor), min=1).item()
+            reduce_mean(num_total_pos_tensor), min=1).squeeze(0)
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
         loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors,
@@ -1033,15 +1041,15 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         pres_curr_targets = torch.cat(pres_curr_targets_list)
         pres_weights = torch.cat(pres_weights_list)
         cls_flat = cls_scores.reshape(-1, self.cls_out_channels)
-        cls_avg_factor = max(float(reduce_mean(
-            cls_flat.new_tensor([num_total_pos])).item()), 1.0)
+        cls_avg_factor = torch.clamp(
+            reduce_mean(cls_flat.new_tensor([num_total_pos])),
+            min=1).squeeze(0)
         loss_cls = self._loss_cls(
             cls_flat, labels, label_weights, bbox_prev.reshape(-1, 5),
             bbox_curr.reshape(-1, 5), bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
-        num_pos = max(float(reduce_mean(loss_cls.new_tensor(
-            [num_total_pos])).item()), 1.0)
+        num_pos = cls_avg_factor
         loss_pres_prev = self.loss_presence(
             presence_prev.reshape(-1), pres_prev_targets, pres_weights,
             avg_factor=num_pos)
@@ -1113,20 +1121,26 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         cls_curr_flat = cls_curr.reshape(-1, self.cls_out_channels)
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
-        cls_avg_factor = max(float(reduce_mean(
-            cls_prev_flat.new_tensor([num_total_pos])).item()), 1.0)
+        cls_avg_factor = torch.clamp(
+            reduce_mean(cls_prev_flat.new_tensor([num_total_pos])),
+            min=1).squeeze(0)
+        cls_iou_targets_prev, cls_iou_targets_curr = (
+            self._build_dual_cls_iou_targets(
+                cls_prev_flat, labels_prev, labels_curr, label_weights,
+                bbox_prev_flat, bbox_curr_flat, bbox_prev_targets,
+                bbox_curr_targets, bbox_prev_weights, bbox_curr_weights,
+                batch_img_metas))
         loss_cls_prev = self._loss_cls(
             cls_prev_flat, labels_prev, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
-            cls_avg_factor)
+            cls_avg_factor, cls_iou_targets=cls_iou_targets_prev)
         loss_cls_curr = self._loss_cls(
             cls_curr_flat, labels_curr, label_weights, bbox_prev_flat,
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
-            cls_avg_factor)
-        num_pos = max(float(reduce_mean(loss_cls_prev.new_tensor(
-            [num_total_pos])).item()), 1.0)
+            cls_avg_factor, cls_iou_targets=cls_iou_targets_curr)
+        num_pos = cls_avg_factor
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
         loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors, bbox_prev_targets * factors,
@@ -1189,9 +1203,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         cls_scores_flat = cls_scores.reshape(-1, self.cls_out_channels)
         cls_avg_factor = num_total_pos * 1.0 + num_total_neg * self.bg_cls_weight
         if self.sync_cls_avg_factor:
-            cls_avg_factor = reduce_mean(
-                cls_scores_flat.new_tensor([cls_avg_factor]))
-        cls_avg_factor = max(cls_avg_factor, 1)
+            cls_avg_factor = torch.clamp(
+                reduce_mean(cls_scores_flat.new_tensor([cls_avg_factor])),
+                min=1)
+        else:
+            cls_avg_factor = max(cls_avg_factor, 1)
 
         loss_cls = self._loss_cls(
             cls_scores_flat,
@@ -1209,7 +1225,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
 
         num_total_pos_tensor = loss_cls.new_tensor([num_total_pos])
         num_total_pos_val = torch.clamp(
-            reduce_mean(num_total_pos_tensor), min=1).item()
+            reduce_mean(num_total_pos_tensor), min=1).squeeze(0)
 
         pres_prev_flat = presence_prev.reshape(-1)
         pres_curr_flat = presence_curr.reshape(-1)
@@ -1270,28 +1286,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         bbox_curr_weights: Tensor,
         batch_img_metas: List[dict],
         cls_avg_factor: float,
+        cls_iou_targets: Optional[Tensor] = None,
     ) -> Tensor:
         cls_scores = self._adjust_cls_scores_for_loss(cls_scores, labels)
         cls_loss_weights = self._build_cls_loss_weights(cls_scores, labels)
         if isinstance(self.loss_cls, VarifocalLoss):
-            bg_class_ind = self.num_classes
-            pos_inds = ((labels >= 0)
-                        & (labels < bg_class_ind)).nonzero().squeeze(1)
-            cls_iou_targets = label_weights.new_zeros(cls_scores.shape)
-            if pos_inds.numel() > 0:
-                pos_labels = labels[pos_inds]
-                iou_targets = self._pair_iou_targets(
-                    bbox_prev[pos_inds],
-                    bbox_curr[pos_inds],
-                    bbox_prev_targets[pos_inds],
-                    bbox_curr_targets[pos_inds],
-                    bbox_prev_weights[pos_inds],
-                    bbox_curr_weights[pos_inds],
-                    batch_img_metas,
-                    pos_inds,
-                    bbox_prev.size(0),
-                )
-                cls_iou_targets[pos_inds, pos_labels] = iou_targets
+            if cls_iou_targets is None:
+                cls_iou_targets = self._build_cls_iou_targets(
+                    cls_scores, labels, label_weights, bbox_prev, bbox_curr,
+                    bbox_prev_targets, bbox_curr_targets, bbox_prev_weights,
+                    bbox_curr_weights, batch_img_metas)
             return self.loss_cls(
                 cls_scores,
                 cls_iou_targets,
@@ -1301,6 +1305,73 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             label_weights = label_weights[:, None] * cls_loss_weights
         return self.loss_cls(
             cls_scores, labels, label_weights, avg_factor=cls_avg_factor)
+
+    def _build_cls_iou_targets(
+        self,
+        cls_scores: Tensor,
+        labels: Tensor,
+        label_weights: Tensor,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        bbox_prev_targets: Tensor,
+        bbox_curr_targets: Tensor,
+        bbox_prev_weights: Tensor,
+        bbox_curr_weights: Tensor,
+        batch_img_metas: List[dict],
+    ) -> Optional[Tensor]:
+        """Build the shared pair quality target for Varifocal cls branches."""
+        if not isinstance(self.loss_cls, VarifocalLoss):
+            return None
+        pos_inds = ((labels >= 0)
+                    & (labels < self.num_classes)).nonzero().squeeze(1)
+        cls_iou_targets = label_weights.new_zeros(cls_scores.shape)
+        if pos_inds.numel() > 0:
+            pos_labels = labels[pos_inds]
+            iou_targets = self._pair_iou_targets(
+                bbox_prev[pos_inds], bbox_curr[pos_inds],
+                bbox_prev_targets[pos_inds], bbox_curr_targets[pos_inds],
+                bbox_prev_weights[pos_inds], bbox_curr_weights[pos_inds],
+                batch_img_metas, pos_inds, bbox_prev.size(0))
+            cls_iou_targets[pos_inds, pos_labels] = iou_targets
+        return cls_iou_targets
+
+    def _build_dual_cls_iou_targets(
+        self,
+        cls_scores: Tensor,
+        labels_prev: Tensor,
+        labels_curr: Tensor,
+        label_weights: Tensor,
+        bbox_prev: Tensor,
+        bbox_curr: Tensor,
+        bbox_prev_targets: Tensor,
+        bbox_curr_targets: Tensor,
+        bbox_prev_weights: Tensor,
+        bbox_curr_weights: Tensor,
+        batch_img_metas: List[dict],
+    ) -> Tuple[Optional[Tensor], Optional[Tensor]]:
+        """Build dual-cls targets while evaluating pair quality only once."""
+        if not isinstance(self.loss_cls, VarifocalLoss):
+            return None, None
+        valid_prev = (labels_prev >= 0) & (labels_prev < self.num_classes)
+        valid_curr = (labels_curr >= 0) & (labels_curr < self.num_classes)
+        union_inds = (valid_prev | valid_curr).nonzero().squeeze(1)
+        targets_prev = label_weights.new_zeros(cls_scores.shape)
+        targets_curr = label_weights.new_zeros(cls_scores.shape)
+        if union_inds.numel() == 0:
+            return targets_prev, targets_curr
+
+        quality = self._pair_iou_targets(
+            bbox_prev[union_inds], bbox_curr[union_inds],
+            bbox_prev_targets[union_inds], bbox_curr_targets[union_inds],
+            bbox_prev_weights[union_inds], bbox_curr_weights[union_inds],
+            batch_img_metas, union_inds, bbox_prev.size(0))
+        union_prev = valid_prev[union_inds]
+        union_curr = valid_curr[union_inds]
+        prev_inds = union_inds[union_prev]
+        curr_inds = union_inds[union_curr]
+        targets_prev[prev_inds, labels_prev[prev_inds]] = quality[union_prev]
+        targets_curr[curr_inds, labels_curr[curr_inds]] = quality[union_curr]
+        return targets_prev, targets_curr
 
     def _pair_hbox_iou_targets(
         self,
@@ -1419,13 +1490,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
     def _build_rescale_factors(self, batch_img_metas: List[dict],
                                bbox_prev: Tensor) -> Tensor:
         factors = []
-        for img_meta, _ in zip(batch_img_metas, bbox_prev):
+        for img_meta in batch_img_metas:
             img_h, img_w = img_meta['img_shape']
-            factor = bbox_prev.new_tensor(
-                [img_w, img_h, img_w, img_h,
-                 self.angle_factor]).unsqueeze(0)
-            factors.append(factor)
-        return torch.cat(factors, 0).repeat_interleave(
+            factors.append(
+                [img_w, img_h, img_w, img_h, self.angle_factor])
+        return bbox_prev.new_tensor(factors).repeat_interleave(
             bbox_prev.size(1), dim=0)
 
     def _loss_iou_valid(self, bbox_preds: Tensor, bbox_targets: Tensor,

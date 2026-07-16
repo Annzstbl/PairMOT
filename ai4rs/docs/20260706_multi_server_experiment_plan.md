@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-07-12 01:20 CST.
+Last updated: 2026-07-16 15:46 CST.
 
 ## Server Status
 
@@ -26,6 +26,47 @@ is named `litianhao01@10.106.14.197`, but the verified login account on
 ```bash
 ssh -i ~/.ssh/litianhao01@10.106.15.252/id_ed25519 litianhao01@10.106.15.252
 ```
+
+## Global Experiment ID Rule
+
+Formal experiment IDs are global across 99, 197, and 252.  They are never
+allocated independently per server.
+
+- Format: `MMDD_NN`, for example `0715_02`.
+- Before creating a config, queue, screen, or workdir, scan all three shared
+  roots and this document for the largest ID on that date, then reserve the
+  next number here.
+- The reservation happens before code sync or launch, so simultaneous jobs on
+  different servers cannot claim the same ID.
+- A retry of exactly the same scientific experiment keeps its ID and uses a
+  suffix such as `_rerun` or `_restart`; a changed model, data, loss, precision
+  boundary, or ablation receives a new global ID.
+- `tmp_profile_*`, diagnostics, detection/evaluation-only jobs, and canceled
+  queues do not consume formal experiment IDs.
+- Config filename, workdir, screen name, launch log, report, and status entry
+  must use the same global ID.
+
+Legacy 0714 paths are not renamed because active checkpoints, evaluator paths,
+and reports already reference them.  The known historical collision is
+`0714_01`: 99 used it for pair-aware liquid, while 252 used it for the
+full-data COCO+Objects365 baseline.  The repeated 197 `0714_02` paths are
+diagnostic/restart variants of its AMP investigation.  These are historical
+exceptions only, not numbering precedent.
+
+Current allocation state:
+
+| Date | Last global ID | Experiment | Server | Next ID |
+| --- | --- | --- | --- | --- |
+| 2026-07-16 | `0716_02` | paper Base R18, COCO-only, full data, 1200x900, BF16 | 99 | `0716_03` |
+| 2026-07-16 | `0716_03` | paper Base + final Liquid R18, COCO-only, full data, 1200x900, BF16 | 197 | `0716_04` |
+
+## Current Paper Runs
+
+| Date | Server | Experiment | GPUs | Status | Log |
+| --- | --- | --- | --- | --- | --- |
+| 2026-07-16 | local `10.106.14.99` | `0716_02_paper_base_r18_coco_full_1200x900_bf16_orderedpairs_reboot_fresh` | `0,1` | running normally after reboot; fresh start at 17:10 CST, verified through epoch 1 iter 50 at 0.8307 s/iter with finite losses/gradients; all four GPUs healthy after reboot | `/data4/litianhao/PairMmot/workdir_99/0716_02_paper_base_r18_coco_full_1200x900_bf16_orderedpairs_reboot_fresh/launch.log` |
+| 2026-07-16 | local `10.106.14.99` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs` | `2,3` | canceled and fully cleaned at 16:41 CST after GPU 2 hardware drop (`0000:B1:00.0: Unknown Error`); stopped in epoch 1 after iter 1000, no formal checkpoint, must fresh train on healthy GPUs; GPU 0/1 Base unaffected | `/data4/litianhao/PairMmot/workdir_99/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs/launch.log` |
+| 2026-07-16 | `10.106.14.197` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | running normally; code synced and fresh start at 17:15 CST, verified through epoch 1 iter 50 at 1.0818 s/iter with finite losses/gradients; GPUs 1/2/4 belong to other users | `/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
 
 ## Current 0708 Runs
 
@@ -52,6 +93,7 @@ gmc test:  /data/users/litianhao/PairMOT/workdir/aux/gmc_cache/hsmot_test_gap1
 
 When updating this file, keep these fields current:
 
+- Reserve the next global `MMDD_NN` ID across 99, 197, and 252 before launch.
 - SSH login command and key path if access changes.
 - Code root, shared root, work dir, conda env, and GMC cache root per server.
 - Current job name, GPUs, launch time, log path, and first observed
@@ -268,6 +310,26 @@ Workdir:
 /data4/litianhao/PairMmot/workdir_99/0714_01_fresh_novis_trackeval_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_liquid8_pairaware_laf_wide
 ```
 
+## 2026-07-15 Pair-Consistent Spectral Transport
+
+| server | experiment | model change | launch status |
+|---|---|---|---|
+| 99 | `0715_02_liquid8_laf_wide_groupmod_pairtransport` | Strictly uses `0711_01 wide LAF + groupmod` as the baseline. `PairCoupledSamplerRouter` adds bidirectional pair-conditioned sampler-logit residuals without forcing identical frame patterns; `PairTransportTokenCoupling` aligns wide-LAF group tokens by overlap between the resulting prev/curr spectral coverage distributions. Both branches are zero-initialized. | Finished epoch 72 after recovering from the physical GPU2 PCIe failure at epoch 70. The run remains FP32 `OptimWrapper` with `find_unused_parameters=True` for trajectory continuity. Unique best is final epoch 72 / payload `step=71`: `cls_HOTA=47.520`, `det_HOTA=58.600`, sum `106.120`, which is `+0.215` over the strict `0711_01` baseline and is the current liquid HOTA best. Final AP is pair mAP `0.2540`, pair AP50 `0.4448`. Resume reset the async counter, so this final TrackEval overwrote `val_track_0001`. |
+| 99 | `0715_03_liquid8_laf_wide_groupmod_pairbandcontext` | Strictly uses `0711_01 wide LAF + groupmod`, without Pair Transport. A band-aligned prev/curr context jointly drives sampler descriptor/logit residuals and coverage-pooled wide-LAF group context. All injections are zero-initialized; the model adds only `24384` stem parameters. | Not launched. The original detached queue was terminated by the server reboot. Any future launch must be recreated explicitly using the canonical BF16-through-encoder and `find_unused_parameters=False` configuration. |
+| 197 | `0715_04_liquid8_laf_wide_groupmod_pairchangegate` | Uses `0711_01 wide LAF + groupmod` as the structural baseline and the 99 `0715_01` BF16 setup as the training baseline. `PairChangeGatedTokenCoupling` uses per-group spectral-coverage intersection/distance and pooled response change to gate shared versus frame-specific liquid tokens. The residual is zero-initialized and adds no attention or spatial pair operation. | Running normally on GPUs `2,3` with BF16-through-encoder and `find_unused_parameters=False`; reached epoch 61 at 2026-07-15 21:50 CST, about `1.04 s/iter`, with roughly 1h45m training ETA. The unique best completed point is epoch 52 / payload `step=51`: `cls_HOTA=46.298`, `det_HOTA=57.768`, sum `104.066`. Epoch 56 is `103.690`; epoch 60 TrackEval is still running asynchronously. Current best is above `0704_01 resume` but `1.839` below the final historical FP32 `0711_01` sum `105.905`. Isolated stem overhead is about 1.3%. |
+| 99 | `0715_05_liquid8_final_pairtransport_paironly_coco365_full_bf16` | Final Liquid candidate: eight groups, independent pair-conditioned samplers, wide overlap-aware LAF, group modulation, and coverage-based pair transport. Both relation MLPs consume ordered `[x,y]` only. Uses all 75 train sequences and direct COCO+Objects365 adapted initialization. | Completed 72 epochs and all 18 TrackEval points. Unique best is final `val_track_0018 / step 71`: `cls_HOTA=53.472`, `det_HOTA=60.907`; relative to full baseline `0714_01`, deltas are `+1.098` and `+0.589`. AP best is epoch 72: pair mAP `0.2988`, pair AP50 `0.5115`. All eight class HOTA values improve; tricycle is largest at `+5.072`. This is a positive system comparison, not a strict Liquid-only ablation because baseline is FP32/find-unused while this run is BF16/find-false with stability fixes. |
+| 252 | `0715_06_liquid8_pairbandcontext_paironly_coco365_full_bf16` | Wide LAF + groupmod with a shared physical-band pair context. The context conditions both sampler descriptors/logits and coverage-pooled LAF tokens. Its directional relation consumes ordered `[x,y]` only; no pair router, pair transport, change gate, hand-crafted difference, or product is active. Uses all 75 train sequences and direct COCO+Objects365 adapted initialization. | Final fresh run started at 2026-07-15 22:05 CST on GPUs `0,1`, port `29878`, with BF16 through encoder, nearest sampler gradient expansion, and `find_unused_parameters=False`. Verified through epoch 1 iter 200: `0.9636 s/iter`, log memory `8444 MiB`, finite loss/grad and expected initial pattern; ETA is about 20h29m. The first 22:01 attempt stopped before model construction because 252 lacked the committed BF16 detector boundary; current detector/head/RT-DETR/GDLoss code was synchronized from the local stable implementation before the final launch. |
+
+Workdir:
+
+```text
+/data4/litianhao/PairMmot/workdir_99/0715_02_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_liquid8_laf_wide_groupmod_pairtransport
+/data4/litianhao/PairMmot/workdir_99/0715_03_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_liquid8_laf_wide_groupmod_pairbandcontext
+/data4/litianhao/PairMmot/workdir_197/0715_04_o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_half_pairdn_gap1train_dualcls_nopres_pairtopk_v2_unique_pairdn_allgt_liquid8_laf_wide_groupmod_pairchangegate
+/data4/litianhao/PairMmot/workdir_99/0715_05_liquid8_final_pairtransport_paironly_coco365_full_bf16
+/data4/litianhao/PairMmot/workdir_252/0715_06_liquid8_pairbandcontext_paironly_coco365_full_bf16
+```
+
 ## 2026-07-13 Long-tail cls-HOTA Repair Experiments
 
 These experiments address the MOTRv2 vs PairMOT split: PairMOT `0704_01 resume`
@@ -294,6 +356,26 @@ Workdirs:
 
 ## 2026-07-14 AMP Acceleration
 
+### Canonical configuration for experiments started after 2026-07-15
+
+All newly launched experiments must inherit the validated 99-server `0715_01`
+training/runtime configuration unless an experiment explicitly studies numerical
+precision itself:
+
+- `AmpOptimWrapper(dtype='bfloat16', loss_scale=1.0)`;
+- BF16 for backbone, neck, and shared RT-DETR encoder, followed by one FP32 cast;
+- FP32 for query initialization, decoder, prediction heads, matching, and losses;
+- `find_unused_parameters=False` with every intended trainable parameter connected to loss;
+- validation and TrackEval enabled; visualization/drawing may be disabled;
+- fresh training by default (`resume=False`).
+
+This rule standardizes precision and distributed training, but does not override the
+dataset, initialization checkpoint, or structural parent required by an individual
+ablation.  For new half-data experiments with the original `0704_01` structure, use
+the completed 99 `0715_01` result (`cls_HOTA=46.531`, `det_HOTA=58.484`, sum
+`105.015`) as the performance baseline.  Existing reports retain their historical
+`0704_01 resume` comparisons.
+
 This change keeps the `0704_01` model and loss definition and switches training
 to `AmpOptimWrapper`.  Backbone and neck use AMP; transformer/deformable
 attention remain FP32 because FP16 produced non-finite gradients and the CUDA
@@ -304,11 +386,12 @@ per-loss covariance checks and GPU-to-CPU synchronization.
 
 | server | experiment | change | status |
 |---|---|---|---|
+| 252 | `0714_01_0704_resume_coco365_full_unique_allgt` | `0704_01` structure with direct COCO+Objects365-adapted initialization and all 75 training sequences. This historical run uses FP32 and `find_unused_parameters=True`. | Finished 72 epochs and all 18 TrackEval points. Unique best is async 18 / val_det epoch 71: `cls_HOTA=52.374`, `det_HOTA=60.318`, sum `112.692`. Independent AP best is epoch 72: pair mAP `0.2928`, pair AP50 `0.5062`. |
 | 99 | `tmp_profile_0714_pair_amp_fastgdloss_v1` | Single-GPU AMP smoke test for the current pair-valid-fill baseline, `find_unused_parameters=False`, dynamic loss scale initialized at `128`, with fast GDLoss fallback. | Passed 40 iters on GPU2. Loss and all logged components stayed finite; `grad_norm` stayed finite from iter 5 to 40. Mean `iter_wall` was `0.654s` vs `0.671s` for FP32 and `0.733s` for the earlier always-filtered AMP path. Memory was about `6.84GB`, compared with about `11.02GB` for FP32. |
 | 252 | `0714_01_0704_resume_coco365_full_unique_allgt_amp` | Formal full-data COCO+Objects365-adapted `0704_resume` baseline with AMP. | Fast GDLoss AMP code synced to `/data/users/litianhao01/PairMmot/ai4rs`, but the queued screen `pairmot_0714_amp_queue` was canceled before launch on 2026-07-14 16:57 CST per request. No 252 AMP training process was started. |
 | 197 | `0714_02_0704_01_half_unique_allgt_amp_fp32transformer` | Initial half-data stability run. It used `find_unused_parameters=True` and a defensive GDLoss implementation that changed the width/height clamp to `1.0`, silently dropped invalid rows, and introduced repeated synchronization. | Stopped on 2026-07-14 after the implementation review. The workdir and completed evaluation outputs are retained as diagnostic history and must not be used for the final AMP comparison. |
 | 197 | `tmp_validate_0714_amp_fixed_gpu5` | Corrected hybrid AMP CUDA/DDP validation with `find_unused_parameters=False`, original GDLoss semantics, and no silent non-finite fallback. | Passed 100 consecutive iterations on GPU `5`. All loss components and `grad_norm` remained finite; stable time reached `0.69s/iter` over iterations 60-100. |
-| 197 | `0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed` | Formal half-data `0704_01` AMP performance-parity run using the corrected implementation. Backbone/neck use AMP; transformer/deformable attention and GDLoss use FP32; DDP uses `find_unused_parameters=False`. | Fresh two-GPU run launched in screen `pairmot_0714_03_hybrid_amp_fixed` on GPUs `2,3`, port `29827`, at 2026-07-14 20:39 CST. Epoch 4 validation completed and epoch 5 training was active at 21:11 CST: training losses and gradients remained finite, `0.7772s/iter`, about `8.5GB` per GPU. Full AP and TrackEval evaluation remain enabled. The `pair/gt_pairs: nan`-style validation diagnostics are unavailable placeholders, not non-finite model losses. |
+| 197 | `0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed` | Formal half-data `0704_01` AMP performance-parity run using the corrected implementation. Backbone/neck use AMP; transformer/deformable attention and GDLoss use FP32; DDP uses `find_unused_parameters=False`. | Finished epoch 72 with all 18 TrackEval points. Unique best HOTA point is async 16 / val_det epoch 63: `cls_HOTA=46.271`, `det_HOTA=58.381`, sum `104.652`, which is `+1.009` over `0704_01 resume`. Independent best AP point is epoch 72: pair mAP `0.2424`, pair AP50 `0.4215`. No performance degradation was observed, but FP16 is not retained due its numerical stability risk. |
 
 ### 99 precision-boundary audit
 
@@ -416,6 +499,44 @@ cost about `0.0003s/iter`, while encoder and decoder measured about `0.016s`
 and `0.011s`.  The smoke-test workdir is
 `/data4/litianhao/PairMmot/workdir_99/tmp_profile_0715_bf16_boundary_fixed`.
 
+The formal half-data BF16 validation was launched on local 99 GPUs `0,1` at
+2026-07-15 00:21 CST in screen `pairmot_0715_01_bf16_99`.  It uses
+`AmpOptimWrapper(dtype='bfloat16', loss_scale=1.0)`, BF16 through the encoder,
+FP32 thereafter, and `find_unused_parameters=False`; validation and TrackEval
+remain enabled while image drawing is disabled.  Training was verified through
+epoch 1 iteration 100 with finite loss `23.2721` and grad norm `61.5421`, about
+`1.327s/iter`, and no NaN or unused-parameter error.  Workdir and log:
+`/data4/litianhao/PairMmot/workdir_99/0715_01_0704_01_half_unique_allgt_bf16_encoder_findfalse`.
+
+The run subsequently finished epoch 72 with all 18 TrackEval points.  Its
+unique best HOTA point is async 18 / val_det epoch 71: `cls_HOTA=46.531`, `det_HOTA=58.484`, sum
+`105.015`, or `+1.372` over `0704_01 resume`.  Its independent best AP point is
+also epoch 72: pair mAP `0.2445`, pair AP50 `0.4257`.  Thus the retained BF16
+boundary shows no observed accuracy degradation.
+
+The unexpectedly slow initial run was traced to
+`TORCH_DISTRIBUTED_DEBUG=DETAIL` in the local launch script.  On PyTorch 2.0.1
+this wraps and validates DDP collectives; data time stayed near `0.03s` and the
+GPUs were correctly bound, but formal training took about `1.32s/iter`.  A
+concurrent two-GPU no-DETAIL control on GPUs `2,3` measured component
+`iter_wall=0.78-0.82s`, so BF16 itself was not the slowdown.  DETAIL has been
+removed from the launcher; the already-running process retains its launch-time
+environment until restarted.  The slow workdir was then cleared and the
+experiment was restarted from the adapted pretrain at 2026-07-15 00:48 CST,
+without resume.  The fresh run reached epoch 1 iteration 50 at `0.7776s/iter`,
+with finite loss `30.1673`, grad norm `84.7378`, and no unused-parameter error;
+the ETA fell from about 13 hours to about 7.5 hours.
+
+A same-host two-GPU FP32 control was then run on idle GPUs `2,3`, with the same
+batch size, model, fixed sample order, `find_unused_parameters=False`, and no
+DDP DETAIL.  Over the four component-timer samples at iterations 5/10/15/20,
+BF16-through-encoder averaged `0.801s/iter` versus `0.904s/iter` for FP32, an
+approximately 11.4% speedup; excluding the earliest warm-up sample gives a
+roughly 9-10% gain.  Peak logged model memory was about `7.18GB` versus
+`11.02GB` per GPU, a reduction of about 35%.  The modest speed gain is expected
+because query initialization, decoder, head, matching, losses, backward
+communication, and optimizer work remain FP32 or CPU-bound.
+
 The first covariance-stabilized KLD implementation was added at about 22:43
 on 2026-07-14 after the fixed-order run reproduced the DN IoU NaN.  A follow-up
 analytical `xy_wh_r` implementation removed its matrix overhead.  In isolated
@@ -454,4 +575,41 @@ Workdirs and logs:
 /data4/litianhao/PairMmot/workdir_197/tmp_validate_0714_amp_fixed_gpu5
 /data4/litianhao/PairMmot/workdir_197/0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed
 /data4/litianhao/PairMmot/workdir_197/0714_03_0704_01_half_unique_allgt_hybrid_amp_fixed/launch.log
+```
+
+## 2026-07-15 Proposal zero-shot 状态
+
+本机 99 的 `0715_07_full_baseline_elliptical_spectral_zeroshot` 已完成。实验使用空闲
+GPU2，直接评测 252 full-data baseline 的 `epoch_72.pth`，未训练；现有 top-k、单侧
+可见候选、unique selection 和真实 GMC 均保持不变，只在 pair affinity 中加入低开销
+elliptical motion 与 5 点 box spectral descriptor。
+
+独立 tracking 指标为 `cls_HOTA=52.780`、`det_HOTA=60.244`。相对 full baseline 分别
+变化 `+0.406`、`-0.074`；用于选择最佳点的两项 HOTA 之和提高 `0.332`。独立 AP 指标
+为 pair mAP `0.2952`、pair AP50 `0.5105`。详细设计、类别变化和耗时见
+`projects/multispec_pair_rotated_rtdetr/docs/reports/20260714_module_ablation_report.md`
+第 7 节。
+
+```text
+/data4/litianhao/PairMmot/workdir_99/0715_07_full_baseline_elliptical_spectral_zeroshot
+```
+
+`0715_08_full_classaware_elliptical_spectral_rank30_zeroshot` 已在本机 99 完成，使用
+full baseline `epoch_72.pth` 做纯 zero-shot 评测。最终结果为
+`cls_HOTA=52.921`、`det_HOTA=60.876`，相对 baseline 分别提高 `0.547`、`0.558`；
+pair mAP 为 `0.2953`，pair AP50 为 `0.5108`。该版本使用类别门控，只保留为方法诊断
+上界，不再作为最终通用方案。
+
+```text
+/data4/litianhao/PairMmot/workdir_99/0715_08_full_classaware_elliptical_spectral_rank30_zeroshot
+```
+
+`0716_01_full_sizeaware_elliptical_spectral_rank30_zeroshot` 去掉所有按类别选择 motion 或
+spectrum 的分支，改为归一化面积 `3.5e-4` 门控：小目标回退 isotropic motion 并启用
+relative spectral，大目标使用 elliptical motion。结果为 `cls_HOTA=52.886`、
+`det_HOTA=60.942`，相对 baseline 分别提高 `0.512`、`0.624`；pair mAP 为 `0.2947`，
+pair AP50 为 `0.5094`。该版本为正式通用方案，下一全局编号为 `0716_02`。
+
+```text
+/data4/litianhao/PairMmot/workdir_99/0716_01_full_sizeaware_elliptical_spectral_rank30_zeroshot
 ```

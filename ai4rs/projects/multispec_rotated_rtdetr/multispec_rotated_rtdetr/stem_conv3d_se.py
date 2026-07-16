@@ -58,9 +58,12 @@ class LiquidSpectralSampler(nn.Module):
                  lowres_grad_size: Optional[Union[int, Tuple[int, int]]] = None,
                  lowres_grad_downsample: int = 4,
                  use_lowres_grad_correction: bool = True,
+                 lowres_grad_upsample_mode: str = 'nearest',
                  use_band_attention: bool = False,
                  band_attention_heads: int = 4,
-                 band_attention_dropout: float = 0.0) -> None:
+                 band_attention_dropout: float = 0.0,
+                 pair_sampler_router: Optional[dict] = None,
+                 pair_band_context: Optional[dict] = None) -> None:
         super().__init__()
         assert num_spectral >= spectral_kernel
         self.num_spectral = num_spectral
@@ -76,6 +79,11 @@ class LiquidSpectralSampler(nn.Module):
         self.lowres_grad_size = lowres_grad_size
         self.lowres_grad_downsample = lowres_grad_downsample
         self.use_lowres_grad_correction = use_lowres_grad_correction
+        if lowres_grad_upsample_mode not in ('nearest', 'bilinear'):
+            raise ValueError(
+                'lowres_grad_upsample_mode must be nearest or bilinear, got '
+                f'{lowres_grad_upsample_mode!r}')
+        self.lowres_grad_upsample_mode = lowres_grad_upsample_mode
         self.use_band_attention = use_band_attention
         init_pattern_tensor = self._build_init_patterns(init_patterns)
         self.register_buffer(
@@ -88,6 +96,30 @@ class LiquidSpectralSampler(nn.Module):
         self.w2 = nn.Linear(embed_dims * 2, embed_dims)
         self.head = nn.Linear(
             embed_dims, self.num_groups * spectral_kernel * num_spectral)
+        if pair_sampler_router is True:
+            pair_sampler_router = {}
+        if pair_sampler_router is not None:
+            router_cfg = dict(pair_sampler_router)
+            router_cfg.setdefault('embed_dims', embed_dims)
+            router_cfg.setdefault(
+                'output_dims',
+                self.num_groups * spectral_kernel * num_spectral)
+            self.pair_sampler_router = PairCoupledSamplerRouter(**router_cfg)
+        else:
+            self.pair_sampler_router = None
+        if pair_band_context is True:
+            pair_band_context = {}
+        if pair_band_context is not None:
+            context_cfg = dict(pair_band_context)
+            context_cfg.setdefault('embed_dims', embed_dims)
+            context_cfg.setdefault(
+                'output_dims',
+                self.num_groups * spectral_kernel * num_spectral)
+            self.pair_band_context = PairBandContextEncoder(**context_cfg)
+        else:
+            self.pair_band_context = None
+        self.last_pair_band_context = None
+        self.last_pair_band_logits = None
         if use_band_attention:
             assert embed_dims % band_attention_heads == 0, (
                 f'embed_dims={embed_dims} must be divisible by '
@@ -234,6 +266,43 @@ class LiquidSpectralSampler(nn.Module):
         return min(self.lowres_grad_size[0], height), min(
             self.lowres_grad_size[1], width)
 
+    @staticmethod
+    def _bilinear_expand(x: torch.Tensor,
+                         output_size: Tuple[int, int]) -> torch.Tensor:
+        """Bilinear upsample with activation math kept in ``x.dtype``.
+
+        This reproduces the half-pixel coordinates used by
+        ``F.interpolate(..., align_corners=False)`` without invoking the CUDA
+        bilinear kernel, which is unavailable for BF16 in PyTorch 2.0.
+        """
+        input_h, input_w = x.shape[-2:]
+        output_h, output_w = output_size
+        if (input_h, input_w) == (output_h, output_w):
+            return x
+
+        def indices_and_weight(input_size: int, output_size: int):
+            position = ((torch.arange(
+                output_size, device=x.device, dtype=torch.float32) + 0.5) *
+                        (input_size / output_size) - 0.5)
+            position = position.clamp_(0, input_size - 1)
+            lower = position.floor().to(torch.long)
+            upper = (lower + 1).clamp_max_(input_size - 1)
+            weight = (position - lower).to(dtype=x.dtype)
+            return lower, upper, weight
+
+        h0, h1, hw = indices_and_weight(input_h, output_h)
+        expanded = x.index_select(-2, h0)
+        expanded = torch.lerp(
+            expanded,
+            x.index_select(-2, h1),
+            hw.view(*([1] * (x.ndim - 2)), output_h, 1))
+
+        w0, w1, ww = indices_and_weight(input_w, output_w)
+        return torch.lerp(
+            expanded.index_select(-1, w0),
+            expanded.index_select(-1, w1),
+            ww.view(*([1] * (x.ndim - 1)), output_w))
+
     def _sample_bands(self, x: torch.Tensor,
                       probs: torch.Tensor) -> torch.Tensor:
         batch_size, _, height, width = x.shape
@@ -255,16 +324,29 @@ class LiquidSpectralSampler(nn.Module):
             batch_size, self.num_groups * self.spectral_kernel, lowres_h,
             lowres_w)
         lowres_correction = lowres_sampled - lowres_sampled.detach()
-        correction = F.interpolate(
-            lowres_correction,
-            size=(height, width),
-            mode='bilinear',
-            align_corners=False).view(
+        if self.lowres_grad_upsample_mode == 'bilinear':
+            correction = self._bilinear_expand(
+                lowres_correction, (height, width))
+        else:
+            height_indices = torch.div(
+                torch.arange(height, device=x.device) * lowres_h,
+                height,
+                rounding_mode='floor')
+            width_indices = torch.div(
+                torch.arange(width, device=x.device) * lowres_w,
+                width,
+                rounding_mode='floor')
+            correction = lowres_correction.index_select(
+                -2, height_indices).index_select(-1, width_indices)
+        correction = correction.view(
                 batch_size, self.num_groups, self.spectral_kernel, height,
                 width)
         return sampled + correction
 
-    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def forward(self,
+                x: torch.Tensor,
+                pair_batch_size: Optional[int] = None
+                ) -> Tuple[torch.Tensor, torch.Tensor]:
         assert x.ndim == 4, f'Expected [B, S, H, W], got {tuple(x.shape)}'
         assert x.size(1) == self.num_spectral, (
             f'Expected {self.num_spectral} spectral bands, got {x.size(1)}')
@@ -278,6 +360,13 @@ class LiquidSpectralSampler(nn.Module):
             attn_input = self.band_norm1(desc)
             desc = desc + self.band_attn(attn_input, attn_input, attn_input)[0]
             desc = desc + self.band_ffn(self.band_norm2(desc))
+        if self.pair_band_context is not None:
+            (desc, self.last_pair_band_context,
+             self.last_pair_band_logits) = self.pair_band_context(
+                 desc, pair_batch_size)
+        else:
+            self.last_pair_band_context = None
+            self.last_pair_band_logits = None
 
         hidden = desc.new_zeros(desc.size(0), self.embed_dims)
         for band_idx in range(self.num_spectral):
@@ -289,9 +378,325 @@ class LiquidSpectralSampler(nn.Module):
         logits = self.head(hidden).view(
             x.size(0), self.num_groups, self.spectral_kernel,
             self.num_spectral)
+        if self.pair_sampler_router is not None:
+            pair_logits = self.pair_sampler_router(hidden, pair_batch_size)
+            logits = logits + pair_logits.view_as(logits)
+        if self.last_pair_band_logits is not None:
+            logits = logits + self.last_pair_band_logits.view_as(logits)
         probs = self._sample(logits)
         sampled = self._sample_bands(x, probs)
         return sampled, probs
+
+
+class PairCoupledSamplerRouter(nn.Module):
+    """Condition frame-specific sampler logits on the paired frame.
+
+    The router does not force the two frames to use identical groups.  It
+    predicts a residual for each direction from source, paired, difference,
+    and agreement features, preserving frame-specific spectral evidence.
+    """
+
+    def __init__(self,
+                 embed_dims: int,
+                 output_dims: int,
+                 hidden_dims: int = 64,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True,
+                 relation_mode: str = 'pair_diff_product') -> None:
+        super().__init__()
+        assert relation_mode in ('pair', 'pair_diff_product')
+        self.relation_mode = relation_mode
+        relation_dims = embed_dims * (2 if relation_mode == 'pair' else 4)
+        self.norm = nn.LayerNorm(relation_dims)
+        self.mlp = nn.Sequential(
+            nn.Linear(relation_dims, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, output_dims),
+        )
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        if zero_init:
+            nn.init.zeros_(self.mlp[-1].weight)
+        else:
+            nn.init.normal_(self.mlp[-1].weight, std=init_std)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def _pair_features(self, src: torch.Tensor,
+                       other: torch.Tensor) -> torch.Tensor:
+        if self.relation_mode == 'pair':
+            return torch.cat([src, other], dim=-1)
+        return torch.cat([src, other, src - other, src * other], dim=-1)
+
+    def forward(self, hidden: torch.Tensor,
+                pair_batch_size: Optional[int]) -> torch.Tensor:
+        batch_size = hidden.size(0)
+        output_dims = self.mlp[-1].out_features
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return hidden.new_zeros(batch_size, output_dims)
+
+        prev = hidden[:pair_batch_size]
+        curr = hidden[pair_batch_size:]
+        pair_features = torch.cat([
+            self._pair_features(prev, curr),
+            self._pair_features(curr, prev),
+        ], dim=0)
+        return self.mlp(self.norm(pair_features))
+
+
+class PairBandContextEncoder(nn.Module):
+    """Build a shared pair context for each physically aligned band."""
+
+    def __init__(self,
+                 embed_dims: int,
+                 output_dims: int,
+                 hidden_dims: int = 64,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True,
+                 relation_mode: str = 'pair_diff_product') -> None:
+        super().__init__()
+        assert relation_mode in ('pair', 'pair_diff_product')
+        self.relation_mode = relation_mode
+        relation_dims = embed_dims * (2 if relation_mode == 'pair' else 4)
+        self.relation_norm = nn.LayerNorm(relation_dims)
+        self.context_mlp = nn.Sequential(
+            nn.Linear(relation_dims, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, embed_dims),
+        )
+        self.context_norm = nn.LayerNorm(embed_dims)
+        self.desc_delta = nn.Linear(embed_dims, embed_dims)
+        self.logit_delta = nn.Linear(embed_dims, output_dims)
+        nn.init.xavier_uniform_(self.context_mlp[0].weight)
+        nn.init.zeros_(self.context_mlp[0].bias)
+        nn.init.xavier_uniform_(self.context_mlp[-1].weight)
+        nn.init.zeros_(self.context_mlp[-1].bias)
+        if zero_init:
+            nn.init.zeros_(self.desc_delta.weight)
+            nn.init.zeros_(self.logit_delta.weight)
+        else:
+            nn.init.normal_(self.desc_delta.weight, std=init_std)
+            nn.init.normal_(self.logit_delta.weight, std=init_std)
+        nn.init.zeros_(self.desc_delta.bias)
+        nn.init.zeros_(self.logit_delta.bias)
+
+    def _relation(self, src: torch.Tensor,
+                  other: torch.Tensor) -> torch.Tensor:
+        if self.relation_mode == 'pair':
+            return torch.cat([src, other], dim=-1)
+        common = 0.5 * (src + other)
+        return torch.cat([src, common, src - other, src * other], dim=-1)
+
+    def forward(self, desc: torch.Tensor,
+                pair_batch_size: Optional[int]
+                ) -> Tuple[torch.Tensor, Optional[torch.Tensor],
+                           Optional[torch.Tensor]]:
+        batch_size = desc.size(0)
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return desc, None, None
+
+        prev = desc[:pair_batch_size]
+        curr = desc[pair_batch_size:]
+        relation = torch.cat([
+            self._relation(prev, curr),
+            self._relation(curr, prev),
+        ], dim=0)
+        context = self.context_mlp(self.relation_norm(relation))
+        context = self.context_norm(context)
+        pair_logits = self.logit_delta(context.mean(dim=1))
+        return desc + self.desc_delta(context), context, pair_logits
+
+
+class PairTransportTokenCoupling(nn.Module):
+    """Align paired group tokens by their sampled spectral coverage."""
+
+    def __init__(self,
+                 embed_dims: int,
+                 hidden_dims: int = 128,
+                 temperature: float = 0.25,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True,
+                 relation_mode: str = 'pair_diff_product') -> None:
+        super().__init__()
+        assert temperature > 0
+        assert relation_mode in ('pair', 'pair_diff_product')
+        self.temperature = temperature
+        self.relation_mode = relation_mode
+        relation_dims = embed_dims * (2 if relation_mode == 'pair' else 4)
+        self.norm = nn.LayerNorm(relation_dims)
+        self.mlp = nn.Sequential(
+            nn.Linear(relation_dims, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, embed_dims),
+        )
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        if zero_init:
+            nn.init.zeros_(self.mlp[-1].weight)
+        else:
+            nn.init.normal_(self.mlp[-1].weight, std=init_std)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def _relation(self, src: torch.Tensor,
+                  transported: torch.Tensor) -> torch.Tensor:
+        if self.relation_mode == 'pair':
+            return torch.cat([src, transported], dim=-1)
+        return torch.cat([
+            src, transported, src - transported, src * transported
+        ], dim=-1)
+
+    def _transport(self, src_token: torch.Tensor, src_coverage: torch.Tensor,
+                   other_token: torch.Tensor,
+                   other_coverage: torch.Tensor
+                   ) -> Tuple[torch.Tensor, torch.Tensor]:
+        affinity = torch.bmm(src_coverage, other_coverage.transpose(1, 2))
+        transport = F.softmax(affinity / self.temperature, dim=-1)
+        transported = torch.bmm(transport, other_token)
+        relation = self.norm(self._relation(src_token, transported))
+        return self.mlp(relation), transport
+
+    def forward(self, token: torch.Tensor, probs: torch.Tensor,
+                pair_batch_size: Optional[int]
+                ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size = token.size(0)
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return torch.zeros_like(token), None
+
+        coverage = F.normalize(probs.sum(dim=2), p=1, dim=-1)
+        prev_token = token[:pair_batch_size]
+        curr_token = token[pair_batch_size:]
+        prev_coverage = coverage[:pair_batch_size]
+        curr_coverage = coverage[pair_batch_size:]
+        prev_delta, prev_transport = self._transport(
+            prev_token, prev_coverage, curr_token, curr_coverage)
+        curr_delta, curr_transport = self._transport(
+            curr_token, curr_coverage, prev_token, prev_coverage)
+        delta = torch.cat([prev_delta, curr_delta], dim=0)
+        transport = torch.stack([prev_transport, curr_transport], dim=1)
+        return delta, transport
+
+
+class PairBandContextFusion(nn.Module):
+    """Pool aligned pair-band context into liquid group tokens."""
+
+    def __init__(self,
+                 context_dims: int,
+                 embed_dims: int,
+                 hidden_dims: int = 64,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True) -> None:
+        super().__init__()
+        self.norm = nn.LayerNorm(context_dims)
+        self.mlp = nn.Sequential(
+            nn.Linear(context_dims, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, embed_dims),
+        )
+        nn.init.xavier_uniform_(self.mlp[0].weight)
+        nn.init.zeros_(self.mlp[0].bias)
+        if zero_init:
+            nn.init.zeros_(self.mlp[-1].weight)
+        else:
+            nn.init.normal_(self.mlp[-1].weight, std=init_std)
+        nn.init.zeros_(self.mlp[-1].bias)
+
+    def forward(self, pair_band_context: Optional[torch.Tensor],
+                probs: torch.Tensor) -> Optional[torch.Tensor]:
+        if pair_band_context is None:
+            return None
+        coverage = F.normalize(probs.sum(dim=2), p=1, dim=-1)
+        group_context = torch.bmm(coverage, pair_band_context)
+        return self.mlp(self.norm(group_context))
+
+
+class PairChangeGatedTokenCoupling(nn.Module):
+    """Fuse stable pair evidence while preserving frame-specific changes.
+
+    The reliability gate uses only per-group spectral coverage and pooled
+    response statistics.  Cross-frame computation is therefore linear in the
+    number of liquid groups and never touches full-resolution feature maps.
+    """
+
+    def __init__(self,
+                 embed_dims: int,
+                 hidden_dims: int = 16,
+                 init_std: float = 1e-3,
+                 zero_init: bool = True) -> None:
+        super().__init__()
+        self.common_norm = nn.LayerNorm(embed_dims)
+        self.change_norm = nn.LayerNorm(embed_dims)
+        self.common_proj = nn.Linear(embed_dims, embed_dims)
+        self.change_proj = nn.Linear(embed_dims, embed_dims)
+        self.gate_mlp = nn.Sequential(
+            nn.Linear(4, hidden_dims),
+            nn.GELU(),
+            nn.Linear(hidden_dims, 1),
+        )
+        self.out_proj = nn.Linear(embed_dims, embed_dims)
+        for projection in (self.common_proj, self.change_proj):
+            nn.init.xavier_uniform_(projection.weight)
+            nn.init.zeros_(projection.bias)
+        nn.init.xavier_uniform_(self.gate_mlp[0].weight)
+        nn.init.zeros_(self.gate_mlp[0].bias)
+        nn.init.xavier_uniform_(self.gate_mlp[-1].weight)
+        nn.init.zeros_(self.gate_mlp[-1].bias)
+        if zero_init:
+            nn.init.zeros_(self.out_proj.weight)
+        else:
+            nn.init.normal_(self.out_proj.weight, std=init_std)
+        nn.init.zeros_(self.out_proj.bias)
+
+    @staticmethod
+    def _relative_difference(src: torch.Tensor,
+                             other: torch.Tensor) -> torch.Tensor:
+        return (src - other).abs() / (
+            src.abs() + other.abs()).clamp_min(1e-6)
+
+    def forward(self, token: torch.Tensor, response: torch.Tensor,
+                probs: torch.Tensor, pair_batch_size: Optional[int]
+                ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        batch_size = token.size(0)
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return torch.zeros_like(token), None
+
+        coverage = F.normalize(probs.sum(dim=2), p=1, dim=-1)
+        prev_token = token[:pair_batch_size]
+        curr_token = token[pair_batch_size:]
+        prev_coverage = coverage[:pair_batch_size]
+        curr_coverage = coverage[pair_batch_size:]
+        prev_response = response[:pair_batch_size]
+        curr_response = response[pair_batch_size:]
+
+        coverage_intersection = torch.minimum(
+            prev_coverage, curr_coverage).sum(dim=-1, keepdim=True)
+        coverage_distance = 0.5 * (
+            prev_coverage - curr_coverage).abs().sum(dim=-1, keepdim=True)
+        response_difference = self._relative_difference(
+            prev_response, curr_response)
+        cues = torch.cat([
+            coverage_intersection, coverage_distance, response_difference
+        ], dim=-1)
+        reliability = torch.sigmoid(self.gate_mlp(cues))
+
+        common = 0.5 * (prev_token + curr_token)
+        prev_change = prev_token - curr_token
+        curr_change = -prev_change
+        shared = self.common_proj(self.common_norm(common))
+
+        def _directional_delta(change: torch.Tensor) -> torch.Tensor:
+            specific = self.change_proj(self.change_norm(change))
+            candidate = reliability * shared + (1.0 - reliability) * specific
+            return self.out_proj(F.gelu(candidate))
+
+        delta = torch.cat([
+            _directional_delta(prev_change),
+            _directional_delta(curr_change),
+        ], dim=0)
+        pair_reliability = torch.cat([reliability, reliability], dim=0)
+        return delta, pair_reliability
 
 
 class LiquidAwareFusion(nn.Module):
@@ -312,7 +717,10 @@ class LiquidAwareFusion(nn.Module):
                  dropout: float = 0.0,
                  init_std: float = 1e-3,
                  use_overlap_context: bool = False,
-                 use_spatial_mixer: bool = True) -> None:
+                 use_spatial_mixer: bool = True,
+                 pair_transport: Optional[dict] = None,
+                 pair_band_context_fusion: Optional[dict] = None,
+                 pair_change_gate: Optional[dict] = None) -> None:
         super().__init__()
         assert embed_dims > 0
         assert embed_dims % num_heads == 0, (
@@ -357,6 +765,35 @@ class LiquidAwareFusion(nn.Module):
         else:
             self.spatial_mixer = None
         self.out_proj = nn.Conv2d(num_groups, num_groups, kernel_size=1)
+        if pair_transport is True:
+            pair_transport = {}
+        if pair_transport is not None:
+            pair_transport_cfg = dict(pair_transport)
+            pair_transport_cfg.setdefault('embed_dims', embed_dims)
+            self.pair_transport = PairTransportTokenCoupling(
+                **pair_transport_cfg)
+        else:
+            self.pair_transport = None
+        self.last_pair_transport = None
+        if pair_band_context_fusion is True:
+            pair_band_context_fusion = {}
+        if pair_band_context_fusion is not None:
+            pair_band_fusion_cfg = dict(pair_band_context_fusion)
+            pair_band_fusion_cfg.setdefault('embed_dims', embed_dims)
+            self.pair_band_context_fusion = PairBandContextFusion(
+                **pair_band_fusion_cfg)
+        else:
+            self.pair_band_context_fusion = None
+        if pair_change_gate is True:
+            pair_change_gate = {}
+        if pair_change_gate is not None:
+            pair_change_gate_cfg = dict(pair_change_gate)
+            pair_change_gate_cfg.setdefault('embed_dims', embed_dims)
+            self.pair_change_gate = PairChangeGatedTokenCoupling(
+                **pair_change_gate_cfg)
+        else:
+            self.pair_change_gate = None
+        self.last_pair_change_reliability = None
         self._init_weights(init_std)
 
     def _init_weights(self, init_std: float) -> None:
@@ -378,8 +815,12 @@ class LiquidAwareFusion(nn.Module):
         nn.init.normal_(self.out_proj.weight, std=init_std)
         nn.init.zeros_(self.out_proj.bias)
 
-    def forward(self, x_se: torch.Tensor,
-                probs: torch.Tensor) -> torch.Tensor:
+    def forward(self,
+                x_se: torch.Tensor,
+                probs: torch.Tensor,
+                pair_batch_size: Optional[int] = None,
+                pair_band_context: Optional[torch.Tensor] = None
+                ) -> torch.Tensor:
         batch_size, num_groups, height, width = x_se.shape
         assert num_groups == self.num_groups
         pattern = probs.reshape(batch_size, num_groups, -1)
@@ -396,6 +837,24 @@ class LiquidAwareFusion(nn.Module):
             overlap = overlap / overlap.sum(dim=-1, keepdim=True).clamp_min(
                 1e-6)
             token = token + self.overlap_proj(torch.bmm(overlap, token))
+        if self.pair_band_context_fusion is not None:
+            pair_band_delta = self.pair_band_context_fusion(
+                pair_band_context, probs)
+            if pair_band_delta is not None:
+                token = token + pair_band_delta
+        if self.pair_change_gate is not None:
+            pair_change_delta, self.last_pair_change_reliability = (
+                self.pair_change_gate(
+                    token, response, probs, pair_batch_size))
+            token = token + pair_change_delta
+        else:
+            self.last_pair_change_reliability = None
+        if self.pair_transport is not None:
+            pair_delta, self.last_pair_transport = self.pair_transport(
+                token, probs, pair_batch_size)
+            token = token + pair_delta
+        else:
+            self.last_pair_transport = None
         attn_input = self.norm1(token)
         token = token + self.attn(attn_input, attn_input, attn_input)[0]
         token = token + self.ffn(self.norm2(token))
@@ -707,7 +1166,7 @@ class MultispecStemConv3dSE(nn.Module):
     def _forward_liquid(self, x: torch.Tensor) -> torch.Tensor:
         if x.ndim == 5:
             x = x.squeeze(1)
-        sampled, probs = self.liquid_sampler(x)
+        sampled, probs = self.liquid_sampler(x, self.pair_batch_size)
         batch_size, num_groups, _, height, width = sampled.shape
         sampled = sampled.reshape(
             batch_size, 1, num_groups * self.spectral_kernel, height, width)
@@ -742,7 +1201,10 @@ class MultispecStemConv3dSE(nn.Module):
         if self.liquid_aware_fusion is not None:
             assert self.last_liquid_probs is not None
             self.last_liquid_aware_delta = self.liquid_aware_fusion(
-                x_se, self.last_liquid_probs)
+                x_se,
+                self.last_liquid_probs,
+                self.pair_batch_size,
+                self.liquid_sampler.last_pair_band_context)
             gate_logits = gate_logits + self.last_liquid_aware_delta
         else:
             self.last_liquid_aware_delta = None

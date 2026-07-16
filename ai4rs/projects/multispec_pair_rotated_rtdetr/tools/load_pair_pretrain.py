@@ -145,14 +145,21 @@ def _map_bn(src_key: str, target_prefix: str) -> str:
     return f'{target_prefix}.bn.{suffix}'
 
 
-def _convert_rtdetr_r18_backbone(
+def _convert_rtdetr_resnet_backbone(
         state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
+    """Convert official RT-DETR Paddle-style ResNet keys to MMRotate.
+
+    This handles both BasicBlock (R18/R34) and Bottleneck (R50+) variants.
+    Blocks and stages are discovered from the checkpoint instead of being
+    constrained to a specific backbone depth.
+    """
     converted: Dict[str, torch.Tensor] = OrderedDict()
     stem_map = {
         'backbone.conv1.conv1_1': ('backbone.stem.0', 'backbone.stem.1'),
         'backbone.conv1.conv1_2': ('backbone.stem.3', 'backbone.stem.4'),
         'backbone.conv1.conv1_3': ('backbone.stem.6', 'backbone.stem.7'),
     }
+    is_bottleneck = any('.branch2c.' in key for key in state_dict)
     for key, value in state_dict.items():
         for src_prefix, (conv_prefix, norm_prefix) in stem_map.items():
             if key == f'{src_prefix}.conv.weight':
@@ -175,8 +182,15 @@ def _convert_rtdetr_r18_backbone(
             converted[f'{layer_prefix}.conv2.weight'] = value
         elif '.branch2b.norm.' in key:
             converted[_map_norm(key, f'{layer_prefix}.bn2')] = value
+        elif '.branch2c.conv.weight' in key:
+            converted[f'{layer_prefix}.conv3.weight'] = value
+        elif '.branch2c.norm.' in key:
+            converted[_map_norm(key, f'{layer_prefix}.bn3')] = value
 
-        down_conv_idx, down_norm_idx = (0, 1) if stage == 0 else (1, 2)
+        if is_bottleneck or stage > 0:
+            down_conv_idx, down_norm_idx = 1, 2
+        else:
+            down_conv_idx, down_norm_idx = 0, 1
         if '.short.conv.weight' in key or '.short.conv.conv.weight' in key:
             converted[
                 f'{layer_prefix}.downsample.{down_conv_idx}.weight'] = value
@@ -237,12 +251,14 @@ def _convert_hybrid_encoder_keys(
                 src_top = 'encoder.pan_blocks.'
                 tgt_top = 'encoder.fpn.bottom_up_blocks.'
             rest = key.replace(src_top, tgt_top, 1)
-            rest = rest.replace('.conv1.', '.main_conv.')
-            rest = rest.replace('.conv2.', '.short_conv.')
-            rest = rest.replace('.conv3.', '.final_conv.')
             rest = rest.replace('.bottlenecks.', '.blocks.')
-            rest = rest.replace('.conv1.', '.rbr_dense.')
-            rest = rest.replace('.conv2.', '.rbr_1x1.')
+            if '.blocks.' in rest:
+                rest = rest.replace('.conv1.', '.rbr_dense.')
+                rest = rest.replace('.conv2.', '.rbr_1x1.')
+            else:
+                rest = rest.replace('.conv1.', '.main_conv.')
+                rest = rest.replace('.conv2.', '.short_conv.')
+                rest = rest.replace('.conv3.', '.final_conv.')
             if '.conv.weight' in rest:
                 new_key = rest
             elif '.norm.' in rest:
@@ -252,9 +268,27 @@ def _convert_hybrid_encoder_keys(
     return converted
 
 
+def _convert_mlp_key(src_key: str, src_prefix: str,
+                     target_prefix: str) -> Optional[str]:
+    parts = src_key[len(src_prefix):].split('.')
+    if len(parts) != 3 or parts[0] != 'layers':
+        return None
+    layer_map = {'0': '0', '1': '2', '2': '4'}
+    target_layer = layer_map.get(parts[1])
+    if target_layer is None:
+        return None
+    return f'{target_prefix}.{target_layer}.{parts[2]}'
+
+
 def _convert_decoder_and_head_keys(
         state_dict: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
     converted: Dict[str, torch.Tensor] = OrderedDict()
+    decoder_layers = {
+        int(key.split('.')[3])
+        for key in state_dict
+        if key.startswith('decoder.decoder.layers.')
+    }
+    encoder_branch_idx = max(decoder_layers) + 1 if decoder_layers else 0
     for key, value in state_dict.items():
         if key.startswith('decoder.decoder.layers.'):
             new_key = key.replace('decoder.decoder.layers.', 'decoder.layers.', 1)
@@ -274,20 +308,24 @@ def _convert_decoder_and_head_keys(
         elif key.startswith('decoder.dec_bbox_head.'):
             parts = key.split('.')
             layer = parts[2]
-            mlp_layer = parts[4]
-            suffix = parts[5]
-            if mlp_layer == '0':
-                target_layer = '0'
-            elif mlp_layer == '1':
-                target_layer = '2'
-            elif mlp_layer == '2':
-                target_layer = '4'
-            else:
+            target_key = _convert_mlp_key(
+                key, f'decoder.dec_bbox_head.{layer}.',
+                f'bbox_head.reg_branches.{layer}')
+            if target_key is None:
                 continue
-            base = f'bbox_head.reg_branches.{layer}.{target_layer}.{suffix}'
-            converted[base] = value
-            converted[base.replace('reg_branches.', 'reg_branches_curr.')] = (
+            converted[target_key] = value
+            converted[target_key.replace(
+                'reg_branches.', 'reg_branches_curr.')] = (
                 copy.deepcopy(value))
+        elif key.startswith('decoder.enc_bbox_head.'):
+            target_key = _convert_mlp_key(
+                key, 'decoder.enc_bbox_head.',
+                f'bbox_head.reg_branches.{encoder_branch_idx}')
+            if target_key is None:
+                continue
+            converted[target_key] = value
+            converted[target_key.replace(
+                'reg_branches.', 'reg_branches_curr.')] = copy.deepcopy(value)
         elif key.startswith('decoder.enc_output.0.'):
             converted[key.replace('decoder.enc_output.0.', 'memory_trans_fc.')] = value
         elif key.startswith('decoder.enc_output.1.'):
@@ -305,11 +343,16 @@ def _adapt_2d_to_3d_weight(src: torch.Tensor,
     out_c, in_c, depth, kh, kw = target_shape
     if src.shape[0] != out_c or src.shape[2:] != (kh, kw):
         return None
+    # The project stem replaces Conv2d(3, C, 3) with Conv3d(1, C, 3, 3, 3).
+    # Preserve each RGB filter along the spectral kernel axis exactly. This is
+    # also the mapping used by ``convert_stem_conv2d_to_conv3d_weight``.
+    if in_c == 1 and src.shape[1] == depth:
+        return src.unsqueeze(1).contiguous()
     if src.shape[1] == in_c:
-        base = src
-    else:
-        base = src.mean(dim=1, keepdim=True).repeat(1, in_c, 1, 1)
-    return base.unsqueeze(2).repeat(1, 1, depth, 1, 1) / depth
+        return src.unsqueeze(2).repeat(1, 1, depth, 1, 1) / depth
+    base = src.mean(dim=1, keepdim=True).repeat(1, in_c, 1, 1)
+    scale = src.shape[1] / (in_c * depth)
+    return base.unsqueeze(2).repeat(1, 1, depth, 1, 1) * scale
 
 
 def _partial_copy(src: torch.Tensor, dst: torch.Tensor) -> Optional[torch.Tensor]:
@@ -321,13 +364,13 @@ def _partial_copy(src: torch.Tensor, dst: torch.Tensor) -> Optional[torch.Tensor
     return out
 
 
-def build_pair_adapted_coco365_state_dict(
+def build_pair_adapted_rtdetr_state_dict(
     src_ckpt: str,
     target_state_dict: Dict[str, torch.Tensor],
 ) -> Tuple[Dict[str, torch.Tensor], Dict[str, object]]:
     src_sd, source_key = _load_pretrain_state_dict(src_ckpt)
     candidates: Dict[str, torch.Tensor] = OrderedDict()
-    candidates.update(_convert_rtdetr_r18_backbone(src_sd))
+    candidates.update(_convert_rtdetr_resnet_backbone(src_sd))
     candidates.update(_convert_hybrid_encoder_keys(src_sd))
     candidates.update(_convert_decoder_and_head_keys(src_sd))
 
@@ -343,6 +386,10 @@ def build_pair_adapted_coco365_state_dict(
         'missing_in_target_skipped': 0,
         'adapted_conv3d_keys': [],
         'partial_keys': [],
+        'shape_mismatch_keys': [],
+        'missing_in_target_keys': [],
+        'target_only_tensors': 0,
+        'target_only_keys': [],
     }
     for key, value in candidates.items():
         target_key = key
@@ -350,6 +397,7 @@ def build_pair_adapted_coco365_state_dict(
             target_key = 'backbone.stem.0.conv3d.weight'
         if target_key not in target_state_dict:
             stats['missing_in_target_skipped'] += 1
+            stats['missing_in_target_keys'].append(target_key)
             continue
         target = target_state_dict[target_key]
         if tuple(value.shape) == tuple(target.shape):
@@ -372,15 +420,31 @@ def build_pair_adapted_coco365_state_dict(
                 stats['partial_keys'].append(target_key)
                 continue
         stats['shape_mismatch_skipped'] += 1
+        stats['shape_mismatch_keys'].append({
+            'key': target_key,
+            'source_shape': list(value.shape),
+            'target_shape': list(target.shape),
+        })
+    target_only = sorted(set(target_state_dict) - set(adapted))
+    stats['target_only_tensors'] = len(target_only)
+    stats['target_only_keys'] = target_only
     return adapted, stats
 
 
-def ensure_coco365_pair_adapted_checkpoint(
+def build_pair_adapted_coco365_state_dict(
+    src_ckpt: str,
+    target_state_dict: Dict[str, torch.Tensor],
+) -> Tuple[Dict[str, torch.Tensor], Dict[str, object]]:
+    """Backward-compatible alias for the generalized RT-DETR adapter."""
+    return build_pair_adapted_rtdetr_state_dict(src_ckpt, target_state_dict)
+
+
+def ensure_rtdetr_pair_adapted_checkpoint(
     src_ckpt: str,
     target_config: str,
     cache_dir: str,
     force: bool = False,
-    output_name: str = 'pair_coco365_full_adapted_pretrain.pth',
+    output_name: str = 'pair_coco_adapted_pretrain.pth',
 ) -> str:
     src_ckpt = osp.abspath(src_ckpt)
     target_config = osp.abspath(target_config)
@@ -399,14 +463,14 @@ def ensure_coco365_pair_adapted_checkpoint(
     from mmrotate.registry import MODELS
     from mmrotate.utils import register_all_modules as register_mmrotate_modules
 
-    DefaultScope.get_instance('pair_coco365_adapt', scope_name='mmrotate')
+    DefaultScope.get_instance('pair_rtdetr_adapt', scope_name='mmrotate')
     register_mmdet_modules(init_default_scope=False)
     register_mmrotate_modules(init_default_scope=False)
     cfg = Config.fromfile(target_config)
     if cfg.get('custom_imports', None):
         import_modules_from_strings(**cfg.custom_imports)
     target_sd = MODELS.build(cfg.model).state_dict()
-    adapted_sd, stats = build_pair_adapted_coco365_state_dict(
+    adapted_sd, stats = build_pair_adapted_rtdetr_state_dict(
         src_ckpt, target_sd)
     stats.update({
         'source_checkpoint': src_ckpt,
@@ -420,9 +484,10 @@ def ensure_coco365_pair_adapted_checkpoint(
             'source_checkpoint': src_ckpt,
             'target_config': target_config,
             'note': (
-                'COCO+Objects365 RT-DETR R18vd adapted to PairMOT full-data '
-                '0704_resume baseline. Class logits are intentionally skipped '
-                'when class dimensions differ.'),
+                'Official RT-DETR checkpoint adapted to the requested PairMOT '
+                'target architecture. Target-only extension parameters retain '
+                'their model initialization. Class logits are skipped when '
+                'class dimensions differ.'),
         },
         'pair_pretrain_meta': stats,
     }
@@ -431,7 +496,7 @@ def ensure_coco365_pair_adapted_checkpoint(
     with open(stats_path, 'w', encoding='utf-8') as f:
         json.dump(stats, f, indent=2, sort_keys=True)
     print(
-        f'Adapted COCO365 pair pretrain checkpoint: {dst_ckpt}\n'
+        f'Adapted RT-DETR pair pretrain checkpoint: {dst_ckpt}\n'
         f'  source: {src_ckpt}\n'
         f'  target: {target_config}\n'
         f'  exact={stats["exact_copied"]} conv3d='
@@ -441,3 +506,19 @@ def ensure_coco365_pair_adapted_checkpoint(
         f'{stats["shape_mismatch_skipped"]}\n'
         f'  stats: {stats_path}')
     return dst_ckpt
+
+
+def ensure_coco365_pair_adapted_checkpoint(
+    src_ckpt: str,
+    target_config: str,
+    cache_dir: str,
+    force: bool = False,
+    output_name: str = 'pair_coco365_full_adapted_pretrain.pth',
+) -> str:
+    """Backward-compatible wrapper for existing COCO+Objects365 configs."""
+    return ensure_rtdetr_pair_adapted_checkpoint(
+        src_ckpt=src_ckpt,
+        target_config=target_config,
+        cache_dir=cache_dir,
+        force=force,
+        output_name=output_name)

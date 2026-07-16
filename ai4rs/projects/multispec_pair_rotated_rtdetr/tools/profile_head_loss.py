@@ -406,7 +406,9 @@ def _profile_pair_head_breakdown(
     timings['loss_by_feat_all_layers'] = timer.measure(
         lambda: head.loss_by_feat(
             all_cls, all_pres_prev, all_pres_curr, all_bbox_prev,
-            all_bbox_curr, gt_list, meta_list),
+            all_bbox_curr,
+            batch_pair_gt_instances=gt_list,
+            batch_img_metas=meta_list),
         3, 10)
     timings['forward_head'] = timer.measure(
         lambda: head.forward(hidden, ref_prev, ref_curr), 3, 20)
