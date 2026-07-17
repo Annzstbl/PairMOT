@@ -1,6 +1,6 @@
 # PairMOT Paper Mainline Experiment Report
 
-更新时间：2026-07-16 CST
+更新时间：2026-07-17 CST
 
 ## 1. 实验目标
 
@@ -61,13 +61,16 @@ COCO 80类分类头不加载；HSMOT 8类 prev/curr 分类头重新初始化。R
 
 每个训练实验只按 `cls_HOTA + det_HOTA` 在全部 18 个评测点中选取唯一最佳 epoch。表格必须分别展示 `cls_HOTA` 与 `det_HOTA`，禁止合并成一个指标展示或跨 epoch 拼接。
 
-同时报告该 epoch 的 cls/det MOTA、IDF1。AP 独立按 `pair_mAP50:95` 选择最佳 epoch并单独成表，不参与 tracking checkpoint 选择。最终论文还需记录参数量、FLOPs、训练显存、训练吞吐和推理速度。
+同时报告该 epoch 的 cls/det MOTA、IDF1、pair mAP 和 pair AP50。AP 不参与
+checkpoint 选择，也不允许另选 AP 最优 epoch；所有论文指标必须来自
+`cls_HOTA + det_HOTA` 所确定的同一个唯一 epoch。最终论文还需记录参数量、FLOPs、
+训练显存、训练吞吐和推理速度。
 
 ## 6. 当前进展
 
 | ID | 实验 | 服务器/GPU | 配置 | 状态 |
 | --- | --- | --- | --- | --- |
-| `0716_02` | Paper Base R18 COCO full 1200x900 BF16 | 99 / GPU 0,1 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_coco_full_1200x900_bf16_reboot_fresh_99.py` | 服务器重启后已fresh恢复；正常训练，已验收到epoch 1 iter 50 |
+| `0716_02` | Paper Base R18 COCO full 1200x900 BF16 | 99 / GPU 0,1 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_coco_full_1200x900_bf16_reboot_fresh_99.py` | 已完成72 epochs和18/18异步TrackEval；唯一最佳为epoch 68 |
 | `0716_04` | Paper Base + Liquid group-set-unique R18 COCO full 1200x900 BF16 | 197 / GPU 0,3 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_groupsetunique_coco_full_1200x900_bf16_197.py` | 正常训练；已验收到epoch 1 iter 150 |
 | `0716_05` | Paper Base + Liquid group-set-unique + Encoder R18 COCO full 1200x900 BF16 | 252 / GPU 0,1 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_groupsetunique_encoder_coco_full_1200x900_bf16_252.py` | 30项单测和100 iter DDP测试通过；正式训练已验收到epoch 1 iter 50 |
 | `0717_01` | Parallel Liquid Set-Transport structural candidate | 99 / GPU 2,3 | `o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_plus_liquid_settransport_coco_full_1200x900_bf16_99.py` | 23项单测和100 iter DDP测试通过；正式运行因GPU 2/3掉卡风险在epoch 2 iter 250主动取消，不作为结果 |
@@ -96,15 +99,15 @@ Tracking 表在实验完成后填写：
 
 | 实验 | unique epoch | cls HOTA | det HOTA | cls MOTA | cls IDF1 | det MOTA | det IDF1 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| A Base | - | - | - | - | - | - | - |
+| A Base | 68 | 53.314 | 61.982 | 44.690 | 62.218 | 60.599 | 72.303 |
 | B Base + Liquid | - | - | - | - | - | - | - |
 | C Base + Liquid + Encoder | - | - | - | - | - | - | - |
 
-AP 独立结果：
+AP 诊断结果，epoch 必须与 Tracking 表一致：
 
 | 实验 | AP epoch | pair mAP | pair AP50 |
 | --- | ---: | ---: | ---: |
-| A Base | - | - | - |
+| A Base | 68 | 0.3149 | 0.5225 |
 | B Base + Liquid | - | - | - |
 | C Base + Liquid + Encoder | - | - | - |
 
@@ -240,6 +243,13 @@ NCCL、NaN、OOM、unused parameter或DDP reduction错误。正式日志为
 SHA256为`0a9215dc3f3b0f1b6c2bc41d602760f9032ffd56f5f599e44f0065d714a505af`；完整源码快照
 `source_snapshot_20260716_base_reboot_fresh.tar.gz` SHA256为
 `645e304993e99e01f8626807656e044c0b3ed82408cd10c1c8ff200023e48188`。
+
+该运行已完成全部72 epochs、18次validation和18/18异步TrackEval，未发现异步评测失败
+或残留进程。严格按`cls_HOTA + det_HOTA`在18个点中选择，唯一最佳为epoch 68：
+`cls_HOTA=53.314`、`det_HOTA=61.982`、`cls_MOTA=44.690`、
+`cls_IDF1=62.218`、`det_MOTA=60.599`、`det_IDF1=72.303`，HOTA sum为
+`115.296`。同一epoch 68的检测指标为`pair_mAP=0.3149`、`pair_AP50=0.5225`。
+epoch 72的HOTA sum为`114.990`，因此仅作为末轮稳定性参考，不作为论文checkpoint。
 
 ### 8.7 Base + Liquid fresh run on 197
 

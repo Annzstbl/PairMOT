@@ -34,6 +34,27 @@ def class_hota(metrics: dict) -> dict[str, float]:
     return result
 
 
+def load_pair_ap_by_epoch(work_dir: Path) -> dict[int, dict[str, float]]:
+    by_epoch = {}
+    for scalars_path in work_dir.glob('*/vis_data/scalars.json'):
+        with scalars_path.open(encoding='utf-8') as handle:
+            for line in handle:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if 'pair/pair_mAP50_95' not in record:
+                    continue
+                epoch = record.get('epoch', record.get('step'))
+                if epoch is None:
+                    continue
+                by_epoch[int(epoch)] = {
+                    'pair_mAP': float(record['pair/pair_mAP50_95']),
+                    'pair_AP50': float(record['pair/pair_AP50']),
+                }
+    return by_epoch
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('--work-dir', type=Path, required=True)
@@ -47,6 +68,7 @@ def main() -> None:
     args = parser.parse_args()
 
     eval_root = args.work_dir / 'val_track_eval'
+    pair_ap_by_epoch = load_pair_ap_by_epoch(args.work_dir)
     rows = []
     for metrics_path in sorted(eval_root.glob('val_track_*/metrics.json')):
         match = re.search(r'val_track_(\d+)', metrics_path.parent.name)
@@ -67,6 +89,7 @@ def main() -> None:
             'metrics_path': str(metrics_path.relative_to(args.work_dir)),
         }
         row['hota_sum'] = row['track/cls_hota'] + row['track/det_hota']
+        row.update(pair_ap_by_epoch.get(row['epoch'], {}))
         rows.append(row)
 
     if len(rows) != args.expected_evals:
@@ -81,6 +104,9 @@ def main() -> None:
             f'Best cls_HOTA + det_HOTA is not unique: '
             f'{[row["epoch"] for row in winners]}')
     best = winners[0]
+    if 'pair_mAP' not in best or 'pair_AP50' not in best:
+        raise RuntimeError(
+            f'No pair AP record for selected tracking epoch {best["epoch"]}')
     final = rows[-1]
 
     baseline = load_json(args.baseline) if args.baseline and args.baseline.exists() else None
@@ -126,6 +152,8 @@ def main() -> None:
                   f'- `cls_HOTA={best["track/cls_hota"]:.3f}`.',
                   f'- `det_HOTA={best["track/det_hota"]:.3f}`.',
                   f'- `cls_HOTA + det_HOTA={best["hota_sum"]:.3f}`.',
+                  f'- Same-epoch `pair_mAP={best["pair_mAP"]:.4f}`.',
+                  f'- Same-epoch `pair_AP50={best["pair_AP50"]:.4f}`.',
                   f'- Final epoch sum: `{final["hota_sum"]:.3f}`; best-to-final '
                   f'delta: `{best["hota_sum"] - final["hota_sum"]:+.3f}`.', ''])
 
