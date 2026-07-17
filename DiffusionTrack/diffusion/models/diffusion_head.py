@@ -5,14 +5,12 @@ from collections import namedtuple
 import torch
 import torch.nn.functional as F
 from torch import nn
-from torchvision.ops import nms,box_iou
 
 from .diffusion_losses import SetCriterionDynamicK, HungarianMatcherDynamicK
 from .diffusion_models import DynamicHead
 
-from yolox.utils.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh
+from yolox.utils.rotated_boxes import qbox_to_rbox
 from yolox.utils import synchronize
-from detectron2.layers import batched_nms
 import time
 
 ModelPrediction = namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
@@ -41,7 +39,7 @@ def cosine_beta_schedule(timesteps, s=0.008):
     as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
     """
     steps = timesteps + 1
-    x = torch.linspace(0, timesteps, steps, dtype=torch.float64)
+    x = torch.linspace(0, timesteps, steps, dtype=torch.float32)
     alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
@@ -130,7 +128,7 @@ class DiffusionHead(nn.Module):
         self.use_fed_loss = False
         self.use_nms = False
         self.pooler_resolution=7
-        self.noise_strategy="xywh"
+        self.noise_strategy="xywhtheta"
    
         self.head = DynamicHead(num_classes,self.hidden_dim,self.pooler_resolution,strides,[self.hidden_dim]*len(strides),return_intermediate=self.deep_supervision,num_heads=self.num_heads,use_focal=self.use_focal,use_fed_loss=self.use_fed_loss)
         # Loss parameters:
@@ -139,7 +137,8 @@ class DiffusionHead(nn.Module):
         matcher = HungarianMatcherDynamicK(
             cost_class=class_weight, cost_bbox=l1_weight, cost_giou=giou_weight, use_focal=self.use_focal,use_fed_loss=self.use_fed_loss
         )
-        weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight, "loss_giou": giou_weight}
+        weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight,
+                       "loss_giou": giou_weight}
         if self.deep_supervision:
             aux_weight_dict = {}
             for i in range(self.num_heads - 1):
@@ -163,13 +162,15 @@ class DiffusionHead(nn.Module):
         def prepare(x,images_whwh):
             x_boxes = torch.clamp(x, min=-1 * self.scale, max=self.scale)
             x_boxes = ((x_boxes / self.scale) + 1) / 2
-            x_boxes = box_cxcywh_to_xyxy(x_boxes)
-            x_boxes = x_boxes * images_whwh[:, None, :]
+            x_boxes = x_boxes.clone()
+            x_boxes[..., :4] *= images_whwh[:, None, :]
+            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 2
             return x_boxes
         
         def post(x_start,images_whwh):
-            x_start = x_start / images_whwh[:, None, :]
-            x_start = box_xyxy_to_cxcywh(x_start)
+            x_start = x_start.clone()
+            x_start[..., :4] /= images_whwh[:, None, :]
+            x_start[..., 4] = (x_start[..., 4] + math.pi / 2) / math.pi
             x_start = (x_start * 2 - 1.) * self.scale
             x_start = torch.clamp(x_start, min=-1 * self.scale, max=self.scale)
             return x_start
@@ -189,7 +190,7 @@ class DiffusionHead(nn.Module):
     def new_ddim_sample(self,backbone_feats,images_whwh,ref_targets=None,dynamic_time=True,num_timesteps=1,num_proposals=500,inference_time_range=1,track_candidate=1,diffusion_t=200,clip_denoised=True):
         batch = images_whwh.shape[0]//2
         self.sampling_timesteps,self.num_proposals,self.track_candidate,self.inference_time_range=num_timesteps,num_proposals,track_candidate,inference_time_range
-        shape = (batch, self.num_proposals, 4)
+        shape = (batch, self.num_proposals, 5)
         cur_bboxes= torch.randn(shape,device=self.device,dtype=self.dtype)
         ref_t_list=[]
         track_t_list=[]
@@ -206,16 +207,15 @@ class DiffusionHead(nn.Module):
                 track_t_list.append(track_t)
         else:
             labels =ref_targets[..., :5]
-            nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
-            shape = (batch, self.num_proposals, 4)
+            nlabel = (labels[..., :4].abs().sum(dim=2) > 0).sum(dim=1)
+            shape = (batch, self.num_proposals, 5)
             diffused_boxes = []
             cur_diffused_boxes=[]
             for batch_idx,num_gt in enumerate(nlabel):
-                gt_bboxes_per_image = box_cxcywh_to_xyxy(labels[batch_idx, :num_gt])
                 image_size_xyxy = images_whwh[batch_idx]
-                gt_boxes = gt_bboxes_per_image  / image_size_xyxy
-                # cxcywh
-                gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
+                gt_boxes = labels[batch_idx, :num_gt].clone()
+                gt_boxes[:, :4] /= image_size_xyxy
+                gt_boxes[:, 4] = (gt_boxes[:, 4] + math.pi / 2) / math.pi
                 # t = torch.randint(self.num_timesteps-self.inference_time_range, self.num_timesteps,(2,), device=self.device).long()
                 # if dynamic_time:
                 #     ref_t,track_t=t[0],t[1]
@@ -328,7 +328,9 @@ class DiffusionHead(nn.Module):
                             c[i] * pred_noise[i] + \
                             sigma[i] * noise
                         
-                        bboxes[i] = torch.cat((bboxes[i], torch.randn(self.num_proposals - remain_list[i], 4, device=self.device)), dim=0)
+                        bboxes[i] = torch.cat((bboxes[i], torch.randn(
+                            self.num_proposals - remain_list[i], 5,
+                            device=self.device)), dim=0)
                 else:
                     noise = torch.randn_like(bboxes)
 
@@ -348,7 +350,8 @@ class DiffusionHead(nn.Module):
         box_pred = outputs_coord[-1]
         conf_score=outputs_score[-1]
 
-        return torch.cat([box_pred.view(2*batch,-1,4),box_cls.view(2*batch,-1,1)],dim=-1),conf_score.view(batch,-1,1),total_time
+        return torch.cat([box_pred.view(2 * batch, -1, 5), box_cls],
+                         dim=-1), conf_score.view(batch, -1, 1), total_time
     
     # forward diffusion
     def q_sample(self, x_start, t, noise=None):
@@ -376,7 +379,9 @@ class DiffusionHead(nn.Module):
             targets, x_boxes, noises, t = self.prepare_targets(targets,images_whwh)
             t=t.squeeze(-1)
             # t[b:]=t[:b]
-            x_boxes = x_boxes * images_whwh[:,None,:]
+            x_boxes = x_boxes.clone()
+            x_boxes[..., :4] *= images_whwh[:, None, :]
+            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 2
             pre_x_boxes,cur_x_boxes=torch.split(x_boxes,b,dim=0)
 
             outputs_class,outputs_coord,outputs_score = self.head(features,(pre_x_boxes,cur_x_boxes),t)
@@ -399,11 +404,11 @@ class DiffusionHead(nn.Module):
         """
         t = torch.full((1,),t,device=self.device).long()
 
-        noise = torch.randn(self.num_proposals,4,device=self.device,dtype=self.dtype)
+        noise = torch.randn(self.num_proposals,5,device=self.device,dtype=self.dtype)
 
         num_gt = gt_boxes.shape[0]
         if not num_gt:  # generate fake gt boxes if empty gt boxes
-            gt_boxes = torch.as_tensor([[0.5, 0.5, 1., 1.]], dtype=self.dtype, device=self.device)
+            gt_boxes = torch.as_tensor([[0.5, 0.5, 1., 1., 0.5]], dtype=self.dtype, device=self.device)
             num_gt = 1
 
         num_repeat = self.num_proposals // num_gt  # number of repeat except the last gt box in one image
@@ -427,7 +432,7 @@ class DiffusionHead(nn.Module):
             x = torch.clamp(x, min=-1 * self.scale, max=self.scale)
             x = ((x / self.scale) + 1) / 2.
 
-            diff_boxes = box_cxcywh_to_xyxy(x)
+            diff_boxes = x
         else:
             diff_boxes=x
 
@@ -441,22 +446,25 @@ class DiffusionHead(nn.Module):
         if self.training:
             self.track_candidate=1
         t = torch.full((1,),t,device=self.device).long()
-        noise = torch.randn(self.num_proposals, 4, device=self.device,dtype=self.dtype)
+        noise = torch.randn(self.num_proposals, 5, device=self.device,dtype=self.dtype)
         select_mask=None
         num_gt = gt_boxes.shape[0]*self.track_candidate
         if not num_gt:  # generate fake gt boxes if empty gt boxes
-            gt_boxes = torch.as_tensor([[0.5, 0.5, 1., 1.]], dtype=self.dtype, device=self.device)
+            gt_boxes = torch.as_tensor(
+                [[0.5, 0.5, 1., 1., 0.5]], dtype=self.dtype,
+                device=self.device)
             num_gt = 1
         else:
             gt_boxes=torch.repeat_interleave(gt_boxes,torch.tensor([self.track_candidate]*gt_boxes.shape[0],device=self.device),dim=0)
         if num_gt < self.num_proposals:
-            box_placeholder = torch.randn(self.num_proposals - num_gt, 4,
+            box_placeholder = torch.randn(self.num_proposals - num_gt, 5,
                                           device=self.device,dtype=self.dtype) / 6. + 0.5  # 3sigma = 1/2 --> sigma: 1/6
             # box_placeholder=torch.clip(torch.poisson(torch.clip(box_placeholder*5,min=0)),min=1,max=10)/10
             # box_placeholder=torch.nn.init.uniform_(box_placeholder, a=0, b=1)
             # box_placeholder=torch.ones_like(box_placeholder)
             # box_placeholder[:,:2]=box_placeholder[:,:2]/2
-            box_placeholder[:, 2:4] = torch.clip(box_placeholder[:, 2:4], min=1e-4)
+            box_placeholder[:, 2:5] = torch.clip(
+                box_placeholder[:, 2:5], min=1e-4)
             x_start = torch.cat((gt_boxes, box_placeholder), dim=0)
         elif num_gt > self.num_proposals:
             select_mask = [True] * self.num_proposals + [False] * (num_gt - self.num_proposals)
@@ -480,15 +488,15 @@ class DiffusionHead(nn.Module):
             x = torch.clamp(x, min=-1 * self.scale, max=self.scale)
             x = ((x / self.scale) + 1) / 2.
 
-            diff_boxes = box_cxcywh_to_xyxy(x)
+            diff_boxes = x
         else:
             diff_boxes = x
 
         return diff_boxes, noise, select_mask
 
     def prepare_targets(self,targets,images_whwh):
-        labels = targets[..., :5]
-        nlabel = (labels.sum(dim=2) > 0).sum(dim=1)  # number of objects
+        labels = targets[..., :9]
+        nlabel = (labels[..., 1:9].abs().sum(dim=2) > 0).sum(dim=1)
         new_targets = []
         diffused_boxes = []
         noises = []
@@ -498,12 +506,13 @@ class DiffusionHead(nn.Module):
         # select_gt_boxes={}
         for batch_idx,num_gt in enumerate(nlabel):
             target = {}
-            gt_bboxes_per_image = box_cxcywh_to_xyxy(labels[batch_idx, :num_gt, 1:5])
+            gt_qboxes = labels[batch_idx, :num_gt, 1:9]
             gt_classes = labels[batch_idx, :num_gt, 0]
             image_size_xyxy = images_whwh[batch_idx]
-            gt_boxes = gt_bboxes_per_image  / image_size_xyxy
-            # cxcywh
-            gt_boxes = box_xyxy_to_cxcywh(gt_boxes)
+            gt_boxes_abs = qbox_to_rbox(gt_qboxes)
+            gt_boxes = gt_boxes_abs.clone()
+            gt_boxes[:, :4] /= image_size_xyxy
+            gt_boxes[:, 4] = (gt_boxes_abs[:, 4] + math.pi / 2) / math.pi
             x_gt_boxes=gt_boxes
             d_t = torch.randint(0, self.num_timesteps, (1,), device=self.device).long()[0]
             ## baseline setting
@@ -527,13 +536,11 @@ class DiffusionHead(nn.Module):
             ts.append(d_t)
             target["labels"] = gt_classes.long()
             target["boxes"] = gt_boxes
-            target["boxes_xyxy"] = gt_bboxes_per_image
+            target["boxes_abs"] = gt_boxes_abs
+            target["boxes_qbox"] = gt_qboxes
             target["image_size_xyxy"] = image_size_xyxy
             image_size_xyxy_tgt = image_size_xyxy.unsqueeze(0).repeat(len(gt_boxes), 1)
             target["image_size_xyxy_tgt"] = image_size_xyxy_tgt
             new_targets.append(target)
 
         return new_targets, torch.stack(diffused_boxes), torch.stack(noises), torch.stack(ts)
-
-
-

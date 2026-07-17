@@ -114,6 +114,30 @@ def random_perspective(
     # Transform label coordinates
     n = len(targets)
     if n:
+        if targets.shape[1] >= 10:
+            original = targets[:, :8].reshape(n, 4, 2)
+            homogeneous = np.ones((n * 4, 3), dtype=np.float32)
+            homogeneous[:, :2] = original.reshape(-1, 2)
+            warped = homogeneous @ M.T
+            if perspective:
+                warped = warped[:, :2] / warped[:, 2:3]
+            else:
+                warped = warped[:, :2]
+            warped = warped.reshape(n, 4, 2)
+            old_min = original.min(axis=1)
+            old_max = original.max(axis=1)
+            new_min = warped.min(axis=1)
+            new_max = warped.max(axis=1)
+            old_aabb = np.concatenate([old_min, old_max], axis=1)
+            new_aabb = np.concatenate([new_min, new_max], axis=1)
+            keep = box_candidates(old_aabb.T * s, new_aabb.T)
+            keep &= new_max[:, 0] > 0
+            keep &= new_max[:, 1] > 0
+            keep &= new_min[:, 0] < width
+            keep &= new_min[:, 1] < height
+            targets = targets[keep]
+            targets[:, :8] = warped[keep].reshape(-1, 8)
+            return img, targets
         # warp points
         xy = np.ones((n * 4, 3))
         xy[:, :2] = targets[:, [0, 1, 2, 3, 0, 3, 2, 1]].reshape(
@@ -188,7 +212,8 @@ def _mirror(image, boxes):
 
 def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
     if len(image.shape) == 3:
-        padded_img = np.ones((input_size[0], input_size[1], 3)) * 114.0
+        padded_img = np.ones(
+            (input_size[0], input_size[1], image.shape[2])) * 114.0
     else:
         padded_img = np.ones(input_size) * 114.0
     img = np.array(image)
@@ -200,7 +225,8 @@ def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
     ).astype(np.float32)
     padded_img[: int(img.shape[0] * r), : int(img.shape[1] * r)] = resized_img
 
-    padded_img = padded_img[:, :, ::-1]
+    if padded_img.shape[2] == 3:
+        padded_img = padded_img[:, :, ::-1]
     padded_img /= 255.0
     if mean is not None:
         padded_img -= mean
@@ -219,6 +245,10 @@ class TrainTransform:
         self.max_labels = max_labels
 
     def __call__(self, image, targets, input_dim):
+        if targets.shape[1] >= 10:
+            return _hsmot_single_transform(
+                image, targets, input_dim, self.means, self.std,
+                self.max_labels)
         boxes = targets[:, :4].copy()
         labels = targets[:, 4].copy()
         ids = targets[:, 5].copy()
@@ -277,6 +307,10 @@ class DiffusionValTransform:
         self.max_labels = max_labels
 
     def __call__(self, image, targets, input_dim):
+        if targets.shape[1] >= 10:
+            return _hsmot_single_transform(
+                image, targets, input_dim, self.means, self.std,
+                self.max_labels)
         if len(targets) == 0:
             targets = np.zeros((self.max_labels, 6), dtype=np.float32)
             image, r_o = preproc(image, input_dim, self.means, self.std)
@@ -318,6 +352,10 @@ class DiffusionTrainTransform:
         self.max_labels = max_labels
 
     def __call__(self, ref_image, ref_targets, track_image, track_targets,input_dim):
+        if ref_targets.shape[1] >= 10 or track_targets.shape[1] >= 10:
+            return _hsmot_pair_transform(
+                ref_image, ref_targets, track_image, track_targets,
+                input_dim, self.means, self.std, self.max_labels)
         if len(ref_targets) == 0:
             ref_targets_t = np.zeros((self.max_labels, 6), dtype=np.float32)
             ref_image_t, r_o = preproc(ref_image, input_dim, self.means, self.std)
@@ -386,6 +424,48 @@ class DiffusionTrainTransform:
         track_image_t = np.ascontiguousarray(track_image_t, dtype=np.float32)
 
         return ref_image_t,ref_padded_labels,track_image_t,track_padded_labels
+
+
+def _hsmot_single_transform(image, targets, input_dim, means, std,
+                            max_labels):
+    """Resize/normalize one multispectral image without RGB HSV distortion."""
+    image_t, ratio = preproc(image, input_dim, means, std)
+    packed = np.zeros((max_labels, 10), dtype=np.float32)
+    if len(targets):
+        scaled = targets.copy()
+        scaled[:, :8] *= ratio
+        # Head input is [class, qbox, track_id].
+        reordered = np.concatenate(
+            [scaled[:, 8:9], scaled[:, :8], scaled[:, 9:10]], axis=1)
+        count = min(len(reordered), max_labels)
+        packed[:count] = reordered[:count]
+    return (np.ascontiguousarray(image_t, dtype=np.float32),
+            np.ascontiguousarray(packed, dtype=np.float32))
+
+
+def _hsmot_pair_transform(ref_image, ref_targets, cur_image, cur_targets,
+                          input_dim, means, std, max_labels):
+    ref_image_t, ref_ratio = preproc(ref_image, input_dim, means, std)
+    cur_image_t, cur_ratio = preproc(cur_image, input_dim, means, std)
+    ref_by_id = {int(row[9]): row for row in ref_targets}
+    cur_by_id = {int(row[9]): row for row in cur_targets}
+    common_ids = sorted(set(ref_by_id).intersection(cur_by_id))
+    ref_packed = np.zeros((max_labels, 10), dtype=np.float32)
+    cur_packed = np.zeros((max_labels, 10), dtype=np.float32)
+    for output_index, track_id in enumerate(common_ids[:max_labels]):
+        ref_row = ref_by_id[track_id].copy()
+        cur_row = cur_by_id[track_id].copy()
+        ref_row[:8] *= ref_ratio
+        cur_row[:8] *= cur_ratio
+        # Keep the reference class for both sides; HSMOT track classes are
+        # identity-stable and paired queries must share one semantic label.
+        class_id = ref_row[8]
+        ref_packed[output_index] = np.concatenate(
+            [[class_id], ref_row[:8], [track_id]])
+        cur_packed[output_index] = np.concatenate(
+            [[class_id], cur_row[:8], [track_id]])
+    return (np.ascontiguousarray(ref_image_t, dtype=np.float32), ref_packed,
+            np.ascontiguousarray(cur_image_t, dtype=np.float32), cur_packed)
     
 class ValTransform:
     """

@@ -13,6 +13,38 @@ from ..data_augment import box_candidates, random_perspective, augment_hsv
 from .datasets_wrapper import Dataset
 
 
+def _place_labels(labels, scale, padw, padh):
+    labels = labels.copy()
+    if not len(labels):
+        return labels
+    if labels.shape[1] >= 10:
+        points = labels[:, :8].reshape(-1, 4, 2)
+        points *= scale
+        points[..., 0] += padw
+        points[..., 1] += padh
+        labels[:, :8] = points.reshape(-1, 8)
+    else:
+        labels[:, [0, 2]] = scale * labels[:, [0, 2]] + padw
+        labels[:, [1, 3]] = scale * labels[:, [1, 3]] + padh
+    return labels
+
+
+def _filter_visible(labels, width, height):
+    if not len(labels):
+        return labels
+    if labels.shape[1] >= 10:
+        points = labels[:, :8].reshape(-1, 4, 2)
+        minimum = points.min(axis=1)
+        maximum = points.max(axis=1)
+        keep = ((maximum[:, 0] > 0) & (maximum[:, 1] > 0) &
+                (minimum[:, 0] < width) & (minimum[:, 1] < height))
+        return labels[keep]
+    labels = labels[labels[:, 0] < width]
+    labels = labels[labels[:, 2] > 0]
+    labels = labels[labels[:, 1] < height]
+    return labels[labels[:, 3] > 0]
+
+
 def get_mosaic_coordinate(mosaic_image, mosaic_index, xc, yc, w, h, input_h, input_w):
     # TODO update doc
     # index0 to top left part of image
@@ -107,13 +139,7 @@ class MosaicDetection(Dataset):
                 mosaic_img[l_y1:l_y2, l_x1:l_x2] = img[s_y1:s_y2, s_x1:s_x2]
                 padw, padh = l_x1 - s_x1, l_y1 - s_y1
 
-                labels = _labels.copy()
-                # Normalized xywh to pixel xyxy format
-                if _labels.size > 0:
-                    labels[:, 0] = scale * _labels[:, 0] + padw
-                    labels[:, 1] = scale * _labels[:, 1] + padh
-                    labels[:, 2] = scale * _labels[:, 2] + padw
-                    labels[:, 3] = scale * _labels[:, 3] + padh
+                labels = _place_labels(_labels, scale, padw, padh)
                 mosaic_labels.append(labels)
 
             if len(mosaic_labels):
@@ -125,10 +151,8 @@ class MosaicDetection(Dataset):
                 np.clip(mosaic_labels[:, 3], 0, 2 * input_h, out=mosaic_labels[:, 3])
                 '''
                 
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 0] < 2 * input_w]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 2] > 0]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 1] < 2 * input_h]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 3] > 0]
+                mosaic_labels = _filter_visible(
+                    mosaic_labels, 2 * input_w, 2 * input_h)
                 
             #augment_hsv(mosaic_img)
             mosaic_img, mosaic_labels = random_perspective(
@@ -171,7 +195,8 @@ class MosaicDetection(Dataset):
         img, cp_labels, _, _ = self._dataset.pull_item(cp_index)
 
         if len(img.shape) == 3:
-            cp_img = np.ones((input_dim[0], input_dim[1], 3)) * 114.0
+            cp_img = np.ones(
+                (input_dim[0], input_dim[1], img.shape[2])) * 114.0
         else:
             cp_img = np.ones(input_dim) * 114.0
         cp_scale_ratio = min(input_dim[0] / img.shape[0], input_dim[1] / img.shape[1])
@@ -194,8 +219,8 @@ class MosaicDetection(Dataset):
         origin_h, origin_w = cp_img.shape[:2]
         target_h, target_w = origin_img.shape[:2]
         padded_img = np.zeros(
-            (max(origin_h, target_h), max(origin_w, target_w), 3)
-        ).astype(np.uint8)
+            (max(origin_h, target_h), max(origin_w, target_w),
+             cp_img.shape[2])).astype(np.uint8)
         padded_img[:origin_h, :origin_w] = cp_img
 
         x_offset, y_offset = 0, 0
@@ -207,13 +232,20 @@ class MosaicDetection(Dataset):
             y_offset: y_offset + target_h, x_offset: x_offset + target_w
         ]
 
-        cp_bboxes_origin_np = adjust_box_anns(
-            cp_labels[:, :4].copy(), cp_scale_ratio, 0, 0, origin_w, origin_h
-        )
+        is_qbox = cp_labels.shape[1] >= 10
+        if is_qbox:
+            cp_bboxes_origin_np = cp_labels[:, :8].copy() * cp_scale_ratio
+        else:
+            cp_bboxes_origin_np = adjust_box_anns(
+                cp_labels[:, :4].copy(), cp_scale_ratio, 0, 0,
+                origin_w, origin_h)
         if FLIP:
-            cp_bboxes_origin_np[:, 0::2] = (
-                origin_w - cp_bboxes_origin_np[:, 0::2][:, ::-1]
-            )
+            if is_qbox:
+                cp_bboxes_origin_np[:, 0::2] = (
+                    origin_w - cp_bboxes_origin_np[:, 0::2])
+            else:
+                cp_bboxes_origin_np[:, 0::2] = (
+                    origin_w - cp_bboxes_origin_np[:, 0::2][:, ::-1])
         cp_bboxes_transformed_np = cp_bboxes_origin_np.copy()
         '''
         cp_bboxes_transformed_np[:, 0::2] = np.clip(
@@ -225,18 +257,26 @@ class MosaicDetection(Dataset):
         '''
         cp_bboxes_transformed_np[:, 0::2] = cp_bboxes_transformed_np[:, 0::2] - x_offset
         cp_bboxes_transformed_np[:, 1::2] = cp_bboxes_transformed_np[:, 1::2] - y_offset
-        keep_list = box_candidates(cp_bboxes_origin_np.T, cp_bboxes_transformed_np.T, 5)
+        if is_qbox:
+            old_points = cp_bboxes_origin_np.reshape(-1, 4, 2)
+            new_points = cp_bboxes_transformed_np.reshape(-1, 4, 2)
+            old_aabb = np.concatenate(
+                [old_points.min(1), old_points.max(1)], axis=1)
+            new_aabb = np.concatenate(
+                [new_points.min(1), new_points.max(1)], axis=1)
+            keep_list = box_candidates(old_aabb.T, new_aabb.T, 5)
+        else:
+            keep_list = box_candidates(
+                cp_bboxes_origin_np.T, cp_bboxes_transformed_np.T, 5)
 
         if keep_list.sum() >= 1.0:
-            cls_labels = cp_labels[keep_list, 4:5].copy()
-            id_labels = cp_labels[keep_list, 5:6].copy()
+            class_column, id_column = ((8, 9) if is_qbox else (4, 5))
+            cls_labels = cp_labels[keep_list, class_column:class_column + 1].copy()
+            id_labels = cp_labels[keep_list, id_column:id_column + 1].copy()
             box_labels = cp_bboxes_transformed_np[keep_list]
             labels = np.hstack((box_labels, cls_labels, id_labels))
             # remove outside bbox
-            labels = labels[labels[:, 0] < target_w]
-            labels = labels[labels[:, 2] > 0]
-            labels = labels[labels[:, 1] < target_h]
-            labels = labels[labels[:, 3] > 0]
+            labels = _filter_visible(labels, target_w, target_h)
             origin_labels = np.vstack((origin_labels, labels))
             origin_img = origin_img.astype(np.float32)
             origin_img = 0.5 * origin_img + 0.5 * padded_cropped_img.astype(np.float32)
@@ -280,7 +320,7 @@ class DiffusionMosaicDetection(Dataset):
         self.enable_mosaic = mosaic
         self.enable_mixup = enable_mixup
         self.video_info=self._dataset.video_info
-        self.track_range=2
+        self.track_range=1
         assert all([v[2] for v in self.video_info.values()]),"Only For MOT Tracking!"
 
     def __len__(self):
@@ -301,7 +341,12 @@ class DiffusionMosaicDetection(Dataset):
             video_keys=list(self.video_info.keys())
             cur_idx_range=[idx>=self.video_info[k][0] and idx<=self.video_info[k][1]  for k in video_keys]
             cur_idx_video_key=video_keys.pop(cur_idx_range.index(True))
-            sample_video_keys=[cur_idx_video_key]+random.sample(video_keys,3)
+            if len(video_keys) >= 3:
+                extra_video_keys = random.sample(video_keys, 3)
+            else:
+                pool = video_keys or [cur_idx_video_key]
+                extra_video_keys = random.choices(pool, k=3)
+            sample_video_keys=[cur_idx_video_key]+extra_video_keys
             ref_indices = [idx] + [random.randint(self.video_info[sample_k][0], self.video_info[sample_k][1]) for sample_k in sample_video_keys[-3:]]
             track_indices=[max(min(idx+random.randint(-self.track_range,self.track_range),self.video_info[sample_k][1]),self.video_info[sample_k][0]) for idx,sample_k in zip(ref_indices,sample_video_keys)]
 
@@ -325,13 +370,7 @@ class DiffusionMosaicDetection(Dataset):
                 mosaic_img[l_y1:l_y2, l_x1:l_x2] = img[s_y1:s_y2, s_x1:s_x2]
                 padw, padh = l_x1 - s_x1, l_y1 - s_y1
 
-                labels = _labels.copy()
-                # Normalized xywh to pixel xyxy format
-                if _labels.size > 0:
-                    labels[:, 0] = scale * _labels[:, 0] + padw
-                    labels[:, 1] = scale * _labels[:, 1] + padh
-                    labels[:, 2] = scale * _labels[:, 2] + padw
-                    labels[:, 3] = scale * _labels[:, 3] + padh
+                labels = _place_labels(_labels, scale, padw, padh)
                 mosaic_labels.append(labels)
 
             if len(mosaic_labels):
@@ -343,10 +382,8 @@ class DiffusionMosaicDetection(Dataset):
                 np.clip(mosaic_labels[:, 3], 0, 2 * input_h, out=mosaic_labels[:, 3])
                 '''
                 
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 0] < 2 * input_w]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 2] > 0]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 1] < 2 * input_h]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 3] > 0]
+                mosaic_labels = _filter_visible(
+                    mosaic_labels, 2 * input_w, 2 * input_h)
                 
             #augment_hsv(mosaic_img)
             mosaic_img, mosaic_labels = random_perspective(
@@ -383,13 +420,7 @@ class DiffusionMosaicDetection(Dataset):
                 mosaic_img[l_y1:l_y2, l_x1:l_x2] = img[s_y1:s_y2, s_x1:s_x2]
                 padw, padh = l_x1 - s_x1, l_y1 - s_y1
 
-                labels = _labels.copy()
-                # Normalized xywh to pixel xyxy format
-                if _labels.size > 0:
-                    labels[:, 0] = scale * _labels[:, 0] + padw
-                    labels[:, 1] = scale * _labels[:, 1] + padh
-                    labels[:, 2] = scale * _labels[:, 2] + padw
-                    labels[:, 3] = scale * _labels[:, 3] + padh
+                labels = _place_labels(_labels, scale, padw, padh)
                 mosaic_labels.append(labels)
 
             if len(mosaic_labels):
@@ -401,10 +432,8 @@ class DiffusionMosaicDetection(Dataset):
                 np.clip(mosaic_labels[:, 3], 0, 2 * input_h, out=mosaic_labels[:, 3])
                 '''
                 
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 0] < 2 * input_w]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 2] > 0]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 1] < 2 * input_h]
-                mosaic_labels = mosaic_labels[mosaic_labels[:, 3] > 0]
+                mosaic_labels = _filter_visible(
+                    mosaic_labels, 2 * input_w, 2 * input_h)
                 
             #augment_hsv(mosaic_img)
             mosaic_img, mosaic_labels = random_perspective(

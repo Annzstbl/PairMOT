@@ -4,4 +4,4 @@
 
 from .datasets_wrapper import ConcatDataset, Dataset, MixConcatDataset
 from .mosaicdetection import MosaicDetection,DiffusionMosaicDetection
-from .mot import MOTDataset
+from .mot import HSMOTDataset, MOTDataset

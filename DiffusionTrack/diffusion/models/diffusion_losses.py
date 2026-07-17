@@ -1,11 +1,42 @@
+import math
+
 import torch
 import torch.nn.functional as F
 from torch import nn
-from fvcore.nn import sigmoid_focal_loss_jit
-import torchvision.ops as ops
-from yolox.utils import box_ops
 from yolox.utils.dist import get_world_size, is_dist_avail_and_initialized
-from yolox.utils.box_ops import box_cxcywh_to_xyxy, box_xyxy_to_cxcywh, generalized_box_iou
+from yolox.utils.rotated_boxes import pair_rotated_iou, rotated_iou
+
+
+def _normalize_rboxes(boxes, image_whwh):
+    """Normalize absolute rboxes to cxcywh in [0, 1] and le90 angle in [0, 1]."""
+    normalized = boxes.clone()
+    normalized[..., :4] /= image_whwh
+    normalized[..., 4] = (normalized[..., 4] + math.pi / 2) / math.pi
+    return normalized
+
+
+def _periodic_l1_cost(boxes1, boxes2):
+    """Pairwise L1 cost with the pi-periodic rotated-box angle distance."""
+    cost = torch.cdist(boxes1[..., :4], boxes2[..., :4], p=1)
+    angle = (boxes1[:, None, 4] - boxes2[None, :, 4]).abs()
+    return cost + torch.minimum(angle, 1.0 - angle)
+
+
+def sigmoid_focal_loss_jit(inputs, targets, alpha=-1, gamma=2,
+                           reduction="none"):
+    """Torch-native focal loss, avoiding DiffusionTrack's Detectron2/FVCore dependency."""
+    prob = inputs.sigmoid()
+    ce_loss = F.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    p_t = prob * targets + (1 - prob) * (1 - targets)
+    loss = ce_loss * ((1 - p_t) ** gamma)
+    if alpha >= 0:
+        alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
+        loss = alpha_t * loss
+    if reduction == "mean":
+        return loss.mean()
+    if reduction == "sum":
+        return loss.sum()
+    return loss
 
 
 class SetCriterionDynamicK(nn.Module):
@@ -84,7 +115,7 @@ class SetCriterionDynamicK(nn.Module):
         assert 'pred_logits' in outputs
         src_logits = outputs['pred_logits']
         conf_score=torch.cat([outputs['pred_scores'],outputs['pred_scores']],dim=0)
-        p=torch.sqrt(torch.sigmoid(src_logits)*conf_score)
+        p=torch.sqrt(torch.sigmoid(src_logits)*conf_score).clamp(1e-6, 1 - 1e-6)
         src_logits=torch.log(p/(1-p))
         batch_size = len(targets)
 
@@ -151,54 +182,52 @@ class SetCriterionDynamicK(nn.Module):
         return losses
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
-           targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
-           The target boxes are expected in format (center_x, center_y, w, h), normalized by the image size.
+        """Compute periodic rotated L1 and paired rotated IoU losses.
+
+        The ``loss_giou`` key is intentionally retained for checkpoint/config
+        compatibility although it now contains the paired rotated IoU loss.
         """
         assert 'pred_boxes' in outputs
-        # idx = self._get_src_permutation_idx(indices)
         src_boxes = outputs['pred_boxes']
-
         batch_size = len(targets)
-        pred_box_list = []
-        pred_norm_box_list = []
-        tgt_box_list = []
-        tgt_box_xyxy_list = []
-        for batch_idx in range(batch_size):
-            valid_query = indices[batch_idx%(batch_size//2)][0]
-            gt_multi_idx = indices[batch_idx%(batch_size//2)][1]
+        pair_batch = batch_size // 2
+        loss_bbox = src_boxes.sum() * 0
+        loss_riou = src_boxes.sum() * 0
+        matched = 0
+        for batch_idx in range(pair_batch):
+            valid_query, gt_multi_idx = indices[batch_idx]
             if len(gt_multi_idx) == 0:
                 continue
-            bz_image_whwh = targets[batch_idx]['image_size_xyxy']
-            bz_src_boxes = src_boxes[batch_idx]
-            bz_target_boxes = targets[batch_idx]["boxes"]  # normalized (cx, cy, w, h)
-            bz_target_boxes_xyxy = targets[batch_idx]["boxes_xyxy"]  # absolute (x1, y1, x2, y2)
-            pred_box_list.append(bz_src_boxes[valid_query])
-            pred_norm_box_list.append(bz_src_boxes[valid_query] / bz_image_whwh)  # normalize (x1, y1, x2, y2)
-            tgt_box_list.append(bz_target_boxes[gt_multi_idx])
-            tgt_box_xyxy_list.append(bz_target_boxes_xyxy[gt_multi_idx])
+            cur_idx = batch_idx + pair_batch
+            pred_ref = src_boxes[batch_idx, valid_query]
+            pred_cur = src_boxes[cur_idx, valid_query]
+            tgt_ref = targets[batch_idx]["boxes_abs"][gt_multi_idx]
+            tgt_cur = targets[cur_idx]["boxes_abs"][gt_multi_idx]
 
-        if len(pred_box_list) != 0:
-            src_boxes = torch.cat(pred_box_list)
-            src_boxes_re=torch.cat(pred_box_list[-len(pred_box_list)//2:]+pred_box_list[:len(pred_box_list)//2])
-            src_boxes_norm = torch.cat(pred_norm_box_list)  # normalized (x1, y1, x2, y2)
-            target_boxes = torch.cat(tgt_box_list)
-            target_boxes_abs_xyxy = torch.cat(tgt_box_xyxy_list)
-            target_boxes_abs_xyxy_re=torch.cat(tgt_box_xyxy_list[-len(tgt_box_xyxy_list)//2:]+tgt_box_xyxy_list[:len(tgt_box_xyxy_list)//2])
-            num_boxes = src_boxes.shape[0]
-            losses = {}
-            # require normalized (x1, y1, x2, y2)
-            loss_bbox = F.l1_loss(src_boxes_norm, box_cxcywh_to_xyxy(target_boxes), reduction='none')
-            losses['loss_bbox'] = loss_bbox.sum() / num_boxes
+            pred_ref_norm = _normalize_rboxes(
+                pred_ref, targets[batch_idx]['image_size_xyxy'])
+            pred_cur_norm = _normalize_rboxes(
+                pred_cur, targets[cur_idx]['image_size_xyxy'])
+            tgt_ref_norm = targets[batch_idx]["boxes"][gt_multi_idx]
+            tgt_cur_norm = targets[cur_idx]["boxes"][gt_multi_idx]
 
-            # loss_giou = giou_loss(box_ops.box_cxcywh_to_xyxy(src_boxes), box_ops.box_cxcywh_to_xyxy(target_boxes))
-            loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(src_boxes,src_boxes_re,target_boxes_abs_xyxy,target_boxes_abs_xyxy_re))
-            losses['loss_giou'] = loss_giou.sum() / num_boxes
-        else:
-            losses = {'loss_bbox': outputs['pred_boxes'].sum() * 0,
-                      'loss_giou': outputs['pred_boxes'].sum() * 0}
+            for pred_norm, tgt_norm in ((pred_ref_norm, tgt_ref_norm),
+                                        (pred_cur_norm, tgt_cur_norm)):
+                coord = F.l1_loss(pred_norm[:, :4], tgt_norm[:, :4],
+                                  reduction='none').sum()
+                angle = (pred_norm[:, 4] - tgt_norm[:, 4]).abs()
+                loss_bbox = loss_bbox + coord + torch.minimum(angle, 1 - angle).sum()
 
-        return losses
+            pair_iou = pair_rotated_iou(
+                pred_ref, tgt_ref, pred_cur, tgt_cur).diag()
+            loss_riou = loss_riou + (1 - pair_iou).sum()
+            matched += len(gt_multi_idx)
+
+        normalizer = max(matched, 1)
+        return {
+            'loss_bbox': loss_bbox / (2 * normalizer),
+            'loss_giou': loss_riou / normalizer,
+        }
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
@@ -306,9 +335,9 @@ class HungarianMatcherDynamicK(nn.Module):
             matched_ids = []
             assert bs == len(targets)
             for batch_idx in range(bs//2):
-                bz_boxes_pre = out_bbox_pre[batch_idx]  # [num_proposals, 4]
+                bz_boxes_pre = out_bbox_pre[batch_idx]  # [num_proposals, 5]
                 bz_out_prob_pre = out_prob_pre[batch_idx]
-                bz_boxes_curr = out_bbox_curr[batch_idx]  # [num_proposals, 4]
+                bz_boxes_curr = out_bbox_curr[batch_idx]  # [num_proposals, 5]
                 bz_out_prob_curr = out_prob_curr[batch_idx]
                 bz_tgt_ids_pre = targets[batch_idx]["labels"]
                 bz_tgt_ids_curr = targets[batch_idx+bs//2]["labels"]
@@ -322,26 +351,24 @@ class HungarianMatcherDynamicK(nn.Module):
                     matched_ids.append(matched_qidx)
                     continue
 
-                bz_gtboxs_pre = targets[batch_idx]['boxes']  # [num_gt, 4] normalized (cx, xy, w, h)
-                bz_gtboxs_abs_xyxy_pre = targets[batch_idx]['boxes_xyxy']
-                bz_gtboxs_curr = targets[batch_idx+bs//2]['boxes']  # [num_gt, 4] normalized (cx, xy, w, h)
-                bz_gtboxs_abs_xyxy_curr = targets[batch_idx+bs//2]['boxes_xyxy']
+                bz_gtboxs_pre = targets[batch_idx]['boxes']
+                bz_gtboxs_abs_pre = targets[batch_idx]['boxes_abs']
+                bz_gtboxs_curr = targets[batch_idx+bs//2]['boxes']
+                bz_gtboxs_abs_curr = targets[batch_idx+bs//2]['boxes_abs']
                 fg_mask_pre, is_in_boxes_and_center_pre = self.get_in_boxes_info(
-                    box_xyxy_to_cxcywh(bz_boxes_pre),  # absolute (cx, cy, w, h)
-                    box_xyxy_to_cxcywh(bz_gtboxs_abs_xyxy_pre),  # absolute (cx, cy, w, h)
+                    bz_boxes_pre, bz_gtboxs_abs_pre,
                     expanded_strides=32
                 )
                 fg_mask_curr, is_in_boxes_and_center_curr = self.get_in_boxes_info(
-                    box_xyxy_to_cxcywh(bz_boxes_curr),  # absolute (cx, cy, w, h)
-                    box_xyxy_to_cxcywh(bz_gtboxs_abs_xyxy_curr),  # absolute (cx, cy, w, h)
+                    bz_boxes_curr, bz_gtboxs_abs_curr,
                     expanded_strides=32
                 )
                 fg_mask=fg_mask_pre&fg_mask_curr 
                 is_in_boxes_and_center=is_in_boxes_and_center_pre&is_in_boxes_and_center_curr
 
-                pair_wise_ious_pre = ops.box_iou(bz_boxes_pre, bz_gtboxs_abs_xyxy_pre)
-                pair_wise_ious_curr = ops.box_iou(bz_boxes_curr, bz_gtboxs_abs_xyxy_curr)
-                pair_wise_ious=(pair_wise_ious_pre+pair_wise_ious_curr)/2
+                pair_wise_ious = pair_rotated_iou(
+                    bz_boxes_pre, bz_gtboxs_abs_pre,
+                    bz_boxes_curr, bz_gtboxs_abs_curr)
                 cost_class=0
                 bz_out_prob_set=[bz_out_prob_pre,bz_out_prob_curr]
                 bz_tgt_ids_set=[bz_tgt_ids_pre,bz_tgt_ids_curr]
@@ -369,18 +396,14 @@ class HungarianMatcherDynamicK(nn.Module):
                 # image_size_tgt = torch.cat([v["image_size_xyxy_tgt"] for v in targets])
 
                 bz_image_size_out_pre = targets[batch_idx]['image_size_xyxy']
-                bz_image_size_tgt_pre = targets[batch_idx]['image_size_xyxy_tgt']
                 bz_image_size_out_curr = targets[batch_idx+bs//2]['image_size_xyxy']
-                bz_image_size_tgt_curr = targets[batch_idx+bs//2]['image_size_xyxy_tgt']
 
-                bz_out_bbox_pre = bz_boxes_pre / bz_image_size_out_pre  # normalize (x1, y1, x2, y2)
-                bz_out_bbox_curr = bz_boxes_curr / bz_image_size_out_curr  # normalize (x1, y1, x2, y2)
-                bz_tgt_bbox_pre = bz_gtboxs_abs_xyxy_pre / bz_image_size_tgt_pre  # normalize (x1, y1, x2, y2)
-                bz_tgt_bbox_curr = bz_gtboxs_abs_xyxy_curr / bz_image_size_tgt_curr  # normalize (x1, y1, x2, y2)
-                cost_bbox_pre = torch.cdist(bz_out_bbox_pre, bz_tgt_bbox_pre, p=1)
-                cost_bbox_curr = torch.cdist(bz_out_bbox_curr, bz_tgt_bbox_curr, p=1)
+                bz_out_bbox_pre = _normalize_rboxes(bz_boxes_pre, bz_image_size_out_pre)
+                bz_out_bbox_curr = _normalize_rboxes(bz_boxes_curr, bz_image_size_out_curr)
+                cost_bbox_pre = _periodic_l1_cost(bz_out_bbox_pre, bz_gtboxs_pre)
+                cost_bbox_curr = _periodic_l1_cost(bz_out_bbox_curr, bz_gtboxs_curr)
 
-                cost_giou = -generalized_box_iou(bz_boxes_pre,bz_boxes_curr,bz_gtboxs_abs_xyxy_pre,bz_gtboxs_abs_xyxy_curr)
+                cost_giou = -pair_wise_ious
 
                 # Final cost matrix
                 cost = self.cost_bbox * (cost_bbox_pre+cost_bbox_curr)/2 + self.cost_class * cost_class/2 + self.cost_giou * cost_giou + 100.0 * (~is_in_boxes_and_center)
@@ -397,7 +420,12 @@ class HungarianMatcherDynamicK(nn.Module):
         return indices, matched_ids
 
     def get_in_boxes_info(self, boxes, target_gts, expanded_strides):
-        xy_target_gts = box_cxcywh_to_xyxy(target_gts)  # (x1, y1, x2, y2)
+        # Keep the original SimOTA center prior.  For rotated boxes its extent
+        # is represented by the enclosing local cxcywh rectangle; exact rotated
+        # overlap is still used by the actual matching cost.
+        half_wh = target_gts[:, 2:4] / 2
+        xy_target_gts = torch.cat(
+            [target_gts[:, :2] - half_wh, target_gts[:, :2] + half_wh], dim=1)
 
         anchor_center_x = boxes[:, 0].unsqueeze(1)
         anchor_center_y = boxes[:, 1].unsqueeze(1)
@@ -433,8 +461,10 @@ class HungarianMatcherDynamicK(nn.Module):
         n_candidate_k = self.ota_k
 
         # Take the sum of the predicted value and the top 10 iou of gt with the largest iou as dynamic_k
-        topk_ious, _ = torch.topk(ious_in_boxes_matrix, n_candidate_k, dim=0)
-        dynamic_ks = torch.clamp(topk_ious.sum(0).int(), min=1)
+        topk_ious, _ = torch.topk(
+            ious_in_boxes_matrix, min(n_candidate_k, cost.shape[0]), dim=0)
+        dynamic_ks = torch.clamp(
+            topk_ious.sum(0).int(), min=1, max=cost.shape[0])
 
         for gt_idx in range(num_gt):
             _, pos_idx = torch.topk(cost[:, gt_idx], k=dynamic_ks[gt_idx].item(), largest=False)

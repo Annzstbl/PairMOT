@@ -38,6 +38,12 @@ def make_parser():
     )
     parser.add_argument("-b", "--batch-size", type=int, default=2*8, help="batch size")
     parser.add_argument(
+        "--accumulate",
+        type=int,
+        default=1,
+        help="number of micro-batches accumulated before each optimizer step",
+    )
+    parser.add_argument(
         "-d", "--devices", default=8, type=int, help="device for training"
     )
     parser.add_argument(
@@ -53,7 +59,7 @@ def make_parser():
     parser.add_argument(
         "--resume", default=False, action="store_true", help="resume training"
     )
-    parser.add_argument("-c", "--ckpt", default="diffusion_dancetrack_det.pth.tar", type=str, help="checkpoint file")
+    parser.add_argument("-c", "--ckpt", default=None, type=str, help="checkpoint file")
     parser.add_argument(
         "-e",
         "--start_epoch",

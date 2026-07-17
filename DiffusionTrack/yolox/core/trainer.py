@@ -25,6 +25,8 @@ from yolox.utils import (
 )
 
 import datetime
+import contextlib
+import math
 import os
 import time
 
@@ -41,6 +43,9 @@ class Trainer:
         self.max_epoch = exp.max_epoch
         self.amp_training = args.fp16
         self.scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
+        self.accumulate = int(getattr(args, "accumulate", 1))
+        if self.accumulate < 1:
+            raise ValueError("--accumulate must be at least 1")
         self.is_distributed = get_world_size() > 1
         self.rank = get_rank()
         self.local_rank = args.local_rank
@@ -92,30 +97,50 @@ class Trainer:
         iter_start_time = time.time()
         pre_inps, pre_targets,cur_inps,cur_targets= self.prefetcher.next()
         pre_inps = pre_inps.to(self.data_type)
-        pre_targets = pre_targets[:,:,:5].to(self.data_type)
+        target_dim = getattr(self.exp, "target_dim", 5)
+        pre_targets = pre_targets[:, :, :target_dim].to(self.data_type)
         pre_targets.requires_grad = False
         if self.task=="tracking":
             cur_inps = cur_inps.to(self.data_type)
-            cur_targets = cur_targets[:,:,:5].to(self.data_type)
+            cur_targets = cur_targets[:, :, :target_dim].to(self.data_type)
             cur_targets.requires_grad = False
 
         data_end_time = time.time()
         inps,targets=(pre_inps,cur_inps),(pre_targets,cur_targets)
-        with torch.cuda.amp.autocast(enabled=self.amp_training):
-            outputs = self.model(inps,targets,self.random_flip,self.input_size)
-        loss = outputs["total_loss"]
+        group_start = (self.iter // self.accumulate) * self.accumulate
+        group_size = min(self.accumulate, self.max_iter - group_start)
+        should_step = self.iter + 1 == group_start + group_size
+        if self.iter == group_start:
+            self.optimizer.zero_grad()
 
-        self.optimizer.zero_grad()
-        self.scaler.scale(loss).backward()
-        self.scaler.step(self.optimizer)
-        self.scaler.update()
+        # Avoid an unnecessary DDP all-reduce for intermediate micro-batches.
+        sync_context = (
+            contextlib.nullcontext()
+            if should_step or not self.is_distributed
+            else self.model.no_sync()
+        )
+        with sync_context:
+            with torch.cuda.amp.autocast(enabled=self.amp_training):
+                outputs = self.model(inps,targets,self.random_flip,self.input_size)
+            loss = outputs["total_loss"]
+            self.scaler.scale(loss / group_size).backward()
 
-        if self.use_model_ema:
-            self.ema_model.update(self.model)
+        if should_step:
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
 
-        lr = self.lr_scheduler.update_lr(self.progress_in_iter + 1)
-        for param_group in self.optimizer.param_groups:
-            param_group["lr"] = lr
+            if self.use_model_ema:
+                self.ema_model.update(self.model)
+
+            optimizer_progress = (
+                self.epoch * self.optimizer_iters_per_epoch
+                + math.ceil((self.iter + 1) / self.accumulate)
+            )
+            self.current_lr = self.lr_scheduler.update_lr(optimizer_progress)
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = self.current_lr
+
+        lr = self.current_lr
 
         iter_end_time = time.time()
         self.meter.update(
@@ -154,10 +179,14 @@ class Trainer:
         self.prefetcher = DataPrefetcher(self.train_loader,self.task)
         # max_iter means iters per epoch
         self.max_iter = len(self.train_loader)
+        self.optimizer_iters_per_epoch = math.ceil(
+            self.max_iter / self.accumulate)
 
         self.lr_scheduler = self.exp.get_lr_scheduler(
-            self.exp.basic_lr_per_img * self.args.batch_size, self.max_iter
+            self.exp.basic_lr_per_img * self.args.batch_size * self.accumulate,
+            self.optimizer_iters_per_epoch,
         )
+        self.current_lr = self.optimizer.param_groups[0]["lr"]
         if self.args.occupy:
             occupy_mem(self.local_rank)
 
@@ -166,7 +195,8 @@ class Trainer:
 
         if self.use_model_ema:
             self.ema_model = ModelEMA(model, 0.9998)
-            self.ema_model.updates = self.max_iter * self.start_epoch
+            self.ema_model.updates = (
+                self.optimizer_iters_per_epoch * self.start_epoch)
 
         self.model = model
         self.model.train()
@@ -178,7 +208,14 @@ class Trainer:
         if self.rank == 0:
             self.tblogger = SummaryWriter(self.file_name)
 
-        logger.info("Training start...")
+        logger.info(
+            "Training start... physical global batch={}, accumulate={}, "
+            "effective global batch={}".format(
+                self.args.batch_size,
+                self.accumulate,
+                self.args.batch_size * self.accumulate,
+            )
+        )
         #logger.info("\n{}".format(model))
 
     def after_train(self):
@@ -201,7 +238,8 @@ class Trainer:
             else:
                 self.model.head.use_l1 = True
             
-            self.exp.eval_interval = 1
+            self.exp.eval_interval = getattr(
+                self.exp, "no_aug_eval_interval", 1)
             if not self.no_aug:
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
@@ -210,7 +248,8 @@ class Trainer:
             self.ema_model.update_attr(self.model)
 
         self.save_ckpt(ckpt_name="latest")
-        if (self.epoch + 1) % 10 == 0:
+        save_interval = getattr(self.exp, "save_interval", 10)
+        if (self.epoch + 1) % save_interval == 0:
             self.save_ckpt(ckpt_name="epoch_{}".format(self.epoch+1))
         if (self.epoch + 1) % self.exp.eval_interval == 0: 
             all_reduce_norm(self.model)
@@ -313,9 +352,9 @@ class Trainer:
             logger.info("\n" + summary)
         synchronize()
 
+        is_best = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
-        self.save_ckpt("last_epoch", ap50 > self.best_ap)
-        self.best_ap = max(self.best_ap, ap50)
+        self.save_ckpt("last_epoch", is_best)
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:

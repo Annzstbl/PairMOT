@@ -20,11 +20,12 @@ class DiffusionNet(nn.Module):
         self.backbone=backbone
         self.head=head
         self.projs=nn.ModuleList()
-        in_channels=backbone.in_channels
+        in_channels = getattr(backbone, "out_channels", backbone.in_channels)
+        channel_scale = getattr(backbone, "channel_scale", head.width)
         for i in range(len(in_channels)):
             self.projs.append(
                 BaseConv(
-                    in_channels=int(in_channels[i] * head.width),
+                    in_channels=int(in_channels[i] * channel_scale),
                     out_channels=int(head.hidden_dim),
                     ksize=1,
                     stride=1,
@@ -83,5 +84,4 @@ class DiffusionNet(nn.Module):
             outputs = self.head(features,mate_info,targets=pre_targets)
 
         return outputs
-
 

@@ -7,4 +7,5 @@ from .losses import IOUloss
 from .yolo_fpn import YOLOFPN
 from .yolo_head import YOLOXHead
 from .yolo_pafpn import YOLOPAFPN
+from .yolo11_backbone import YOLO11BackboneAdapter, YOLO11ConvMSIStem
 from .yolox import YOLOX

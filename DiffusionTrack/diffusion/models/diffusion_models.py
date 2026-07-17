@@ -8,16 +8,50 @@ import torch.nn.functional as F
 
 from einops import rearrange, repeat
 from einops_exts import rearrange_many
+from mmcv.ops import roi_align_rotated
 
 
 
 def exists(val):
     return val is not None
-from detectron2.modeling.poolers import ROIPooler
-from detectron2.structures import Boxes
-
-
 _DEFAULT_SCALE_CLAMP = math.log(100000.0 / 16)
+
+
+class RotatedROIPooler(nn.Module):
+    """Minimal FPN rotated ROIAlign preserving Detectron2 ROIPooler order."""
+
+    def __init__(self, output_size, scales, sampling_ratio=2):
+        super().__init__()
+        self.output_size = (output_size, output_size)
+        self.scales = tuple(scales)
+        self.sampling_ratio = sampling_ratio
+
+    def forward(self, features, boxes_per_image):
+        counts = [len(boxes) for boxes in boxes_per_image]
+        if sum(counts) == 0:
+            return features[0].new_zeros(
+                (0, features[0].shape[1], *self.output_size))
+        rois = []
+        for batch_index, boxes in enumerate(boxes_per_image):
+            if len(boxes):
+                indices = boxes.new_full((len(boxes), 1), batch_index)
+                rois.append(torch.cat([indices, boxes], dim=1))
+        rois = torch.cat(rois, dim=0)
+        sizes = torch.sqrt((rois[:, 3] * rois[:, 4]).clamp_min(1e-6))
+        levels = torch.floor(4 + torch.log2(sizes / 224.0 + 1e-8))
+        min_level = int(round(-math.log2(self.scales[0])))
+        max_level = int(round(-math.log2(self.scales[-1])))
+        levels = levels.clamp(min_level, max_level).long() - min_level
+        output = features[0].new_zeros(
+            (len(rois), features[0].shape[1], *self.output_size))
+        for level, (feature, scale) in enumerate(zip(features, self.scales)):
+            indices = torch.where(levels == level)[0]
+            if len(indices) == 0:
+                continue
+            output[indices] = roi_align_rotated(
+                feature, rois[indices].to(feature.dtype), self.output_size,
+                scale, self.sampling_ratio, True, False)
+        return output
 
 
 
@@ -125,19 +159,15 @@ class DynamicHead(nn.Module):
 
         pooler_scales = [1/s for s in strides]
         sampling_ratio = 2
-        pooler_type = "ROIAlignV2"
 
         # If StandardROIHeads is applied on multiple feature maps (as in FPN),
         # then we share the same predictors and therefore the channel counts must be the same
         # Check all channel counts are equal
         assert len(set(in_channels)) == 1, in_channels
 
-        box_pooler = ROIPooler(
-            output_size=pooler_resolution,
-            scales=pooler_scales,
-            sampling_ratio=sampling_ratio,
-            pooler_type=pooler_type,
-        )
+        box_pooler = RotatedROIPooler(
+            output_size=pooler_resolution, scales=pooler_scales,
+            sampling_ratio=sampling_ratio)
         return box_pooler
 
     def forward(self,features,init_bboxes,t,lost_features=None,fix_ref_boxes=False):
@@ -168,7 +198,7 @@ class DynamicHead(nn.Module):
 class RCNNHead(nn.Module):
 
     def __init__(self,d_model, num_classes, pooler_resolution,dim_feedforward=2048, nhead=8, dropout=0.1, activation="relu",
-                 scale_clamp: float = _DEFAULT_SCALE_CLAMP, bbox_weights=(2.0, 2.0, 1.0, 1.0),use_focal=False,use_fed_loss=False):
+                 scale_clamp: float = _DEFAULT_SCALE_CLAMP, bbox_weights=(2.0, 2.0, 1.0, 1.0, 1.0),use_focal=False,use_fed_loss=False):
         super().__init__()
 
         self.d_model = d_model
@@ -236,11 +266,15 @@ class RCNNHead(nn.Module):
         else:
             self.class_logits = nn.Linear(d_model, num_classes + 1)
         self.score_logits=nn.Linear(d_model,1)
-        self.bboxes_delta = nn.Linear(d_model, 4)
+        self.bboxes_delta = nn.Linear(d_model, 5)
         self.scale_clamp = scale_clamp
         self.bbox_weights = bbox_weights
         nn.init.constant_(self.class_logits.bias,-math.log((1 - 1e-2) / 1e-2))
         nn.init.constant_(self.bboxes_delta.bias,-math.log((1 - 1e-2) / 1e-2))
+        # Angle is a residual around the proposal orientation, not a positive
+        # size prior.  Starting it at zero preserves the proposal angle.
+        with torch.no_grad():
+            self.bboxes_delta.bias[4::5].zero_()
         for sub_module in self.reg_module:
             if isinstance(sub_module,nn.Linear):
                 nn.init.constant_(sub_module.bias,-math.log((1 - 1e-2) / 1e-2))
@@ -267,8 +301,8 @@ class RCNNHead(nn.Module):
         proposal_boxes_pre = list()
         proposal_boxes_curr = list()
         for b in range(N):
-            proposal_boxes_pre.append(Boxes(bboxes_pre[b]))
-            proposal_boxes_curr.append(Boxes(bboxes_cur[b]))
+            proposal_boxes_pre.append(bboxes_pre[b])
+            proposal_boxes_curr.append(bboxes_cur[b])
 
         roi_features_pre = pooler(features[0], proposal_boxes_pre)
         if lost_features is not None:
@@ -374,36 +408,37 @@ class RCNNHead(nn.Module):
 
         association_score=self.score_logits(score_feature)
 
-        pred_bboxes_pre = self.apply_deltas(bboxes_deltas_pre, bboxes_pre.view(-1, 4))
+        pred_bboxes_pre = self.apply_deltas(bboxes_deltas_pre, bboxes_pre.view(-1, 5))
         if fix_ref_boxes:
             assert not self.training,"fix reference bboxes only for inference mode"
             pred_bboxes_pre[:nr_boxes]=bboxes_pre[0,:nr_boxes]
-        pred_bboxes_curr = self.apply_deltas(bboxes_deltas_curr, bboxes_cur.view(-1, 4))
+        pred_bboxes_curr = self.apply_deltas(bboxes_deltas_curr, bboxes_cur.view(-1, 5))
             
         return (class_logits_pre.view(N, nr_boxes, -1),class_logits_curr.view(N, nr_boxes, -1)), (pred_bboxes_pre.view(N, nr_boxes, -1),pred_bboxes_curr.view(N, nr_boxes, -1)),obj_features,association_score.view(N, nr_boxes, -1)
 
     def apply_deltas(self, deltas, boxes):
         """
-        Apply transformation `deltas` (dx, dy, dw, dh) to `boxes`.
+        Apply ``(dx,dy,dw,dh,dtheta)`` to rotated ``(cx,cy,w,h,theta)``.
 
         Args:
-            deltas (Tensor): transformation deltas of shape (N, k*4), where k >= 1.
+            deltas (Tensor): transformation deltas of shape (N, k*5), where k >= 1.
                 deltas[i] represents k potentially different class-specific
                 box transformations for the single box boxes[i].
-            boxes (Tensor): boxes to transform, of shape (N, 4)
+            boxes (Tensor): boxes to transform, of shape (N, 5)
         """
         boxes = boxes.to(deltas.dtype)
 
-        widths = boxes[:, 2] - boxes[:, 0]
-        heights = boxes[:, 3] - boxes[:, 1]
-        ctr_x = boxes[:, 0] + 0.5 * widths
-        ctr_y = boxes[:, 1] + 0.5 * heights
+        ctr_x, ctr_y = boxes[:, 0], boxes[:, 1]
+        widths = boxes[:, 2].clamp_min(1e-6)
+        heights = boxes[:, 3].clamp_min(1e-6)
+        angles = boxes[:, 4]
 
-        wx, wy, ww, wh = self.bbox_weights
-        dx = deltas[:, 0::4] / wx
-        dy = deltas[:, 1::4] / wy
-        dw = deltas[:, 2::4] / ww
-        dh = deltas[:, 3::4] / wh
+        wx, wy, ww, wh, wa = self.bbox_weights
+        dx = deltas[:, 0::5] / wx
+        dy = deltas[:, 1::5] / wy
+        dw = deltas[:, 2::5] / ww
+        dh = deltas[:, 3::5] / wh
+        da = deltas[:, 4::5] / wa
 
         # Prevent sending too large values into torch.exp()
         dw = torch.clamp(dw, max=self.scale_clamp)
@@ -415,10 +450,12 @@ class RCNNHead(nn.Module):
         pred_h = torch.exp(dh) * heights[:, None]
 
         pred_boxes = torch.zeros_like(deltas)
-        pred_boxes[:, 0::4] = pred_ctr_x - 0.5 * pred_w  # x1
-        pred_boxes[:, 1::4] = pred_ctr_y - 0.5 * pred_h  # y1
-        pred_boxes[:, 2::4] = pred_ctr_x + 0.5 * pred_w  # x2
-        pred_boxes[:, 3::4] = pred_ctr_y + 0.5 * pred_h  # y2
+        pred_boxes[:, 0::5] = pred_ctr_x
+        pred_boxes[:, 1::5] = pred_ctr_y
+        pred_boxes[:, 2::5] = pred_w
+        pred_boxes[:, 3::5] = pred_h
+        pred_boxes[:, 4::5] = torch.remainder(
+            angles[:, None] + da + math.pi / 2, math.pi) - math.pi / 2
 
         return pred_boxes
 

@@ -181,6 +181,10 @@ def _distributed_worker(
     ), "cuda is not available. Please check your installation."
     configure_nccl()
     global_rank = machine_rank * num_gpus_per_machine + local_rank
+    # Select the rank-local GPU before initializing NCCL.  Otherwise rank 1
+    # briefly uses the default cuda:0 device during the first barrier and
+    # leaves a persistent CUDA context on rank 0's physical GPU.
+    torch.cuda.set_device(local_rank)
     logger.info("Rank {} initialization finished.".format(global_rank))
     try:
         dist.init_process_group(
@@ -202,8 +206,6 @@ def _distributed_worker(
         os.remove("./" + args[1].experiment_name + "_ip_add.txt")
 
     assert num_gpus_per_machine <= torch.cuda.device_count()
-    torch.cuda.set_device(local_rank)
-
     args[1].local_rank = local_rank
     args[1].num_machines = num_machines
 
