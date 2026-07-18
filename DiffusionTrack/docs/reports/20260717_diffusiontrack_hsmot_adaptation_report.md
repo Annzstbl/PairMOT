@@ -203,6 +203,9 @@ CUDA_VISIBLE_DEVICES=0 python tools/track.py \
 - 重启后iteration 20/40/60的真实训练`data_time`分别为0.003/0.148/0.260秒，迭代时间约1.15--1.51秒，loss及全部子loss有限。8 workers已能用预取隐藏大部分NFS延迟，暂不需要迁移约72.3 GB训练NPY到仅余约98 GB的本地盘。
 - Stage 1已改为每5 epoch保存具名checkpoint并执行完整验证；验证指标为类别感知旋转IoU下的COCO 101点插值`mAP50`和`mAP50:95`，阈值范围为0.50:0.05:0.95。验证在DDP rank 0顺序执行，其余rank同步等待，并使用AMP降低显存；`best_ckpt`按`mAP50:95`更新。单张真实HSMOT验证样本已完成旋转推理、NMS、IoU匹配和AP汇总烟雾测试。
 - 加入上述验证后已从epoch 1重新启动，旧训练输出保留为后缀`_before_val5_20260717`。新任务rank PID为1668/1669，分别只占GPU 1/2；epoch 1 iteration 20的loss为45.019、`data_time=0.002s`，训练正常。
+- 首次训练在epoch 10约iteration 1680后由一个极端diffusion proposal触发AMP数值溢出：未约束的角度delta成为`inf`，旋转框解码中的`remainder(inf, pi)`产生`NaN`并污染Dynamic-K cost；rank 0退出后旧启动器未清理rank 1，导致GPU 2看似仍在单卡运行，实际DDP已经停止。检查epoch 9 `latest_ckpt`确认约2.94亿模型parameter/buffer以及全部AdamW状态均为有限值。
+- 数值修复只作用于无效极端proposal：旋转框delta解码强制使用FP32，宽高delta采用对称clamp，解码结果限制在FP16 ROIAlign可表示范围；匹配器排除非有限proposal而保留全部有效proposal及其原cost。启动器同时改为任一rank失败时自动终止其余rank。真实HSMOT batch从epoch 9 checkpoint执行AMP前向及scale=1反向通过，19项loss和全部梯度有限，峰值显存约8.26 GiB。
+- 2026-07-18已从`start_epoch=9`的`latest_ckpt`双卡resume，rank PID 41296/41297分别只使用GPU 1/2；epoch 10 iteration 20的`total_loss=23.132`、`data_time=0.003s`，两卡显存约20.7/20.5 GiB，所有子loss有限。
 
 ### 8.5 checkpoint、推理和输出测试
 

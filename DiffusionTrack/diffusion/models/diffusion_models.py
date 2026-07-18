@@ -426,36 +426,50 @@ class RCNNHead(nn.Module):
                 box transformations for the single box boxes[i].
             boxes (Tensor): boxes to transform, of shape (N, 5)
         """
-        boxes = boxes.to(deltas.dtype)
+        # BBox decoding is particularly sensitive to AMP overflow: an FP16
+        # angle delta can become inf and ``remainder(inf, pi)`` is NaN.  Keep
+        # this small geometry operation in FP32.  The clipping only affects
+        # invalid, far-outside-image diffusion proposals and keeps later
+        # FP16 rotated ROIAlign inputs representable.
+        with torch.cuda.amp.autocast(enabled=False):
+            deltas = torch.nan_to_num(
+                deltas.float(), nan=0.0,
+                posinf=self.scale_clamp, neginf=-self.scale_clamp)
+            boxes = torch.nan_to_num(
+                boxes.float(), nan=0.0, posinf=32768.0, neginf=-32768.0)
 
-        ctr_x, ctr_y = boxes[:, 0], boxes[:, 1]
-        widths = boxes[:, 2].clamp_min(1e-6)
-        heights = boxes[:, 3].clamp_min(1e-6)
-        angles = boxes[:, 4]
+            ctr_x, ctr_y = boxes[:, 0], boxes[:, 1]
+            widths = boxes[:, 2].clamp(1e-6, 32768.0)
+            heights = boxes[:, 3].clamp(1e-6, 32768.0)
+            angles = boxes[:, 4]
 
-        wx, wy, ww, wh, wa = self.bbox_weights
-        dx = deltas[:, 0::5] / wx
-        dy = deltas[:, 1::5] / wy
-        dw = deltas[:, 2::5] / ww
-        dh = deltas[:, 3::5] / wh
-        da = deltas[:, 4::5] / wa
+            wx, wy, ww, wh, wa = self.bbox_weights
+            dx = deltas[:, 0::5] / wx
+            dy = deltas[:, 1::5] / wy
+            dw = deltas[:, 2::5] / ww
+            dh = deltas[:, 3::5] / wh
+            da = deltas[:, 4::5] / wa
 
-        # Prevent sending too large values into torch.exp()
-        dw = torch.clamp(dw, max=self.scale_clamp)
-        dh = torch.clamp(dh, max=self.scale_clamp)
+            # Symmetric clamping also prevents underflowed zero-sized boxes.
+            dw = torch.clamp(dw, -self.scale_clamp, self.scale_clamp)
+            dh = torch.clamp(dh, -self.scale_clamp, self.scale_clamp)
 
-        pred_ctr_x = dx * widths[:, None] + ctr_x[:, None]
-        pred_ctr_y = dy * heights[:, None] + ctr_y[:, None]
-        pred_w = torch.exp(dw) * widths[:, None]
-        pred_h = torch.exp(dh) * heights[:, None]
+            pred_ctr_x = (dx * widths[:, None] + ctr_x[:, None]).clamp(
+                -32768.0, 32768.0)
+            pred_ctr_y = (dy * heights[:, None] + ctr_y[:, None]).clamp(
+                -32768.0, 32768.0)
+            pred_w = (torch.exp(dw) * widths[:, None]).clamp(
+                1e-6, 32768.0)
+            pred_h = (torch.exp(dh) * heights[:, None]).clamp(
+                1e-6, 32768.0)
 
-        pred_boxes = torch.zeros_like(deltas)
-        pred_boxes[:, 0::5] = pred_ctr_x
-        pred_boxes[:, 1::5] = pred_ctr_y
-        pred_boxes[:, 2::5] = pred_w
-        pred_boxes[:, 3::5] = pred_h
-        pred_boxes[:, 4::5] = torch.remainder(
-            angles[:, None] + da + math.pi / 2, math.pi) - math.pi / 2
+            pred_boxes = torch.zeros_like(deltas)
+            pred_boxes[:, 0::5] = pred_ctr_x
+            pred_boxes[:, 1::5] = pred_ctr_y
+            pred_boxes[:, 2::5] = pred_w
+            pred_boxes[:, 3::5] = pred_h
+            pred_boxes[:, 4::5] = torch.remainder(
+                angles[:, None] + da + math.pi / 2, math.pi) - math.pi / 2
 
         return pred_boxes
 

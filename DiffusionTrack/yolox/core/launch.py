@@ -159,10 +159,36 @@ def launch_by_subprocess(
         process = subprocess.Popen(cmd, env=current_env)
         processes.append(process)
 
+    failed_process = None
+    while True:
+        for process in processes:
+            returncode = process.poll()
+            if returncode is not None and returncode != 0:
+                failed_process = process
+                break
+        if failed_process is not None or all(
+                process.poll() is not None for process in processes):
+            break
+        time.sleep(0.1)
+
+    if failed_process is not None:
+        # Do not leave the other DDP rank blocked in a collective and holding
+        # an entire GPU when one rank raises an exception.
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+        deadline = time.time() + 10
+        for process in processes:
+            if process.poll() is None:
+                try:
+                    process.wait(timeout=max(0.0, deadline - time.time()))
+                except subprocess.TimeoutExpired:
+                    process.kill()
+        raise subprocess.CalledProcessError(
+            returncode=failed_process.returncode, cmd=cmd)
+
     for process in processes:
         process.wait()
-        if process.returncode != 0:
-            raise subprocess.CalledProcessError(returncode=process.returncode, cmd=cmd)
 
 
 def _distributed_worker(

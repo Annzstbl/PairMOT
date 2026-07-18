@@ -407,7 +407,22 @@ class HungarianMatcherDynamicK(nn.Module):
 
                 # Final cost matrix
                 cost = self.cost_bbox * (cost_bbox_pre+cost_bbox_curr)/2 + self.cost_class * cost_class/2 + self.cost_giou * cost_giou + 100.0 * (~is_in_boxes_and_center)
-                assert not torch.any(torch.isnan(cost)),"Error nan value occurs"
+                # A single invalid diffusion proposal must not terminate all
+                # DDP ranks. Exclude non-finite proposal rows from matching;
+                # valid rows and their original costs are left untouched.
+                valid_rows = (
+                    torch.isfinite(bz_boxes_pre).all(dim=1)
+                    & torch.isfinite(bz_boxes_curr).all(dim=1)
+                    & torch.isfinite(bz_out_prob_pre).all(dim=1)
+                    & torch.isfinite(bz_out_prob_curr).all(dim=1)
+                )
+                if not valid_rows.any():
+                    raise FloatingPointError(
+                        "all diffusion proposals are non-finite during matching")
+                cost = torch.where(
+                    torch.isfinite(cost), cost,
+                    torch.full_like(cost, 1e8))
+                cost[~valid_rows] = 1e8
                 # cost = (cost_class + 3.0 * cost_giou + 100.0 * (~is_in_boxes_and_center))  # [num_query,num_gt]
                 cost[~fg_mask] = cost[~fg_mask] + 10000.0
 
