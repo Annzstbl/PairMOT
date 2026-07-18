@@ -58,7 +58,17 @@ class YOLO11ConvMSIStem(nn.Module):
             raise ValueError("YOLO11 ConvMSI expects [B,8,H,W], got {}".
                              format(tuple(x.shape)))
         x = self.act(self.bn3d(self.conv3d(x)))
-        return self.act(self.bn2d(self.fuse(x).squeeze(2)))
+        output_dtype = x.dtype
+        # Torch 2.0/cu118 does not implement the depthwise Conv3D CUDA kernel
+        # for BF16. This is the exact same convolution and weights; only its
+        # arithmetic runs in FP32 before returning to the autocast dtype.
+        if output_dtype == torch.bfloat16:
+            with torch.cuda.amp.autocast(enabled=False):
+                x = self.fuse(x.float()).squeeze(2)
+            x = x.to(output_dtype)
+        else:
+            x = self.fuse(x).squeeze(2)
+        return self.act(self.bn2d(x))
 
 
 def _load_yolo_task_model(model_cfg, weights):
@@ -153,6 +163,12 @@ class YOLO11BackboneAdapter(nn.Module):
                 else:
                     current = [current if index == -1 else saved[index]
                                for index in module.f]
-            current = module(current)
+            # Torch 2.0/cu118 likewise lacks BF16 nearest-neighbour upsample.
+            # Keep only this parameter-free resize in FP32.
+            if isinstance(module, nn.Upsample) and current.dtype == torch.bfloat16:
+                with torch.cuda.amp.autocast(enabled=False):
+                    current = module(current.float()).to(torch.bfloat16)
+            else:
+                current = module(current)
             saved.append(current if module.i in self.task_model.save else None)
         return tuple(saved[index] for index in self.feature_indices)

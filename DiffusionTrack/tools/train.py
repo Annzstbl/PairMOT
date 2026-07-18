@@ -78,7 +78,13 @@ def make_parser():
         dest="fp16",
         default=False,
         action="store_true",
-        help="Adopting mix precision training.",
+        help="Legacy alias for --amp-dtype fp16.",
+    )
+    parser.add_argument(
+        "--amp-dtype",
+        choices=("fp32", "fp16", "bf16"),
+        default="fp32",
+        help="Autocast dtype. BF16 is recommended on Ampere GPUs.",
     )
     parser.add_argument(
         "-o",

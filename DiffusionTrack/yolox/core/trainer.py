@@ -41,8 +41,22 @@ class Trainer:
         # training related attr
         self.task=exp.task
         self.max_epoch = exp.max_epoch
-        self.amp_training = args.fp16
-        self.scaler = torch.cuda.amp.GradScaler(enabled=args.fp16)
+        amp_dtype = getattr(args, "amp_dtype", "fp32")
+        if args.fp16:
+            if amp_dtype not in ("fp32", "fp16"):
+                raise ValueError("--fp16 conflicts with --amp-dtype {}".format(
+                    amp_dtype))
+            amp_dtype = "fp16"
+        self.amp_dtype_name = amp_dtype
+        self.amp_training = amp_dtype != "fp32"
+        self.amp_dtype = {
+            "fp32": torch.float32,
+            "fp16": torch.float16,
+            "bf16": torch.bfloat16,
+        }[amp_dtype]
+        if amp_dtype == "bf16" and not torch.cuda.is_bf16_supported():
+            raise RuntimeError("BF16 was requested but this GPU does not support it")
+        self.scaler = torch.cuda.amp.GradScaler(enabled=amp_dtype == "fp16")
         self.accumulate = int(getattr(args, "accumulate", 1))
         if self.accumulate < 1:
             raise ValueError("--accumulate must be at least 1")
@@ -53,7 +67,11 @@ class Trainer:
         self.use_model_ema = exp.ema
 
         # data/dataloader related attr
-        self.data_type = torch.float16 if args.fp16 else torch.float32
+        self.data_type = self.amp_dtype
+        self.target_type = torch.float32
+        self.optimizer_step = 0
+        self.skipped_optimizer_steps = 0
+        self._ema_state = None
         self.input_size = exp.input_size
         self.random_flip=exp.random_flip
         self.best_ap = 0
@@ -98,11 +116,11 @@ class Trainer:
         pre_inps, pre_targets,cur_inps,cur_targets= self.prefetcher.next()
         pre_inps = pre_inps.to(self.data_type)
         target_dim = getattr(self.exp, "target_dim", 5)
-        pre_targets = pre_targets[:, :, :target_dim].to(self.data_type)
+        pre_targets = pre_targets[:, :, :target_dim].to(self.target_type)
         pre_targets.requires_grad = False
         if self.task=="tracking":
             cur_inps = cur_inps.to(self.data_type)
-            cur_targets = cur_targets[:, :, :target_dim].to(self.data_type)
+            cur_targets = cur_targets[:, :, :target_dim].to(self.target_type)
             cur_targets.requires_grad = False
 
         data_end_time = time.time()
@@ -120,25 +138,32 @@ class Trainer:
             else self.model.no_sync()
         )
         with sync_context:
-            with torch.cuda.amp.autocast(enabled=self.amp_training):
+            with torch.cuda.amp.autocast(
+                    enabled=self.amp_training, dtype=self.amp_dtype):
                 outputs = self.model(inps,targets,self.random_flip,self.input_size)
             loss = outputs["total_loss"]
             self.scaler.scale(loss / group_size).backward()
 
         if should_step:
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            optimizer_ran = True
+            if self.scaler.is_enabled():
+                old_scale = self.scaler.get_scale()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+                optimizer_ran = self.scaler.get_scale() >= old_scale
+            else:
+                self.optimizer.step()
 
-            if self.use_model_ema:
-                self.ema_model.update(self.model)
-
-            optimizer_progress = (
-                self.epoch * self.optimizer_iters_per_epoch
-                + math.ceil((self.iter + 1) / self.accumulate)
-            )
-            self.current_lr = self.lr_scheduler.update_lr(optimizer_progress)
-            for param_group in self.optimizer.param_groups:
-                param_group["lr"] = self.current_lr
+            if optimizer_ran:
+                self.optimizer_step += 1
+                if self.use_model_ema:
+                    self.ema_model.update(self.model)
+                self.current_lr = self.lr_scheduler.update_lr(
+                    self.optimizer_step)
+                for param_group in self.optimizer.param_groups:
+                    param_group["lr"] = self.current_lr
+            else:
+                self.skipped_optimizer_steps += 1
 
         lr = self.current_lr
 
@@ -186,6 +211,11 @@ class Trainer:
             self.exp.basic_lr_per_img * self.args.batch_size * self.accumulate,
             self.optimizer_iters_per_epoch,
         )
+        if self.optimizer_step < 0:
+            # Backward compatibility for checkpoints written before the
+            # successful optimizer-step counter was persisted.
+            self.optimizer_step = (
+                self.start_epoch * self.optimizer_iters_per_epoch)
         self.current_lr = self.optimizer.param_groups[0]["lr"]
         if self.args.occupy:
             occupy_mem(self.local_rank)
@@ -195,8 +225,9 @@ class Trainer:
 
         if self.use_model_ema:
             self.ema_model = ModelEMA(model, 0.9998)
-            self.ema_model.updates = (
-                self.optimizer_iters_per_epoch * self.start_epoch)
+            if self._ema_state is not None:
+                self.ema_model.ema.load_state_dict(self._ema_state)
+            self.ema_model.updates = self.optimizer_step
 
         self.model = model
         self.model.train()
@@ -317,14 +348,23 @@ class Trainer:
 
             ckpt = torch.load(ckpt_file, map_location=self.device)
             # resume the model/optimizer state dict
-            model.load_state_dict(ckpt["model"])
+            # New checkpoints retain the raw train model separately while the
+            # legacy ``model`` key remains EMA for inference compatibility.
+            model.load_state_dict(ckpt.get("raw_model", ckpt["model"]))
             self.optimizer.load_state_dict(ckpt["optimizer"])
+            if self.scaler.is_enabled() and ckpt.get("scaler") is not None:
+                self.scaler.load_state_dict(ckpt["scaler"])
+            self._ema_state = ckpt.get("ema_model", ckpt["model"])
             start_epoch = (
                 self.args.start_epoch - 1
                 if self.args.start_epoch is not None
                 else ckpt["start_epoch"]
             )
             self.start_epoch = start_epoch
+            self.optimizer_step = ckpt.get("optimizer_step", -1)
+            self.skipped_optimizer_steps = ckpt.get(
+                "skipped_optimizer_steps", 0)
+            self.best_ap = ckpt.get("best_ap", 0)
             logger.info(
                 "loaded checkpoint '{}' (epoch {})".format(
                     self.args.resume, self.start_epoch
@@ -358,12 +398,24 @@ class Trainer:
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:
-            save_model = self.ema_model.ema if self.use_model_ema else self.model
+            raw_model = (self.model.module if hasattr(self.model, "module")
+                         else self.model)
             logger.info("Save weights to {}".format(self.file_name))
             ckpt_state = {
                 "start_epoch": self.epoch + 1,
-                "model": save_model.state_dict(),
+                # Keep the established inference contract: ``model`` is EMA.
+                "model": (self.ema_model.ema.state_dict()
+                          if self.use_model_ema else raw_model.state_dict()),
+                "raw_model": raw_model.state_dict(),
+                "ema_model": (self.ema_model.ema.state_dict()
+                              if self.use_model_ema else None),
                 "optimizer": self.optimizer.state_dict(),
+                "optimizer_step": self.optimizer_step,
+                "scaler": (self.scaler.state_dict()
+                           if self.scaler.is_enabled() else None),
+                "amp_dtype": self.amp_dtype_name,
+                "skipped_optimizer_steps": self.skipped_optimizer_steps,
+                "best_ap": self.best_ap,
             }
             save_checkpoint(
                 ckpt_state,

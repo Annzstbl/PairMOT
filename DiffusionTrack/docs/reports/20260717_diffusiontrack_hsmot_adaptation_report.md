@@ -115,7 +115,7 @@ conda activate py310
 # Stage 1：双卡每卡2张，累积4个micro-batch，有效全局BS=16
 CUDA_VISIBLE_DEVICES=2,3 python tools/train.py \
   -f exps/example/mot/yolo11l_diffusion_det_hsmot.py \
-  -d 2 -b 4 --accumulate 4 --fp16
+  -d 2 -b 4 --accumulate 4 --amp-dtype bf16
 
 # Stage 2
 CUDA_VISIBLE_DEVICES=0 python tools/train.py \
@@ -232,3 +232,13 @@ CUDA_VISIBLE_DEVICES=0 python tools/track.py \
 ## 9. 当前状态与注意事项
 
 代码当前已经具备从MMOT官方YOLO11L起点开始Stage 1正式训练的条件。正式训练前需要确认目标机器上存在`/data4/litianhao/PairMmot/pretrained_weights/mmot_official/yolo11L-8ch-3dstem.pt`；如果路径不同，应复制该文件或设置`YOLO11_WEIGHTS`。Stage 2必须使用Stage 1完整checkpoint启动，否则冻结的YOLO11骨干将保持随机初始化。当前测试只验证工程链路和数值稳定性，尚未产生可用于比较的正式训练精度。
+
+## 10. AMP NaN根因与BF16修复（2026-07-18）
+
+epoch 8 checkpoint的约2.94亿模型parameter/buffer及全部AdamW状态经逐张量检查均为有限值，但原FP16任务在epoch 9从iteration 460开始间歇出现主输出`loss_ce=NaN`，日志至少记录15次，最终在iteration 980之后出现整个YOLO11输出特征、proposal logits和旋转框均为NaN并退出。根因不是单一旋转框异常，而是两条AMP数值链：其一，原版分类融合使用`p=sqrt(sigmoid(logit)*score)`后执行`clamp(1e-6,1-1e-6)`和手写inverse-logit；FP16/BF16均会把`1-1e-6`舍入成1，导致正样本`BCEWithLogits(+inf,1)=NaN`，GPU复现同时确认反向梯度为NaN。其二，最终异常栈证明进入DiffusionHead前的YOLO11特征已经全NaN，说明FP16 backbone仍存在激活溢出路径；matcher中的非有限proposal屏蔽只能处理症状，不能修复这两条上游链。
+
+训练AMP现改为显式`--amp-dtype {fp32,fp16,bf16}`，3090正式配置使用BF16以获得FP32同级指数范围，旧`--fp16`仅保留为兼容别名。分类几何均值、`torch.logit(eps=1e-6)`、focal/BCE、Dynamic-K matcher概率与cost、旋转框delta解码均固定为FP32，保持原方法公式和匹配逻辑不变。当前Torch 2.0.1/cu118缺少BF16 depthwise Conv3D和nearest-upsample kernel，MMCV 2.2也缺少BF16 rotated ROIAlign kernel，因此仅ConvMSI的谱融合Conv3D、YOLO11无参数上采样和rotated ROIAlign局部使用FP32，输出随即转回BF16；网络结构、参数和梯度路径均未改变。
+
+checkpoint同时补充raw model、EMA model、optimizer成功更新次数、AMP dtype、GradScaler及skip计数。`model`键仍保存EMA以兼容原推理入口，resume优先恢复`raw_model`，避免此前EMA参数配raw optimizer state的不严格组合。FP16下只有GradScaler真正执行optimizer step后才更新EMA和学习率；BF16不使用GradScaler。旧checkpoint没有optimizer-step字段时按`已完成epoch数×每epoch累积后step数`恢复。
+
+本机RTX 3090验证结果如下：饱和BF16分类概率的loss和logits/score梯度全部有限；BF16特征通过FP32 rotated ROIAlign桥接后前反向有限；YOLO11L+ConvMSI+六层DiffusionHead在`256×320`及原生`900×1200`完成完整前向、19项loss和反向，所有loss与参数梯度有限，`900×1200`峰值显存约8525 MiB。223使用相同py310环境的BF16完整模型前反向同样通过。正式任务使用GPU 2、3、`-d 2 -b 4 --accumulate 4 --amp-dtype bf16`，有效全局BS=16，从已确认有限的epoch 8 checkpoint恢复到独立实验目录`yolo11l_diffusion_det_hsmot_b4_d2_acc4_bf16_w8`；日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_resume_bf16_nanfix_20260718.log`。

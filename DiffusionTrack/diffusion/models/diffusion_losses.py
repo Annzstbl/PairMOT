@@ -113,10 +113,16 @@ class SetCriterionDynamicK(nn.Module):
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
         """
         assert 'pred_logits' in outputs
-        src_logits = outputs['pred_logits']
-        conf_score=torch.cat([outputs['pred_scores'],outputs['pred_scores']],dim=0)
-        p=torch.sqrt(torch.sigmoid(src_logits)*conf_score).clamp(1e-6, 1 - 1e-6)
-        src_logits=torch.log(p/(1-p))
+        # The original inverse-logit fusion is unsafe in both FP16 and BF16:
+        # ``1 - 1e-6`` rounds to exactly one, making log(p / (1-p)) infinite.
+        # Preserve the original geometric-mean fusion but evaluate it, focal
+        # loss included, in FP32 with a representable logit clamp.
+        with torch.cuda.amp.autocast(enabled=False):
+            src_logits = outputs['pred_logits'].float()
+            conf_score = torch.cat(
+                [outputs['pred_scores'], outputs['pred_scores']], dim=0).float()
+            p = torch.sqrt(torch.sigmoid(src_logits) * conf_score)
+            src_logits = torch.logit(p, eps=1e-6)
         batch_size = len(targets)
 
         # src_logits_re=torch.cat((src_logits[:batch_size//2],src_logits[batch_size//2:]),dim=0)
@@ -145,7 +151,7 @@ class SetCriterionDynamicK(nn.Module):
             num_boxes = torch.cat(target_classes_o_list).shape[0] if len(target_classes_o_list) != 0 else 1
 
             target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], self.num_classes + 1],
-                                                dtype=src_logits.dtype, layout=src_logits.layout,
+                                                dtype=torch.float32, layout=src_logits.layout,
                                                 device=src_logits.device)
             target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
             loss_ce=0
@@ -319,12 +325,12 @@ class HungarianMatcherDynamicK(nn.Module):
 
     def forward(self, outputs, targets):
         """ simOTA for detr"""
-        with torch.no_grad():
+        with torch.no_grad(), torch.cuda.amp.autocast(enabled=False):
             bs, num_queries = outputs["pred_logits"].shape[:2]
-            conf_score=outputs["pred_scores"]
+            conf_score=outputs["pred_scores"].float()
             # We flatten to compute the cost matrices in a batch
-            pred_logits_pre,pred_logits_curr=torch.split(outputs["pred_logits"],bs//2,dim=0)
-            out_bbox_pre,out_bbox_curr = torch.split(outputs["pred_boxes"],bs//2,dim=0)
+            pred_logits_pre,pred_logits_curr=torch.split(outputs["pred_logits"].float(),bs//2,dim=0)
+            out_bbox_pre,out_bbox_curr = torch.split(outputs["pred_boxes"].float(),bs//2,dim=0)
             if self.use_focal or self.use_fed_loss:
                 out_prob_pre = torch.sqrt(pred_logits_pre.sigmoid()*conf_score)  # [batch_size, num_queries, num_classes]
                 out_prob_curr = torch.sqrt(pred_logits_curr.sigmoid()*conf_score)

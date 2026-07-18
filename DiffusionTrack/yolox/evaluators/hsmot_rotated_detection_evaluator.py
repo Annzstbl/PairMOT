@@ -29,6 +29,8 @@ class HSMOTRotatedDetectionEvaluator:
         self.nmsthre3d = nmsthre3d
         self.nmsthre2d = nmsthre2d
         self.amp = amp
+        self.amp_dtype = ({"bf16": torch.bfloat16, "fp16": torch.float16}
+                          .get(amp, torch.float16))
         self.iou_thresholds = np.arange(0.50, 0.96, 0.05)
 
     @staticmethod
@@ -117,7 +119,8 @@ class HSMOTRotatedDetectionEvaluator:
                 model, tensor_type, conf_thresh=self.confthre,
                 det_thresh=self.detthre, nms_thresh_3d=self.nmsthre3d,
                 nms_thresh_2d=self.nmsthre2d)
-            with torch.cuda.amp.autocast(enabled=self.amp or half):
+            with torch.cuda.amp.autocast(
+                    enabled=bool(self.amp) or half, dtype=self.amp_dtype):
                 detections, _ = tracker.update(images)
             for detection in detections:
                 class_id = int(detection.class_id)

@@ -136,7 +136,7 @@ class Exp(MyExp):
             dataloader=loader, num_classes=self.num_classes,
             confthre=0.001, detthre=0.001,
             nmsthre3d=self.nms_thresh3d, nmsthre2d=self.nms_thresh2d,
-            amp=True)
+            amp="bf16")
 
     def get_optimizer(self, batch_size):
         if "optimizer" not in self.__dict__:

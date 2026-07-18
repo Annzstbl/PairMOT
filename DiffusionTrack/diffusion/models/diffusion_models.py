@@ -48,9 +48,14 @@ class RotatedROIPooler(nn.Module):
             indices = torch.where(levels == level)[0]
             if len(indices) == 0:
                 continue
-            output[indices] = roi_align_rotated(
-                feature, rois[indices].to(feature.dtype), self.output_size,
-                scale, self.sampling_ratio, True, False)
+            # MMCV 2.2 has no BF16 kernel for rotated ROIAlign. Keep this
+            # geometry sampling operation in FP32 and return the surrounding
+            # autocast dtype afterwards.
+            with torch.cuda.amp.autocast(enabled=False):
+                pooled = roi_align_rotated(
+                    feature.float(), rois[indices].float(), self.output_size,
+                    scale, self.sampling_ratio, True, False)
+            output[indices] = pooled.to(output.dtype)
         return output
 
 
