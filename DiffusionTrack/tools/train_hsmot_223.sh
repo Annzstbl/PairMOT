@@ -14,13 +14,13 @@ export HSMOT_VAL_ROOT="${RUNTIME}/data/hsmot/test"
 export YOLO11_WEIGHTS="${RUNTIME}/pretrained_weights/mmot_official/yolo11L-8ch-3dstem.pt"
 
 cd "${REPO}"
-resume_args=()
+train_args=(
+  -f exps/example/mot/yolo11l_diffusion_det_hsmot.py
+  -expn yolo11l_diffusion_det_hsmot_b4_d2_acc4_fp16_w8
+  -d 2 -b 4 --accumulate 4 --fp16
+)
 if [[ "${RESUME:-0}" == "1" ]]; then
-  resume_args+=(--resume)
+  train_args+=(--resume)
 fi
-exec python tools/train.py \
-  -f exps/example/mot/yolo11l_diffusion_det_hsmot.py \
-  -expn yolo11l_diffusion_det_hsmot_b4_d2_acc4_fp16_w8 \
-  -d 2 -b 4 --accumulate 4 --fp16 \
-  "${resume_args[@]}" \
-  output_dir "${RUNTIME}/work_dirs" data_num_workers 8
+train_args+=(output_dir "${RUNTIME}/work_dirs" data_num_workers 8)
+exec python tools/train.py "${train_args[@]}"

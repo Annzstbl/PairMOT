@@ -38,7 +38,7 @@ MMOT官方权重位于`/data4/litianhao/PairMmot/pretrained_weights/mmot_officia
 
 - 扩散变量由水平框4维扩展为旋转框5维`(cx,cy,w,h,theta)`。
 - 角度采用`le90`、弧度制，对应扩散归一化空间中的`[0,1]`。
-- 回归分支由4维delta扩展为5维delta，并将角度残差bias初始化为0。
+- 回归分支由4维delta扩展为5维delta；`dx/dy/dw/dh/dtheta`是相对proposal的残差，因此输出层和回归MLP的bias均初始化为0，使初始解码为恒等变换。分类先验bias仍保持原版设置。
 - 解码后的角度统一回绕至`[-pi/2, pi/2)`。
 - 使用MMCV `roi_align_rotated`替换Detectron2水平ROI Pooler，保留原FPN层级分配和ROI顺序。
 - 移除当前训练/推理链对Detectron2和FVCore focal loss的依赖，focal loss改为等价的Torch实现。
@@ -205,7 +205,10 @@ CUDA_VISIBLE_DEVICES=0 python tools/track.py \
 - 加入上述验证后已从epoch 1重新启动，旧训练输出保留为后缀`_before_val5_20260717`。新任务rank PID为1668/1669，分别只占GPU 1/2；epoch 1 iteration 20的loss为45.019、`data_time=0.002s`，训练正常。
 - 首次训练在epoch 10约iteration 1680后由一个极端diffusion proposal触发AMP数值溢出：未约束的角度delta成为`inf`，旋转框解码中的`remainder(inf, pi)`产生`NaN`并污染Dynamic-K cost；rank 0退出后旧启动器未清理rank 1，导致GPU 2看似仍在单卡运行，实际DDP已经停止。检查epoch 9 `latest_ckpt`确认约2.94亿模型parameter/buffer以及全部AdamW状态均为有限值。
 - 数值修复只作用于无效极端proposal：旋转框delta解码强制使用FP32，宽高delta采用对称clamp，解码结果限制在FP16 ROIAlign可表示范围；匹配器排除非有限proposal而保留全部有效proposal及其原cost。启动器同时改为任一rank失败时自动终止其余rank。真实HSMOT batch从epoch 9 checkpoint执行AMP前向及scale=1反向通过，19项loss和全部梯度有限，峰值显存约8.26 GiB。
-- 2026-07-18已从`start_epoch=9`的`latest_ckpt`双卡resume，rank PID 41296/41297分别只使用GPU 1/2；epoch 10 iteration 20的`total_loss=23.132`、`data_time=0.003s`，两卡显存约20.7/20.5 GiB，所有子loss有限。
+- 进一步回查epoch 1--10日志发现，主输出`loss_giou`长期精确停在理论上限2.000，epoch 5验证mAP为0。根因是原水平框代码误将分类正样本先验`-4.595`用于旋转框残差输出bias；解码时`exp(dw/dh)≈0.01`，每个refinement head都会将宽高缩小约100倍。真实增强目标抽查30个样本、2045个框未发现退化框，确认问题不在标注或几何增强。修复仅改初始化，不在forward、匹配或损失热路径增加额外检查。
+- 修复后单元测试确认零delta严格保持`(cx,cy,w,h,theta)`不变；真实HSMOT batch从MMOT官方骨干起点执行AMP前向和反向，全部loss与梯度有限，主Pair Rotated IoU loss为1.941而非固定2.000。
+- 远端第一次重启时发现同步目标误落入顶层仓库下的同名`DiffusionTrack/`子目录，实际训练仍加载顶层旧代码；该次无效输出已归档为`yolo11l_diffusion_det_hsmot_b4_d2_acc4_fp16_w8_wrong_sync_20260718_0127`。核对进程`cwd`及源码SHA256后，补丁已同步到实际执行的顶层目录并从epoch 0重新启动。
+- 当前有效训练日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_bboxinitfix_actual_epoch0_20260718.log`，主进程PID 47013，rank PID 47156/47157分别使用GPU 1/2。epoch 1 iteration 20/40的主`loss_giou`为1.911/1.750，六层旋转IoU损失均脱离固定2.000状态，全部子loss有限，`data_time`为0.001--0.002秒。
 
 ### 8.5 checkpoint、推理和输出测试
 

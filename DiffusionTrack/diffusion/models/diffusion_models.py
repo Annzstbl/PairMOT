@@ -270,14 +270,13 @@ class RCNNHead(nn.Module):
         self.scale_clamp = scale_clamp
         self.bbox_weights = bbox_weights
         nn.init.constant_(self.class_logits.bias,-math.log((1 - 1e-2) / 1e-2))
-        nn.init.constant_(self.bboxes_delta.bias,-math.log((1 - 1e-2) / 1e-2))
-        # Angle is a residual around the proposal orientation, not a positive
-        # size prior.  Starting it at zero preserves the proposal angle.
-        with torch.no_grad():
-            self.bboxes_delta.bias[4::5].zero_()
+        # Box outputs are residuals (dx, dy, dw, dh, dtheta).  Zero bias is
+        # the identity transform; using the classification prior here would
+        # shrink w/h by ~100x at every refinement head.
+        nn.init.zeros_(self.bboxes_delta.bias)
         for sub_module in self.reg_module:
             if isinstance(sub_module,nn.Linear):
-                nn.init.constant_(sub_module.bias,-math.log((1 - 1e-2) / 1e-2))
+                nn.init.zeros_(sub_module.bias)
 
     def forward(self, features,bboxes,pro_features,pooler,time_emb,lost_features=None,fix_ref_boxes=False):
         """
