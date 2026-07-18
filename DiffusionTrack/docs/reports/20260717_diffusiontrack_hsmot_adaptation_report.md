@@ -209,6 +209,8 @@ CUDA_VISIBLE_DEVICES=0 python tools/track.py \
 - 修复后单元测试确认零delta严格保持`(cx,cy,w,h,theta)`不变；真实HSMOT batch从MMOT官方骨干起点执行AMP前向和反向，全部loss与梯度有限，主Pair Rotated IoU loss为1.941而非固定2.000。
 - 远端第一次重启时发现同步目标误落入顶层仓库下的同名`DiffusionTrack/`子目录，实际训练仍加载顶层旧代码；该次无效输出已归档为`yolo11l_diffusion_det_hsmot_b4_d2_acc4_fp16_w8_wrong_sync_20260718_0127`。核对进程`cwd`及源码SHA256后，补丁已同步到实际执行的顶层目录并从epoch 0重新启动。
 - 当前有效训练日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_bboxinitfix_actual_epoch0_20260718.log`，主进程PID 47013，rank PID 47156/47157分别使用GPU 1/2。epoch 1 iteration 20/40的主`loss_giou`为1.911/1.750，六层旋转IoU损失均脱离固定2.000状态，全部子loss有限，`data_time`为0.001--0.002秒。
+- 该任务运行到epoch 7 iteration约1181时再次在Dynamic-K cost中遇到NaN。核验SHA256后确认此前只把旋转残差初始化文件同步到了远端实际执行的顶层仓库，AMP框解码、非有限proposal隔离和DDP失败清理仍误留在未执行的嵌套`DiffusionTrack/`目录。实际顶层旧启动器还会顺序等待两个rank，而`@logger.catch`会吞掉rank异常并返回0，导致另一个rank继续占用GPU。此次已将全部关键文件同步到实际顶层，并把训练入口改为`@logger.catch(reraise=True)`，确保异常以非零状态传给父进程并触发其余rank清理。
+- 清理残留进程后已从`latest_ckpt`的epoch 6状态恢复，当前日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_resume_fullfix_20260718.log`。rank PID 51579/51580分别使用GPU 1/2，epoch 7 iteration 20的`total_loss=26.414`、`data_time=0.006s`，全部子loss有限。
 
 ### 8.5 checkpoint、推理和输出测试
 
