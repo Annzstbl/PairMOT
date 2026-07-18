@@ -34,6 +34,18 @@ from hsmot_adapter import (HSMOT_CLASSES, build_hsmot_pair_dataset,
                            ctracker_collate)
 from torch.utils.data import Dataset, DataLoader
 
+
+def atomic_torch_save(payload, path):
+	"""Publish a completed checkpoint without exposing a partial file."""
+	temporary_path = '{}.tmp.{}'.format(path, os.getpid())
+	try:
+		torch.save(payload, temporary_path)
+		os.replace(temporary_path, path)
+	finally:
+		if os.path.exists(temporary_path):
+			os.remove(temporary_path)
+
+
 print('CUDA available: {}'.format(torch.cuda.is_available()))
 
 def main(args=None):
@@ -265,11 +277,11 @@ def main(args=None):
 			optimizer=optimizer.state_dict(),
 			scheduler=scheduler.state_dict(),
 			args=vars(parser))
-		torch.save(
+		atomic_torch_save(
 			checkpoint, os.path.join(parser.model_dir, 'checkpoint_latest.pt'))
 		if (parser.checkpoint_interval > 0 and
 				(epoch_num + 1) % parser.checkpoint_interval == 0):
-			torch.save(checkpoint, os.path.join(
+			atomic_torch_save(checkpoint, os.path.join(
 				parser.model_dir,
 				'checkpoint_epoch_{:03d}.pt'.format(epoch_num + 1)))
 		if parser.max_iters and total_iter >= parser.max_iters:
@@ -277,7 +289,8 @@ def main(args=None):
 
 	retinanet.eval()
 
-	torch.save(model_without_wrapper, os.path.join(parser.model_dir, 'model_final.pt'))
+	atomic_torch_save(
+		model_without_wrapper, os.path.join(parser.model_dir, 'model_final.pt'))
 	if not parser.skip_test and parser.dataset == 'csv':
 		run_from_train(parser.model_dir, parser.root_path, device=device)
 
