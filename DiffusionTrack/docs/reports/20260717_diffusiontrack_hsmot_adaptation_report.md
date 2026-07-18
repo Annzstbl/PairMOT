@@ -242,3 +242,5 @@ epoch 8 checkpoint的约2.94亿模型parameter/buffer及全部AdamW状态经逐�
 checkpoint同时补充raw model、EMA model、optimizer成功更新次数、AMP dtype、GradScaler及skip计数。`model`键仍保存EMA以兼容原推理入口，resume优先恢复`raw_model`，避免此前EMA参数配raw optimizer state的不严格组合。FP16下只有GradScaler真正执行optimizer step后才更新EMA和学习率；BF16不使用GradScaler。旧checkpoint没有optimizer-step字段时按`已完成epoch数×每epoch累积后step数`恢复。
 
 本机RTX 3090验证结果如下：饱和BF16分类概率的loss和logits/score梯度全部有限；BF16特征通过FP32 rotated ROIAlign桥接后前反向有限；YOLO11L+ConvMSI+六层DiffusionHead在`256×320`及原生`900×1200`完成完整前向、19项loss和反向，所有loss与参数梯度有限，`900×1200`峰值显存约8525 MiB。223使用相同py310环境的BF16完整模型前反向同样通过。正式任务使用GPU 2、3、`-d 2 -b 4 --accumulate 4 --amp-dtype bf16`，有效全局BS=16，从已确认有限的epoch 8 checkpoint恢复到独立实验目录`yolo11l_diffusion_det_hsmot_b4_d2_acc4_bf16_w8`；日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_resume_bf16_nanfix_20260718.log`。
+
+正式resume已进入epoch 9并连续运行至至少iteration 220，日志中的`loss_ce: nan`计数为0，全部主输出和五层辅助输出loss保持有限；iteration 20/100/220的`total_loss`分别为24.815/24.913/24.281。两个rank分别且只使用GPU 2、3。iteration 20冷启动阶段`data_time=8.036s`，预取稳定后一度降至0.388--0.945s；随后同机另外两个NPY训练任务竞争`/data4`，16个worker曾同时进入NFS I/O等待并使`data_time`升至4.452s，但任务能够自动恢复，确认该现象是共享存储吞吐波动而非BF16、DDP或NaN故障。
