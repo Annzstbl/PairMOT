@@ -4,22 +4,21 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from yolox.utils.dist import get_world_size, is_dist_avail_and_initialized
-from yolox.utils.rotated_boxes import pair_rotated_iou, rotated_iou
+from yolox.utils.rotated_boxes import (aligned_pair_rotated_iou,
+                                       pair_rotated_iou)
 
 
 def _normalize_rboxes(boxes, image_whwh):
-    """Normalize absolute rboxes to cxcywh in [0, 1] and le90 angle in [0, 1]."""
+    """Normalize absolute rboxes and map le135 angles to [0, 1]."""
     normalized = boxes.clone()
     normalized[..., :4] /= image_whwh
-    normalized[..., 4] = (normalized[..., 4] + math.pi / 2) / math.pi
+    normalized[..., 4] = (normalized[..., 4] + math.pi / 4) / math.pi
     return normalized
 
 
-def _periodic_l1_cost(boxes1, boxes2):
-    """Pairwise L1 cost with the pi-periodic rotated-box angle distance."""
-    cost = torch.cdist(boxes1[..., :4], boxes2[..., :4], p=1)
-    angle = (boxes1[:, None, 4] - boxes2[None, :, 4]).abs()
-    return cost + torch.minimum(angle, 1.0 - angle)
+def _rbox_l1_cost(boxes1, boxes2):
+    """Pairwise direct L1 cost over normalized le135 boxes."""
+    return torch.cdist(boxes1, boxes2, p=1)
 
 
 def sigmoid_focal_loss_jit(inputs, targets, alpha=-1, gamma=2,
@@ -188,7 +187,7 @@ class SetCriterionDynamicK(nn.Module):
         return losses
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """Compute periodic rotated L1 and paired rotated IoU losses.
+        """Compute direct le135 L1 and differentiable paired rotated IoU.
 
         The ``loss_giou`` key is intentionally retained for checkpoint/config
         compatibility although it now contains the paired rotated IoU loss.
@@ -219,13 +218,11 @@ class SetCriterionDynamicK(nn.Module):
 
             for pred_norm, tgt_norm in ((pred_ref_norm, tgt_ref_norm),
                                         (pred_cur_norm, tgt_cur_norm)):
-                coord = F.l1_loss(pred_norm[:, :4], tgt_norm[:, :4],
-                                  reduction='none').sum()
-                angle = (pred_norm[:, 4] - tgt_norm[:, 4]).abs()
-                loss_bbox = loss_bbox + coord + torch.minimum(angle, 1 - angle).sum()
+                loss_bbox = loss_bbox + F.l1_loss(
+                    pred_norm, tgt_norm, reduction='none').sum()
 
-            pair_iou = pair_rotated_iou(
-                pred_ref, tgt_ref, pred_cur, tgt_cur).diag()
+            pair_iou = aligned_pair_rotated_iou(
+                pred_ref, tgt_ref, pred_cur, tgt_cur)
             loss_riou = loss_riou + (1 - pair_iou).sum()
             matched += len(gt_multi_idx)
 
@@ -406,8 +403,8 @@ class HungarianMatcherDynamicK(nn.Module):
 
                 bz_out_bbox_pre = _normalize_rboxes(bz_boxes_pre, bz_image_size_out_pre)
                 bz_out_bbox_curr = _normalize_rboxes(bz_boxes_curr, bz_image_size_out_curr)
-                cost_bbox_pre = _periodic_l1_cost(bz_out_bbox_pre, bz_gtboxs_pre)
-                cost_bbox_curr = _periodic_l1_cost(bz_out_bbox_curr, bz_gtboxs_curr)
+                cost_bbox_pre = _rbox_l1_cost(bz_out_bbox_pre, bz_gtboxs_pre)
+                cost_bbox_curr = _rbox_l1_cost(bz_out_bbox_curr, bz_gtboxs_curr)
 
                 cost_giou = -pair_wise_ious
 

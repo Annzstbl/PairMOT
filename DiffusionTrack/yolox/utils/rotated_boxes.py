@@ -1,19 +1,27 @@
 """Rotated-box geometry used by the HSMOT DiffusionTrack adaptation.
 
-Public tensors use ``(cx, cy, w, h, theta)`` with theta in radians unless a
-function explicitly says degrees.  MMCV's clockwise=False convention is used
-consistently for IoU and NMS.
+Public tensors use long-edge-135 ``(cx, cy, w, h, theta)`` boxes with theta
+in ``[-pi/4, 3pi/4)`` radians.  Image-coordinate angles match MMCV's
+``clockwise=True`` convention consistently for ROIAlign, IoU and NMS.
 """
 
 import math
 
 import numpy as np
 import torch
-from mmcv.ops import box_iou_rotated, nms_rotated
+from mmcv.ops import box_iou_rotated, diff_iou_rotated_2d, nms_rotated
+
+
+def regularize_rboxes(boxes):
+    """Regularize long-edge boxes to the le135 angle interval."""
+    result = boxes.clone()
+    result[..., 4] = torch.remainder(
+        result[..., 4] + math.pi / 4, math.pi) - math.pi / 4
+    return result
 
 
 def qbox_to_rbox(qboxes):
-    """Convert ordered quadrilaterals ``[..., 8]`` to le90 rboxes."""
+    """Convert ordered quadrilaterals ``[..., 8]`` to le135 rboxes."""
     is_numpy = isinstance(qboxes, np.ndarray)
     boxes = torch.as_tensor(qboxes, dtype=torch.float32)
     shape = boxes.shape[:-1]
@@ -28,7 +36,7 @@ def qbox_to_rbox(qboxes):
     height = torch.where(use01, len12, len01).clamp_min(1e-6)
     direction = torch.where(use01[:, None], edge01, edge12)
     angle = torch.atan2(direction[:, 1], direction[:, 0])
-    angle = torch.remainder(angle + math.pi / 2, math.pi) - math.pi / 2
+    angle = torch.remainder(angle + math.pi / 4, math.pi) - math.pi / 4
     result = torch.cat(
         [center, width[:, None], height[:, None], angle[:, None]], dim=1)
     result = result.reshape(*shape, 5)
@@ -62,10 +70,14 @@ def rotated_iou(boxes1, boxes2, aligned=False):
             boxes1.size(0), boxes2.size(0))
         return boxes1.new_zeros(shape)
     overlaps = box_iou_rotated(
-        boxes1.float(), boxes2.float(), aligned=aligned, clockwise=False)
+        boxes1.float(), boxes2.float(), aligned=aligned, clockwise=True)
     # MMCV can emit NaN for degenerate/extreme random diffusion proposals.
     # Such proposals have no useful overlap and must not poison SimOTA costs.
-    return torch.nan_to_num(overlaps, nan=0.0, posinf=0.0, neginf=0.0)
+    # The CUDA kernel can return finite values outside the mathematical IoU
+    # range for extremely large/degenerate diffusion proposals.  Such values
+    # must not create false matches or corrupt Dynamic-K costs.
+    return torch.nan_to_num(
+        overlaps, nan=0.0, posinf=0.0, neginf=0.0).clamp_(0, 1)
 
 
 def batched_rotated_nms(boxes, scores, labels, iou_threshold):
@@ -75,7 +87,7 @@ def batched_rotated_nms(boxes, scores, labels, iou_threshold):
         indices = torch.where(labels == label)[0]
         _, local_keep = nms_rotated(
             boxes[indices].float(), scores[indices].float(), iou_threshold,
-            clockwise=False)
+            clockwise=True)
         keep.append(indices[local_keep])
     if not keep:
         return labels.new_zeros((0,), dtype=torch.long)
@@ -98,6 +110,28 @@ def pair_rotated_iou(ref_a, ref_b, cur_a, cur_b):
     result = (inter_ref + inter_cur) / (
         union_ref + union_cur).clamp_min(1e-6)
     return torch.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0).clamp_(0, 1)
+
+
+def aligned_pair_rotated_iou(ref_pred, ref_target, cur_pred, cur_target):
+    """Differentiable volume-style IoU for aligned paired le135 boxes."""
+    if ref_pred.numel() == 0:
+        return ref_pred.new_zeros((0,))
+    # diff_iou_rotated_2d uses MMCV's clockwise image-coordinate convention.
+    iou_ref = diff_iou_rotated_2d(
+        ref_pred.float()[None], ref_target.float()[None])[0]
+    iou_cur = diff_iou_rotated_2d(
+        cur_pred.float()[None], cur_target.float()[None])[0]
+    area_ref_pred = ref_pred[:, 2].float() * ref_pred[:, 3].float()
+    area_ref_target = ref_target[:, 2].float() * ref_target[:, 3].float()
+    area_cur_pred = cur_pred[:, 2].float() * cur_pred[:, 3].float()
+    area_cur_target = cur_target[:, 2].float() * cur_target[:, 3].float()
+    inter_ref = iou_ref * (area_ref_pred + area_ref_target) / (1 + iou_ref)
+    inter_cur = iou_cur * (area_cur_pred + area_cur_target) / (1 + iou_cur)
+    union_ref = area_ref_pred + area_ref_target - inter_ref
+    union_cur = area_cur_pred + area_cur_target - inter_cur
+    result = (inter_ref + inter_cur) / (
+        union_ref + union_cur).clamp_min(1e-6)
+    return torch.nan_to_num(result, nan=0.0, posinf=0.0, neginf=0.0).clamp(0, 1)
 
 
 def pair_cluster_nms_rotated(ref_boxes, cur_boxes, scores,

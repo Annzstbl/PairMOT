@@ -161,7 +161,8 @@ class Trainer:
                 self.current_lr = self.lr_scheduler.update_lr(
                     self.optimizer_step)
                 for param_group in self.optimizer.param_groups:
-                    param_group["lr"] = self.current_lr
+                    param_group["lr"] = (
+                        self.current_lr * param_group.get("lr_scale", 1.0))
             else:
                 self.skipped_optimizer_steps += 1
 
@@ -207,10 +208,13 @@ class Trainer:
         self.optimizer_iters_per_epoch = math.ceil(
             self.max_iter / self.accumulate)
 
-        self.lr_scheduler = self.exp.get_lr_scheduler(
+        scheduler_base_lr = getattr(
+            self.exp,
+            "scheduler_base_lr",
             self.exp.basic_lr_per_img * self.args.batch_size * self.accumulate,
-            self.optimizer_iters_per_epoch,
         )
+        self.lr_scheduler = self.exp.get_lr_scheduler(
+            scheduler_base_lr, self.optimizer_iters_per_epoch)
         if self.optimizer_step < 0:
             # Backward compatibility for checkpoints written before the
             # successful optimizer-step counter was persisted.
@@ -259,7 +263,12 @@ class Trainer:
     def before_epoch(self):
         logger.info("---> start train epoch{}".format(self.epoch + 1))
 
-        if self.epoch + 1 == self.max_epoch - self.exp.no_aug_epochs or self.no_aug:
+        l1_start_epoch = getattr(
+            self.exp,
+            "l1_start_epoch",
+            self.max_epoch - self.exp.no_aug_epochs,
+        )
+        if self.epoch + 1 == l1_start_epoch or self.no_aug:
             
             logger.info("--->No mosaic aug now!")
             self.train_loader.close_mosaic()
@@ -271,14 +280,16 @@ class Trainer:
             
             self.exp.eval_interval = getattr(
                 self.exp, "no_aug_eval_interval", 1)
-            if not self.no_aug:
+            if (not self.no_aug and
+                    getattr(self.exp, "save_last_mosaic_checkpoint", True)):
                 self.save_ckpt(ckpt_name="last_mosaic_epoch")
 
     def after_epoch(self):
         if self.use_model_ema:
             self.ema_model.update_attr(self.model)
 
-        self.save_ckpt(ckpt_name="latest")
+        if getattr(self.exp, "save_latest_each_epoch", True):
+            self.save_ckpt(ckpt_name="latest")
         save_interval = getattr(self.exp, "save_interval", 10)
         if (self.epoch + 1) % save_interval == 0:
             self.save_ckpt(ckpt_name="epoch_{}".format(self.epoch+1))
@@ -394,7 +405,8 @@ class Trainer:
 
         is_best = ap50_95 > self.best_ap
         self.best_ap = max(self.best_ap, ap50_95)
-        self.save_ckpt("last_epoch", is_best)
+        if getattr(self.exp, "save_after_eval", True):
+            self.save_ckpt("last_epoch", is_best)
 
     def save_ckpt(self, ckpt_name, update_best_ckpt=False):
         if self.rank == 0:

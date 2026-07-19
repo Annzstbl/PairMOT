@@ -40,6 +40,9 @@ class Exp(MyExp):
         self.no_aug_eval_interval = 5
         self.no_aug_epochs = 5
         self.basic_lr_per_img = 0.001 / 64.0
+        # DiffusionTrack's published optimizer uses a fixed AdamW LR of
+        # 2.5e-5.  Do not let the generic YOLOX batch-size rule overwrite it.
+        self.scheduler_base_lr = 2.5e-5
         self.warmup_epochs = 1
         self.task = "detection"
         self.enable_mixup = True
@@ -70,8 +73,10 @@ class Exp(MyExp):
     def get_data_loader(self, batch_size, is_distributed, no_aug=False):
         from yolox.data import (DataLoader, InfiniteSampler, MosaicDetection,
                                 TrainTransform, YoloBatchSampler)
+        # Match the MMOT official Ultralytics checkpoint preprocessing:
+        # uint8 -> float32 / 255, with no additional mean/std normalization.
         transform = TrainTransform(
-            rgb_means=HSMOT_MEAN, std=HSMOT_STD, max_labels=500)
+            rgb_means=None, std=None, max_labels=500)
         dataset = self._dataset(self.train_data_dir, transform)
         dataset = MosaicDetection(
             dataset, mosaic=not no_aug, img_size=self.input_size,
@@ -94,7 +99,7 @@ class Exp(MyExp):
         dataset = self._dataset(
             self.val_data_dir,
             DiffusionValTransform(
-                rgb_means=HSMOT_MEAN, std=HSMOT_STD, max_labels=500))
+                rgb_means=None, std=None, max_labels=500))
         sampler = (torch.utils.data.distributed.DistributedSampler(
             dataset, shuffle=False) if is_distributed else
             torch.utils.data.SequentialSampler(dataset))
@@ -140,8 +145,20 @@ class Exp(MyExp):
 
     def get_optimizer(self, batch_size):
         if "optimizer" not in self.__dict__:
+            base_lr = getattr(self, "optimizer_base_lr", 2.5e-5)
+            stem = self.model.backbone.task_model.model[0]
+            stem_ids = {id(parameter) for parameter in stem.parameters()}
+            stem_parameters = [
+                parameter for parameter in stem.parameters()
+                if parameter.requires_grad]
+            other_parameters = [
+                parameter for parameter in self.model.parameters()
+                if parameter.requires_grad and id(parameter) not in stem_ids]
             self.optimizer = AdamW(
-                [parameter for parameter in self.model.parameters()
-                 if parameter.requires_grad],
-                lr=2.5e-5, weight_decay=1e-4)
+                [
+                    dict(params=other_parameters, lr=base_lr, lr_scale=1.0),
+                    dict(params=stem_parameters, lr=base_lr * 10,
+                         lr_scale=10.0),
+                ],
+                lr=base_lr, weight_decay=1e-4)
         return self.optimizer

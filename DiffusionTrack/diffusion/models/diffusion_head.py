@@ -164,13 +164,13 @@ class DiffusionHead(nn.Module):
             x_boxes = ((x_boxes / self.scale) + 1) / 2
             x_boxes = x_boxes.clone()
             x_boxes[..., :4] *= images_whwh[:, None, :]
-            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 2
+            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 4
             return x_boxes
         
         def post(x_start,images_whwh):
             x_start = x_start.clone()
             x_start[..., :4] /= images_whwh[:, None, :]
-            x_start[..., 4] = (x_start[..., 4] + math.pi / 2) / math.pi
+            x_start[..., 4] = (x_start[..., 4] + math.pi / 4) / math.pi
             x_start = (x_start * 2 - 1.) * self.scale
             x_start = torch.clamp(x_start, min=-1 * self.scale, max=self.scale)
             return x_start
@@ -191,12 +191,29 @@ class DiffusionHead(nn.Module):
         batch = images_whwh.shape[0]//2
         self.sampling_timesteps,self.num_proposals,self.track_candidate,self.inference_time_range=num_timesteps,num_proposals,track_candidate,inference_time_range
         shape = (batch, self.num_proposals, 5)
-        cur_bboxes= torch.randn(shape,device=self.device,dtype=self.dtype)
+        fixed_noise_seed = getattr(self, "fixed_noise_seed", None)
+        if fixed_noise_seed is None:
+            cur_bboxes = torch.randn(
+                shape, device=self.device, dtype=self.dtype)
+        else:
+            generator = torch.Generator(device=self.device)
+            generator.manual_seed(int(fixed_noise_seed))
+            cur_bboxes = torch.randn(
+                shape, device=self.device, dtype=self.dtype,
+                generator=generator)
         ref_t_list=[]
         track_t_list=[]
         total_time=0
         if ref_targets is None or self.track_candidate==0:
-            ref_bboxes=torch.randn(shape, device=self.device)
+            if fixed_noise_seed is None:
+                ref_bboxes = torch.randn(
+                    shape, device=self.device, dtype=self.dtype)
+            else:
+                # A strict overfit diagnostic must present the same fixed
+                # proposal set to both duplicated image branches.  Formal
+                # training/inference never defines ``fixed_noise_seed`` and
+                # therefore retains independent Gaussian proposals.
+                ref_bboxes = cur_bboxes.clone()
             for i in range(batch):
                 t = torch.randint(self.num_timesteps-self.inference_time_range, self.num_timesteps,(2,), device=self.device).long()
                 if dynamic_time:
@@ -215,7 +232,7 @@ class DiffusionHead(nn.Module):
                 image_size_xyxy = images_whwh[batch_idx]
                 gt_boxes = labels[batch_idx, :num_gt].clone()
                 gt_boxes[:, :4] /= image_size_xyxy
-                gt_boxes[:, 4] = (gt_boxes[:, 4] + math.pi / 2) / math.pi
+                gt_boxes[:, 4] = (gt_boxes[:, 4] + math.pi / 4) / math.pi
                 # t = torch.randint(self.num_timesteps-self.inference_time_range, self.num_timesteps,(2,), device=self.device).long()
                 # if dynamic_time:
                 #     ref_t,track_t=t[0],t[1]
@@ -381,7 +398,7 @@ class DiffusionHead(nn.Module):
             # t[b:]=t[:b]
             x_boxes = x_boxes.clone()
             x_boxes[..., :4] *= images_whwh[:, None, :]
-            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 2
+            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 4
             pre_x_boxes,cur_x_boxes=torch.split(x_boxes,b,dim=0)
 
             outputs_class,outputs_coord,outputs_score = self.head(features,(pre_x_boxes,cur_x_boxes),t)
@@ -446,7 +463,14 @@ class DiffusionHead(nn.Module):
         if self.training:
             self.track_candidate=1
         t = torch.full((1,),t,device=self.device).long()
-        noise = torch.randn(self.num_proposals, 5, device=self.device,dtype=self.dtype)
+        fixed_noise_seed = getattr(self, "fixed_noise_seed", None)
+        generator = None
+        if fixed_noise_seed is not None:
+            generator = torch.Generator(device=self.device)
+            generator.manual_seed(int(fixed_noise_seed))
+        noise = torch.randn(
+            self.num_proposals, 5, device=self.device, dtype=self.dtype,
+            generator=generator)
         select_mask=None
         num_gt = gt_boxes.shape[0]*self.track_candidate
         if not num_gt:  # generate fake gt boxes if empty gt boxes
@@ -457,8 +481,14 @@ class DiffusionHead(nn.Module):
         else:
             gt_boxes=torch.repeat_interleave(gt_boxes,torch.tensor([self.track_candidate]*gt_boxes.shape[0],device=self.device),dim=0)
         if num_gt < self.num_proposals:
-            box_placeholder = torch.randn(self.num_proposals - num_gt, 5,
-                                          device=self.device,dtype=self.dtype) / 6. + 0.5  # 3sigma = 1/2 --> sigma: 1/6
+            placeholder_generator = None
+            if fixed_noise_seed is not None:
+                placeholder_generator = torch.Generator(device=self.device)
+                placeholder_generator.manual_seed(int(fixed_noise_seed) + 1)
+            box_placeholder = torch.randn(
+                self.num_proposals - num_gt, 5, device=self.device,
+                dtype=self.dtype, generator=placeholder_generator
+            ) / 6. + 0.5  # 3sigma = 1/2 --> sigma: 1/6
             # box_placeholder=torch.clip(torch.poisson(torch.clip(box_placeholder*5,min=0)),min=1,max=10)/10
             # box_placeholder=torch.nn.init.uniform_(box_placeholder, a=0, b=1)
             # box_placeholder=torch.ones_like(box_placeholder)
@@ -512,9 +542,19 @@ class DiffusionHead(nn.Module):
             gt_boxes_abs = qbox_to_rbox(gt_qboxes)
             gt_boxes = gt_boxes_abs.clone()
             gt_boxes[:, :4] /= image_size_xyxy
-            gt_boxes[:, 4] = (gt_boxes_abs[:, 4] + math.pi / 2) / math.pi
+            gt_boxes[:, 4] = (gt_boxes_abs[:, 4] + math.pi / 4) / math.pi
             x_gt_boxes=gt_boxes
-            d_t = torch.randint(0, self.num_timesteps, (1,), device=self.device).long()[0]
+            fixed_training_t = getattr(self, "fixed_training_t", None)
+            if fixed_training_t is None:
+                d_t = torch.randint(
+                    0, self.num_timesteps, (1,),
+                    device=self.device).long()[0]
+            else:
+                if not 0 <= int(fixed_training_t) < self.num_timesteps:
+                    raise ValueError("fixed_training_t must be in [0, 999]")
+                d_t = torch.as_tensor(
+                    int(fixed_training_t), device=self.device,
+                    dtype=torch.long)
             ## baseline setting
             # if batch_idx<len(nlabel)//2:
             #     d_t = torch.randint(0, 40, (1,), device=self.device).long()[0]

@@ -131,6 +131,12 @@ class YOLO11BackboneAdapter(nn.Module):
                 setattr(spectral_stem, name, getattr(original_stem, name))
         task_model.model[0] = spectral_stem
 
+        # Ultralytics checkpoints prefer the EMA module, whose parameters are
+        # serialized with requires_grad=False.  Training policy must be set by
+        # this adapter rather than inherited from that serialization detail.
+        for parameter in task_model.parameters():
+            parameter.requires_grad_(not freeze)
+
         self.task_model = task_model
         self.layers = task_model.model
         self.head = self.layers[-1]

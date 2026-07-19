@@ -54,7 +54,7 @@ class RotatedROIPooler(nn.Module):
             with torch.cuda.amp.autocast(enabled=False):
                 pooled = roi_align_rotated(
                     feature.float(), rois[indices].float(), self.output_size,
-                    scale, self.sampling_ratio, True, False)
+                    scale, self.sampling_ratio, True, True)
             output[indices] = pooled.to(output.dtype)
         return output
 
@@ -473,7 +473,7 @@ class RCNNHead(nn.Module):
             pred_boxes[:, 2::5] = pred_w
             pred_boxes[:, 3::5] = pred_h
             pred_boxes[:, 4::5] = torch.remainder(
-                angles[:, None] + da + math.pi / 2, math.pi) - math.pi / 2
+                angles[:, None] + da + math.pi / 4, math.pi) - math.pi / 4
 
         return pred_boxes
 

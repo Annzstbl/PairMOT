@@ -21,7 +21,7 @@ class Exp(DetectionExp):
                                 DiffusionTrainTransform, HSMOTDataset,
                                 InfiniteSampler, YoloBatchSampler)
         transform = DiffusionTrainTransform(
-            rgb_means=HSMOT_MEAN, std=HSMOT_STD, max_labels=500)
+            rgb_means=None, std=None, max_labels=500)
         dataset = HSMOTDataset(
             data_dir=self.train_data_dir, img_size=self.input_size,
             preproc=None, ann_subdir="mot", img_subdir="npy")

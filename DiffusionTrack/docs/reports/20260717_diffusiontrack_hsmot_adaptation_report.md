@@ -244,3 +244,15 @@ checkpoint同时补充raw model、EMA model、optimizer成功更新次数、AMP 
 本机RTX 3090验证结果如下：饱和BF16分类概率的loss和logits/score梯度全部有限；BF16特征通过FP32 rotated ROIAlign桥接后前反向有限；YOLO11L+ConvMSI+六层DiffusionHead在`256×320`及原生`900×1200`完成完整前向、19项loss和反向，所有loss与参数梯度有限，`900×1200`峰值显存约8525 MiB。223使用相同py310环境的BF16完整模型前反向同样通过。正式任务使用GPU 2、3、`-d 2 -b 4 --accumulate 4 --amp-dtype bf16`，有效全局BS=16，从已确认有限的epoch 8 checkpoint恢复到独立实验目录`yolo11l_diffusion_det_hsmot_b4_d2_acc4_bf16_w8`；日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_resume_bf16_nanfix_20260718.log`。
 
 正式resume已进入epoch 9并连续运行至至少iteration 220，日志中的`loss_ce: nan`计数为0，全部主输出和五层辅助输出loss保持有限；iteration 20/100/220的`total_loss`分别为24.815/24.913/24.281。两个rank分别且只使用GPU 2、3。iteration 20冷启动阶段`data_time=8.036s`，预取稳定后一度降至0.388--0.945s；随后同机另外两个NPY训练任务竞争`/data4`，16个worker曾同时进入NFS I/O等待并使`data_time`升至4.452s，但任务能够自动恢复，确认该现象是共享存储吞吐波动而非BF16、DDP或NaN故障。
+
+## 11. 单图过拟合闭环与进一步修复（2026-07-20）
+
+为把“能够运行”进一步收紧为可验证的学习闭环，在223服务器GPU 2构造了单张`900×1200`八波段图像重复20次的Stage 1检测集。最终选用`data28-6`第4帧中一个未截断truck，标注为一个LE135旋转框；训练、验证均关闭mosaic、mixup、随机尺度和翻转，使用BF16、BS=1、完整可训练YOLO11L/ConvMSI骨干、stem十倍学习率及主输出加五层辅助输出的分类/L1/Pair Rotated IoU损失。
+
+诊断中发现MMCV的`box_iou_rotated`对极端但有限的随机diffusion proposal偶尔返回远大于1的有限值。原代码只处理NaN/Inf，异常有限值仍会进入Dynamic-K并造成错误匹配。`rotated_iou`现统一把非有限值置零并将最终结果限制到数学定义域`[0,1]`；该修复不改变任何正常旋转IoU。独立检查确认原始训练目标、类别、900×1200等比缩放、LE135角度、骨干梯度及推理解码均一致。
+
+第一阶段严格执行1 epoch warmup加40 epoch无增强训练，共820个optimizer step。最终raw权重达到`AP50=0.4272、AP50:95=0.1493`，EMA为`0.3466、0.1157`；单次raw proposal的最高旋转IoU达到0.9048。这排除了EMA加载或推理未使用训练权重的问题，也证明随机时间、随机proposal下已经能够学习，但800 step不足以稳定覆盖一步推理固定使用的`t=999`。继续用2.5e-5或5e-6恒定学习率会破坏精细定位，使用末期实际学习率1.25e-6则稳定改善；随机时间续训至epoch 60时曾达到`AP50=0.5147、AP50:95=0.1952`，随后固定`t=999`微调至epoch 100，最佳验证为`AP50=0.6403、AP50:95=0.3666`。
+
+严格意义上的单样本记忆还必须消除diffusion noise这一随机数据源，否则验证实际测量的是“同一图像对未见随机proposal的泛化”。因此只在`yolo11l_diffusion_det_hsmot_overfit.py`中增加默认关闭的`fixed_training_t`和`fixed_noise_seed`诊断开关；DiffusionHead仅在显式设置seed时让训练与一步推理使用同一固定高斯proposal，正式Stage 1/Stage 2配置既不定义这些值，也继续使用原论文的均匀随机训练时间和独立随机proposal。固定`t=999、noise seed=8823`后从epoch 100低学习率微调，epoch 105即达到`AP50=1.0000`，epoch 110和120达到`AP50=1.0000、AP50:95=0.5000`。最终epoch 120 checkpoint独立重载复测中，raw和EMA结果完全一致，均为`AP50=1.0000、AP50:95=0.5000`；raw/EMA最佳proposal旋转IoU分别为0.7472/0.7070，类别均正确解码为truck。
+
+最终诊断checkpoint绝对路径为`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/yolo11l_diffusion_det_hsmot_overfit_one_large_object_t999_fixednoise_noaug_l1_gpu2_v10/epoch_120_ckpt.pth.tar`，训练日志位于同目录`train_log.txt`。该结果证明NPY输入、ConvMSI/YOLO11骨干、pair diffusion、LE135旋转匹配与L1/IoU损失、反向更新、EMA/checkpoint、旋转解码、类别感知旋转NMS和mAP评估能够完整闭环；随机noise结果用于衡量diffusion泛化，固定noise结果用于隔离并证明代码链路，两者不混作正式数据集精度。
