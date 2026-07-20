@@ -25,7 +25,9 @@ class Exp(DetectionExp):
             rgb_means=None, std=None, max_labels=500)
         dataset = HSMOTDataset(
             data_dir=self.train_data_dir, img_size=self.input_size,
-            preproc=None, ann_subdir="mot", img_subdir="npy")
+            preproc=None, ann_subdir="mot",
+            img_subdir=self.hsmot_img_subdir,
+            img_format=self.hsmot_img_format)
         dataset = DiffusionMosaicDetection(
             dataset, mosaic=not no_aug, img_size=self.input_size,
             preproc=transform, degrees=self.degrees, translate=self.translate,

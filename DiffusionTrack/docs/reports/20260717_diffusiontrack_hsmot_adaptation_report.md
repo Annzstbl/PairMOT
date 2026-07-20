@@ -272,3 +272,11 @@ Stage 2新增独立配置`yolo11l_diffusion_track_hsmot_inter2.py`。这里的`i
 BS=1/rank测试进一步暴露并修复了pair标签边界问题：Dynamic-K曾把单侧padding误识别为500个当前帧目标。现在目标准备阶段以pair两侧旋转框有效掩码的交集生成共享目标数，严格对应“只监督两帧共同ID”的原方法语义，不增加GPU同步或逐目标Python检查。随后还移除了YOLO adapter中`task_model/layers/head`对同一模块的三重注册；`layers/head`改为只读属性，旧Stage 1 checkpoint仍由规范的`backbone.task_model.*`键完整继承，同时消除重复state dict和潜在CUDA迁移。
 
 真实启动已确认配置为8类、`pair_interval=2`、`interval=2`、骨干可训练，Stage 1 checkpoint加载无缺失/形状告警；首次前向得到有限`total_loss=31.1585`。后续验证期间其他用户的两个任务进入GPU 2/3，各占约9.8 GiB，与本任务单rank约12.5 GiB叠加后导致OOM；当时GPU 0/1也已被其他任务占用。该失败属于外部显存竞争而非NaN或模型链路错误。新增显存门控队列脚本，只在GPU 2/3同时低于2 GiB后自动启动，不清理其他用户进程。
+
+## 14. 本地3-JPG与双卡验证（2026-07-20）
+
+223本地`/data/users/qinhaolin01/data/hsmot`包含完整75/50个训练/测试序列，对应8372/5466帧。每帧由三张900×1200 RGB JPEG组成，按`3+3+2`通道拼回八波段输入。DiffusionTrack的HSMOT dataset现原生支持`img_format={npy,3jpg}`，3-JPG通道顺序与ai4rs主线loader一致；配置通过`HSMOT_IMG_SUBDIR/HSMOT_IMG_FORMAT`切换。按当前实验协议，标注末列仅作为元数据，不用于过滤目标。
+
+验证loader不再只让rank 0处理全量数据。全局验证BS=6经两卡分片后，每rank BS=3；本测试集5466帧可被两卡整除，因此各处理2733帧且没有sampler补齐样本。两个rank分别完成pair detection、旋转IoU和局部记录，末尾只汇总CPU/Numpy格式的AP及canonical detection cache记录，再由rank 0统一计算指标、排序并写缓存。训练内验证前释放CUDA缓存，但不移动或修改模型、EMA和optimizer状态。独立`tools/eval_hsmot_det.py`可直接对任意checkpoint执行同一双卡验证。
+
+epoch 5 checkpoint的完整复测已在GPU 0/1上通过：5466帧全部处理，pair-detection及AP汇总总耗659.3秒，输出`mAP50:95=0.0014、mAP50=0.0014`。缓存manifest包含50个序列和5466个帧记录，说明双rank合并无遗漏。随后从该epoch 5 checkpoint恢复Stage 2，明确进入epoch 6；GPU 0/1均参与训练，有效全局BS=16，前80个iteration的全部loss有限，稳态`data_time`约0.001秒。

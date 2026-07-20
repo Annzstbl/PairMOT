@@ -393,6 +393,9 @@ class Trainer:
 
     def evaluate_and_save_model(self):
         evalmodel = self.ema_model.ema if self.use_model_ema else self.model
+        # Release cached training activations before FP32 rotated validation.
+        # Parameters, optimizer state and EMA remain intact on their devices.
+        torch.cuda.empty_cache()
         if hasattr(self.evaluator, "cache_root"):
             self.evaluator.cache_root = os.path.join(self.file_name, "val_det")
             self.evaluator.validation_name = "epoch_{:03d}".format(

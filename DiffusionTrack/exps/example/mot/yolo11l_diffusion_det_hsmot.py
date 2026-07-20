@@ -53,13 +53,15 @@ class Exp(MyExp):
         self.nms_thresh3d = 0.7
         self.interval = 5
         self.data_num_workers = 4
-        # Backbone features are shared by prev->curr and curr->curr.  BS=6
-        # peaks near 19.9 GiB on the project's 24-GiB GPUs.
+        # Global validation BS=6 is split across both DDP ranks (3 per GPU).
+        # Backbone features are shared by prev->curr and curr->curr.
         self.val_batch_size = 6
         self.train_data_dir = os.environ.get(
             "HSMOT_TRAIN_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/train"))
         self.val_data_dir = os.environ.get(
             "HSMOT_VAL_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/test"))
+        self.hsmot_img_subdir = os.environ.get("HSMOT_IMG_SUBDIR", "npy")
+        self.hsmot_img_format = os.environ.get("HSMOT_IMG_FORMAT", "npy")
         self.yolo11_cfg = "yolo11l-obb.yaml"
         self.yolo11_weights = os.environ.get(
             "YOLO11_WEIGHTS",
@@ -71,7 +73,8 @@ class Exp(MyExp):
         from yolox.data import HSMOTDataset
         return HSMOTDataset(
             data_dir=root, img_size=self.input_size, preproc=transform,
-            ann_subdir="mot", img_subdir="npy")
+            ann_subdir="mot", img_subdir=self.hsmot_img_subdir,
+            img_format=self.hsmot_img_format)
 
     def get_data_loader(self, batch_size, is_distributed, no_aug=False):
         from yolox.data import (DataLoader, InfiniteSampler, MosaicDetection,
@@ -140,7 +143,8 @@ class Exp(MyExp):
         from yolox.evaluators import HSMOTRotatedDetectionEvaluator
         # Pair detection is stateless and is evaluated in real batches.  KL
         # tracking consumes the saved result cache instead of rerunning it.
-        loader = self.get_eval_loader(self.val_batch_size, False, testdev)
+        loader = self.get_eval_loader(
+            self.val_batch_size, is_distributed, testdev)
         return HSMOTRotatedDetectionEvaluator(
             dataloader=loader, num_classes=self.num_classes,
             confthre=0.001, detthre=0.001,

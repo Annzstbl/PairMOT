@@ -5,11 +5,12 @@ import time
 
 import numpy as np
 import torch
+import torch.distributed as dist
 from loguru import logger
 from tqdm import tqdm
 
 from yolox.tracker.diffusion_tracker_kl import DiffusionTracker
-from yolox.utils import get_rank, is_main_process, synchronize
+from yolox.utils import is_main_process
 from yolox.utils.rotated_boxes import qbox_to_rbox, rotated_iou
 from .hsmot_detection_cache import write_detection_cache
 
@@ -89,12 +90,6 @@ class HSMOTRotatedDetectionEvaluator:
 
     @torch.no_grad()
     def evaluate(self, model, distributed=False, half=False, **kwargs):
-        # Stateful duplicated-pair inference is deliberately run only on rank
-        # 0. Other ranks wait here so DDP training resumes in lockstep.
-        if distributed and not is_main_process():
-            synchronize()
-            return 0.0, 0.0, "validation executed on rank 0"
-
         if hasattr(model, "module"):
             model = model.module
         model = model.eval()
@@ -112,7 +107,6 @@ class HSMOTRotatedDetectionEvaluator:
 
         iterator = tqdm(self.dataloader, desc="HSMOT rotated val",
                         disable=not is_main_process())
-        image_id = 0
         for prev_images, curr_images, targets, meta in iterator:
             prev_images = prev_images.type(tensor_type, non_blocking=True)
             curr_images = curr_images.type(tensor_type, non_blocking=True)
@@ -133,6 +127,7 @@ class HSMOTRotatedDetectionEvaluator:
                 valid = target[:, 1:9].abs().sum(dim=1) > 0
                 target = target[valid]
                 gt_by_class = []
+                image_id = int(meta['image_id'][batch_index])
                 for class_id in range(self.num_classes):
                     class_target = target[target[:, 0].long() == class_id]
                     boxes = qbox_to_rbox(
@@ -159,12 +154,38 @@ class HSMOTRotatedDetectionEvaluator:
                 scale = min(curr_images.shape[-2] / original_h,
                             curr_images.shape[-1] / original_w)
                 cache_records.append(dict(
+                    image_id=image_id,
                     sequence=meta['sequence'][batch_index],
                     frame_id=int(meta['frame_id'][batch_index]),
                     prev_frame_id=int(meta['prev_frame_id'][batch_index]),
                     scale=scale, ref_dets=ref_dets, cur_dets=cur_dets,
                     detections=detections))
-                image_id += 1
+
+        if distributed:
+            # Each rank performs pair detection on its disjoint sampler shard.
+            # Gather compact CPU/Numpy evaluation records only after inference;
+            # no detector output is communicated on the hot path.
+            torch.cuda.empty_cache()
+            gathered = ([None] * dist.get_world_size()
+                        if is_main_process() else None)
+            dist.gather_object(
+                (records, gt_counts, cache_records), gathered, dst=0)
+            if is_main_process():
+                records = [[] for _ in range(self.num_classes)]
+                gt_counts = np.zeros(self.num_classes, dtype=np.int64)
+                cache_records = []
+                for rank_records, rank_gt_counts, rank_cache in gathered:
+                    for class_id in range(self.num_classes):
+                        records[class_id].extend(rank_records[class_id])
+                    gt_counts += rank_gt_counts
+                    cache_records.extend(rank_cache)
+                cache_records.sort(
+                    key=lambda item: int(item.get('image_id', 0)))
+
+        if distributed and not is_main_process():
+            result = [None]
+            dist.broadcast_object_list(result, src=0)
+            return result[0]
 
         cache_path = None
         if self.cache_root:
@@ -198,5 +219,7 @@ class HSMOTRotatedDetectionEvaluator:
                  time.time() - start, cache_path, "\n".join(class_lines))
         logger.info(summary)
         if distributed:
-            synchronize()
+            result = [(map50_95, map50, summary)]
+            dist.broadcast_object_list(result, src=0)
+            return result[0]
         return map50_95, map50, summary

@@ -151,11 +151,15 @@ class HSMOTDataset(Dataset):
                "tricycle", "awning-bike")
 
     def __init__(self, data_dir, img_size=(900, 1200), preproc=None,
-                 ann_subdir="mot", img_subdir="npy", sequence_file=""):
+                 ann_subdir="mot", img_subdir="npy", sequence_file="",
+                 img_format="npy"):
         super().__init__(img_size)
         self.data_dir = os.path.abspath(data_dir)
         self.img_root = os.path.join(self.data_dir, img_subdir)
         self.ann_root = os.path.join(self.data_dir, ann_subdir)
+        if img_format not in ("npy", "3jpg"):
+            raise ValueError("img_format must be 'npy' or '3jpg'")
+        self.img_format = img_format
         self.img_size = img_size
         self.preproc = preproc
         self._classes = self.classes
@@ -178,11 +182,13 @@ class HSMOTDataset(Dataset):
         self.video_info = {}
         for video_id, sequence in enumerate(sequences, start=1):
             frame_annotations = self._load_sequence_annotations(sequence)
+            pattern = "*.npy" if self.img_format == "npy" else "*_p1.jpg"
             frame_paths = sorted(glob.glob(
-                os.path.join(self.img_root, sequence, "*.npy")))
+                os.path.join(self.img_root, sequence, pattern)))
             if not frame_paths:
                 raise FileNotFoundError(
-                    "no NPY frames found for {}".format(sequence))
+                    "no {} frames found for {}".format(
+                        self.img_format, sequence))
             start = len(self.annotations)
             for frame_path in frame_paths:
                 frame_id = int(os.path.splitext(
@@ -190,8 +196,7 @@ class HSMOTDataset(Dataset):
                 rows = frame_annotations.get(frame_id, [])
                 target = np.asarray(rows, dtype=np.float32).reshape(-1, 10)
                 image_id = len(self.ids) + 1
-                rel_name = os.path.join(
-                    sequence, os.path.basename(frame_path))
+                rel_name = os.path.join(sequence, os.path.basename(frame_path))
                 info = (900, 1200, frame_id, video_id, rel_name)
                 self.annotations.append((target, info, frame_path))
                 self.ids.append(image_id)
@@ -210,8 +215,9 @@ class HSMOTDataset(Dataset):
                 track_id = int(float(values[1]))
                 polygon = [float(value) for value in values[2:10]]
                 class_id = int(float(values[11]))
-                truncation = int(float(values[12])) if len(values) > 12 else 0
-                if not 0 <= class_id < len(self.classes) or truncation > 0:
+                # The final column is metadata, not a training-time exclusion
+                # rule for this protocol. Preserve every valid-class target.
+                if not 0 <= class_id < len(self.classes):
                     continue
                 grouped[frame_id].append(
                     polygon + [class_id, track_id])
@@ -225,7 +231,22 @@ class HSMOTDataset(Dataset):
 
     def pull_item(self, index):
         target, img_info, frame_path = self.annotations[index]
-        image = np.load(frame_path)
+        if self.img_format == "npy":
+            image = np.load(frame_path)
+        else:
+            stem = frame_path[:-len("_p1.jpg")]
+            parts = []
+            for part_index in (1, 2, 3):
+                part_path = "{}_p{}.jpg".format(stem, part_index)
+                part = cv2.imread(part_path, cv2.IMREAD_COLOR)
+                if part is None:
+                    raise FileNotFoundError(
+                        "failed to read HSMOT JPEG part {}".format(part_path))
+                # Match MMOT's established 3-JPG loader: decode as RGB, then
+                # concatenate 3 + 3 + 2 channels in spectral order.
+                parts.append(part[:, :, ::-1])
+            image = np.concatenate(
+                (parts[0], parts[1], parts[2][:, :, :2]), axis=2)
         if image.ndim != 3 or image.shape[2] != 8:
             raise ValueError("expected HSMOT HxWx8 image at {}, got {}".
                              format(frame_path, image.shape))
