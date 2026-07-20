@@ -526,7 +526,14 @@ class DiffusionHead(nn.Module):
 
     def prepare_targets(self,targets,images_whwh):
         labels = targets[..., :9]
-        nlabel = (labels[..., 1:9].abs().sum(dim=2) > 0).sum(dim=1)
+        valid = labels[..., 1:9].abs().sum(dim=2) > 0
+        # Pair supervision is defined only for aligned objects present in
+        # both frames.  Derive one shared length per pair so padding (or a
+        # one-sided invalid row after geometric augmentation) can never be
+        # interpreted as hundreds of current-frame objects when per-GPU BS=1.
+        half_batch = labels.shape[0] // 2
+        pair_nlabel = (valid[:half_batch] & valid[half_batch:]).sum(dim=1)
+        nlabel = torch.cat((pair_nlabel, pair_nlabel), dim=0)
         new_targets = []
         diffused_boxes = []
         noises = []

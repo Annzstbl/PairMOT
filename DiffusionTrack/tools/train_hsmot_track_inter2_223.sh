@@ -16,6 +16,6 @@ export HSMOT_VAL_ROOT="${RUNTIME}/data/hsmot/test"
 cd "${REPO}"
 exec python tools/train.py \
   -f exps/example/mot/yolo11l_diffusion_track_hsmot_inter2.py \
-  -expn "${EXPERIMENT_NAME:-yolo11l_diffusion_track_hsmot_inter2_b4_d2_acc4_bf16_w8}" \
-  -d 2 -b 4 --accumulate 4 --amp-dtype bf16 -c "${STAGE1}" \
+  -expn "${EXPERIMENT_NAME:-yolo11l_diffusion_track_hsmot_inter2_b2_d2_acc8_bf16_w8}" \
+  -d 2 -b 2 --accumulate 8 --amp-dtype bf16 -c "${STAGE1}" \
   output_dir "${RUNTIME}/work_dirs" data_num_workers 8

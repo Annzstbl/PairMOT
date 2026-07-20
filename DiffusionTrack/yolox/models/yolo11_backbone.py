@@ -75,11 +75,17 @@ class YOLO11ConvMSIStem(nn.Module):
         return self.act(self.bn2d(x))
 
 
-def _load_yolo_task_model(model_cfg, weights):
+def _load_yolo_task_model(model_cfg, weights, num_classes=None):
     from ultralytics import YOLO
 
     if not weights:
-        return YOLO(str(model_cfg)).model
+        # Stage two is initialized from the complete Stage-one checkpoint, so
+        # it builds from YAML first.  Build the otherwise-unused OBB head with
+        # HSMOT's class count as well, keeping the checkpoint topology exact
+        # and avoiding misleading 8-vs-80 head mismatch warnings.
+        from ultralytics.nn.tasks import OBBModel
+        return OBBModel(
+            str(model_cfg), ch=3, nc=num_classes, verbose=False)
 
     # Register the missing class at the exact pickle import location.  This
     # does not modify the installed package on disk.
@@ -114,9 +120,10 @@ class YOLO11BackboneAdapter(nn.Module):
     """Return YOLO11L OBB P3/P4/P5 inputs while skipping its OBB head."""
 
     def __init__(self, model_cfg="yolo11l-obb.yaml", weights="",
-                 freeze=False, num_spectral=8):
+                 freeze=False, num_spectral=8, num_classes=None):
         super().__init__()
-        task_model = _load_yolo_task_model(model_cfg, weights)
+        task_model = _load_yolo_task_model(
+            model_cfg, weights, num_classes=num_classes)
         original_stem = task_model.model[0]
         stem_conv = (original_stem.conv3d if hasattr(original_stem, "conv3d")
                      else original_stem.conv)
@@ -142,19 +149,29 @@ class YOLO11BackboneAdapter(nn.Module):
             parameter.requires_grad_(not freeze)
 
         self.task_model = task_model
-        self.layers = task_model.model
-        self.head = self.layers[-1]
-        self.feature_indices = list(self.head.f)
+        layers = task_model.model
+        head = layers[-1]
+        self.feature_indices = list(head.f)
         self.out_channels = [
-            int(branch[0].conv.in_channels) for branch in self.head.cv2]
+            int(branch[0].conv.in_channels) for branch in head.cv2]
         self.in_channels = self.out_channels
         self.channel_scale = 1.0
 
-        for parameter in self.head.parameters():
+        for parameter in head.parameters():
             parameter.requires_grad = False
         if freeze:
             for parameter in self.parameters():
                 parameter.requires_grad = False
+
+    @property
+    def layers(self):
+        """Ultralytics graph without registering a second module alias."""
+        return self.task_model.model
+
+    @property
+    def head(self):
+        """OBB head metadata without tripling its checkpoint/CUDA storage."""
+        return self.task_model.model[-1]
 
     def forward(self, x) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         # HSMOT's native 900x1200 size is not divisible by YOLO's stride 32.

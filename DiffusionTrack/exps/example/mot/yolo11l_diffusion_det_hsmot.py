@@ -1,5 +1,5 @@
 # encoding: utf-8
-"""Stage-1 HSMOT detector: YOLO11L + baseline Conv3D-SE + rotated diffusion."""
+"""Stage-1 HSMOT detector: YOLO11L + MMOT ConvMSI + rotated diffusion."""
 
 import os
 
@@ -129,7 +129,8 @@ class Exp(MyExp):
                     format(weights))
             backbone = YOLO11BackboneAdapter(
                 model_cfg=self.yolo11_cfg, weights=weights,
-                freeze=self.freeze_yolo11_backbone, num_spectral=8)
+                freeze=self.freeze_yolo11_backbone, num_spectral=8,
+                num_classes=self.num_classes)
             self.model = DiffusionNet(
                 backbone, DiffusionHead(self.num_classes, self.width))
             self.model.apply(init_bn)

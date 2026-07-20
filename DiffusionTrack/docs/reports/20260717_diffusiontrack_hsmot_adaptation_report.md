@@ -264,3 +264,11 @@ checkpoint同时补充raw model、EMA model、optimizer成功更新次数、AMP 
 KL/Kalman状态机新增纯缓存入口。缓存以低阈值导出以支持AP和后续阈值扫描，回放时再按命令行`association_thresh/det_thresh`过滤；轨迹传播、类别感知旋转IoU匹配、Kalman丢失目标预测与找回、新生轨迹和去重逻辑均与在线版本一致。`tools/track.py`默认先执行batched pair-detection并保存缓存，再从缓存生成TrackEval结果；传入`--detection-cache`可跳过网络并重复执行不同跟踪阈值。由于Torch 2.0/MMCV 2.2没有BF16 RotatedROIAlign推理kernel，验证固定使用FP32。初版直接走`DiffusionNet.forward`时会重复计算当前帧骨干；最终实现与原在线tracker一致，只提取一次prev/curr骨干特征，再在特征层组成`prev->curr`和`curr->curr`。复用后223的24 GiB GPU上BS=4峰值14.97 GiB，BS=6峰值19.92 GiB，正式配置使用BS=6。BS=6的真实checkpoint测试成功生成缓存；低阈值缓存回放用2.879秒生成2938行轨迹结果，证明网络检测、缓存序列化/反序列化和KL跟踪链路闭环。
 
 GT加噪参数也与原版及DiffusionTrack-lx逐项核对：`T=1000`、cosine schedule的`s=0.008`、训练`t~Uniform{0,...,999}`、`scale=2`、`eps~N(0,1)`、GT不足时placeholder为`N(0.5,(1/6)^2)`、训练后裁剪到`[-2,2]`均一致；旋转适配只把噪声从4维扩为`(cx,cy,w,h,theta)`五维，并以等价LE135映射`(theta+pi/4)/pi`处理角度。我们的schedule buffer为FP32以避免BF16训练中由FP64 buffer引起整条proposal链类型提升，lx/原版用FP64生成schedule；两者数学参数完全相同但不逐bit相同。实测累计alpha最大绝对差为`4.24e-7`，noise标准差系数最大差约`2.94e-6`（发生在`t=0`），不构成加噪幅度改变。正式配置不启用固定`t`、固定noise或lx的`randn_proposals`实验。
+
+## 13. Stage 2 `inter=2`与双阶段验证（2026-07-20）
+
+Stage 2新增独立配置`yolo11l_diffusion_track_hsmot_inter2.py`。这里的`inter=2`不仅写入推理tracker参数，还把训练数据的pair采样范围真实改为同序列`[-2,2]`；保持原版随机正负方向与包含零偏移的采样逻辑。YOLO11/ConvMSI骨干全部解冻，stem维持十倍学习率；从Stage 1完整checkpoint初始化。223启动配置为两卡、物理全局BS=2（每卡1）、梯度累积8次、BF16，等效全局BS=16。每卡BS=2的首次测试在反向阶段超过24 GiB，因此没有继续使用物理全局BS=4。
+
+BS=1/rank测试进一步暴露并修复了pair标签边界问题：Dynamic-K曾把单侧padding误识别为500个当前帧目标。现在目标准备阶段以pair两侧旋转框有效掩码的交集生成共享目标数，严格对应“只监督两帧共同ID”的原方法语义，不增加GPU同步或逐目标Python检查。随后还移除了YOLO adapter中`task_model/layers/head`对同一模块的三重注册；`layers/head`改为只读属性，旧Stage 1 checkpoint仍由规范的`backbone.task_model.*`键完整继承，同时消除重复state dict和潜在CUDA迁移。
+
+真实启动已确认配置为8类、`pair_interval=2`、`interval=2`、骨干可训练，Stage 1 checkpoint加载无缺失/形状告警；首次前向得到有限`total_loss=31.1585`。后续验证期间其他用户的两个任务进入GPU 2/3，各占约9.8 GiB，与本任务单rank约12.5 GiB叠加后导致OOM；当时GPU 0/1也已被其他任务占用。该失败属于外部显存竞争而非NaN或模型链路错误。新增显存门控队列脚本，只在GPU 2/3同时低于2 GiB后自动启动，不清理其他用户进程。
