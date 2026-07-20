@@ -279,4 +279,6 @@ BS=1/rank测试进一步暴露并修复了pair标签边界问题：Dynamic-K曾�
 
 验证loader不再只让rank 0处理全量数据。全局验证BS=6经两卡分片后，每rank BS=3；本测试集5466帧可被两卡整除，因此各处理2733帧且没有sampler补齐样本。两个rank分别完成pair detection、旋转IoU和局部记录，末尾只汇总CPU/Numpy格式的AP及canonical detection cache记录，再由rank 0统一计算指标、排序并写缓存。训练内验证前释放CUDA缓存，但不移动或修改模型、EMA和optimizer状态。独立`tools/eval_hsmot_det.py`可直接对任意checkpoint执行同一双卡验证。
 
-epoch 5 checkpoint的完整复测已在GPU 0/1上通过：5466帧全部处理，pair-detection及AP汇总总耗659.3秒，输出`mAP50:95=0.0014、mAP50=0.0014`。缓存manifest包含50个序列和5466个帧记录，说明双rank合并无遗漏。随后从该epoch 5 checkpoint恢复Stage 2，明确进入epoch 6；GPU 0/1均参与训练，有效全局BS=16，前80个iteration的全部loss有限，稳态`data_time`约0.001秒。
+epoch 5 checkpoint的完整复测已在GPU 0/1上通过：5466帧全部处理，pair-detection及AP汇总总耗659.3秒，输出`mAP50:95=0.0014、mAP50=0.0014`。缓存manifest包含50个序列和5466个帧记录，说明双rank合并无遗漏。随后从该epoch 5 checkpoint恢复当前Pair Detection（Stage 1）训练，明确进入epoch 6；配置中的`task=tracking`只用于启用成对帧与`inter=2`采样，并不表示KL tracker参与训练。GPU 0/1均参与训练，有效全局BS=16，前80个iteration的全部loss有限，稳态`data_time`约0.001秒。
+
+对照DiffusionTrack-lx的实际scheduler后，20 epoch正式配置改为按有效全局batch线性缩放的`yoloxwarmcos`：`base_lr=0.001/64×effective_batch`。当物理全局BS=2、累积8步时，普通backbone和DiffusionHead在1 epoch二次warmup后达到`2.5e-4`，ConvMSI stem保持10倍即`2.5e-3`；随后cosine下降，最后5 epoch分别固定为`1.25e-5/1.25e-4`。scheduler按optimizer update而非micro-batch推进。同时将LR设置移到`optimizer.step()`之前，消除新任务第一步先使用峰值、随后再跳回warmup起点的异常。

@@ -145,6 +145,15 @@ class Trainer:
             self.scaler.scale(loss / group_size).backward()
 
         if should_step:
+            # Set LR for the update about to run. Previously the first update
+            # used the optimizer constructor's peak LR before jumping back to
+            # warmup, and every later update used a one-step-old LR.
+            self.current_lr = self.lr_scheduler.update_lr(
+                self.optimizer_step + 1)
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = (
+                    self.current_lr * param_group.get("lr_scale", 1.0))
+
             optimizer_ran = True
             if self.scaler.is_enabled():
                 old_scale = self.scaler.get_scale()
@@ -158,11 +167,6 @@ class Trainer:
                 self.optimizer_step += 1
                 if self.use_model_ema:
                     self.ema_model.update(self.model)
-                self.current_lr = self.lr_scheduler.update_lr(
-                    self.optimizer_step)
-                for param_group in self.optimizer.param_groups:
-                    param_group["lr"] = (
-                        self.current_lr * param_group.get("lr_scale", 1.0))
             else:
                 self.skipped_optimizer_steps += 1
 
@@ -220,7 +224,11 @@ class Trainer:
             # successful optimizer-step counter was persisted.
             self.optimizer_step = (
                 self.start_epoch * self.optimizer_iters_per_epoch)
-        self.current_lr = self.optimizer.param_groups[0]["lr"]
+        self.current_lr = self.lr_scheduler.update_lr(
+            self.optimizer_step + 1)
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = (
+                self.current_lr * param_group.get("lr_scale", 1.0))
         if self.args.occupy:
             occupy_mem(self.local_rank)
 

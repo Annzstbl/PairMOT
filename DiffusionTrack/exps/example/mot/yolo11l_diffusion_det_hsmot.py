@@ -40,9 +40,10 @@ class Exp(MyExp):
         self.no_aug_eval_interval = 5
         self.no_aug_epochs = 5
         self.basic_lr_per_img = 0.001 / 64.0
-        # DiffusionTrack's published optimizer uses a fixed AdamW LR of
-        # 2.5e-5.  Do not let the generic YOLOX batch-size rule overwrite it.
-        self.scheduler_base_lr = 2.5e-5
+        # Match the reproduced DiffusionTrack rule: scale 0.001 / 64 by the
+        # effective global batch. BS=2 with accumulation=8 peaks at 2.5e-4.
+        self.scheduler = "yoloxwarmcos"
+        self.min_lr_ratio = 0.05
         self.warmup_epochs = 1
         self.task = "detection"
         self.enable_mixup = True
