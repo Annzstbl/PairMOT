@@ -14,7 +14,8 @@ class Exp(DetectionExp):
         self.task = "tracking"
         # Stage two is initialized from the complete stage-one checkpoint.
         self.yolo11_weights = ""
-        self.freeze_yolo11_backbone = True
+        self.freeze_yolo11_backbone = False
+        self.pair_interval = 1
 
     def get_data_loader(self, batch_size, is_distributed, no_aug=False):
         from yolox.data import (DataLoader, DiffusionMosaicDetection,
@@ -30,6 +31,7 @@ class Exp(DetectionExp):
             preproc=transform, degrees=self.degrees, translate=self.translate,
             scale=self.scale, shear=self.shear, perspective=self.perspective,
             enable_mixup=self.enable_mixup)
+        dataset.track_range = int(self.pair_interval)
         self.dataset = dataset
         if is_distributed:
             batch_size //= dist.get_world_size()

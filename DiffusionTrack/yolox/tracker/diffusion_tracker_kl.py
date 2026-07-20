@@ -254,10 +254,33 @@ class DiffusionTracker:
         if prev_images.shape != curr_images.shape:
             raise ValueError("prev_images and curr_images must have one shape")
         batch_size = len(curr_images)
-        paired_prev = torch.cat([prev_images, curr_images], dim=0)
-        paired_curr = torch.cat([curr_images, curr_images], dim=0)
-        outputs, conf_scores, association_time = self.model(
-            (paired_prev, paired_curr))
+        # Extract each physical frame once.  The original online tracker also
+        # forms prev->curr and curr->curr after the backbone; sending the
+        # duplicated images through DiffusionNet.forward would unnecessarily
+        # compute the current-frame backbone three times.
+        fpn_outputs = self.backbone(torch.cat(
+            [prev_images, curr_images], dim=0))
+        prev_features, curr_features = [], []
+        for projection, feature in zip(self.feature_projs, fpn_outputs):
+            feature = projection(feature)
+            prev_feature, curr_feature = feature.split(batch_size, dim=0)
+            prev_features.append(torch.cat(
+                [prev_feature, curr_feature], dim=0))
+            curr_features.append(torch.cat(
+                [curr_feature, curr_feature], dim=0))
+        self.diffusion_model.device = curr_images.device
+        self.diffusion_model.dtype = curr_images.dtype
+        height, width = curr_images.shape[-2:]
+        images_whwh = torch.tensor(
+            [width, height, width, height], device=curr_images.device,
+            dtype=curr_images.dtype)[None].expand(4 * batch_size, 4)
+        outputs, conf_scores, association_time = \
+            self.diffusion_model.new_ddim_sample(
+                (prev_features, curr_features), images_whwh,
+                num_timesteps=self.sampling_steps,
+                num_proposals=self.num_boxes,
+                dynamic_time=self.dynamic_time,
+                track_candidate=self.repeat_times)
         decoded = self._decode_pair_outputs(
             outputs, conf_scores, self.nms_thresh_3d,
             self.association_thresh)

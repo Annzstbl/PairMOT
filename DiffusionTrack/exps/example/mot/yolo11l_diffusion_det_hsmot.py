@@ -53,10 +53,9 @@ class Exp(MyExp):
         self.nms_thresh3d = 0.7
         self.interval = 5
         self.data_num_workers = 4
-        # One pair sample internally evaluates prev->curr and curr->curr, so
-        # BS=3 already executes 12 full images and peaks near 20.1 GiB on the
-        # 24-GiB GPUs used by the project.
-        self.val_batch_size = 3
+        # Backbone features are shared by prev->curr and curr->curr.  BS=6
+        # peaks near 19.9 GiB on the project's 24-GiB GPUs.
+        self.val_batch_size = 6
         self.train_data_dir = os.environ.get(
             "HSMOT_TRAIN_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/train"))
         self.val_data_dir = os.environ.get(
@@ -140,8 +139,7 @@ class Exp(MyExp):
         from yolox.evaluators import HSMOTRotatedDetectionEvaluator
         # Pair detection is stateless and is evaluated in real batches.  KL
         # tracking consumes the saved result cache instead of rerunning it.
-        loader = self.get_eval_loader(
-            min(batch_size, self.val_batch_size), False, testdev)
+        loader = self.get_eval_loader(self.val_batch_size, False, testdev)
         return HSMOTRotatedDetectionEvaluator(
             dataloader=loader, num_classes=self.num_classes,
             confthre=0.001, detthre=0.001,

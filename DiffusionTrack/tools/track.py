@@ -43,7 +43,7 @@ def make_parser():
         type=str,
         help="url used to set up distributed training",
     )
-    parser.add_argument("-b", "--batch-size", type=int, default=3,
+    parser.add_argument("-b", "--batch-size", type=int, default=6,
                         help="pair-detection batch size")
     parser.add_argument(
         "-d", "--devices", default=1, type=int, help="device for training"
