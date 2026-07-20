@@ -12,6 +12,7 @@ from tqdm import tqdm
 from yolox.tracker.diffusion_tracker_kl import DiffusionTracker
 from yolox.utils import is_main_process, synchronize
 from yolox.utils.rotated_boxes import rbox_to_qbox
+from .hsmot_detection_cache import load_detection_cache
 
 
 PAIR_HEADER = (
@@ -85,6 +86,44 @@ class DiffusionMOTEvaluatorKL:
         self.nmsthre2d = nmsthre2d
         self.num_classes = num_classes
         self.association_interval = interval
+
+    def evaluate_cache(self, cache_root, result_folder=None):
+        """Run only the KL/Kalman state machine from saved detector output."""
+        result_folder = result_folder or 'track_results'
+        cached_sequences = load_detection_cache(cache_root)
+        sample_count = 0
+        start = time.time()
+        for video_name, frame_records in cached_sequences.items():
+            tracker = DiffusionTracker(
+                None, None, self.confthre, self.detthre,
+                self.nmsthre3d, self.nmsthre2d,
+                self.association_interval)
+            track_records = []
+            for item in frame_records:
+                output = tracker.update_from_cache(
+                    item['ref_dets'], item['cur_dets'], item['detections'])
+                rboxes, track_ids, scores, classes = [], [], [], []
+                for track in output:
+                    rbox = track.rbox.copy()
+                    if rbox[2] * rbox[3] <= self.args.min_box_area:
+                        continue
+                    rboxes.append(rbox)
+                    track_ids.append(track.track_id)
+                    scores.append(track.score)
+                    classes.append(track.class_id)
+                track_records.append((item['frame_id'], rboxes, track_ids,
+                                      scores, classes))
+                sample_count += 1
+            write_results(
+                os.path.join(result_folder, video_name + '.txt'),
+                track_records)
+        elapsed = time.time() - start
+        info = (f'KL tracking consumed cache {cache_root}; '
+                f'sequences={len(cached_sequences)}, frames={sample_count}, '
+                f'cached state-machine time={elapsed:.3f}s; '
+                f'results written to {result_folder}')
+        logger.info(info)
+        return 0.0, 0.0, info
 
     def evaluate(self, model, distributed=False, half=False, trt_file=None,
                  decoder=None, test_size=None, result_folder=None):

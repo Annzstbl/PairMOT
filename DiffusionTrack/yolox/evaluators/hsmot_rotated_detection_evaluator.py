@@ -1,5 +1,6 @@
 """Class-aware rotated detection AP for HSMOT Stage-1 validation."""
 
+import os
 import time
 
 import numpy as np
@@ -10,6 +11,7 @@ from tqdm import tqdm
 from yolox.tracker.diffusion_tracker_kl import DiffusionTracker
 from yolox.utils import get_rank, is_main_process, synchronize
 from yolox.utils.rotated_boxes import qbox_to_rbox, rotated_iou
+from .hsmot_detection_cache import write_detection_cache
 
 
 class HSMOTRotatedDetectionEvaluator:
@@ -21,7 +23,8 @@ class HSMOTRotatedDetectionEvaluator:
     """
 
     def __init__(self, dataloader, num_classes, confthre=0.001,
-                 detthre=0.001, nmsthre3d=0.7, nmsthre2d=0.75, amp=True):
+                 detthre=0.001, nmsthre3d=0.7, nmsthre2d=0.75, amp=True,
+                 cache_root=None, max_dets=100):
         self.dataloader = dataloader
         self.num_classes = num_classes
         self.confthre = confthre
@@ -32,6 +35,9 @@ class HSMOTRotatedDetectionEvaluator:
         self.amp_dtype = ({"bf16": torch.bfloat16, "fp16": torch.float16}
                           .get(amp, torch.float16))
         self.iou_thresholds = np.arange(0.50, 0.96, 0.05)
+        self.cache_root = cache_root
+        self.validation_name = None
+        self.max_dets = int(max_dets)
 
     @staticmethod
     def _interpolated_ap(tp, fp, num_gt):
@@ -97,42 +103,80 @@ class HSMOTRotatedDetectionEvaluator:
         tensor_type = torch.cuda.FloatTensor
         records = [[] for _ in range(self.num_classes)]
         gt_counts = np.zeros(self.num_classes, dtype=np.int64)
+        cache_records = []
         start = time.time()
+        tracker = DiffusionTracker(
+            model, tensor_type, conf_thresh=self.confthre,
+            det_thresh=self.detthre, nms_thresh_3d=self.nmsthre3d,
+            nms_thresh_2d=self.nmsthre2d)
 
         iterator = tqdm(self.dataloader, desc="HSMOT rotated val",
                         disable=not is_main_process())
-        for image_id, (images, targets, _, _) in enumerate(iterator):
-            images = images.type(tensor_type, non_blocking=True)
-            target = targets[0]
-            valid = target[:, 1:9].abs().sum(dim=1) > 0
-            target = target[valid]
-            gt_by_class = []
-            for class_id in range(self.num_classes):
-                class_target = target[target[:, 0].long() == class_id]
-                boxes = qbox_to_rbox(class_target[:, 1:9]).cuda()
-                gt_by_class.append(boxes)
-                gt_counts[class_id] += len(boxes)
-
-            # Recreate the first-frame inference state for every image so this
-            # metric measures detection rather than temporal tracking quality.
-            tracker = DiffusionTracker(
-                model, tensor_type, conf_thresh=self.confthre,
-                det_thresh=self.detthre, nms_thresh_3d=self.nmsthre3d,
-                nms_thresh_2d=self.nmsthre2d)
+        image_id = 0
+        for prev_images, curr_images, targets, meta in iterator:
+            prev_images = prev_images.type(tensor_type, non_blocking=True)
+            curr_images = curr_images.type(tensor_type, non_blocking=True)
             with torch.cuda.amp.autocast(
                     enabled=bool(self.amp) or half, dtype=self.amp_dtype):
-                detections, _ = tracker.update(images)
-            for detection in detections:
-                class_id = int(detection.class_id)
-                if not 0 <= class_id < self.num_classes:
-                    continue
-                box = torch.as_tensor(
-                    detection.rbox, device=images.device,
-                    dtype=torch.float32).reshape(1, 5)
-                overlaps = rotated_iou(
-                    box, gt_by_class[class_id]).squeeze(0).cpu().numpy()
-                records[class_id].append(
-                    (float(detection.score), image_id, overlaps))
+                batch_results, _ = tracker.detect_batch(
+                    prev_images, curr_images)
+            for batch_index, (ref_dets, cur_dets, detections) in enumerate(
+                    batch_results):
+                if len(ref_dets) > self.max_dets:
+                    keep = np.argsort(-ref_dets[:, 6])[:self.max_dets]
+                    ref_dets, cur_dets = ref_dets[keep], cur_dets[keep]
+                if len(detections) > self.max_dets:
+                    keep = np.argsort(
+                        -detections[:, 6])[:self.max_dets]
+                    detections = detections[keep]
+                target = targets[batch_index]
+                valid = target[:, 1:9].abs().sum(dim=1) > 0
+                target = target[valid]
+                gt_by_class = []
+                for class_id in range(self.num_classes):
+                    class_target = target[target[:, 0].long() == class_id]
+                    boxes = qbox_to_rbox(
+                        class_target[:, 1:9]).to(curr_images.device)
+                    gt_by_class.append(boxes)
+                    gt_counts[class_id] += len(boxes)
+                for class_id in range(self.num_classes):
+                    class_detections = detections[
+                        detections[:, 7].astype(np.int64) == class_id]
+                    if not len(class_detections):
+                        continue
+                    overlaps = rotated_iou(
+                        torch.as_tensor(
+                            class_detections[:, :5],
+                            device=curr_images.device,
+                            dtype=torch.float32),
+                        gt_by_class[class_id]).cpu().numpy()
+                    records[class_id].extend(
+                        (float(detection[6]), image_id, overlap)
+                        for detection, overlap in zip(
+                            class_detections, overlaps))
+                original_h = float(meta['original_height'][batch_index])
+                original_w = float(meta['original_width'][batch_index])
+                scale = min(curr_images.shape[-2] / original_h,
+                            curr_images.shape[-1] / original_w)
+                cache_records.append(dict(
+                    sequence=meta['sequence'][batch_index],
+                    frame_id=int(meta['frame_id'][batch_index]),
+                    prev_frame_id=int(meta['prev_frame_id'][batch_index]),
+                    scale=scale, ref_dets=ref_dets, cur_dets=cur_dets,
+                    detections=detections))
+                image_id += 1
+
+        cache_path = None
+        if self.cache_root:
+            cache_path = os.path.join(
+                self.cache_root, self.validation_name or 'latest')
+            write_detection_cache(
+                cache_path, cache_records,
+                metadata=dict(conf_threshold=self.confthre,
+                              detection_threshold=self.detthre,
+                              pair_nms_threshold=self.nmsthre3d,
+                              frame_nms_threshold=self.nmsthre2d))
+            logger.info('saved batched pair-detection cache to {}', cache_path)
 
         map50_95, map50, per_class = self._summarize(records, gt_counts)
         class_lines = []
@@ -148,9 +192,10 @@ class HSMOTRotatedDetectionEvaluator:
                     np.nanmean(per_class[class_id]), gt_counts[class_id]))
         summary = (
             "HSMOT rotated detection validation\n"
-            "mAP50:95={:.4f}, mAP50={:.4f}, images={}, time={:.1f}s\n{}"
+            "mAP50:95={:.4f}, mAP50={:.4f}, images={}, time={:.1f}s, "
+            "pair_cache={}\n{}"
         ).format(map50_95, map50, len(self.dataloader.dataset),
-                 time.time() - start, "\n".join(class_lines))
+                 time.time() - start, cache_path, "\n".join(class_lines))
         logger.info(summary)
         if distributed:
             synchronize()

@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import torch
 from pycocotools.coco import COCO
 from collections import defaultdict
 import os
@@ -236,3 +237,50 @@ class HSMOTDataset(Dataset):
         if self.preproc is not None:
             image, target = self.preproc(image, target, self.input_dim)
         return image, target, info, image_id
+
+
+class HSMOTPairEvalDataset(torch.utils.data.Dataset):
+    """Adjacent-frame view of :class:`HSMOTDataset` for batched inference.
+
+    The first frame of every sequence is paired with itself.  Every later
+    frame is paired with the immediately preceding enumerated frame.  Unlike
+    the online tracker this dataset is stateless, so it is safe to use with a
+    multi-sample or distributed validation loader.
+    """
+
+    def __init__(self, dataset):
+        self.dataset = dataset
+        self._classes = dataset._classes
+        self.classes = dataset.classes
+        self.ids = dataset.ids
+        self.img_size = dataset.img_size
+        self.prev_indices = []
+        previous_by_video = {}
+        for index, (_, info, _) in enumerate(dataset.annotations):
+            video_id = int(info[3])
+            self.prev_indices.append(previous_by_video.get(video_id, index))
+            previous_by_video[video_id] = index
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, index):
+        prev_index = self.prev_indices[index]
+        prev_image, _, prev_info, _ = self.dataset.pull_item(prev_index)
+        curr_image, target, curr_info, image_id = self.dataset.pull_item(index)
+        if self.dataset.preproc is not None:
+            prev_image, _ = self.dataset.preproc(
+                prev_image, np.empty((0, 10), dtype=np.float32),
+                self.dataset.input_dim)
+            curr_image, target = self.dataset.preproc(
+                curr_image, target, self.dataset.input_dim)
+        meta = dict(
+            image_id=int(image_id[0]),
+            sequence=str(curr_info[4]).split(os.sep)[0],
+            prev_frame_id=int(prev_info[2]),
+            frame_id=int(curr_info[2]),
+            original_height=float(curr_info[0]),
+            original_width=float(curr_info[1]),
+            image_name=str(curr_info[4]),
+        )
+        return prev_image, curr_image, target, meta

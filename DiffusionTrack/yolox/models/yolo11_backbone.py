@@ -62,10 +62,14 @@ class YOLO11ConvMSIStem(nn.Module):
         # Torch 2.0/cu118 does not implement the depthwise Conv3D CUDA kernel
         # for BF16. This is the exact same convolution and weights; only its
         # arithmetic runs in FP32 before returning to the autocast dtype.
-        if output_dtype == torch.bfloat16:
+        bf16_autocast = (
+            x.is_cuda and torch.is_autocast_enabled()
+            and torch.get_autocast_gpu_dtype() == torch.bfloat16)
+        if output_dtype == torch.bfloat16 or bf16_autocast:
             with torch.cuda.amp.autocast(enabled=False):
                 x = self.fuse(x.float()).squeeze(2)
-            x = x.to(output_dtype)
+            if output_dtype == torch.bfloat16:
+                x = x.to(output_dtype)
         else:
             x = self.fuse(x).squeeze(2)
         return self.act(self.bn2d(x))

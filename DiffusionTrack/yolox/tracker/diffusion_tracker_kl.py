@@ -171,10 +171,13 @@ class DiffusionTracker:
                  nms_thresh_3d=0.7, nms_thresh_2d=0.75, interval=5,
                  detections=None):
         self.frame_id = 0
-        self.backbone = model.backbone
-        self.feature_projs = model.projs
-        self.diffusion_model = model.head
-        self.feature_extractor = self.diffusion_model.head.box_pooler
+        self.model = model
+        self.backbone = model.backbone if model is not None else None
+        self.feature_projs = model.projs if model is not None else None
+        self.diffusion_model = model.head if model is not None else None
+        self.feature_extractor = (
+            self.diffusion_model.head.box_pooler
+            if self.diffusion_model is not None else None)
         self.det_thresh = det_thresh
         self.association_thresh = conf_thresh
         self.nms_thresh_2d = nms_thresh_2d
@@ -198,8 +201,188 @@ class DiffusionTracker:
         self.mot17 = False
         self.last_pair_detections = None
 
+    @staticmethod
+    def _decode_pair_outputs(diffusion_outputs, conf_scores, nms_thre,
+                             conf_thre):
+        """Decode every pair in a network batch without dropping samples."""
+        pre_predictions, cur_predictions = diffusion_outputs.split(
+            len(diffusion_outputs) // 2, dim=0)
+        output = []
+        for pre_pred, cur_pred, association_score in zip(
+                pre_predictions, cur_predictions, conf_scores):
+            association_score = association_score.flatten()
+            class_conf_pre, class_pre = pre_pred[:, 5:].sigmoid().max(dim=1)
+            class_conf_cur, class_cur = cur_pred[:, 5:].sigmoid().max(dim=1)
+            pair_class_conf = torch.sqrt(class_conf_pre * class_conf_cur)
+            pair_class = torch.where(
+                class_conf_pre >= class_conf_cur, class_pre, class_cur)
+            detections = pre_pred.new_zeros((2, len(cur_pred), 8))
+            detections[0, :, :5] = pre_pred[:, :5]
+            detections[1, :, :5] = cur_pred[:, :5]
+            detections[:, :, 5] = association_score[None]
+            detections[:, :, 6] = torch.sqrt(
+                pair_class_conf * association_score)[None]
+            detections[:, :, 7] = pair_class.to(detections.dtype)[None]
+            keep = association_score > conf_thre
+            detections = detections[:, keep]
+            if detections.size(1):
+                kept_by_class = []
+                for class_id in detections[0, :, 7].unique(sorted=True):
+                    indices = torch.where(
+                        detections[0, :, 7] == class_id)[0]
+                    local = pair_cluster_nms_rotated(
+                        detections[0, indices, :5],
+                        detections[1, indices, :5],
+                        detections[0, indices, 5], nms_thre)
+                    kept_by_class.append(indices[local])
+                keep = torch.cat(kept_by_class)
+                keep = keep[torch.argsort(
+                    detections[0, keep, 5], descending=True)]
+                detections = detections[:, keep]
+            output.append(detections)
+        return output
+
+    @torch.no_grad()
+    def detect_batch(self, prev_images, curr_images):
+        """Run stateless pair detection for a batch of adjacent frames.
+
+        The first half contains ``prev -> curr`` pairs.  The second half is
+        the detector's original ``curr -> curr`` branch used to obtain
+        independent current-frame detections.  No tracker state participates
+        in this operation.
+        """
+        if prev_images.shape != curr_images.shape:
+            raise ValueError("prev_images and curr_images must have one shape")
+        batch_size = len(curr_images)
+        paired_prev = torch.cat([prev_images, curr_images], dim=0)
+        paired_curr = torch.cat([curr_images, curr_images], dim=0)
+        outputs, conf_scores, association_time = self.model(
+            (paired_prev, paired_curr))
+        decoded = self._decode_pair_outputs(
+            outputs, conf_scores, self.nms_thresh_3d,
+            self.association_thresh)
+        if len(decoded) != 2 * batch_size:
+            raise RuntimeError(
+                "expected {} decoded pairs, got {}".format(
+                    2 * batch_size, len(decoded)))
+        results = []
+        for index in range(batch_size):
+            pair = decoded[index]
+            independent = decoded[batch_size + index]
+            ref_dets, track_dets = self.diffusion_track_filt(
+                pair[0], pair[1], self.det_thresh, self.nms_thresh_2d)
+            current = torch.cat([independent[0], independent[1]], dim=0)
+            current = self.diffusion_det_filt(
+                current, self.det_thresh, self.nms_thresh_2d)
+            results.append((ref_dets, track_dets, current))
+        return results, association_time
+
     def _new_track(self, detection):
         return STrack(detection[:5], detection[6], detection[7])
+
+    def update_from_cache(self, ref_dets, track_dets, detections):
+        """Advance the original KL/Kalman state machine from cached outputs."""
+        self.frame_id += 1
+        ref_dets = np.asarray(ref_dets, dtype=np.float32).reshape(-1, 8)
+        track_dets = np.asarray(track_dets, dtype=np.float32).reshape(-1, 8)
+        detections = np.asarray(detections, dtype=np.float32).reshape(-1, 8)
+        # Validation caches are deliberately exported at low thresholds for
+        # AP and later threshold sweeps.  Recover the online tracker's runtime
+        # filtering here without rerunning pair detection.
+        pair_keep = ((ref_dets[:, 5] > self.association_thresh)
+                     & (ref_dets[:, 6] > self.det_thresh))
+        ref_dets, track_dets = ref_dets[pair_keep], track_dets[pair_keep]
+        detections = detections[detections[:, 6] > self.det_thresh]
+        self.last_pair_detections = None
+        if self.frame_id == 1:
+            for detection in detections:
+                track = self._new_track(detection)
+                track.activate(self.kalman_filter, self.frame_id)
+                self.tracked_stracks.append(track)
+            return [track for track in self.tracked_stracks
+                    if track.is_activated]
+
+        self.last_pair_detections = (ref_dets.copy(), track_dets.copy())
+        activated_stracks, refind_stracks = [], []
+        lost_stracks, removed_stracks = [], []
+        STrack.multi_predict(self.tracked_stracks)
+        dists = rotated_distance(self.tracked_stracks, ref_dets,
+                                 class_aware=True)
+        matches, unmatched_tracks, _ = matching.linear_assignment(
+            dists, thresh=self.same_thresh)
+
+        unmatched_detections = np.arange(len(detections))
+        if len(matches):
+            paired_current = track_dets[matches[:, 1]]
+            dists_fix = rotated_distance(
+                paired_current, detections, class_aware=True)
+            matches_fix, _, unmatched_detections = matching.linear_assignment(
+                dists_fix, thresh=self.same_thresh)
+            for pair_index, detection_index in matches_fix:
+                paired_current[pair_index, :8] = detections[
+                    detection_index, :8]
+            track_dets[matches[:, 1]] = paired_current
+
+        remaining_detections = detections[unmatched_detections]
+        ref_box_t, track_box_t = [], []
+        for track_index, detection_index in matches:
+            track = self.tracked_stracks[track_index]
+            detection = track_dets[detection_index]
+            ref_box_t.append(track.rbox[:4])
+            track_box_t.append(detection[:4])
+            new_track = self._new_track(detection)
+            if track.state == TrackState.Tracked:
+                track.update(new_track, self.frame_id)
+                activated_stracks.append(track)
+            else:
+                track.re_activate(new_track, self.frame_id, new_id=False)
+                refind_stracks.append(track)
+        if ref_box_t:
+            self.track_t = self.extract_mean_track_t(
+                np.asarray(ref_box_t), np.asarray(track_box_t))
+        for track_index in unmatched_tracks:
+            track = self.tracked_stracks[track_index]
+            if track.state != TrackState.Lost:
+                track.mark_lost()
+                lost_stracks.append(track)
+
+        STrack.multi_predict(self.lost_stracks)
+        dists_lost = rotated_distance(
+            self.lost_stracks, remaining_detections, class_aware=True)
+        matches_lost, _, unmatched_detection_lost = matching.linear_assignment(
+            dists_lost, thresh=self.same_thresh)
+        for track_index, detection_index in matches_lost:
+            track = self.lost_stracks[track_index]
+            new_track = self._new_track(remaining_detections[detection_index])
+            track.re_activate(new_track, self.frame_id, new_id=False)
+            refind_stracks.append(track)
+
+        for detection_index in unmatched_detection_lost:
+            track = self._new_track(remaining_detections[detection_index])
+            track.activate(self.kalman_filter, self.frame_id)
+            activated_stracks.append(track)
+
+        for track in self.lost_stracks:
+            if self.frame_id - track.end_frame > self.max_time_lost:
+                track.mark_removed()
+                removed_stracks.append(track)
+
+        self.tracked_stracks = [
+            track for track in self.tracked_stracks
+            if track.state == TrackState.Tracked]
+        self.tracked_stracks = joint_stracks(
+            self.tracked_stracks, activated_stracks)
+        self.tracked_stracks = joint_stracks(
+            self.tracked_stracks, refind_stracks)
+        self.lost_stracks = sub_stracks(
+            self.lost_stracks, self.tracked_stracks)
+        self.lost_stracks.extend(lost_stracks)
+        self.lost_stracks = sub_stracks(
+            self.lost_stracks, self.removed_stracks)
+        self.removed_stracks.extend(removed_stracks)
+        self.tracked_stracks, self.lost_stracks = remove_duplicate_stracks(
+            self.tracked_stracks, self.lost_stracks)
+        return self.tracked_stracks
 
     def update(self, cur_image):
         self.frame_id += 1
@@ -355,40 +538,8 @@ class DiffusionTracker:
 
     def diffusion_postprocess(self, diffusion_outputs, conf_scores,
                               nms_thre=0.7, conf_thre=0.6):
-        pre_predictions, cur_predictions = diffusion_outputs.split(
-            len(diffusion_outputs) // 2, dim=0)
-        output = []
-        for pre_pred, cur_pred, association_score in zip(
-                pre_predictions, cur_predictions, conf_scores):
-            association_score = association_score.flatten()
-            class_conf_pre, class_pre = pre_pred[:, 5:].sigmoid().max(dim=1)
-            class_conf_cur, class_cur = cur_pred[:, 5:].sigmoid().max(dim=1)
-            pair_class_conf = torch.sqrt(class_conf_pre * class_conf_cur)
-            pair_class = torch.where(
-                class_conf_pre >= class_conf_cur, class_pre, class_cur)
-            detections = pre_pred.new_zeros((2, len(cur_pred), 8))
-            detections[0, :, :5] = pre_pred[:, :5]
-            detections[1, :, :5] = cur_pred[:, :5]
-            detections[:, :, 5] = association_score[None]
-            detections[:, :, 6] = torch.sqrt(
-                pair_class_conf * association_score)[None]
-            detections[:, :, 7] = pair_class.to(detections.dtype)[None]
-            keep = association_score > conf_thre
-            detections = detections[:, keep]
-            if detections.size(1):
-                kept_by_class = []
-                for class_id in detections[0, :, 7].unique(sorted=True):
-                    indices = torch.where(detections[0, :, 7] == class_id)[0]
-                    local = pair_cluster_nms_rotated(
-                        detections[0, indices, :5],
-                        detections[1, indices, :5],
-                        detections[0, indices, 5], nms_thre)
-                    kept_by_class.append(indices[local])
-                keep = torch.cat(kept_by_class)
-                keep = keep[torch.argsort(
-                    detections[0, keep, 5], descending=True)]
-                detections = detections[:, keep]
-            output.append(detections)
+        output = self._decode_pair_outputs(
+            diffusion_outputs, conf_scores, nms_thre, conf_thre)
 
         empty = diffusion_outputs.new_zeros((0, 8))
         ref = output[0][0] if output else empty

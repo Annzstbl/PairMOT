@@ -393,6 +393,10 @@ class Trainer:
 
     def evaluate_and_save_model(self):
         evalmodel = self.ema_model.ema if self.use_model_ema else self.model
+        if hasattr(self.evaluator, "cache_root"):
+            self.evaluator.cache_root = os.path.join(self.file_name, "val_det")
+            self.evaluator.validation_name = "epoch_{:03d}".format(
+                self.epoch + 1)
         ap50_95, ap50, summary = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )

@@ -43,7 +43,8 @@ def make_parser():
         type=str,
         help="url used to set up distributed training",
     )
-    parser.add_argument("-b", "--batch-size", type=int, default=1, help="batch size")
+    parser.add_argument("-b", "--batch-size", type=int, default=3,
+                        help="pair-detection batch size")
     parser.add_argument(
         "-d", "--devices", default=1, type=int, help="device for training"
     )
@@ -126,6 +127,9 @@ def make_parser():
     parser.add_argument("--trackeval-root", default="../TrackEval")
     parser.add_argument("--gt-dir", default="")
     parser.add_argument("--img-dir", default="")
+    parser.add_argument(
+        "--detection-cache", default="",
+        help="skip the network and run KL tracking from a val_det cache")
     return parser
 
 
@@ -173,14 +177,9 @@ def main(exp, args, num_gpu):
     if args.tsize is not None:
         exp.test_size = (args.tsize, args.tsize)
 
-    model = exp.get_model()
-    # logger.info("Model Summary: {}".format(get_model_info(model, exp.test_size)))
-    #logger.info("Model Structure:\n{}".format(str(model)))
-
-    val_loader = exp.get_eval_loader(args.batch_size, is_distributed, args.test)
     evaluator = DiffusionMOTEvaluatorKL(
         args=args,
-        dataloader=val_loader,
+        dataloader=None,
         img_size=exp.test_size,
         confthre=exp.conf_thresh,
         nmsthre3d=exp.nms_thresh3d,
@@ -190,47 +189,73 @@ def main(exp, args, num_gpu):
         num_classes=exp.num_classes,
         )
 
-    torch.cuda.set_device(rank)
-    model.cuda(rank)
-    model.eval()
-
-    if not args.speed and not args.trt:
-        if args.ckpt is None:
-            ckpt_file = os.path.join(file_name, "best_ckpt.pth.tar")
-        else:
-            ckpt_file = args.ckpt
-        logger.info("loading checkpoint")
-        loc = "cuda:{}".format(rank)
-        ckpt = torch.load(ckpt_file, map_location=loc)
-        # load the model state dict
-        model.load_state_dict(ckpt["model"])
-        logger.info("loaded checkpoint done.")
-
-    if is_distributed:
-        model = DDP(model, device_ids=[rank])
-
-    if args.fuse:
-        logger.info("\tFusing model...")
-        model = fuse_model(model)
-
-    if args.trt:
-        assert (
-            not args.fuse and not is_distributed and args.batch_size == 1
-        ), "TensorRT model is not support model fusing and distributed inferencing!"
-        trt_file = os.path.join(file_name, "model_trt.pth")
-        assert os.path.exists(
-            trt_file
-        ), "TensorRT model is not found!\n Run tools/trt.py first!"
-        model.head.decode_in_inference = False
-        decoder = model.head.decode_outputs
+    if args.detection_cache:
+        if is_distributed:
+            raise ValueError(
+                "cached KL tracking is single-process; use --devices 1")
+        *_, summary = evaluator.evaluate_cache(
+            os.path.abspath(args.detection_cache), results_folder)
     else:
-        trt_file = None
-        decoder = None
+        if is_distributed:
+            raise ValueError(
+                "two-stage HSMOT inference uses one GPU with batched pair "
+                "detection; use --devices 1")
+        model = exp.get_model()
+        val_loader = exp.get_eval_loader(
+            min(args.batch_size, getattr(exp, 'val_batch_size',
+                                         args.batch_size)),
+            False, args.test)
+        torch.cuda.set_device(rank)
+        model.cuda(rank)
+        model.eval()
 
-    # start evaluate
-    *_, summary = evaluator.evaluate(
-        model, is_distributed, args.fp16, trt_file, decoder, exp.test_size, results_folder
-    )
+        if not args.speed and not args.trt:
+            if args.ckpt is None:
+                ckpt_file = os.path.join(file_name, "best_ckpt.pth.tar")
+            else:
+                ckpt_file = args.ckpt
+            logger.info("loading checkpoint")
+            loc = "cuda:{}".format(rank)
+            ckpt = torch.load(ckpt_file, map_location=loc)
+            model.load_state_dict(ckpt["model"])
+            logger.info("loaded checkpoint done.")
+
+        if is_distributed:
+            model = DDP(model, device_ids=[rank])
+
+        if args.fuse:
+            logger.info("\tFusing model...")
+            model = fuse_model(model)
+
+        if args.trt:
+            assert (
+                not args.fuse and not is_distributed and args.batch_size == 1
+            ), "TensorRT model is not support model fusing and distributed inferencing!"
+            trt_file = os.path.join(file_name, "model_trt.pth")
+            assert os.path.exists(
+                trt_file
+            ), "TensorRT model is not found!\n Run tools/trt.py first!"
+            model.head.decode_in_inference = False
+            decoder = model.head.decode_outputs
+        else:
+            trt_file = None
+            decoder = None
+        from yolox.evaluators import HSMOTRotatedDetectionEvaluator
+        cache_root = os.path.join(file_name, 'val_det')
+        cache_name = os.path.splitext(
+            os.path.basename(args.ckpt or 'best_ckpt'))[0]
+        detector_evaluator = HSMOTRotatedDetectionEvaluator(
+            dataloader=val_loader, num_classes=exp.num_classes,
+            confthre=0.001, detthre=0.001,
+            nmsthre3d=exp.nms_thresh3d, nmsthre2d=exp.nms_thresh2d,
+            amp=False, cache_root=cache_root)
+        detector_evaluator.validation_name = cache_name
+        _, _, detection_summary = detector_evaluator.evaluate(
+            model, distributed=False, half=False)
+        detection_cache = os.path.join(cache_root, cache_name)
+        _, _, tracking_summary = evaluator.evaluate_cache(
+            detection_cache, results_folder)
+        summary = detection_summary + '\n' + tracking_summary
     logger.info("\n" + summary)
 
     if args.evaluate:

@@ -53,6 +53,10 @@ class Exp(MyExp):
         self.nms_thresh3d = 0.7
         self.interval = 5
         self.data_num_workers = 4
+        # One pair sample internally evaluates prev->curr and curr->curr, so
+        # BS=3 already executes 12 full images and peaks near 20.1 GiB on the
+        # 24-GiB GPUs used by the project.
+        self.val_batch_size = 3
         self.train_data_dir = os.environ.get(
             "HSMOT_TRAIN_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/train"))
         self.val_data_dir = os.environ.get(
@@ -95,11 +99,11 @@ class Exp(MyExp):
             num_workers=self.data_num_workers, pin_memory=True)
 
     def get_eval_loader(self, batch_size, is_distributed, testdev=False):
-        from yolox.data import DiffusionValTransform
-        dataset = self._dataset(
+        from yolox.data import DiffusionValTransform, HSMOTPairEvalDataset
+        dataset = HSMOTPairEvalDataset(self._dataset(
             self.val_data_dir,
             DiffusionValTransform(
-                rgb_means=None, std=None, max_labels=500))
+                rgb_means=None, std=None, max_labels=500)))
         sampler = (torch.utils.data.distributed.DistributedSampler(
             dataset, shuffle=False) if is_distributed else
             torch.utils.data.SequentialSampler(dataset))
@@ -134,14 +138,18 @@ class Exp(MyExp):
 
     def get_evaluator(self, batch_size, is_distributed, testdev=False):
         from yolox.evaluators import HSMOTRotatedDetectionEvaluator
-        # Rotated detection AP is evaluated as one deterministic stream on
-        # rank 0; the evaluator keeps the other DDP ranks synchronized.
-        loader = self.get_eval_loader(1, False, testdev)
+        # Pair detection is stateless and is evaluated in real batches.  KL
+        # tracking consumes the saved result cache instead of rerunning it.
+        loader = self.get_eval_loader(
+            min(batch_size, self.val_batch_size), False, testdev)
         return HSMOTRotatedDetectionEvaluator(
             dataloader=loader, num_classes=self.num_classes,
             confthre=0.001, detthre=0.001,
             nmsthre3d=self.nms_thresh3d, nmsthre2d=self.nms_thresh2d,
-            amp="bf16")
+            # Torch 2.0/mmcv 2.2 has no BF16 RotatedROIAlign kernel.
+            amp=False,
+            cache_root=os.path.join(
+                self.output_dir, self.exp_name, "val_det"))
 
     def get_optimizer(self, batch_size):
         if "optimizer" not in self.__dict__:

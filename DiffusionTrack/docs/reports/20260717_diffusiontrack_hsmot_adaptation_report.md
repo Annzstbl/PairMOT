@@ -256,3 +256,11 @@ checkpoint同时补充raw model、EMA model、optimizer成功更新次数、AMP 
 严格意义上的单样本记忆还必须消除diffusion noise这一随机数据源，否则验证实际测量的是“同一图像对未见随机proposal的泛化”。因此只在`yolo11l_diffusion_det_hsmot_overfit.py`中增加默认关闭的`fixed_training_t`和`fixed_noise_seed`诊断开关；DiffusionHead仅在显式设置seed时让训练与一步推理使用同一固定高斯proposal，正式Stage 1/Stage 2配置既不定义这些值，也继续使用原论文的均匀随机训练时间和独立随机proposal。固定`t=999、noise seed=8823`后从epoch 100低学习率微调，epoch 105即达到`AP50=1.0000`，epoch 110和120达到`AP50=1.0000、AP50:95=0.5000`。最终epoch 120 checkpoint独立重载复测中，raw和EMA结果完全一致，均为`AP50=1.0000、AP50:95=0.5000`；raw/EMA最佳proposal旋转IoU分别为0.7472/0.7070，类别均正确解码为truck。
 
 最终诊断checkpoint绝对路径为`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/yolo11l_diffusion_det_hsmot_overfit_one_large_object_t999_fixednoise_noaug_l1_gpu2_v10/epoch_120_ckpt.pth.tar`，训练日志位于同目录`train_log.txt`。该结果证明NPY输入、ConvMSI/YOLO11骨干、pair diffusion、LE135旋转匹配与L1/IoU损失、反向更新、EMA/checkpoint、旋转解码、类别感知旋转NMS和mAP评估能够完整闭环；随机noise结果用于衡量diffusion泛化，固定noise结果用于隔离并证明代码链路，两者不混作正式数据集精度。
+
+## 12. Batched pair-detection缓存与KL离线跟踪（2026-07-20）
+
+原验证器将loader写死为BS=1，并为每张图重新构造tracker；后处理也只读取batch中的第一个内部pair，因此简单增大loader batch会静默漏掉其余样本。现新增相邻帧验证视图：每个序列首帧与自身组成pair，其他帧与前一有效帧组成`prev->curr`；一个外部batch同时运行原方法已有的`prev->curr`和`curr->curr`两条分支，前者产生pair关联框，后者产生当前帧独立检测。后处理按batch逐项解码，不再丢弃样本。Stage 1旋转AP直接使用本批独立检测结果，同时把pair框、独立检测、帧号、序列和缩放信息写入`val_det/<epoch>/`。其中`pair_detections/*.txt`保持主线28列canonical格式，`frame_detections/*.txt`保存独立检测，`manifest.json`保存包括空帧在内的完整顺序和阈值元数据；坐标统一还原到原图空间。
+
+KL/Kalman状态机新增纯缓存入口。缓存以低阈值导出以支持AP和后续阈值扫描，回放时再按命令行`association_thresh/det_thresh`过滤；轨迹传播、类别感知旋转IoU匹配、Kalman丢失目标预测与找回、新生轨迹和去重逻辑均与在线版本一致。`tools/track.py`默认先执行batched pair-detection并保存缓存，再从缓存生成TrackEval结果；传入`--detection-cache`可跳过网络并重复执行不同跟踪阈值。由于Torch 2.0/MMCV 2.2没有BF16 RotatedROIAlign推理kernel，验证固定使用FP32；223的24 GiB GPU实测外部BS=1/2/3峰值分别为10.09/15.10/20.12 GiB，故正式配置使用BS=3。BS=3的真实checkpoint测试成功生成3帧缓存；低阈值缓存回放用2.879秒生成2938行轨迹结果，证明网络检测、缓存序列化/反序列化和KL跟踪链路闭环。
+
+GT加噪参数也与原版及DiffusionTrack-lx逐项核对：`T=1000`、cosine schedule的`s=0.008`、训练`t~Uniform{0,...,999}`、`scale=2`、`eps~N(0,1)`、GT不足时placeholder为`N(0.5,(1/6)^2)`、训练后裁剪到`[-2,2]`均一致；旋转适配只把噪声从4维扩为`(cx,cy,w,h,theta)`五维，并以等价LE135映射`(theta+pi/4)/pi`处理角度。我们的schedule buffer为FP32以避免BF16训练中由FP64 buffer引起整条proposal链类型提升，lx/原版用FP64生成schedule；两者数学参数完全相同但不逐bit相同。实测累计alpha最大绝对差为`4.24e-7`，noise标准差系数最大差约`2.94e-6`（发生在`t=0`），不构成加噪幅度改变。正式配置不启用固定`t`、固定noise或lx的`randn_proposals`实验。
