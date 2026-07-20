@@ -13,11 +13,23 @@ from mmcv.ops import box_iou_rotated, diff_iou_rotated_2d, nms_rotated
 
 
 def regularize_rboxes(boxes):
-    """Regularize long-edge boxes to the le135 angle interval."""
-    result = boxes.clone()
-    result[..., 4] = torch.remainder(
-        result[..., 4] + math.pi / 4, math.pi) - math.pi / 4
-    return result
+    """Canonicalize rotated boxes to long-edge-135 representation.
+
+    LE135 has two requirements: the angle lies in ``[-pi/4, 3pi/4)`` and
+    ``w >= h``.  Merely wrapping the angle leaves two parameterizations for
+    the same rectangle, which is harmless for IoU but invalidates direct L1
+    regression on ``(w, h, theta)``.
+    """
+    center = boxes[..., :2]
+    width, height = boxes[..., 2], boxes[..., 3]
+    swap = width < height
+    long_edge = torch.where(swap, height, width)
+    short_edge = torch.where(swap, width, height)
+    angle = boxes[..., 4] + swap.to(boxes.dtype) * (math.pi / 2)
+    angle = torch.remainder(angle + math.pi / 4, math.pi) - math.pi / 4
+    return torch.cat(
+        [center, long_edge.unsqueeze(-1), short_edge.unsqueeze(-1),
+         angle.unsqueeze(-1)], dim=-1)
 
 
 def qbox_to_rbox(qboxes):

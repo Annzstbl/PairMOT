@@ -35,7 +35,7 @@ class DiffusionNet(nn.Module):
     def forward(self, x, targets=(None,None),random_flip=False,input_size=None):
         # fpn output content features of [dark3, dark4, dark5]
         # x format (pre_imgs,cur_imgs) (B,C,H,W)
-        # targets format (pre_targets,cur_targets) (B,N,5) class cx cy w h
+        # HSMOT targets are (B,N,9): class + absolute qbox8.
         pre_imgs,cur_imgs=x
         pre_targets,cur_targets=targets
         mate_info=(pre_imgs.shape,pre_imgs.device,pre_imgs.dtype)
@@ -71,9 +71,20 @@ class DiffusionNet(nn.Module):
             if cur_targets is None:
                 cur_targets=pre_targets.clone()
                 if flip_mode:
-                    nlabels=(cur_targets.sum(-1)>0).sum(-1)
+                    if cur_targets.shape[-1] >= 9:
+                        valid = cur_targets[..., 1:9].abs().sum(-1) > 0
+                    else:
+                        valid = cur_targets[..., 1:].abs().sum(-1) > 0
+                    nlabels = valid.sum(-1)
                     for idx,nlabel in enumerate(nlabels):
-                        cur_targets[idx,:nlabel,1]=input_size[1]-cur_targets[idx,:nlabel,1]
+                        if cur_targets.shape[-1] >= 9:
+                            cur_targets[idx, :nlabel, 1:9:2] = (
+                                pre_imgs.shape[-1]
+                                - cur_targets[idx, :nlabel, 1:9:2])
+                        else:
+                            cur_targets[idx, :nlabel, 1] = (
+                                pre_imgs.shape[-1]
+                                - cur_targets[idx, :nlabel, 1])
             loss_dict = self.head(
                 features,mate_info,targets=torch.cat([pre_targets,cur_targets],dim=0))
             if 'total_loss' not in loss_dict:
@@ -84,4 +95,3 @@ class DiffusionNet(nn.Module):
             outputs = self.head(features,mate_info,targets=pre_targets)
 
         return outputs
-

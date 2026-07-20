@@ -45,6 +45,21 @@ def _filter_visible(labels, width, height):
     return labels[labels[:, 3] > 0]
 
 
+def _scope_mosaic_track_ids(labels, mosaic_index, num_tiles=4):
+    """Make sequence-local MOT identities unique within one mosaic sample.
+
+    HSMOT track IDs restart in every sequence.  Pair mosaic deliberately
+    samples four different sequences, so matching concatenated labels by the
+    raw numeric ID collapses objects and can pair different mosaic tiles.
+    Encoding the tile in the temporary training ID preserves ref/current
+    correspondence without changing the source annotations.
+    """
+    if len(labels) and labels.shape[1] >= 10:
+        labels = labels.copy()
+        labels[:, 9] = labels[:, 9] * num_tiles + mosaic_index
+    return labels
+
+
 def get_mosaic_coordinate(mosaic_image, mosaic_index, xc, yc, w, h, input_h, input_w):
     # TODO update doc
     # index0 to top left part of image
@@ -371,6 +386,7 @@ class DiffusionMosaicDetection(Dataset):
                 padw, padh = l_x1 - s_x1, l_y1 - s_y1
 
                 labels = _place_labels(_labels, scale, padw, padh)
+                labels = _scope_mosaic_track_ids(labels, i_mosaic)
                 mosaic_labels.append(labels)
 
             if len(mosaic_labels):
@@ -421,6 +437,7 @@ class DiffusionMosaicDetection(Dataset):
                 padw, padh = l_x1 - s_x1, l_y1 - s_y1
 
                 labels = _place_labels(_labels, scale, padw, padh)
+                labels = _scope_mosaic_track_ids(labels, i_mosaic)
                 mosaic_labels.append(labels)
 
             if len(mosaic_labels):

@@ -5,12 +5,13 @@ import torch.nn.functional as F
 from torch import nn
 from yolox.utils.dist import get_world_size, is_dist_avail_and_initialized
 from yolox.utils.rotated_boxes import (aligned_pair_rotated_iou,
-                                       pair_rotated_iou)
+                                       pair_rotated_iou, rbox_to_qbox,
+                                       regularize_rboxes)
 
 
 def _normalize_rboxes(boxes, image_whwh):
     """Normalize absolute rboxes and map le135 angles to [0, 1]."""
-    normalized = boxes.clone()
+    normalized = regularize_rboxes(boxes)
     normalized[..., :4] /= image_whwh
     normalized[..., 4] = (normalized[..., 4] + math.pi / 4) / math.pi
     return normalized
@@ -438,12 +439,13 @@ class HungarianMatcherDynamicK(nn.Module):
         return indices, matched_ids
 
     def get_in_boxes_info(self, boxes, target_gts, expanded_strides):
-        # Keep the original SimOTA center prior.  For rotated boxes its extent
-        # is represented by the enclosing local cxcywh rectangle; exact rotated
-        # overlap is still used by the actual matching cost.
-        half_wh = target_gts[:, 2:4] / 2
+        # SimOTA's center prior operates in global image x/y coordinates.
+        # Rotated-box w/h are local-axis extents and cannot be used directly as
+        # global x/y extents.  Use the enclosing AABB for the original prior;
+        # the actual assignment cost still uses exact paired rotated IoU.
+        corners = rbox_to_qbox(target_gts).reshape(-1, 4, 2)
         xy_target_gts = torch.cat(
-            [target_gts[:, :2] - half_wh, target_gts[:, :2] + half_wh], dim=1)
+            [corners.amin(dim=1), corners.amax(dim=1)], dim=1)
 
         anchor_center_x = boxes[:, 0].unsqueeze(1)
         anchor_center_y = boxes[:, 1].unsqueeze(1)

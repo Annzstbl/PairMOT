@@ -9,6 +9,7 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops_exts import rearrange_many
 from mmcv.ops import roi_align_rotated
+from yolox.utils.rotated_boxes import regularize_rboxes
 
 
 
@@ -474,6 +475,13 @@ class RCNNHead(nn.Module):
             pred_boxes[:, 3::5] = pred_h
             pred_boxes[:, 4::5] = torch.remainder(
                 angles[:, None] + da + math.pi / 4, math.pi) - math.pi / 4
+
+            # The regression head predicts generic positive w/h values.  Make
+            # every stage output a unique LE135 box before it is consumed by
+            # direct L1, the next refinement stage, inference, or tracking.
+            original_shape = pred_boxes.shape
+            pred_boxes = regularize_rboxes(
+                pred_boxes.reshape(-1, 5)).reshape(original_shape)
 
         return pred_boxes
 
