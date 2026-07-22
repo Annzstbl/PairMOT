@@ -20,6 +20,8 @@ from yolox.utils import (
     load_ckpt,
     occupy_mem,
     save_checkpoint,
+    save_diffusion_train_diagnostic,
+    save_hsmot_pair_visualization,
     setup_logger,
     synchronize,
 )
@@ -123,6 +125,9 @@ class Trainer:
             cur_targets = cur_targets[:, :, :target_dim].to(self.target_type)
             cur_targets.requires_grad = False
 
+        self._save_training_visualization(
+            pre_inps, pre_targets, cur_inps, cur_targets)
+
         data_end_time = time.time()
         inps,targets=(pre_inps,cur_inps),(pre_targets,cur_targets)
         group_start = (self.iter // self.accumulate) * self.accumulate
@@ -137,10 +142,30 @@ class Trainer:
             if should_step or not self.is_distributed
             else self.model.no_sync()
         )
+        debug_interval = int(getattr(
+            self.exp, "diffusion_debug_interval", 0))
+        global_iteration = self.progress_in_iter + 1
+        capture_debug = (
+            self.rank == 0 and debug_interval > 0 and
+            (global_iteration == 1 or
+             global_iteration % debug_interval == 0))
+        raw_model = (self.model.module
+                     if hasattr(self.model, "module") else self.model)
+        diffusion_head = getattr(raw_model, "head", None)
+        if diffusion_head is not None:
+            diffusion_head.capture_train_debug = capture_debug
+            if hasattr(diffusion_head, "criterion"):
+                diffusion_head.criterion.capture_debug = capture_debug
         with sync_context:
             with torch.cuda.amp.autocast(
                     enabled=self.amp_training, dtype=self.amp_dtype):
                 outputs = self.model(inps,targets,self.random_flip,self.input_size)
+            if capture_debug:
+                self._save_diffusion_diagnostic(
+                    pre_inps, diffusion_head.last_train_debug,
+                    global_iteration)
+                diffusion_head.capture_train_debug = False
+                diffusion_head.criterion.capture_debug = False
             loss = outputs["total_loss"]
             self.scaler.scale(loss / group_size).backward()
 
@@ -179,6 +204,59 @@ class Trainer:
             lr=lr,
             **outputs,
         )
+
+    def _save_training_visualization(self, pre_inps, pre_targets,
+                                     cur_inps, cur_targets):
+        interval = int(getattr(self.exp, "train_vis_interval", 0))
+        global_iteration = self.progress_in_iter + 1
+        if (self.rank != 0 or interval <= 0 or
+                (global_iteration != 1 and global_iteration % interval != 0)):
+            return
+        dataset = self.train_loader.dataset
+        while hasattr(dataset, "_dataset"):
+            dataset = dataset._dataset
+        class_names = getattr(dataset, "classes", None)
+        path = os.path.join(
+            self.file_name, "train_visualizations",
+            "epoch_{:03d}_iter_{:05d}_global_{:07d}.jpg".format(
+                self.epoch + 1, self.iter + 1, global_iteration))
+        try:
+            save_hsmot_pair_visualization(
+                path, pre_inps[0], pre_targets[0],
+                cur_image=(cur_inps[0] if self.task == "tracking" else None),
+                cur_targets=(cur_targets[0]
+                             if self.task == "tracking" else None),
+                class_names=class_names,
+                title="epoch {} iter {} size {}x{}".format(
+                    self.epoch + 1, self.iter + 1,
+                    pre_inps.shape[-2], pre_inps.shape[-1]))
+            logger.info("saved training visualization to {}", path)
+        except Exception as error:
+            logger.warning("failed to save training visualization: {}", error)
+
+    def _save_diffusion_diagnostic(self, pre_inps, debug,
+                                   global_iteration):
+        if debug is None:
+            logger.warning("diffusion diagnostic requested without snapshot")
+            return
+        dataset = self.train_loader.dataset
+        while hasattr(dataset, "_dataset"):
+            dataset = dataset._dataset
+        class_names = getattr(dataset, "classes", None)
+        stem = "epoch_{:03d}_iter_{:05d}_global_{:07d}".format(
+            self.epoch + 1, self.iter + 1, global_iteration)
+        output_dir = os.path.join(
+            self.file_name, "train_diffusion_diagnostics")
+        try:
+            paths = save_diffusion_train_diagnostic(
+                output_dir, stem, pre_inps[0], debug,
+                class_names=class_names,
+                max_proposals=int(getattr(
+                    self.exp, "diffusion_debug_max_proposals", 60)))
+            logger.info("saved diffusion diagnostics to {} ({} files)",
+                        output_dir, len(paths))
+        except Exception as error:
+            logger.warning("failed to save diffusion diagnostic: {}", error)
 
     def before_train(self):
         logger.info("args: {}".format(self.args))
@@ -296,14 +374,19 @@ class Trainer:
         if self.use_model_ema:
             self.ema_model.update_attr(self.model)
 
+        completed_epoch = self.epoch + 1
         if getattr(self.exp, "save_latest_each_epoch", True):
             self.save_ckpt(ckpt_name="latest")
         save_interval = getattr(self.exp, "save_interval", 10)
-        if (self.epoch + 1) % save_interval == 0:
-            self.save_ckpt(ckpt_name="epoch_{}".format(self.epoch+1))
-        if (self.epoch + 1) % self.exp.eval_interval == 0: 
+        if completed_epoch % save_interval == 0:
+            self.save_ckpt(ckpt_name="epoch_{}".format(completed_epoch))
+        should_evaluate = (
+            completed_epoch % self.exp.eval_interval == 0
+            or completed_epoch == self.max_epoch
+        )
+        if should_evaluate:
             all_reduce_norm(self.model)
-            self.evaluate_and_save_model() 
+            self.evaluate_and_save_model()
 
     def before_iter(self):
         pass
@@ -411,6 +494,12 @@ class Trainer:
         ap50_95, ap50, summary = self.exp.eval(
             evalmodel, self.evaluator, self.is_distributed
         )
+        # FP32 rotated validation peaks substantially above BF16 training.
+        # Its temporary allocator blocks otherwise remain reserved and can
+        # fragment the next ConvMSI forward (a 6 GiB Conv3D workspace on
+        # 896x1184).  Validation tensors are dead after eval returns, so
+        # release only the allocator cache; model/optimizer tensors stay put.
+        torch.cuda.empty_cache()
         self.model.train()
         if self.rank == 0:
             self.tblogger.add_scalar("val/COCOAP50", ap50, self.epoch + 1)

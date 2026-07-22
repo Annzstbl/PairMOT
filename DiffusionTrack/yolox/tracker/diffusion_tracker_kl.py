@@ -13,7 +13,8 @@ import numpy as np
 import torch
 
 from yolox.utils.rotated_boxes import (
-    batched_rotated_nms, pair_cluster_nms_rotated, rotated_iou)
+    batched_rotated_nms, pair_cluster_nms_rotated, rotated_iou,
+    valid_rbox_mask)
 
 from .basetrack import BaseTrack, TrackState
 from .kalman_filter import KalmanFilter
@@ -223,7 +224,13 @@ class DiffusionTracker:
             detections[:, :, 6] = torch.sqrt(
                 pair_class_conf * association_score)[None]
             detections[:, :, 7] = pair_class.to(detections.dtype)[None]
-            keep = association_score > conf_thre
+            # Rotated IoU/NMS is undefined for zero-area boxes.  High-noise
+            # diffusion proposals can reach the decoder with a side clamped
+            # to 1e-6; discard those unusable pairs before either CUDA
+            # geometry operator is called.
+            keep = ((association_score > conf_thre)
+                    & valid_rbox_mask(pre_pred[:, :5])
+                    & valid_rbox_mask(cur_pred[:, :5]))
             detections = detections[:, keep]
             if detections.size(1):
                 kept_by_class = []

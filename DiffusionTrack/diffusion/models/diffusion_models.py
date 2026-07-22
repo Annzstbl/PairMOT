@@ -160,6 +160,17 @@ class DynamicHead(nn.Module):
                 if p.shape[-1] == self.num_classes or p.shape[-1] == self.num_classes + 1:
                     nn.init.constant_(p, self.bias_value)
 
+        # Each RCNN head predicts a residual on the boxes produced by the
+        # previous head.  Start those residual projections at identity.  A
+        # shared Xavier-initialized projection is cloned into all six heads;
+        # applying its random (dx, dy, dw, dh, dtheta) repeatedly destroys a
+        # useful early-stage rotated box before any head has learned.  Zeroing
+        # only the final regression projection preserves the original cascade
+        # and lets every stage learn its own residual from a stable start.
+        for head in self.head_series:
+            nn.init.zeros_(head.bboxes_delta.weight)
+            nn.init.zeros_(head.bboxes_delta.bias)
+
     @staticmethod
     def _init_box_pooler(pooler_resolution,strides,in_channels):
 

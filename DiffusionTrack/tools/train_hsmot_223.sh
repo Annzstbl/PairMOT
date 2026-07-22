@@ -9,9 +9,11 @@ export PATH="${ENV}/bin:/data/users/linxu/anaconda3/bin:/usr/local/bin:/usr/bin:
 export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-2,3}"
 export PYTHONUNBUFFERED=1
 export PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128
-export HSMOT_TRAIN_ROOT="${RUNTIME}/data/hsmot/train"
-export HSMOT_VAL_ROOT="${RUNTIME}/data/hsmot/test"
-export YOLO11_WEIGHTS="${RUNTIME}/pretrained_weights/mmot_official/yolo11L-8ch-3dstem.pt"
+export HSMOT_TRAIN_ROOT="${HSMOT_TRAIN_ROOT:-/data/users/qinhaolin01/data/hsmot/train}"
+export HSMOT_VAL_ROOT="${HSMOT_VAL_ROOT:-/data/users/qinhaolin01/data/hsmot/test}"
+export HSMOT_IMG_SUBDIR="${HSMOT_IMG_SUBDIR:-npy2jpg}"
+export HSMOT_IMG_FORMAT="${HSMOT_IMG_FORMAT:-3jpg}"
+export YOLO11_WEIGHTS="${YOLO11_WEIGHTS:-${RUNTIME}/pretrained_weights/mmot_official/yolo11L-8ch-3dstem.pt}"
 
 cd "${REPO}"
 train_args=(

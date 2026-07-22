@@ -1,0 +1,19 @@
+{
+  "class_hota": {
+    "awning-bike": 49.109,
+    "bike": 43.807,
+    "bus": 71.483,
+    "car": 81.516,
+    "pedestrian": 44.640,
+    "tricycle": 39.283,
+    "truck": 33.852,
+    "van": 62.825
+  },
+  "experiment_id": "0716_02_paper_base_epoch68",
+  "metrics": {
+    "track/cls_hota": 53.314,
+    "track/det_hota": 61.982
+  },
+  "selection_rule": "unique maximum of cls_HOTA + det_HOTA",
+  "source": "/data4/litianhao/PairMmot/workdir_99/0716_02_paper_base_r18_coco_full_1200x900_bf16_orderedpairs_reboot_fresh/val_track_eval/val_track_0017/metrics.json"
+}

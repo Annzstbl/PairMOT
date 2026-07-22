@@ -17,24 +17,40 @@ class Exp(HSMOTExp):
             "diffusiontrack_one_image_x20")
         self.train_data_dir = root
         self.val_data_dir = root
+        # Fixed diagnostic resolution: no multi-scale resizing.
+        self.input_size = (896, 1184)
+        self.test_size = (896, 1184)
         # Diagnostic schedule: one LR-warmup epoch, followed by forty epochs
-        # with the auxiliary L1 loss enabled.  Spatial augmentation is
+        # with the direct le135 L1 loss (which is active from epoch one).
+        # Spatial augmentation is
         # disabled for the complete run so that this is a strict memorisation
-        # test of one fixed 900x1200 sample.
+        # test of one fixed 896x1184 sample.
         self.max_epoch = 41
         self.warmup_epochs = 1
         self.scheduler_base_lr = 2.5e-5
+        # A 20-sample memorisation run has only 820 optimizer updates.  The
+        # regular long-run EMA (decay ~= 0.9998) would still be dominated by
+        # the initialization at validation time and therefore hides whether
+        # the live model can overfit.  Formal HSMOT training keeps EMA enabled.
+        self.ema = False
         self.save_interval = 41
         self.eval_interval = 5
         self.no_aug_eval_interval = 5
         # Keep the regular warmup/cosine LR schedule across the diagnostic;
-        # augmentation is already disabled by this data loader.  L1 starts at
-        # epoch two through the explicit diagnostic-only override below.
+        # augmentation is already disabled by this data loader. The inherited
+        # YOLOX use_l1 flag is inert for DiffusionHead, whose L1 is always on.
         self.no_aug_epochs = 0
-        self.l1_start_epoch = 2
+        # DiffusionHead's direct LE135 L1 is active from the first iteration;
+        # keep the inert legacy YOLOX switch outside this diagnostic run.
+        self.l1_start_epoch = self.max_epoch + 1
         self.random_size = None
         self.enable_mixup = False
         self.data_num_workers = 0
+        self.train_vis_interval = 0
+        # Snapshot the unmodified image, GT, diffused proposals, six refine
+        # stages and their Dynamic-K assignments at iter 1 and every 100 iters.
+        self.diffusion_debug_interval = 100
+        self.diffusion_debug_max_proposals = 60
         self.save_latest_each_epoch = False
         self.save_after_eval = False
         self.save_last_mosaic_checkpoint = False

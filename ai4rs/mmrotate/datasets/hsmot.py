@@ -151,6 +151,8 @@ class HSMOTDataset(BaseDataset):
             for frame_id in sorted(frame_anns.keys()):
                 file_name = self._get_img_filename(frame_id)
                 img_path = osp.join(img_root, seq_name, file_name)
+                if not osp.isfile(img_path):
+                    continue
                 instances = []
                 for ann in frame_anns[frame_id]:
                     instance = {

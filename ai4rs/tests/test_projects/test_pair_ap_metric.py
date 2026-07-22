@@ -8,6 +8,11 @@ from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_a
     HSMOTPairAPMetric,
     _format_pair_metric_table,
 )
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_ap import (
+    independent_ap_metrics,
+    pair_and_independent_ap_metrics_with_gt_filters,
+    serialize_pair_sample,
+)
 
 
 class TestPairAPMetricDiagnosticMode(unittest.TestCase):
@@ -67,6 +72,33 @@ class TestPairAPMetricDiagnosticMode(unittest.TestCase):
         self.assertIn('disappear_pair_AP50', metrics)
         table = _format_pair_metric_table(metrics)
         self.assertIn('GT Filter AP Breakdown', table)
+
+    def test_independent_ap_uses_side_specific_labels(self):
+        gt = InstanceData()
+        gt.labels = torch.tensor([0])
+        gt.bboxes_prev = torch.tensor([[10., 10., 4., 4., 0.]])
+        gt.bboxes_curr = torch.tensor([[20., 20., 4., 4., 0.]])
+        gt.valid_prev = torch.tensor([True])
+        gt.valid_curr = torch.tensor([False])
+
+        pred = InstanceData()
+        pred.scores = torch.tensor([0.2])
+        pred.labels = torch.tensor([1])
+        pred.labels_prev = torch.tensor([0])
+        pred.labels_curr = torch.tensor([1])
+        pred.scores_prev = torch.tensor([0.9])
+        pred.scores_curr = torch.tensor([0.1])
+        pred.bboxes_prev = gt.bboxes_prev.clone()
+        pred.bboxes_curr = gt.bboxes_curr.clone()
+
+        sample = serialize_pair_sample(gt, pred, pres_thr=0.5)
+        self.assertEqual(sample['pred_labels_prev'].item(), 0)
+        self.assertEqual(sample['pred_labels_curr'].item(), 1)
+        metrics = independent_ap_metrics([sample])
+        self.assertEqual(metrics['independent_prev_AP50'], 1.0)
+        fast_metrics = pair_and_independent_ap_metrics_with_gt_filters(
+            [sample])
+        self.assertEqual(fast_metrics['independent_prev_AP50'], 1.0)
 
 
 if __name__ == '__main__':

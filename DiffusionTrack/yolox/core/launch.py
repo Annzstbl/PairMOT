@@ -154,7 +154,11 @@ def launch_by_subprocess(
         current_env["LOCAL_RANK"] = str(local_rank)
 
         # spawn the processes
-        cmd = ["python3", *raw_argv]
+        # Spawn every DDP rank with the exact interpreter that launched the
+        # parent process.  A bare ``python3`` may resolve to the system Python
+        # in non-interactive jobs even when the parent was started from the
+        # prepared py310 environment.
+        cmd = [sys.executable, *raw_argv]
 
         process = subprocess.Popen(cmd, env=current_env)
         processes.append(process)

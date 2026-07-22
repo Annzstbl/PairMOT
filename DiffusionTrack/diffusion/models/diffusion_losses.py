@@ -4,9 +4,9 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 from yolox.utils.dist import get_world_size, is_dist_avail_and_initialized
-from yolox.utils.rotated_boxes import (aligned_pair_rotated_iou,
-                                       pair_rotated_iou, rbox_to_qbox,
-                                       regularize_rboxes)
+from yolox.utils.rotated_boxes import (aligned_rotated_iou,
+                                       mean_pair_rotated_iou, rbox_to_qbox,
+                                       regularize_rboxes, valid_rbox_mask)
 
 
 def _normalize_rboxes(boxes, image_whwh):
@@ -62,6 +62,11 @@ class SetCriterionDynamicK(nn.Module):
         self.losses = losses
         self.use_focal = use_focal
         self.use_fed_loss = use_fed_loss
+        # Diagnostic snapshots are opt-in and are only enabled by the
+        # single-image overfit experiment.  The formal training hot path does
+        # not retain matcher tensors.
+        self.capture_debug = False
+        self.last_debug_assignments = None
         if self.use_fed_loss:
             self.fed_loss_num_classes = 50
             from detectron2.data.detection_utils import get_fed_loss_cls_weights
@@ -188,10 +193,11 @@ class SetCriterionDynamicK(nn.Module):
         return losses
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """Compute direct le135 L1 and differentiable paired rotated IoU.
+        """Compute direct LE135 L1 and independent frame-wise rotated IoU.
 
         The ``loss_giou`` key is intentionally retained for checkpoint/config
-        compatibility although it now contains the paired rotated IoU loss.
+        compatibility.  It contains the sum of reference/current ordinary
+        rotated-IoU losses; it is not a pair-IoU or GIoU loss.
         """
         assert 'pred_boxes' in outputs
         src_boxes = outputs['pred_boxes']
@@ -222,9 +228,10 @@ class SetCriterionDynamicK(nn.Module):
                 loss_bbox = loss_bbox + F.l1_loss(
                     pred_norm, tgt_norm, reduction='none').sum()
 
-            pair_iou = aligned_pair_rotated_iou(
-                pred_ref, tgt_ref, pred_cur, tgt_cur)
-            loss_riou = loss_riou + (1 - pair_iou).sum()
+            iou_ref = aligned_rotated_iou(pred_ref, tgt_ref)
+            iou_cur = aligned_rotated_iou(pred_cur, tgt_cur)
+            loss_riou = loss_riou + (
+                (1 - iou_ref).sum() + (1 - iou_cur).sum())
             matched += len(gt_multi_idx)
 
         normalizer = max(matched, 1)
@@ -263,7 +270,10 @@ class SetCriterionDynamicK(nn.Module):
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
 
         # Retrieve the matching between the outputs of the last layer and the targets
-        indices, _ = self.matcher(outputs_without_aux, targets)
+        indices, matched_ids = self.matcher(outputs_without_aux, targets)
+        final_debug = (self._pack_debug_assignment(indices, matched_ids)
+                       if self.capture_debug else None)
+        auxiliary_debug = []
 
         # Compute the average number of target boxes accross all nodes, for normalization purposes
         num_boxes = sum(len(t["labels"]) for t in targets)//2
@@ -280,7 +290,10 @@ class SetCriterionDynamicK(nn.Module):
         # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                indices, _ = self.matcher(aux_outputs, targets)
+                indices, matched_ids = self.matcher(aux_outputs, targets)
+                if self.capture_debug:
+                    auxiliary_debug.append(self._pack_debug_assignment(
+                        indices, matched_ids))
                 for loss in self.losses:
                     if loss == 'masks':
                         # Intermediate masks losses are too costly to compute, we ignore them.
@@ -293,7 +306,24 @@ class SetCriterionDynamicK(nn.Module):
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
+        self.last_debug_assignments = (
+            auxiliary_debug + [final_debug] if self.capture_debug else None)
+
         return losses
+
+    @staticmethod
+    def _pack_debug_assignment(indices, matched_ids):
+        """Detach the positive-query/GT mapping for visualization."""
+        packed = []
+        for (selected_query, gt_indices), best_query in zip(
+                indices, matched_ids):
+            packed.append({
+                'query_indices': torch.nonzero(
+                    selected_query, as_tuple=False).squeeze(1).detach().cpu(),
+                'gt_indices': gt_indices.detach().cpu(),
+                'best_query_per_gt': best_query.detach().cpu(),
+            })
+        return packed
 
 
 class HungarianMatcherDynamicK(nn.Module):
@@ -370,7 +400,10 @@ class HungarianMatcherDynamicK(nn.Module):
                 fg_mask=fg_mask_pre&fg_mask_curr 
                 is_in_boxes_and_center=is_in_boxes_and_center_pre&is_in_boxes_and_center_curr
 
-                pair_wise_ious = pair_rotated_iou(
+                # SimOTA/Dynamic-K needs a score in [0, 1].  Average the two
+                # independent frame IoUs here; using their sum would inflate
+                # Dynamic-K and create too many positives.
+                pair_wise_ious = mean_pair_rotated_iou(
                     bz_boxes_pre, bz_gtboxs_abs_pre,
                     bz_boxes_curr, bz_gtboxs_abs_curr)
                 cost_class=0
@@ -415,8 +448,8 @@ class HungarianMatcherDynamicK(nn.Module):
                 # DDP ranks. Exclude non-finite proposal rows from matching;
                 # valid rows and their original costs are left untouched.
                 valid_rows = (
-                    torch.isfinite(bz_boxes_pre).all(dim=1)
-                    & torch.isfinite(bz_boxes_curr).all(dim=1)
+                    valid_rbox_mask(bz_boxes_pre)
+                    & valid_rbox_mask(bz_boxes_curr)
                     & torch.isfinite(bz_out_prob_pre).all(dim=1)
                     & torch.isfinite(bz_out_prob_curr).all(dim=1)
                 )
@@ -480,6 +513,11 @@ class HungarianMatcherDynamicK(nn.Module):
         ious_in_boxes_matrix = pair_wise_ious
         n_candidate_k = self.ota_k
 
+        if num_gt > cost.shape[0]:
+            raise RuntimeError(
+                f"Dynamic-K requires at least one query per GT, but got "
+                f"{cost.shape[0]} queries for {num_gt} GTs")
+
         # Take the sum of the predicted value and the top 10 iou of gt with the largest iou as dynamic_k
         topk_ious, _ = torch.topk(
             ious_in_boxes_matrix, min(n_candidate_k, cost.shape[0]), dim=0)
@@ -492,33 +530,50 @@ class HungarianMatcherDynamicK(nn.Module):
 
         del topk_ious, dynamic_ks, pos_idx
 
-        anchor_matching_gt = matching_matrix.sum(1)
+        # A query may be selected independently by several GTs. Keep only the
+        # lowest-cost GT for every such query. The conflict mask must always be
+        # computed from the current matrix (the old implementation reused a
+        # stale pre-repair mask below).
+        conflicting_queries = matching_matrix.sum(1) > 1
+        if conflicting_queries.any():
+            conflict_rows = torch.nonzero(
+                conflicting_queries, as_tuple=False).squeeze(1)
+            best_gt = cost[conflict_rows].argmin(dim=1)
+            matching_matrix[conflict_rows] = 0
+            matching_matrix[conflict_rows, best_gt] = 1
 
-        if (anchor_matching_gt > 1).sum() > 0:
-            _, cost_argmin = torch.min(cost[anchor_matching_gt > 1], dim=1)
-            matching_matrix[anchor_matching_gt > 1] *= 0
-            matching_matrix[anchor_matching_gt > 1, cost_argmin,] = 1
+        # Conflict resolution can leave GTs without positives. Repair them one
+        # at a time so two missing GTs cannot choose the same free query. If no
+        # free query remains, move a query only from a GT that currently has
+        # more than one positive, preserving coverage of the donor GT.
+        missing_gts = torch.nonzero(
+            matching_matrix.sum(0) == 0, as_tuple=False).squeeze(1)
+        for gt_idx in missing_gts:
+            free_queries = matching_matrix.sum(1) == 0
+            if free_queries.any():
+                candidates = torch.nonzero(
+                    free_queries, as_tuple=False).squeeze(1)
+            else:
+                assigned_gt = matching_matrix.argmax(dim=1)
+                gt_positive_counts = matching_matrix.sum(0)
+                donor_queries = gt_positive_counts[assigned_gt] > 1
+                if not donor_queries.any():
+                    raise RuntimeError(
+                        "cannot give every GT a unique positive query")
+                candidates = torch.nonzero(
+                    donor_queries, as_tuple=False).squeeze(1)
 
-        while (matching_matrix.sum(0) == 0).any():
-            num_zero_gt = (matching_matrix.sum(0) == 0).sum()
-            matched_query_id = matching_matrix.sum(1) > 0
-            cost[matched_query_id] += 100000.0
-            unmatch_id = torch.nonzero(matching_matrix.sum(0) == 0, as_tuple=False).squeeze(1)
-            for gt_idx in unmatch_id:
-                pos_idx = torch.argmin(cost[:, gt_idx])
-                matching_matrix[:, gt_idx][pos_idx] = 1.0
-            if (matching_matrix.sum(1) > 1).sum() > 0:  # If a query matches more than one gt
-                _, cost_argmin = torch.min(cost[anchor_matching_gt > 1],
-                                           dim=1)  # find gt for these queries with minimal cost
-                matching_matrix[anchor_matching_gt > 1] *= 0  # reset mapping relationship
-                matching_matrix[anchor_matching_gt > 1, cost_argmin,] = 1  # keep gt with minimal cost
+            pos_idx = candidates[cost[candidates, gt_idx].argmin()]
+            matching_matrix[pos_idx] = 0
+            matching_matrix[pos_idx, gt_idx] = 1
 
-        assert not (matching_matrix.sum(0) == 0).any()
+        assert (matching_matrix.sum(1) <= 1).all()
+        assert (matching_matrix.sum(0) >= 1).all()
         selected_query = matching_matrix.sum(1) > 0
         gt_indices = matching_matrix[selected_query].max(1)[1]
         assert selected_query.sum() == len(gt_indices)
 
-        cost[matching_matrix == 0] = cost[matching_matrix == 0] + float('inf')
-        matched_query_id = torch.min(cost, dim=0)[1]
+        matched_cost = cost.masked_fill(matching_matrix == 0, float('inf'))
+        matched_query_id = torch.min(matched_cost, dim=0)[1]
 
         return (selected_query, gt_indices), matched_query_id

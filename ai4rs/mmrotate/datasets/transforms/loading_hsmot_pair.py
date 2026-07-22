@@ -191,17 +191,30 @@ class PackHSMOTPairInputs(BaseTransform):
                 f'two images, got {type(imgs)} with len '
                 f'{len(imgs) if isinstance(imgs, list) else "n/a"}.')
 
-        packed_imgs = []
+        normalized_imgs = []
         for img in imgs:
             if img.ndim < 3:
                 img = np.expand_dims(img, -1)
-            if not img.flags.c_contiguous:
-                chw = np.ascontiguousarray(img.transpose(2, 0, 1))
-                packed_imgs.append(to_tensor(chw))
-            else:
-                packed_imgs.append(
-                    to_tensor(img).permute(2, 0, 1).contiguous())
-        inputs = torch.stack(packed_imgs, dim=0)
+            normalized_imgs.append(img)
+
+        if all(img.flags.c_contiguous for img in normalized_imgs):
+            # torch.stack can copy strided CHW views directly into its final
+            # output. Avoid materializing two intermediate CHW tensors for
+            # the common no-flip/rotated path.
+            inputs = torch.stack([
+                to_tensor(img).permute(2, 0, 1)
+                for img in normalized_imgs
+            ], dim=0)
+        else:
+            packed_imgs = []
+            for img in normalized_imgs:
+                if not img.flags.c_contiguous:
+                    chw = np.ascontiguousarray(img.transpose(2, 0, 1))
+                    packed_imgs.append(to_tensor(chw))
+                else:
+                    packed_imgs.append(
+                        to_tensor(img).permute(2, 0, 1).contiguous())
+            inputs = torch.stack(packed_imgs, dim=0)
 
         from mmdet.structures import DetDataSample
         from mmengine.structures import InstanceData

@@ -279,6 +279,54 @@ BS=1/rank测试进一步暴露并修复了pair标签边界问题：Dynamic-K曾�
 
 验证loader不再只让rank 0处理全量数据。全局验证BS=6经两卡分片后，每rank BS=3；本测试集5466帧可被两卡整除，因此各处理2733帧且没有sampler补齐样本。两个rank分别完成pair detection、旋转IoU和局部记录，末尾只汇总CPU/Numpy格式的AP及canonical detection cache记录，再由rank 0统一计算指标、排序并写缓存。训练内验证前释放CUDA缓存，但不移动或修改模型、EMA和optimizer状态。独立`tools/eval_hsmot_det.py`可直接对任意checkpoint执行同一双卡验证。
 
-epoch 5 checkpoint的完整复测已在GPU 0/1上通过：5466帧全部处理，pair-detection及AP汇总总耗659.3秒，输出`mAP50:95=0.0014、mAP50=0.0014`。缓存manifest包含50个序列和5466个帧记录，说明双rank合并无遗漏。随后从该epoch 5 checkpoint恢复当前Pair Detection（Stage 1）训练，明确进入epoch 6；配置中的`task=tracking`只用于启用成对帧与`inter=2`采样，并不表示KL tracker参与训练。GPU 0/1均参与训练，有效全局BS=16，前80个iteration的全部loss有限，稳态`data_time`约0.001秒。
+epoch 5 checkpoint的完整复测已在GPU 0/1上通过：5466帧全部处理，pair-detection及AP汇总总耗659.3秒，输出`mAP50:95=0.0014、mAP50=0.0014`。缓存manifest包含50个序列和5466个帧记录，说明双rank合并无遗漏。随后曾从该epoch 5检测checkpoint启动Pair refinement（按原版训练定义属于Stage 2），配置中的`task=tracking`会启用成对帧与`inter=2`采样；KL tracker仍然只是训练后的推理状态机，不构成额外可训练阶段。GPU 0/1均参与该历史任务，有效全局BS=16，前80个iteration的全部loss有限，稳态`data_time`约0.001秒。
 
 对照DiffusionTrack-lx的实际scheduler后，20 epoch正式配置改为按有效全局batch线性缩放的`yoloxwarmcos`：`base_lr=0.001/64×effective_batch`。当物理全局BS=2、累积8步时，普通backbone和DiffusionHead在1 epoch二次warmup后达到`2.5e-4`，ConvMSI stem保持10倍即`2.5e-3`；随后cosine下降，最后5 epoch分别固定为`1.25e-5/1.25e-4`。scheduler按optimizer update而非micro-batch推进。同时将LR设置移到`optimizer.step()`之前，消除新任务第一步先使用峰值、随后再跳回warmup起点的异常。
+
+## 15. Pair共享几何增强修复（2026-07-21）
+
+对训练张量进行GT可视化后发现，Pair mosaic虽然共享四个tile的位置和mosaic中心，但REF与CUR曾分别调用一次`random_perspective`，从而独立采样旋转、缩放、剪切和平移。该实现会凭空引入与真实帧间运动无关的几何差异；极端样本中REF只占画面很小区域而CUR被大幅放大，违反Pair Detection要求两侧使用同一预处理变换的约束。
+
+现将两侧未仿射的mosaic同时保留，只采样一套几何增强参数，并通过重放Python和NumPy随机状态把完全相同的变换应用到REF和CUR。HSV仍保持关闭，3-JPG到八通道拼接、`/255`、多尺度、mosaic取样以及`[-2,2]`帧偏移逻辑均未改变；无增强阶段原本就是确定性等比resize，不受影响。
+
+完整数据链数值测试把`track_range`临时设为0，使Pair两侧原始图像和GT一致；经过Mosaic和随机仿射后得到`image_equal=True`、`label_equal=True`，证明输出图像及旋转GT逐元素一致。真实`track_range=2`样本在`576×768`、`704×928`和`896×1184`三个训练尺度完成可视化，REF/CUR的mosaic边界和仿射几何一致、共同track ID列表一致。可视化保存在`DiffusionTrack/visualizations/gt_preprocess_shared_aug_20260721/`，远端副本位于`/data4/linxu/PairMOT_DiffusionTrack/gt_preprocess_shared_aug_20260721/`。
+
+使用独立增强的旧任务在epoch 11 iteration 1220停止，目录`yolo11l_diffusion_track_hsmot_inter2_b2_d2_acc8_bf16_w8_boxfix`及其checkpoint只保留用于问题追溯，不再用于resume或评估。修复后从同一Stage-1检测checkpoint重新开始，实验名为`yolo11l_diffusion_track_hsmot_inter2_b2_d2_acc8_bf16_w8_sharedaug`。GPU 0/1双卡、物理全局BS=2、累积8、BF16及有效全局BS=16保持不变；epoch 1前60 iteration已正常完成，显存约16.23 GiB，全部loss有限。
+
+## 16. Stage-1语义校正与缩放范围（2026-07-21）
+
+再次逐行核对原版入口后明确两阶段含义：Stage 1使用`task=detection`和单图`MosaicDetection`，loader只返回一张图；`DiffusionNet`在内部复用同一份特征并复制同一份GT形成self-pair，因此不存在训练帧间隔，配置也不定义`pair_interval`。Stage 2才使用`task=tracking`和`DiffusionMosaicDetection`读取两个真实帧，并令`pair_interval`控制同序列偏移。KL/Kalman是推理状态机，不是第二个可训练网络阶段。此前把`task=tracking`的inter=2任务称为“Stage-1 Pair Detection”属于命名错误；相关Stage-2任务均已停止，不再自动重启。
+
+HSMOT两个训练阶段继承的几何缩放范围已从`(0.1,2.0)`收紧到`(0.5,1.5)`。问题样本的实际随机缩放为0.162717，确实会把整个mosaic缩到画面小区域；新范围排除了此类近乎空画面，同时保留尺度增强。Stage-1因为self-pair只执行一次增强，内部两侧天然完全一致；Stage-2继续使用上一节实现的一套参数同步增强两侧。
+
+当前真正启动的是Stage-1 detection：实验`yolo11l_diffusion_det_hsmot_b4_d2_acc4_bf16_w8_scale05_15`从MMOT官方八通道YOLO11L权重开始，不加载旧Stage-2 checkpoint；数据为223本地完整3-JPG，GPU 0/1、物理全局BS=4、累积4、BF16、有效全局BS=16。配置日志确认`task=detection`、`scale=(0.5,1.5)`且无`pair_interval`；epoch 1 iteration 20已完成，全部loss有限。
+
+## 17. 训练与验证可视化（2026-07-21）
+
+Stage-1现由rank 0在全局iteration 1及其后每500 iteration保存一张送入模型前的真实训练图，直接从GPU训练张量恢复前三波段可视图并叠加增强后的旋转GT。文件写入实验目录`train_visualizations/`，文件名同时记录epoch、epoch内iteration和全局iteration；该路径只在保存点发生一次GPU到CPU拷贝，不进入常规iteration热路径。
+
+验证频率从每5 epoch改为每3 epoch，即epoch 3/6/9/12/15/18执行双卡完整旋转mAP验证。每次验证利用每个序列首帧的`prev_frame_id==frame_id`唯一标记，在负责该样本的DDP rank保存一张图，因此完整50序列每次各产生一张且不会因双卡重复。验证图绿色显示GT，红色显示score不低于0.05的最多30个预测，位于`val_det/epoch_NNN/visualizations/<sequence>_frame_XXXXXX.jpg`；pair detection cache和原mAP统计保持不变。
+
+GPU训练张量写图和验证GT/预测写图均已通过独立烟雾测试。当前有效任务重启为`yolo11l_diffusion_det_hsmot_b4_d2_acc4_bf16_w8_scale05_15_val3_vis500_v2`；iteration 1真实训练图已成功写入，iteration 20全部loss有限。首张图已同步到本仓库`DiffusionTrack/visualizations/stage1_val3_vis500_v2/`供检查。
+
+## 18. data43-2多目标过拟合诊断与匹配修复（2026-07-21）
+
+为验证多类别、密集目标和小目标条件下的完整监督链路，另以`data43-2`第一帧构造单图重复20次的数据集。该帧包含15个GT，覆盖car、bike、pedestrian、truck、bus和tricycle六类；训练使用固定`896×1184`、BS=1、accumulate=1、BF16，并关闭mosaic、mixup、多尺度、翻转及EMA。可视化同时保存原始GT、高斯proposal、六层refine输出和每层SimOTA分配；固定`t=999/noise seed=0`仅用于严格记忆诊断，正式配置仍保留随机时间和随机噪声。
+
+诊断首先发现原版Dynamic-K的缺失GT修复存在真实冲突：多个缺失GT可在同一轮选择同一个query，随后冲突清理又复用了修复前的旧mask。匹配矩阵因此可能同时满足“每列非空”，却让同一个query对应多个GT；转为训练索引时每行只保留一个GT，其他GT实际没有监督。现先解析当前冲突，再逐个给缺失GT分配尚未占用的query；没有空闲query时只允许从拥有多个正样本的GT转移一个query。最终强制验证每个query至多匹配一个GT、每个GT至少一个正样本。200组随机压力测试全部通过，真实六层快照均覆盖15/15 GT且query无重复。
+
+第二个问题来自六层级联框回归初始化。通用Xavier初始化会使同一个随机`(dx,dy,dw,dh,dtheta)`残差连续作用六次；早期层已经接近GT的框会被后续层逐级破坏。各层最终`bboxes_delta`投影现以全零权重和bias初始化，使级联在训练开始时为恒等映射，同时保留每层独立可学习残差、结构、损失和前向流程。修复前固定条件下epoch 10的stage 0最佳pair IoU均值为0.5505，至stage 5降到0.0191；修复后epoch 5六层加权L1由3.434、2.520、1.999、1.510、1.350单调降到1.021，证明refine方向已恢复。
+
+第三个问题是退化旋转框。高斯proposal裁剪后约4%的query会出现接近零的宽或高；MMCV旋转IoU CUDA算子曾对两个相距数百像素的此类框返回1，单纯把输出限制到`[0,1]`无法识别该假值。现在旋转IoU显式将非有限或边长不大于`1e-4`的框标为无效，pairwise IoU置零；可微IoU先以有限dummy几何避开CUDA未定义行为，再将对应结果和梯度置零；解码在NMS前过滤无效框，matcher也不允许其成为正样本。GPU测试确认退化框IoU为0且反向梯度有限，正常框IoU与梯度不变。最终重跑的六层初始快照中38个退化proposal均未被选中，所有层仍保持15/15 GT覆盖。
+
+此外，短程诊断关闭EMA，避免decay约0.9998的权重仍被初始化主导；固定seed推理改为把同一个proposal模板广播到batch和`curr->curr`分支，与训练逐样本重建同seed generator的语义一致。这两项均只在overfit配置显式启用时生效。正式训练需要从MMOT官方YOLO11L骨干重新开始，才能使用新的级联初始化；恢复旧DiffusionHead checkpoint会覆盖初始化，不应与本次修复混用。
+
+单卡诊断还复现了训练内验证后的allocator碎片化：FP32旋转验证峰值约18.9 GiB，返回BF16训练后虽然实际存活张量只有约10.9 GiB，但验证临时块仍被PyTorch保留；第二次验证后ConvMSI尝试申请约6.07 GiB工作区时因连续空闲显存不足而OOM。trainer现于验证返回、局部验证张量销毁后调用`torch.cuda.empty_cache()`，只释放allocator缓存，不迁移或重建模型、optimizer与EMA。最终重跑每5 epoch先保存checkpoint再验证，既验证释放逻辑，也保证外部故障时可从最近完整epoch恢复。
+
+## 19. 扩散初始框最小尺寸修复（2026-07-21）
+
+在保留上述IoU输入合法性保护的基础上，又从扩散几何转换源头处理零面积框。前向扩散latent仍严格按原公式、原cosine schedule和五维标准高斯生成，不改变其分布；只有在归一化框恢复为像素旋转框时，才把宽和高分别限制为至少1像素。中心坐标和LE135角度完整保留原取值范围，正常宽高不做线性重映射。训练和推理共用`unit_rboxes_to_absolute`，从而不会出现一侧有下限、另一侧仍产生零面积初始框的问题。下限在像素坐标转换后执行，避免BF16中先除以图像尺寸再乘回时把1像素舍入为约0.998像素；现有finite/边长检查、无效IoU置零和NMS过滤继续作为后续回归异常的第二道保护。
+
+CPU FP32/BF16及223 GPU BF16边界测试均确认零宽高输入精确输出为1像素，正常框、中心与角度不变。`data43-2`固定`t=999/noise seed=0`的首个真实训练快照中，原本会退化的40个初始框均被提升到1像素，500个框中低于1像素和非有限框数量均为0；六个refinement stage仍全部覆盖15/15 GT。随后从MMOT官方YOLO11L骨干完整训练41 epoch，全程无NaN、OOM或漏分配，总损失从40.512降至8.311，最佳验证出现在epoch 35：`mAP50=0.5842、mAP50:95=0.3782`。bike仍未在该短程严格诊断中拟合，说明尺寸下限解决的是退化几何污染而不是普通IoU对不相交小框缺少几何梯度的问题。损失继续使用可微普通旋转IoU，未改为ProbIoU或GIoU。
+
+223实验目录为`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/yolo11l_diffusion_det_hsmot_overfit_data43_2_minside1px_exact_plainriou_fixedseed_gpu3_v30`，日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_overfit_data43_2_minside1px_exact_plainriou_fixedseed_gpu3_v30_20260721.log`。

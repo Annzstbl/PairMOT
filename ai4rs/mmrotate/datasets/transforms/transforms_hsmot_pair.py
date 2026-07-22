@@ -2,6 +2,7 @@
 """Shared geometric transforms for HSMOT image pairs."""
 from typing import List, Optional, Union
 
+import mmcv
 import numpy as np
 import torch
 from mmcv.transforms import BaseTransform
@@ -140,10 +141,13 @@ class PairSharedResize(BaseTransform):
     def transform(self, results: dict) -> dict:
         bbox_keys = ('gt_bboxes_prev', 'gt_bboxes_curr')
         sub0 = _subresult(results, 0, bbox_keys[0])
+        if results.get('homography_matrix', None) is not None:
+            sub0['homography_matrix'] = results['homography_matrix']
         self.resize.transform(sub0)
         _write_subresult(results, 0, bbox_keys[0], sub0)
 
-        for meta_key in ('scale', 'scale_factor', 'keep_ratio', 'img_shape'):
+        for meta_key in ('scale', 'scale_factor', 'keep_ratio', 'img_shape',
+                         'homography_matrix'):
             if meta_key in sub0:
                 results[meta_key] = sub0[meta_key]
 
@@ -169,18 +173,22 @@ class PairSharedRandomFlip(BaseTransform):
         self.flip = RandomFlip(prob=prob, direction=direction)
 
     def transform(self, results: dict) -> dict:
-        dummy = {
-            'img': results['img'][0].copy(),
-            'img_shape': results['img_shape'],
-        }
-        self.flip.transform(dummy)
-
-        flip = dummy.get('flip', False)
-        flip_direction = dummy.get('flip_direction', None)
+        # Sample through RandomFlip's original cached RNG path, but avoid
+        # copying and flipping a full image only to discard that result.
+        flip_direction = self.flip._choose_direction()
+        flip = flip_direction is not None
         results['flip'] = flip
         results['flip_direction'] = flip_direction
-        if 'homography_matrix' in dummy:
-            results['homography_matrix'] = dummy['homography_matrix']
+        if flip:
+            homography = {
+                'img': results['img'][0],
+                'flip_direction': flip_direction,
+            }
+            if results.get('homography_matrix', None) is not None:
+                homography['homography_matrix'] = results[
+                    'homography_matrix']
+            self.flip._record_homography_matrix(homography)
+            results['homography_matrix'] = homography['homography_matrix']
 
         for img_idx, bbox_key in enumerate(
                 ('gt_bboxes_prev', 'gt_bboxes_curr')):
@@ -188,7 +196,15 @@ class PairSharedRandomFlip(BaseTransform):
             sub['flip'] = flip
             sub['flip_direction'] = flip_direction
             if flip:
-                self.flip._flip(sub)
+                # np.flip, used by RandomFlip, leaves a negative-stride view
+                # and makes the later HWC-to-CHW pack expensive. These pair
+                # images are private writable arrays, so OpenCV can perform
+                # the identical flip in place and keep them contiguous.
+                sub['img'] = mmcv.imflip_(
+                    sub['img'], direction=flip_direction)
+                if sub.get('gt_bboxes') is not None:
+                    sub['gt_bboxes'].flip_(
+                        sub['img'].shape[:2], flip_direction)
             results['img'][img_idx] = sub['img']
             if bbox_key in results and 'gt_bboxes' in sub:
                 results[bbox_key] = sub['gt_bboxes']
@@ -249,17 +265,21 @@ class PairSharedRandomRotate(BaseTransform):
             **self.rotate_kwargs,
         })
 
+        # Both frames receive the same geometric transform. Record that
+        # transform once for GMC conjugation rather than once per frame.
+        rotate.homography_matrix = rotate._get_homography_matrix(
+            _subresult(results, 0, 'gt_bboxes_prev'))
+        if results.get('homography_matrix', None) is None:
+            results['homography_matrix'] = rotate.homography_matrix
+        else:
+            results['homography_matrix'] = (
+                rotate.homography_matrix @ results['homography_matrix'])
+
         for img_idx, bbox_key in enumerate(
                 ('gt_bboxes_prev', 'gt_bboxes_curr')):
             sub = _subresult(results, img_idx, bbox_key)
             # Rotate without per-frame _filter_invalid: placeholders for
             # new/disappear tracks must stay row-aligned with pair_gt.
-            rotate.homography_matrix = rotate._get_homography_matrix(sub)
-            if results.get('homography_matrix', None) is None:
-                results['homography_matrix'] = rotate.homography_matrix
-            else:
-                results['homography_matrix'] = (
-                    rotate.homography_matrix @ results['homography_matrix'])
             rotate._transform_img(sub)
             if sub.get('gt_bboxes') is not None:
                 rotate._transform_bboxes(sub)

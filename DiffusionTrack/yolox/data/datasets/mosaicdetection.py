@@ -13,6 +13,26 @@ from ..data_augment import box_candidates, random_perspective, augment_hsv
 from .datasets_wrapper import Dataset
 
 
+def _shared_random_perspective(ref_image, ref_labels, cur_image, cur_labels,
+                               **kwargs):
+    """Apply exactly the same sampled geometry to both sides of a pair.
+
+    Pair tracking assumes that motion is the only geometric difference between
+    the reference and current frames.  Sampling affine parameters separately
+    creates artificial motion (and can even put the two frames at very
+    different scales), so replay both Python and NumPy RNG states for CUR.
+    """
+    python_state = random.getstate()
+    numpy_state = np.random.get_state()
+    ref_image, ref_labels = random_perspective(
+        ref_image, ref_labels, **kwargs)
+    random.setstate(python_state)
+    np.random.set_state(numpy_state)
+    cur_image, cur_labels = random_perspective(
+        cur_image, cur_labels, **kwargs)
+    return ref_image, ref_labels, cur_image, cur_labels
+
+
 def _place_labels(labels, scale, padw, padh):
     labels = labels.copy()
     if not len(labels):
@@ -401,18 +421,8 @@ class DiffusionMosaicDetection(Dataset):
                 mosaic_labels = _filter_visible(
                     mosaic_labels, 2 * input_w, 2 * input_h)
                 
-            #augment_hsv(mosaic_img)
-            mosaic_img, mosaic_labels = random_perspective(
-                mosaic_img,
-                mosaic_labels,
-                degrees=self.degrees,
-                translate=self.translate,
-                scale=self.scale,
-                shear=self.shear,
-                perspective=self.perspective,
-                border=[-input_h // 2, -input_w // 2],
-            )  # border to remove
-
+            # Keep the unwarped REF mosaic until CUR has been assembled.  A
+            # single sampled affine transform is then replayed on both sides.
             ref_mosaic_img, ref_mosaic_labels=mosaic_img, mosaic_labels
 
             mosaic_labels = []
@@ -452,10 +462,15 @@ class DiffusionMosaicDetection(Dataset):
                 mosaic_labels = _filter_visible(
                     mosaic_labels, 2 * input_w, 2 * input_h)
                 
-            #augment_hsv(mosaic_img)
-            mosaic_img, mosaic_labels = random_perspective(
-                mosaic_img,
-                mosaic_labels,
+            track_mosaic_img, track_mosaic_labels = mosaic_img, mosaic_labels
+            # HSV remains disabled for multispectral input.  All geometric
+            # augmentation parameters are shared inside the Pair.
+            (ref_mosaic_img, ref_mosaic_labels,
+             track_mosaic_img, track_mosaic_labels) = _shared_random_perspective(
+                ref_mosaic_img,
+                ref_mosaic_labels,
+                track_mosaic_img,
+                track_mosaic_labels,
                 degrees=self.degrees,
                 translate=self.translate,
                 scale=self.scale,
@@ -464,7 +479,6 @@ class DiffusionMosaicDetection(Dataset):
                 border=[-input_h // 2, -input_w // 2],
             )  # border to remove
 
-            track_mosaic_img, track_mosaic_labels=mosaic_img, mosaic_labels
             ref_mix_img, ref_padded_labels,track_mix_img, track_padded_labels = self.preproc(ref_mosaic_img, ref_mosaic_labels,track_mosaic_img,track_mosaic_labels, self.input_dim)
             img_info = (ref_mix_img.shape[1], ref_mix_img.shape[0])
 

@@ -31,13 +31,21 @@ class Exp(MyExp):
         self.test_size = (900, 1200)
         # Keep the original multi-scale span while matching HSMOT's 4:3 ratio.
         self.random_size = (18, 28)
+        # Avoid shrinking an entire aerial mosaic to nearly empty content.
+        # Tracking configs inherit this range, and Pair sides share one draw.
+        self.scale = (0.5, 1.5)
+        # A five-parameter rotated box cannot represent the parallelogram
+        # produced by shear. Preserve the source quadrilateral annotations
+        # verbatim instead of rectifying them through minAreaRect.
+        self.shear = 0.0
         self.max_epoch = 20
         self.print_interval = 20
+        self.train_vis_interval = 500
         self.save_interval = 5
-        self.eval_interval = 5
+        self.eval_interval = 3
         # Keep Stage-1 validation/checkpoint cadence unchanged after mosaic is
         # disabled; the upstream trainer otherwise validates every epoch.
-        self.no_aug_eval_interval = 5
+        self.no_aug_eval_interval = 3
         self.no_aug_epochs = 5
         self.basic_lr_per_img = 0.001 / 64.0
         # Match the reproduced DiffusionTrack rule: scale 0.001 / 64 by the
@@ -57,6 +65,8 @@ class Exp(MyExp):
         # Global validation BS=6 is split across both DDP ranks (3 per GPU).
         # Backbone features are shared by prev->curr and curr->curr.
         self.val_batch_size = 6
+        self.val_visualization_conf = 0.05
+        self.val_visualization_max_dets = 30
         self.train_data_dir = os.environ.get(
             "HSMOT_TRAIN_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/train"))
         self.val_data_dir = os.environ.get(
@@ -152,6 +162,9 @@ class Exp(MyExp):
             nmsthre3d=self.nms_thresh3d, nmsthre2d=self.nms_thresh2d,
             # Torch 2.0/mmcv 2.2 has no BF16 RotatedROIAlign kernel.
             amp=False,
+            visualize=True,
+            visualization_conf=self.val_visualization_conf,
+            visualization_max_dets=self.val_visualization_max_dets,
             cache_root=os.path.join(
                 self.output_dir, self.exp_name, "val_det"))
 

@@ -10,8 +10,9 @@ from loguru import logger
 from tqdm import tqdm
 
 from yolox.tracker.diffusion_tracker_kl import DiffusionTracker
-from yolox.utils import is_main_process
-from yolox.utils.rotated_boxes import qbox_to_rbox, rotated_iou
+from yolox.utils import is_main_process, save_hsmot_pair_visualization
+from yolox.utils.rotated_boxes import (qbox_to_rbox, rbox_to_qbox,
+                                       rotated_iou)
 from .hsmot_detection_cache import write_detection_cache
 
 
@@ -25,7 +26,8 @@ class HSMOTRotatedDetectionEvaluator:
 
     def __init__(self, dataloader, num_classes, confthre=0.001,
                  detthre=0.001, nmsthre3d=0.7, nmsthre2d=0.75, amp=True,
-                 cache_root=None, max_dets=100):
+                 cache_root=None, max_dets=100, visualize=True,
+                 visualization_conf=0.05, visualization_max_dets=30):
         self.dataloader = dataloader
         self.num_classes = num_classes
         self.confthre = confthre
@@ -39,6 +41,41 @@ class HSMOTRotatedDetectionEvaluator:
         self.cache_root = cache_root
         self.validation_name = None
         self.max_dets = int(max_dets)
+        self.visualize = bool(visualize)
+        self.visualization_conf = float(visualization_conf)
+        self.visualization_max_dets = int(visualization_max_dets)
+
+    def _save_sequence_visualization(self, image, target, detections,
+                                     sequence, frame_id, prev_frame_id):
+        # The first item of a sequence is uniquely identified by self-pairing,
+        # so distributed validation writes exactly one image per sequence.
+        if (not self.visualize or self.cache_root is None or
+                int(frame_id) != int(prev_frame_id)):
+            return
+        selected = detections[
+            detections[:, 6] >= self.visualization_conf]
+        if len(selected) > self.visualization_max_dets:
+            keep = np.argsort(-selected[:, 6])[:self.visualization_max_dets]
+            selected = selected[keep]
+        pred_qboxes = rbox_to_qbox(torch.as_tensor(
+            selected[:, :5], dtype=torch.float32)).cpu().numpy()
+        root = os.path.join(
+            self.cache_root, self.validation_name or "latest",
+            "visualizations")
+        filename = "{}_frame_{:06d}.jpg".format(
+            str(sequence).replace(os.sep, "_"), int(frame_id))
+        try:
+            save_hsmot_pair_visualization(
+                os.path.join(root, filename), image, target,
+                pred_qboxes=pred_qboxes,
+                pred_classes=selected[:, 7].astype(np.int64),
+                pred_scores=selected[:, 6],
+                class_names=getattr(self.dataloader.dataset, "_classes", None),
+                title="{} frame {} GT=green PRED=red".format(
+                    sequence, int(frame_id)))
+        except Exception as error:
+            logger.warning("failed to save val visualization for {}: {}",
+                           sequence, error)
 
     @staticmethod
     def _interpolated_ap(tp, fp, num_gt):
@@ -126,6 +163,12 @@ class HSMOTRotatedDetectionEvaluator:
                 target = targets[batch_index]
                 valid = target[:, 1:9].abs().sum(dim=1) > 0
                 target = target[valid]
+                sequence = meta['sequence'][batch_index]
+                frame_id = int(meta['frame_id'][batch_index])
+                prev_frame_id = int(meta['prev_frame_id'][batch_index])
+                self._save_sequence_visualization(
+                    curr_images[batch_index], target, detections,
+                    sequence, frame_id, prev_frame_id)
                 gt_by_class = []
                 image_id = int(meta['image_id'][batch_index])
                 for class_id in range(self.num_classes):
@@ -155,9 +198,9 @@ class HSMOTRotatedDetectionEvaluator:
                             curr_images.shape[-1] / original_w)
                 cache_records.append(dict(
                     image_id=image_id,
-                    sequence=meta['sequence'][batch_index],
-                    frame_id=int(meta['frame_id'][batch_index]),
-                    prev_frame_id=int(meta['prev_frame_id'][batch_index]),
+                    sequence=sequence,
+                    frame_id=frame_id,
+                    prev_frame_id=prev_frame_id,
                     scale=scale, ref_dets=ref_dets, cur_dets=cur_dets,
                     detections=detections))
 

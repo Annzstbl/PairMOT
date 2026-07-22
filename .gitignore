@@ -190,3 +190,7 @@ RT-DETR/rtdetrv2_pytorch/output/
 RT-DETR/rtdetrv2_pytorch/dataset/
 
 /pretrained_weights
+
+# Generated full-sequence comparison videos (large local artifacts)
+/ai4rs/projects/multispec_pair_rotated_rtdetr/docs/reports/*_analysis/videos/
+/ai4rs/projects/multispec_pair_rotated_rtdetr/docs/reports/*_visualization/videos/

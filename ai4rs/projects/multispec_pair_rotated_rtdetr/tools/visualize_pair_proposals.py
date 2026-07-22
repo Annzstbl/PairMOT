@@ -349,7 +349,7 @@ def _pairtopk_v2_diag(model, memory_prev, memory_curr, memory_mask,
     candidate_topk = int(cfg.get('candidate_topk', model.num_queries * 6))
     affinity_thr = float(cfg.get('affinity_thr', 0.25))
     proposal_quality_weight = float(cfg.get('proposal_quality_weight', 0.70))
-    learned_quality_weight = float(cfg.get('learned_quality_weight', 0.20))
+    learned_quality_weight = float(cfg.get('learned_quality_weight', 0.0))
     affinity_rank_weight = float(cfg.get('affinity_rank_weight', 0.10))
     unique_pair_selection = bool(cfg.get('unique_pair_selection', False))
     pair_selection_mode = str(cfg.get('pair_selection_mode', 'rank'))

@@ -16,6 +16,25 @@ import time
 ModelPrediction = namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
 
 
+def unit_rboxes_to_absolute(boxes, images_whwh, min_side=1.0):
+    """Convert unit LE135 boxes to pixels with a geometric size floor.
+
+    Diffusion clipping can map width or height exactly to zero.  A zero-area
+    rotated box is outside the domain of the rotated IoU/ROIAlign kernels and
+    cannot be recovered reliably by multiplicative box-delta decoding.  Keep
+    the diffusion latent unchanged and apply the floor only when constructing
+    its geometric box representation.  Centers and angles retain their full
+    unit ranges.
+    """
+    boxes = boxes.clone()
+    boxes[..., :4] *= images_whwh[:, None, :]
+    # Clamp after conversion so BF16 rounding cannot turn a normalized
+    # one-pixel floor back into a 0.998-pixel side.
+    boxes[..., 2:4] = boxes[..., 2:4].clamp_min(float(min_side))
+    boxes[..., 4] = boxes[..., 4] * math.pi - math.pi / 4
+    return boxes
+
+
 def exists(x):
     return x is not None
 
@@ -65,6 +84,8 @@ class DiffusionHead(nn.Module):
         # self.num_proposals = 512
         self.hidden_dim = int(256*width)
         self.num_heads = num_heads
+        self.capture_train_debug = False
+        self.last_train_debug = None
 
         # build diffusion
         timesteps = 1000
@@ -88,6 +109,9 @@ class DiffusionHead(nn.Module):
         self.ddim_sampling_eta = 1.
         self.self_condition = False
         self.scale = 2.0
+        # Minimum geometric side of a decoded diffusion proposal, in pixels.
+        # This affects only boxes clipped to an (almost) zero normalized side.
+        self.min_diffusion_side = 1.0
         self.box_renewal = True
         self.use_ensemble = True
 
@@ -162,10 +186,8 @@ class DiffusionHead(nn.Module):
         def prepare(x,images_whwh):
             x_boxes = torch.clamp(x, min=-1 * self.scale, max=self.scale)
             x_boxes = ((x_boxes / self.scale) + 1) / 2
-            x_boxes = x_boxes.clone()
-            x_boxes[..., :4] *= images_whwh[:, None, :]
-            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 4
-            return x_boxes
+            return unit_rboxes_to_absolute(
+                x_boxes, images_whwh, self.min_diffusion_side)
         
         def post(x_start,images_whwh):
             x_start = x_start.clone()
@@ -198,9 +220,18 @@ class DiffusionHead(nn.Module):
         else:
             generator = torch.Generator(device=self.device)
             generator.manual_seed(int(fixed_noise_seed))
-            cur_bboxes = torch.randn(
-                shape, device=self.device, dtype=self.dtype,
-                generator=generator)
+            # Match prepare_diffusion_concat's fixed-seed semantics: that
+            # method recreates the generator for every training sample, so
+            # every sample sees the same proposal template.  Generate once
+            # and broadcast here as well; otherwise validation batch items
+            # (and the curr->curr detection branch) consume later, different
+            # segments of the random stream and are not the fixed diagnostic
+            # condition that was trained.
+            proposal_template = torch.randn(
+                (1, self.num_proposals, 5), device=self.device,
+                dtype=self.dtype, generator=generator)
+            cur_bboxes = proposal_template.expand(
+                batch, -1, -1).clone()
         ref_t_list=[]
         track_t_list=[]
         total_time=0
@@ -396,9 +427,11 @@ class DiffusionHead(nn.Module):
             targets, x_boxes, noises, t = self.prepare_targets(targets,images_whwh)
             t=t.squeeze(-1)
             # t[b:]=t[:b]
-            x_boxes = x_boxes.clone()
-            x_boxes[..., :4] *= images_whwh[:, None, :]
-            x_boxes[..., 4] = x_boxes[..., 4] * math.pi - math.pi / 4
+            x_boxes = unit_rboxes_to_absolute(
+                x_boxes, images_whwh, self.min_diffusion_side)
+            initial_boxes_debug = (
+                x_boxes.detach().float().cpu().clone()
+                if self.capture_train_debug else None)
             pre_x_boxes,cur_x_boxes=torch.split(x_boxes,b,dim=0)
 
             outputs_class,outputs_coord,outputs_score = self.head(features,(pre_x_boxes,cur_x_boxes),t)
@@ -408,6 +441,24 @@ class DiffusionHead(nn.Module):
                 output['aux_outputs'] = [{'pred_logits': a, 'pred_boxes': b,'pred_scores': c}
                                          for a, b, c in zip(outputs_class[:-1], outputs_coord[:-1],outputs_score[:-1])]
             loss_dict = self.criterion(output, targets)
+            if self.capture_train_debug:
+                self.last_train_debug = {
+                    'timesteps': t.detach().cpu().clone(),
+                    'image_whwh': images_whwh.detach().float().cpu().clone(),
+                    'gt_boxes': [
+                        target['boxes_abs'].detach().float().cpu().clone()
+                        for target in targets],
+                    'gt_classes': [
+                        target['labels'].detach().long().cpu().clone()
+                        for target in targets],
+                    'initial_boxes': initial_boxes_debug,
+                    'stage_boxes': outputs_coord.detach().float().cpu().clone(),
+                    'stage_logits': outputs_class.detach().float().cpu().clone(),
+                    'stage_scores': outputs_score.detach().float().cpu().clone(),
+                    'assignments': self.criterion.last_debug_assignments,
+                }
+            else:
+                self.last_train_debug = None
             weight_dict = self.criterion.weight_dict
             for k in loss_dict.keys():
                 if k in weight_dict: 

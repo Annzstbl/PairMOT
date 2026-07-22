@@ -1,0 +1,177 @@
+[
+  {
+    "sample": 1,
+    "dataset_index": 1551,
+    "seed": 8823,
+    "input_hw": [
+      576,
+      768
+    ],
+    "image_shape": [
+      8,
+      576,
+      768
+    ],
+    "image_dtype": "float32",
+    "image_range": [
+      0.0,
+      1.0
+    ],
+    "ref_gt_count": 42,
+    "cur_gt_count": 42,
+    "paired_track_ids_equal": true,
+    "track_ids": [
+      224,
+      228,
+      260,
+      284,
+      308,
+      324,
+      328,
+      336,
+      348,
+      356,
+      368,
+      372,
+      376,
+      380,
+      396,
+      400,
+      404,
+      408,
+      416,
+      424,
+      428,
+      432,
+      436,
+      440,
+      444,
+      448,
+      456,
+      472,
+      476,
+      480,
+      484,
+      492,
+      516,
+      524,
+      532,
+      540,
+      544,
+      564,
+      596,
+      632,
+      704,
+      708
+    ]
+  },
+  {
+    "sample": 2,
+    "dataset_index": 4269,
+    "seed": 9823,
+    "input_hw": [
+      704,
+      928
+    ],
+    "image_shape": [
+      8,
+      704,
+      928
+    ],
+    "image_dtype": "float32",
+    "image_range": [
+      0.07058823853731155,
+      1.0
+    ],
+    "ref_gt_count": 9,
+    "cur_gt_count": 9,
+    "paired_track_ids_equal": true,
+    "track_ids": [
+      120,
+      124,
+      222,
+      238,
+      250,
+      258,
+      266,
+      290,
+      294
+    ]
+  },
+  {
+    "sample": 3,
+    "dataset_index": 1407,
+    "seed": 10823,
+    "input_hw": [
+      896,
+      1184
+    ],
+    "image_shape": [
+      8,
+      896,
+      1184
+    ],
+    "image_dtype": "float32",
+    "image_range": [
+      0.0,
+      1.0
+    ],
+    "ref_gt_count": 15,
+    "cur_gt_count": 15,
+    "paired_track_ids_equal": true,
+    "track_ids": [
+      16,
+      40,
+      44,
+      68,
+      100,
+      108,
+      116,
+      144,
+      170,
+      194,
+      195,
+      202,
+      227,
+      235,
+      275
+    ]
+  },
+  {
+    "sample": 4,
+    "dataset_index": 6796,
+    "seed": 11823,
+    "input_hw": [
+      576,
+      768
+    ],
+    "image_shape": [
+      8,
+      576,
+      768
+    ],
+    "image_dtype": "float32",
+    "image_range": [
+      0.0470588244497776,
+      1.0
+    ],
+    "ref_gt_count": 13,
+    "cur_gt_count": 13,
+    "paired_track_ids_equal": true,
+    "track_ids": [
+      36,
+      48,
+      52,
+      56,
+      80,
+      104,
+      120,
+      132,
+      176,
+      192,
+      236,
+      798,
+      834
+    ]
+  }
+]

@@ -282,7 +282,9 @@ def _class_multi_aps(samples: Sequence[dict],
     pair_overlaps: Dict[int, np.ndarray] = {}
     prev_overlaps: Dict[int, np.ndarray] = {}
     curr_overlaps: Dict[int, np.ndarray] = {}
-    pred_row: Dict[int, Dict[int, int]] = {}
+    pred_row_pair: Dict[int, Dict[int, int]] = {}
+    pred_row_prev: Dict[int, Dict[int, int]] = {}
+    pred_row_curr: Dict[int, Dict[int, int]] = {}
     pair_detections: List[tuple] = []
     prev_detections: List[tuple] = []
     curr_detections: List[tuple] = []
@@ -292,20 +294,36 @@ def _class_multi_aps(samples: Sequence[dict],
         t0 = time.perf_counter()
         gt_indices = torch.nonzero(
             sample['gt_labels'] == label, as_tuple=False).flatten()
-        pred_indices = torch.nonzero(
+        pred_indices_pair = torch.nonzero(
             sample['pred_labels'] == label, as_tuple=False).flatten()
+        pred_indices_prev = torch.nonzero(
+            sample.get('pred_labels_prev', sample['pred_labels']) == label,
+            as_tuple=False).flatten()
+        pred_indices_curr = torch.nonzero(
+            sample.get('pred_labels_curr', sample['pred_labels']) == label,
+            as_tuple=False).flatten()
         gt_by_sample_pair[sample_id] = gt_indices.tolist()
 
-        pred_row[sample_id] = {
+        pred_row_pair[sample_id] = {
             int(pred_idx): row
-            for row, pred_idx in enumerate(pred_indices.tolist())
+            for row, pred_idx in enumerate(pred_indices_pair.tolist())
         }
-        for pred_idx in pred_indices.tolist():
+        pred_row_prev[sample_id] = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(pred_indices_prev.tolist())
+        }
+        pred_row_curr[sample_id] = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(pred_indices_curr.tolist())
+        }
+        for pred_idx in pred_indices_pair.tolist():
             pair_detections.append(
                 (float(sample['pred_scores'][pred_idx]), sample_id, pred_idx))
+        for pred_idx in pred_indices_prev.tolist():
             prev_detections.append(
                 (float(sample['pred_score_prev'][pred_idx]), sample_id,
                  pred_idx))
+        for pred_idx in pred_indices_curr.tolist():
             curr_detections.append(
                 (float(sample['pred_score_curr'][pred_idx]), sample_id,
                  pred_idx))
@@ -325,30 +343,48 @@ def _class_multi_aps(samples: Sequence[dict],
             gt_by_sample_prev[sample_id] = []
             gt_by_sample_curr[sample_id] = []
         _profile_add(profile, 'class_filter', time.perf_counter() - t0)
-        _profile_count(profile, 'detections', len(pred_indices))
+        _profile_count(profile, 'detections', len(pred_indices_pair))
         _profile_count(profile, 'gts', len(gt_indices))
 
-        np_ = len(pred_indices)
+        all_pred_indices = torch.unique(torch.cat(
+            (pred_indices_pair, pred_indices_prev, pred_indices_curr)))
+        all_pred_row = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(all_pred_indices.tolist())
+        }
+        pair_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_pair.tolist()],
+            dtype=torch.long)
+        prev_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_prev.tolist()],
+            dtype=torch.long)
+        curr_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_curr.tolist()],
+            dtype=torch.long)
+        np_pair = len(pred_indices_pair)
         ng = len(gt_indices)
-        if not np_ or not ng:
-            pair_overlaps[sample_id] = np.empty((np_, ng), dtype=np.float32)
+        if not len(all_pred_indices) or not ng:
+            pair_overlaps[sample_id] = np.empty(
+                (np_pair, ng), dtype=np.float32)
             prev_overlaps[sample_id] = np.empty(
-                (np_, len(prev_cols)), dtype=np.float32)
+                (len(pred_indices_prev), len(prev_cols)), dtype=np.float32)
             curr_overlaps[sample_id] = np.empty(
-                (np_, len(curr_cols)), dtype=np.float32)
+                (len(pred_indices_curr), len(curr_cols)), dtype=np.float32)
             continue
 
         t0 = time.perf_counter()
-        iou_prev = rbbox_overlaps(sample['pred_prev'][pred_indices],
-                                  sample['gt_prev'][gt_indices])
-        iou_curr = rbbox_overlaps(sample['pred_curr'][pred_indices],
-                                  sample['gt_curr'][gt_indices])
+        iou_prev_all = rbbox_overlaps(sample['pred_prev'][all_pred_indices],
+                                      sample['gt_prev'][gt_indices])
+        iou_curr_all = rbbox_overlaps(sample['pred_curr'][all_pred_indices],
+                                      sample['gt_curr'][gt_indices])
         _profile_add(profile, 'rbbox_iou', time.perf_counter() - t0)
         _profile_count(profile, 'rbbox_calls', 2)
 
         t0 = time.perf_counter()
-        pvp = sample['pred_valid_prev'][pred_indices].bool()
-        pvc = sample['pred_valid_curr'][pred_indices].bool()
+        iou_prev_pair = iou_prev_all[pair_rows]
+        iou_curr_pair = iou_curr_all[pair_rows]
+        pvp = sample['pred_valid_prev'][pred_indices_pair].bool()
+        pvc = sample['pred_valid_curr'][pred_indices_pair].bool()
         gvp = valid_prev
         gvc = valid_curr
         compat = ((pvp[:, None] == gvp[None, :]) &
@@ -357,17 +393,17 @@ def _class_multi_aps(samples: Sequence[dict],
         any_curr = pvc[:, None] & gvc[None, :]
         pair_overlap = torch.where(
             any_prev & any_curr,
-            torch.minimum(iou_prev, iou_curr),
-            torch.where(any_prev, iou_prev, iou_curr))
+            torch.minimum(iou_prev_pair, iou_curr_pair),
+            torch.where(any_prev, iou_prev_pair, iou_curr_pair))
         pair_overlap = torch.where(
             compat & (any_prev | any_curr), pair_overlap,
             pair_overlap.new_full((), -1.))
         pair_overlaps[sample_id] = pair_overlap.cpu().numpy().astype(
             np.float32)
-        prev_overlaps[sample_id] = iou_prev[:, prev_cols].cpu().numpy().astype(
-            np.float32)
-        curr_overlaps[sample_id] = iou_curr[:, curr_cols].cpu().numpy().astype(
-            np.float32)
+        prev_overlaps[sample_id] = iou_prev_all[
+            prev_rows][:, prev_cols].cpu().numpy().astype(np.float32)
+        curr_overlaps[sample_id] = iou_curr_all[
+            curr_rows][:, curr_cols].cpu().numpy().astype(np.float32)
         _profile_add(profile, 'overlap_prepare', time.perf_counter() - t0)
 
     t0 = time.perf_counter()
@@ -378,15 +414,15 @@ def _class_multi_aps(samples: Sequence[dict],
     result = dict(
         pair=_aps_from_cached_matches(
             sum(len(gts) for gts in gt_by_sample_pair.values()),
-            gt_by_sample_pair, pair_detections, pair_overlaps, pred_row,
+            gt_by_sample_pair, pair_detections, pair_overlaps, pred_row_pair,
             profile, 'match_pair'),
         prev=_aps_from_cached_matches(
             sum(len(gts) for gts in gt_by_sample_prev.values()),
-            gt_by_sample_prev, prev_detections, prev_overlaps, pred_row,
+            gt_by_sample_prev, prev_detections, prev_overlaps, pred_row_prev,
             profile, 'match_prev'),
         curr=_aps_from_cached_matches(
             sum(len(gts) for gts in gt_by_sample_curr.values()),
-            gt_by_sample_curr, curr_detections, curr_overlaps, pred_row,
+            gt_by_sample_curr, curr_detections, curr_overlaps, pred_row_curr,
             profile, 'match_curr'),
     )
     _profile_add(profile, 'class_total', time.perf_counter() - t_class)
@@ -434,7 +470,11 @@ def _class_multi_aps_by_gt_filter(
             'curr': {},
         } for mode in filters
     }
-    pred_row: Dict[int, Dict[int, int]] = {}
+    pred_rows = {
+        'pair': {},
+        'prev': {},
+        'curr': {},
+    }
     pair_detections: List[tuple] = []
     prev_detections: List[tuple] = []
     curr_detections: List[tuple] = []
@@ -444,18 +484,34 @@ def _class_multi_aps_by_gt_filter(
         t0 = time.perf_counter()
         gt_indices = torch.nonzero(
             sample['gt_labels'] == label, as_tuple=False).flatten()
-        pred_indices = torch.nonzero(
+        pred_indices_pair = torch.nonzero(
             sample['pred_labels'] == label, as_tuple=False).flatten()
-        pred_row[sample_id] = {
+        pred_indices_prev = torch.nonzero(
+            sample.get('pred_labels_prev', sample['pred_labels']) == label,
+            as_tuple=False).flatten()
+        pred_indices_curr = torch.nonzero(
+            sample.get('pred_labels_curr', sample['pred_labels']) == label,
+            as_tuple=False).flatten()
+        pred_rows['pair'][sample_id] = {
             int(pred_idx): row
-            for row, pred_idx in enumerate(pred_indices.tolist())
+            for row, pred_idx in enumerate(pred_indices_pair.tolist())
         }
-        for pred_idx in pred_indices.tolist():
+        pred_rows['prev'][sample_id] = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(pred_indices_prev.tolist())
+        }
+        pred_rows['curr'][sample_id] = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(pred_indices_curr.tolist())
+        }
+        for pred_idx in pred_indices_pair.tolist():
             pair_detections.append(
                 (float(sample['pred_scores'][pred_idx]), sample_id, pred_idx))
+        for pred_idx in pred_indices_prev.tolist():
             prev_detections.append(
                 (float(sample['pred_score_prev'][pred_idx]), sample_id,
                  pred_idx))
+        for pred_idx in pred_indices_curr.tolist():
             curr_detections.append(
                 (float(sample['pred_score_curr'][pred_idx]), sample_id,
                  pred_idx))
@@ -471,39 +527,59 @@ def _class_multi_aps_by_gt_filter(
             for mode in filters
         }
         _profile_add(profile, 'class_filter', time.perf_counter() - t0)
-        _profile_count(profile, 'detections', len(pred_indices))
+        _profile_count(profile, 'detections', len(pred_indices_pair))
         _profile_count(profile, 'gts', len(gt_indices))
 
-        np_ = len(pred_indices)
+        all_pred_indices = torch.unique(torch.cat(
+            (pred_indices_pair, pred_indices_prev, pred_indices_curr)))
+        all_pred_row = {
+            int(pred_idx): row
+            for row, pred_idx in enumerate(all_pred_indices.tolist())
+        }
+        pair_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_pair.tolist()],
+            dtype=torch.long)
+        prev_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_prev.tolist()],
+            dtype=torch.long)
+        curr_rows = torch.as_tensor(
+            [all_pred_row[int(i)] for i in pred_indices_curr.tolist()],
+            dtype=torch.long)
+        np_all = len(all_pred_indices)
         ng = len(gt_indices)
-        if np_ and ng:
+        if np_all and ng:
             t0 = time.perf_counter()
-            iou_prev = rbbox_overlaps(sample['pred_prev'][pred_indices],
-                                      sample['gt_prev'][gt_indices])
-            iou_curr = rbbox_overlaps(sample['pred_curr'][pred_indices],
-                                      sample['gt_curr'][gt_indices])
+            iou_prev_all = rbbox_overlaps(
+                sample['pred_prev'][all_pred_indices],
+                sample['gt_prev'][gt_indices])
+            iou_curr_all = rbbox_overlaps(
+                sample['pred_curr'][all_pred_indices],
+                sample['gt_curr'][gt_indices])
             _profile_add(profile, 'rbbox_iou', time.perf_counter() - t0)
             _profile_count(profile, 'rbbox_calls', 2)
 
             t0 = time.perf_counter()
-            pvp = sample['pred_valid_prev'][pred_indices].bool()
-            pvc = sample['pred_valid_curr'][pred_indices].bool()
+            iou_prev_pair = iou_prev_all[pair_rows]
+            iou_curr_pair = iou_curr_all[pair_rows]
+            pvp = sample['pred_valid_prev'][pred_indices_pair].bool()
+            pvc = sample['pred_valid_curr'][pred_indices_pair].bool()
             compat = ((pvp[:, None] == valid_prev[None, :]) &
                       (pvc[:, None] == valid_curr[None, :]))
             any_prev = pvp[:, None] & valid_prev[None, :]
             any_curr = pvc[:, None] & valid_curr[None, :]
             pair_overlap = torch.where(
                 any_prev & any_curr,
-                torch.minimum(iou_prev, iou_curr),
-                torch.where(any_prev, iou_prev, iou_curr))
+                torch.minimum(iou_prev_pair, iou_curr_pair),
+                torch.where(any_prev, iou_prev_pair, iou_curr_pair))
             pair_overlap = torch.where(
                 compat & (any_prev | any_curr), pair_overlap,
                 pair_overlap.new_full((), -1.))
             _profile_add(profile, 'overlap_prepare', time.perf_counter() - t0)
         else:
-            iou_prev = torch.empty((np_, ng), dtype=torch.float32)
-            iou_curr = torch.empty((np_, ng), dtype=torch.float32)
-            pair_overlap = torch.empty((np_, ng), dtype=torch.float32)
+            iou_prev_all = torch.empty((np_all, ng), dtype=torch.float32)
+            iou_curr_all = torch.empty((np_all, ng), dtype=torch.float32)
+            pair_overlap = torch.empty(
+                (len(pred_indices_pair), ng), dtype=torch.float32)
 
         for mode, cols in filter_cols.items():
             gt_by_filter[mode]['pair'][sample_id] = gt_indices[cols].tolist()
@@ -514,9 +590,11 @@ def _class_multi_aps_by_gt_filter(
             overlaps_by_filter[mode]['pair'][sample_id] = (
                 pair_overlap[:, cols].cpu().numpy().astype(np.float32))
             overlaps_by_filter[mode]['prev'][sample_id] = (
-                iou_prev[:, prev_cols].cpu().numpy().astype(np.float32))
+                iou_prev_all[prev_rows][:, prev_cols].cpu().numpy().astype(
+                    np.float32))
             overlaps_by_filter[mode]['curr'][sample_id] = (
-                iou_curr[:, curr_cols].cpu().numpy().astype(np.float32))
+                iou_curr_all[curr_rows][:, curr_cols].cpu().numpy().astype(
+                    np.float32))
 
     t0 = time.perf_counter()
     pair_detections.sort(key=lambda x: x[0], reverse=True)
@@ -530,17 +608,17 @@ def _class_multi_aps_by_gt_filter(
             pair=_aps_from_cached_matches(
                 sum(len(gts) for gts in gt_by_filter[mode]['pair'].values()),
                 gt_by_filter[mode]['pair'], pair_detections,
-                overlaps_by_filter[mode]['pair'], pred_row, profile,
+                overlaps_by_filter[mode]['pair'], pred_rows['pair'], profile,
                 f'match_{mode}_pair'),
             prev=_aps_from_cached_matches(
                 sum(len(gts) for gts in gt_by_filter[mode]['prev'].values()),
                 gt_by_filter[mode]['prev'], prev_detections,
-                overlaps_by_filter[mode]['prev'], pred_row, profile,
+                overlaps_by_filter[mode]['prev'], pred_rows['prev'], profile,
                 f'match_{mode}_prev'),
             curr=_aps_from_cached_matches(
                 sum(len(gts) for gts in gt_by_filter[mode]['curr'].values()),
                 gt_by_filter[mode]['curr'], curr_detections,
-                overlaps_by_filter[mode]['curr'], pred_row, profile,
+                overlaps_by_filter[mode]['curr'], pred_rows['curr'], profile,
                 f'match_{mode}_curr'),
         )
     _profile_add(profile, 'class_total', time.perf_counter() - t_class)
@@ -577,6 +655,12 @@ def serialize_pair_sample(gt,
     """Move the pair fields needed for AP to CPU and derive pair scores."""
     gt_labels = _field(gt, 'labels').detach().cpu().long()
     pred_labels = _field(pred, 'labels').detach().cpu().long()
+    pred_labels_prev = (
+        _field(pred, 'labels_prev').detach().cpu().long()
+        if _has_field(pred, 'labels_prev') else pred_labels)
+    pred_labels_curr = (
+        _field(pred, 'labels_curr').detach().cpu().long()
+        if _has_field(pred, 'labels_curr') else pred_labels)
     cls_scores = _field(pred, 'scores').detach().cpu().float().clamp(0, 1)
     if _has_field(pred, 'scores_prev'):
         score_prev = _field(pred, 'scores_prev').detach().cpu().float().clamp(0, 1)
@@ -593,6 +677,8 @@ def serialize_pair_sample(gt,
                 (1 - score_prev) * score_curr))
         valid_pair = pred_valid_prev | pred_valid_curr
         pred_labels = pred_labels[valid_pair]
+        pred_labels_prev = pred_labels_prev[valid_pair]
+        pred_labels_curr = pred_labels_curr[valid_pair]
         pred_valid_prev = pred_valid_prev[valid_pair]
         pred_valid_curr = pred_valid_curr[valid_pair]
         pair_scores = pair_scores[valid_pair]
@@ -624,6 +710,8 @@ def serialize_pair_sample(gt,
         rank_scores = torch.maximum(pair_scores, independent_scores)
         keep = torch.topk(rank_scores, k=max_dets).indices
         pred_labels = pred_labels[keep]
+        pred_labels_prev = pred_labels_prev[keep]
+        pred_labels_curr = pred_labels_curr[keep]
         pred_valid_prev = pred_valid_prev[keep]
         pred_valid_curr = pred_valid_curr[keep]
         pair_scores = pair_scores[keep]
@@ -639,6 +727,8 @@ def serialize_pair_sample(gt,
         gt_valid_prev=_field(gt, 'valid_prev').detach().cpu().bool(),
         gt_valid_curr=_field(gt, 'valid_curr').detach().cpu().bool(),
         pred_labels=pred_labels,
+        pred_labels_prev=pred_labels_prev,
+        pred_labels_curr=pred_labels_curr,
         pred_prev=pred_prev,
         pred_curr=pred_curr,
         pred_valid_prev=pred_valid_prev,
@@ -810,7 +900,8 @@ def independent_ap_metrics(pair_samples: Sequence[dict],
             samples.append(dict(
                 gt_labels=sample['gt_labels'][valid],
                 gt_boxes=sample[f'gt_{side}'][valid],
-                pred_labels=sample['pred_labels'],
+                pred_labels=sample.get(
+                    f'pred_labels_{side}', sample['pred_labels']),
                 pred_boxes=sample[f'pred_{side}'],
                 pred_scores=sample.get(
                     f'pred_score_{side}',

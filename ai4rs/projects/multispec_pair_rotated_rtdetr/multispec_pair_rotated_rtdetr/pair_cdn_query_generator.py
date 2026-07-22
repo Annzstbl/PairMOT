@@ -14,9 +14,11 @@ from mmrotate.structures.bbox import RotatedBoxes, qbox2rbox
 class PairCdnQueryGenerator(nn.Module):
     """Generate DINO-style DN queries from pair-level track unions.
 
-    One DN target represents one track id.  It has a shared class query and
-    separate noisy references for the previous and current frame.  Missing
-    sides retain a neutral reference and are supervised only through presence.
+    One DN target represents one track id. It has a shared class query and
+    separate noisy references for the previous and current frame. Missing
+    sides retain a neutral reference and receive no box supervision. They are
+    supervised as absent by either the presence branch or, for a dual-cls head
+    without presence branches, the corresponding background class target.
     """
 
     def __init__(self,
@@ -69,7 +71,16 @@ class PairCdnQueryGenerator(nn.Module):
         magnitude = torch.rand_like(refs)
         if negative:
             magnitude += 1.0
-        noise = (torch.rand_like(refs) * 2 - 1) * magnitude
+            # A separate random sign keeps negative copies in DINO's outer
+            # [1, 2) band. Multiplying by uniform(-1, 1) would allow a nominal
+            # negative copy to have arbitrarily small displacement.
+            random_sign = torch.randint_like(
+                refs, low=0, high=2, dtype=torch.long).to(refs.dtype)
+            noise = (random_sign * 2 - 1) * magnitude
+        else:
+            # Preserve the established positive-DN distribution so this fix
+            # changes only the invalid negative sampling path.
+            noise = (torch.rand_like(refs) * 2 - 1) * magnitude
         noise[:, :4] *= refs[:, 2:4].repeat(1, 2) * self.box_noise_scale / 2
         noise[:, 4] *= self.box_noise_scale * 0.25
         out = (refs + noise).clamp(1e-4, 1 - 1e-4)
@@ -80,7 +91,9 @@ class PairCdnQueryGenerator(nn.Module):
                                                                   Tensor, Tensor,
                                                                   Dict[str, int]]:
         device = batch_data_samples[0].pair_gt_instances.labels.device
-        dtype = batch_data_samples[0].pair_gt_instances.bboxes_prev.tensor.dtype
+        first_prev = batch_data_samples[0].pair_gt_instances.bboxes_prev
+        dtype = (first_prev.tensor if hasattr(first_prev, 'tensor')
+                 else first_prev).dtype
         labels_list: List[Tensor] = []
         refs_prev_list: List[Tensor] = []
         refs_curr_list: List[Tensor] = []
@@ -146,9 +159,12 @@ class PairCdnQueryGenerator(nn.Module):
                                 dtype=torch.bool)
         if num_dn > 0:
             attn_mask[num_dn:, :num_dn] = True
-            for group_idx in range(2 * num_groups):
-                start = group_idx * max_targets
-                end = start + max_targets
+            # One contrastive group contains a positive block followed by
+            # its negative block. Only different groups are isolated.
+            group_width = 2 * max_targets
+            for group_idx in range(num_groups):
+                start = group_idx * group_width
+                end = start + group_width
                 attn_mask[start:end, :start] = True
                 attn_mask[start:end, end:num_dn] = True
         dn_meta = dict(

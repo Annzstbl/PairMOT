@@ -947,16 +947,23 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
     def _get_pair_dn_targets(self, batch_pair_gt_instances: InstanceList,
                              batch_img_metas: List[dict],
                              dn_meta: Dict[str, int], device: torch.device):
-        """Build direct targets for DN slots without Hungarian matching."""
+        """Build DINO-style positive/negative targets for pair DN slots."""
         max_targets = dn_meta['max_num_dn_targets']
         num_groups = dn_meta['num_denoising_groups']
         num_dn = dn_meta['num_denoising_queries']
+        expected_num_dn = 2 * num_groups * max_targets
+        if num_dn != expected_num_dn:
+            raise ValueError(
+                'Pair CDN layout must contain positive and negative halves: '
+                f'expected {expected_num_dn} queries, got {num_dn}')
         target_lists = [[] for _ in range(9)]
         num_total_pos = 0
+        num_total_neg = 0
         for pair_gt, img_meta in zip(batch_pair_gt_instances, batch_img_metas):
             labels = torch.full((num_dn,), self.num_classes, device=device,
                                 dtype=torch.long)
-            label_weights = torch.zeros(num_dn, device=device)
+            # Like DINO, padded and negative DN slots are background samples.
+            label_weights = torch.ones(num_dn, device=device)
             bbox_prev_targets = torch.zeros(num_dn, 5, device=device)
             bbox_curr_targets = torch.zeros(num_dn, 5, device=device)
             bbox_prev_weights = torch.zeros(num_dn, 5, device=device)
@@ -977,27 +984,33 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     pair_gt.valid_prev, device=device, dtype=torch.bool)
                 valid_curr = torch.as_tensor(
                     pair_gt.valid_curr, device=device, dtype=torch.bool)
-                for group_idx in range(2 * num_groups):
-                    start = group_idx * max_targets
-                    end = start + num_targets
-                    labels[start:end] = pair_gt.labels.to(device)
-                    label_weights[start:end] = 1
-                    bbox_prev_targets[start:end] = gt_prev
-                    bbox_curr_targets[start:end] = gt_curr
-                    bbox_prev_weights[start:end] = valid_prev.float().unsqueeze(
-                        -1).expand(-1, 5)
-                    bbox_curr_weights[start:end] = valid_curr.float().unsqueeze(
-                        -1).expand(-1, 5)
-                    pres_prev_targets[start:end] = valid_prev.float()
-                    pres_curr_targets[start:end] = valid_curr.float()
-                    pres_weights[start:end] = 1
-                num_total_pos += num_targets * 2 * num_groups
+                for group_idx in range(num_groups):
+                    # Layout per group: [positive max_targets slots,
+                    # negative max_targets slots]. Negative slots keep the
+                    # background label and zero box/presence targets.
+                    pos_start = group_idx * 2 * max_targets
+                    pos_end = pos_start + num_targets
+                    labels[pos_start:pos_end] = pair_gt.labels.to(device)
+                    bbox_prev_targets[pos_start:pos_end] = gt_prev
+                    bbox_curr_targets[pos_start:pos_end] = gt_curr
+                    bbox_prev_weights[pos_start:pos_end] = (
+                        valid_prev.float().unsqueeze(-1).expand(-1, 5))
+                    bbox_curr_weights[pos_start:pos_end] = (
+                        valid_curr.float().unsqueeze(-1).expand(-1, 5))
+                    pres_prev_targets[pos_start:pos_end] = valid_prev.float()
+                    pres_curr_targets[pos_start:pos_end] = valid_curr.float()
+                    neg_start = pos_start + max_targets
+                    neg_end = neg_start + num_targets
+                    pres_weights[pos_start:pos_end] = 1
+                    pres_weights[neg_start:neg_end] = 1
+                num_total_pos += num_targets * num_groups
+                num_total_neg += num_targets * num_groups
             for bucket, value in zip(target_lists, (
                     labels, label_weights, bbox_prev_targets,
                     bbox_prev_weights, bbox_curr_targets, bbox_curr_weights,
                     pres_prev_targets, pres_curr_targets, pres_weights)):
                 bucket.append(value)
-        return (*target_lists, num_total_pos)
+        return (*target_lists, num_total_pos, num_total_neg)
 
     def loss_pair_dn(self, all_layers_cls_scores: Tensor,
                      all_layers_presence_prev: Tensor,
@@ -1028,7 +1041,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
          bbox_prev_weights_list, bbox_curr_targets_list,
          bbox_curr_weights_list, pres_prev_targets_list,
          pres_curr_targets_list, pres_weights_list,
-             num_total_pos) = self._get_pair_dn_targets(
+         num_total_pos, num_total_neg) = self._get_pair_dn_targets(
              batch_pair_gt_instances, batch_img_metas, dn_meta,
              cls_scores.device)
         labels = torch.cat(labels_list)
@@ -1042,20 +1055,29 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         pres_weights = torch.cat(pres_weights_list)
         cls_flat = cls_scores.reshape(-1, self.cls_out_channels)
         cls_avg_factor = torch.clamp(
-            reduce_mean(cls_flat.new_tensor([num_total_pos])),
+            reduce_mean(cls_flat.new_tensor([
+                num_total_pos + num_total_neg * self.bg_cls_weight
+            ])),
             min=1).squeeze(0)
         loss_cls = self._loss_cls(
             cls_flat, labels, label_weights, bbox_prev.reshape(-1, 5),
             bbox_curr.reshape(-1, 5), bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor)
-        num_pos = cls_avg_factor
+        num_pos = torch.clamp(
+            reduce_mean(cls_flat.new_tensor([num_total_pos])),
+            min=1).squeeze(0)
+        presence_avg_factor = torch.clamp(
+            reduce_mean(cls_flat.new_tensor([
+                num_total_pos + num_total_neg
+            ])),
+            min=1).squeeze(0)
         loss_pres_prev = self.loss_presence(
             presence_prev.reshape(-1), pres_prev_targets, pres_weights,
-            avg_factor=num_pos)
+            avg_factor=presence_avg_factor)
         loss_pres_curr = self.loss_presence(
             presence_curr.reshape(-1), pres_curr_targets, pres_weights,
-            avg_factor=num_pos)
+            avg_factor=presence_avg_factor)
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
@@ -1102,7 +1124,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
          bbox_prev_weights_list, bbox_curr_targets_list,
          bbox_curr_weights_list, _pres_prev_targets_list,
          _pres_curr_targets_list, _pres_weights_list,
-         num_total_pos) = self._get_pair_dn_targets(
+         num_total_pos, num_total_neg) = self._get_pair_dn_targets(
              batch_pair_gt_instances, batch_img_metas, dn_meta,
              cls_prev.device)
         labels = torch.cat(labels_list)
@@ -1122,7 +1144,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         bbox_prev_flat = bbox_prev.reshape(-1, 5)
         bbox_curr_flat = bbox_curr.reshape(-1, 5)
         cls_avg_factor = torch.clamp(
-            reduce_mean(cls_prev_flat.new_tensor([num_total_pos])),
+            reduce_mean(cls_prev_flat.new_tensor([
+                num_total_pos + num_total_neg * self.bg_cls_weight
+            ])),
             min=1).squeeze(0)
         cls_iou_targets_prev, cls_iou_targets_curr = (
             self._build_dual_cls_iou_targets(
@@ -1140,7 +1164,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             bbox_curr_flat, bbox_prev_targets, bbox_curr_targets,
             bbox_prev_weights, bbox_curr_weights, batch_img_metas,
             cls_avg_factor, cls_iou_targets=cls_iou_targets_curr)
-        num_pos = cls_avg_factor
+        num_pos = torch.clamp(
+            reduce_mean(cls_prev_flat.new_tensor([num_total_pos])),
+            min=1).squeeze(0)
         factors = self._build_rescale_factors(batch_img_metas, bbox_prev)
         loss_iou_prev = self._loss_iou_valid(
             bbox_prev_flat * factors, bbox_prev_targets * factors,
@@ -1814,7 +1840,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         max_per_img = self.test_cfg.get('max_per_img', len(pair_scores))
         max_per_img = min(max_per_img, pair_scores.numel())
         scores, bbox_index = pair_scores.topk(max_per_img)
-        labels = labels_curr[bbox_index]
+        # A missing-side classifier is trained as background, so its argmax
+        # class is not meaningful.  Use the side carrying stronger evidence
+        # for the common pair label; side-specific labels remain available
+        # below for tracking and independent-frame evaluation.
+        labels = torch.where(
+            scores_prev >= scores_curr, labels_prev, labels_curr)[bbox_index]
         img_shape = img_meta['img_shape']
 
         det_bboxes_prev = bbox_prev[bbox_index].clone()

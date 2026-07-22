@@ -4,23 +4,26 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-07-17 05:42 CST.
+Last updated: 2026-07-19 CST.
+
+Current per-server status dashboard:
+[`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
 | local `10.106.14.99` | current control/source workspace and execution resource | local shell as `wangying01` | `/data/users/wangying01/lth/PairMOT/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_99` | `/data/users/wangying01/anaconda3/envs/py310` |
-| `10.106.14.197` | execution resource | `ssh -i ~/.ssh/litianhao01@10.106.14.197/id_rsa litianhao@10.106.14.197` | `/data/users/litianhao/PairMOT/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_197` | `/data/users/litianhao/anaconda3/envs/py310` |
-| `10.106.15.178` | available resource, not verified this turn | key folder exists under `~/.ssh/litianhao01@10.106.15.178` | unknown | `/data4/litianhao/PairMmot` expected | unknown | unknown |
-| `10.106.15.252` | available resource, not verified this turn | key folder exists under `~/.ssh/litianhao01@10.106.15.252` | unknown | `/data4/litianhao/PairMmot` expected | unknown | unknown |
+| `10.106.14.197` | execution resource | `ssh -i ~/.ssh/litianhao@10.106.14.197/id_rsa litianhao@10.106.14.197` | `/data/users/litianhao/PairMOT/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_197` | `/data/users/litianhao/anaconda3/envs/py310` |
+| `10.106.15.178` | two RTX 5090 execution resource; one GPU available for PairMOT | `ssh -i ~/.ssh/litianhao01@10.106.15.178/id_rsa litianhao01@10.106.15.178` | `/data1/users/litianhao01/PairMOT/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_178` | `/data1/users/litianhao01/anaconda3/envs/py310`, PyTorch `2.7.0+cu128` |
+| `10.106.15.252` | execution resource | `ssh -i ~/.ssh/litianhao01@10.106.15.252/id_ed25519 litianhao01@10.106.15.252` | `/data/users/litianhao01/PairMmot/ai4rs` | `/data4/litianhao/PairMmot` | `/data4/litianhao/PairMmot/workdir_252` | `/data/users/litianhao01/anaconda3/envs/py310` |
 | AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | temporary two-GPU execution resource | transient password SSH; local command is ignored under `autodl/ssh.md` | `/root/PairMOT/ai4rs` | `/root/autodl-fs/PairMOT_assets` | `/root/autodl-tmp/work_dirs` | image base Python, PyTorch `2.8.0+cu128` retained |
+| AutoDL `autodl-container-10m07jujmn-fe6c2d42` | historical temporary resource for completed `0719_01` | transient password SSH from ignored `autodl/ssh.md` | `/root/PairMOT/ai4rs` | `/root/autodl-fs/PairMOT_assets` | `/root/autodl-tmp/work_dirs` | image PyTorch `2.8.0+cu128`; NumPy/SciPy/OpenCV `1.26.4/1.12.0/4.10.0.84` |
 
 SSH directory convention: subdirectory names under `~/.ssh` are
 `username@ip+port`, with port omitted for default `22`.  The 197 key directory
-is named `litianhao01@10.106.14.197`, but the verified login account on
-2026-07-11 is `litianhao`; `litianhao01@10.106.14.197` currently returns
-`Permission denied (publickey)`.
+for 197 is `litianhao@10.106.14.197`, matching the verified login account
+`litianhao`.
 
 252 verified login on 2026-07-09:
 
@@ -63,6 +66,28 @@ Current allocation state:
 | 2026-07-16 | `0716_04` | paper Base + final Liquid + hard group-set uniqueness, full data, 1200x900, BF16 | 197 | `0716_05` |
 | 2026-07-16 | `0716_05` | paper Base + final Liquid group-set uniqueness + temporal/pyramid Encoder, full data, 1200x900, BF16 | 252 | `0716_06` |
 | 2026-07-17 | `0717_01` | paper Liquid Set-Transport candidate, full data, 1200x900, BF16; same-ID fresh rerun migrated after the 99 cancellation | AutoDL | `0717_02` |
+| 2026-07-17 | `0717_02` | paper original-hard Liquid strict control, full data, 1200x900, BF16 | 99 | `0717_03` |
+| 2026-07-17 | `0717_03` | hard-sampled soft-context Liquid candidate, full data, 1200x900, BF16 | 197 | `0718_01` |
+| 2026-07-18 | `0718_01` | AutoDL Liquid path with independent groups and explicit difference/product pair coupling | 197 | `0718_02` |
+| 2026-07-18 | `0718_02` | anchor-residual competitive Liquid candidate; independent groups with bounded common routing and pair-conditioned content evidence | 99 validation | `0718_03` |
+| 2026-07-18 | `0718_03` | evidence-consistent adaptive-anchor ARCR Liquid; relax stable anchors only when learned and image-conditioned evidence agree | 99 queued GPU 0,1 | `0718_04` |
+| 2026-07-18 | `0718_04` | SASE-Liquid; shared scale-adaptive sparse spectral evidence for pre-sampling routing and local LAF enhancement | 252 GPU 0,1 | `0718_05` |
+| 2026-07-19 | `0719_01` | pair-consensus relaxed-set Liquid with pair-aligned compact-detail enhancement | AutoDL GPU 0,1 | `0719_02` |
+| 2026-07-19 | `0719_02` | reliability-weighted pair-consensus control | 178 GPU 0 | `0719_03` |
+| 2026-07-19 | `0719_03` | strict PACDE ablation: pair-consensus relaxed-set Liquid without compact-detail enhancement | 252 GPU 0,1 | `0719_04` |
+| 2026-07-19 | `0719_04` | paper-protocol replay of the historical `0711_01`: independent 8-group sampler + Wide LAF + GroupMod, without pair routing/transport or set constraints | 197 GPU 4,5, queued after `0718_06` | `0719_05` |
+| 2026-07-19 | `0719_05` | strict Paper Base rerun with unchanged seed/protocol and equivalent single-GPU global batch | 178 GPU 0, queued after `0719_02` | `0719_06` |
+| 2026-07-19 | `0719_06` | Paper Base + validated long-tail positive-class reweighting | 99 GPU 0,1, queued after `0718_05` | `0719_07` |
+| 2026-07-20 | `0720_01` | `0718_01` + gate-mass tangent fusion quality conservation | 252 GPU 0,1 | `0720_02` |
+| 2026-07-20 | `0720_02` | `0718_01` + response-weighted fusion quality conservation | 197 GPU 4,5 | `0720_03` |
+| 2026-07-20 | `0720_03` | `0718_01` + dual-moment fusion quality conservation | 99 GPU 0,1, queued after `0719_06` | `0720_04` |
+| 2026-07-21 | `0721_01` | `0718_01` + response-weighted fusion quality conservation; single-GPU global batch 8 with validated tmpfs JPEG cache and NVMe fallback | 178 GPU 0, queued after `0719_05` final evaluation | `0721_02` |
+| 2026-07-21 | `0721_02` | Accuracy-fixed strict rerun of `0718_01`; independent groups and difference/product pair coupling, without quality conservation | completed on 197 with 72 epochs and 18/18 TrackEval; best epoch 72 is `54.327/61.659` cls/det HOTA | `0721_03` |
+| 2026-07-21 | `0721_03` | BSR-Liquid; replace global route statistics with 12x16 blockwise eight-band recurrent descriptors and block hidden mean/std/max aggregation; use corrected Negative-DN outer-band sampling and contrastive-group attention mask | running on 178 GPU 0 since 2026-07-22 10:07 after corrected BSR implementation sync and a passing 4-iter smoke | `0721_04` |
+| 2026-07-21 | `0721_04` | BSAC-Liquid; accuracy-fixed `0718_01` plus 24-parameter physical-band/kernel-slot calibration before shared Conv3D | running on 252 GPU 0,1; epoch 34 with 8/18 TrackEval at 2026-07-22 12:20 | `0721_05` |
+| 2026-07-21 | `0721_05` | DSE-Liquid; accuracy-fixed `0718_01` plus identity-initialized channel mean/RMS evidence mixing before SE/LAF | running on 99 GPU 0,1; epoch 43 with 10/18 TrackEval at 2026-07-22 12:20 | `0721_06` |
+| 2026-07-21 | `0721_06` | CSPR-Liquid candidate; replace global route statistics with detached 24x32 cyclic shared-Conv3D spectral preview statistics | implemented and tested; not queued | `0721_07` |
+| 2026-07-22 | `0722_01` | `0721_02` PairDN-generator correction: replace the near-zero-capable negative product with signed `[1,2)` sampling and let positive/negative blocks attend within each contrastive group; this is not a box-noise-only ablation | running on 197 GPU 4,5 since 2026-07-22 10:34; epoch 7 with 1/18 TrackEval at 12:20 | `0722_02` |
 
 ## Current Paper Runs
 
@@ -72,9 +97,22 @@ Current allocation state:
 | 2026-07-16 | local `10.106.14.99` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs` | `2,3` | canceled and fully cleaned at 16:41 CST after GPU 2 hardware drop (`0000:B1:00.0: Unknown Error`); stopped in epoch 1 after iter 1000, no formal checkpoint, must fresh train on healthy GPUs; GPU 0/1 Base unaffected | `/data4/litianhao/PairMmot/workdir_99/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs/launch.log` |
 | 2026-07-16 | `10.106.14.197` | `0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | stopped intentionally at epoch 21 iter 50 without resume after confirming cross-group set collapse in the soft argmax preview; retained as diagnostic history | `/data4/litianhao/PairMmot/workdir_197/0716_03_paper_base_plus_liquid_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
 | 2026-07-16 | `10.106.14.197` | `0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,3` | running; fresh start at 23:22 CST after 20/20 remote sampler tests; epoch 1 iter 50 is 0.9771 s/iter with finite losses/gradients and hard preview `unique_sets=8.00`, `max_set_repeat=1.00` | `/data4/litianhao/PairMmot/workdir_197/0716_04_paper_base_plus_liquid_groupsetunique_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
-| 2026-07-16 | `10.106.15.252` | `0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | running; 30 unit tests and a separate 100-iter DDP validation passed before fresh launch at 23:36 CST; formal epoch 1 iter 50 has finite losses/gradients, both temporal branches learning, memory 11387 MiB/rank, and Liquid hard preview `unique_sets=8.00` | `/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-16 | `10.106.15.252` | `0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | completed 72 epochs and 18/18 TrackEval; unique best epoch 72 has cls/det HOTA `54.635/61.488` and same-epoch pair mAP/AP50 `0.3215/0.5467` | `/data4/litianhao/PairMmot/workdir_252/0716_05_paper_base_plus_liquid_groupsetunique_encoder_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
 | 2026-07-17 | local `10.106.14.99` | `0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `2,3` | canceled intentionally at epoch 2 iter 250 because local GPUs 2/3 have prior drop-card risk; full process group and screen removed, both GPUs released to 10 MiB; model code, 23 tests and separate 100-iter DDP validation are retained, but this incomplete run is not a result | `/data4/litianhao/PairMmot/workdir_99/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
-| 2026-07-17 | AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | `0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh` | `0,1` | running fresh from COCO-adapted pretrain; reached epoch 27 iter 1000 at 12:47 CST, 0.8799 s/iter with finite losses/gradients, Set-Transport strength 1.000, `unique_sets=8.00`, and `max_set_repeat=1.00`; training and automatic analysis/GitHub publication/shutdown finalizer are alive, ETA about 11 h | `/root/autodl-tmp/work_dirs/0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh/launch.log` |
+| 2026-07-17 | AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | `0717_01_paper_base_plus_liquid_settransport_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh` | `0,1` | completed 72 epochs and 18/18 TrackEval; unique best epoch 68 has cls HOTA 54.941, det HOTA 61.836, pair mAP 0.3196 and AP50 0.5359; finalizer analysis was recovered manually after its no-card shell lacked `python`, and 940 MB of selected checkpoints/results are preserved under shared FS | `/root/autodl-fs/PairMOT_results/0717_01` |
+| 2026-07-17 | local `10.106.14.99` | `0717_02_paper_base_plus_liquid_originalhard_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | completed 72 epochs and 18/18 TrackEval; unique best epoch 72 has cls HOTA 54.335, det HOTA 61.445, same-epoch pair mAP 0.3215 and AP50 0.5429. Relative to Paper Base best, cls HOTA is +1.021 while det HOTA is -0.537 | `/data4/litianhao/PairMmot/workdir_99/0717_02_paper_base_plus_liquid_originalhard_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-17 | `10.106.14.197` | `0717_03_paper_base_plus_liquid_hardsoftcontext_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `4,5` | intentionally stopped at epoch 15 iter 150 on 2026-07-18; latest periodic checkpoint is epoch 12 and is retained, but this experiment will not be resumed | `/data4/litianhao/PairMmot/workdir_197/0717_03_paper_base_plus_liquid_hardsoftcontext_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-18 | `10.106.14.197` | `0718_01_paper_base_plus_liquid_independent_diffproduct_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `4,5` | completed 72 epochs and 18/18 TrackEval; unique best epoch 64 has cls/det HOTA `55.276/61.812` | `/data4/litianhao/PairMmot/workdir_197/0718_01_paper_base_plus_liquid_independent_diffproduct_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-18 | AutoDL `autodl-container-b77mjk6jn5-c7ceaf44` | `0718_02_paper_base_plus_liquid_anchorcompetitive_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh` | `0,1` RTX 4080 SUPER | completed 72 epochs and 18/18 TrackEval; unique best epoch 64 has cls/det HOTA `53.357/61.054`, endpoint epoch 72 has `53.118/61.216`. Finalizer completed at 21:59 CST and archived report, logs, selected/final checkpoints and TrackEval to shared FS | `/autodl-fs/data/PairMOT_results/0718_02` |
+| 2026-07-18 | local `10.106.14.99` | `0718_03_paper_base_plus_liquid_anchorcompetitive_adaptiveanchor_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | completed 72 epochs and 18/18 TrackEval; unique best epoch 60 has cls/det HOTA `54.689/60.969`; endpoint epoch 72 is `54.645/60.969` | `/data4/litianhao/PairMmot/workdir_99/0718_03_paper_base_plus_liquid_anchorcompetitive_adaptiveanchor_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-18 | `10.106.15.252` | `0718_04_paper_liquid_adaptiveanchor_sase_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | completed 72 epochs and 18/18 TrackEval; unique best epoch 68 has cls/det HOTA `53.398/60.928`; endpoint epoch 72 is `52.986/60.811` | `/data4/litianhao/PairMmot/workdir_252/0718_04_paper_liquid_adaptiveanchor_sase_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-18 | `10.106.14.197` | `0718_06_paper_liquid_cpas_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `4,5` | fresh-launched after code/config sync; epoch 1 iter 50 is 1.0627 s/iter, 10694 MiB/rank, finite loss 34.9247 and grad norm 158.0419; CPAS/Set-Transport/difference-product monitors active, GPU temperatures 59/50C | `/data4/litianhao/PairMmot/workdir_197/0718_06_paper_liquid_cpas_settransport_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-19 | `10.106.15.252` | `0719_03_paper_liquid_pairconsensus_relaxedset_nopacde_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | strict single-variable PACDE ablation; 41 local unit tests and a real-data four-iteration two-GPU BF16 DDP smoke passed with `find_unused_parameters=False`, finite loss/grad and 10666 MiB/rank; fresh formal run started at 16:45 CST | `/data4/litianhao/PairMmot/workdir_252/0719_03_paper_liquid_pairconsensus_relaxedset_nopacde_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-19 | `10.106.14.197` | `0719_04_paper_liquid_widelaf_groupmod_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `4,5` | predecessor `0718_06` completed and the guarded queue launched `0719_04` at 20:41 CST; running normally at epoch 9 around 23:03. The strict replay keeps independent per-frame/per-group sampling, Wide LAF (`64`, 4 heads, overlap/spatial context) and GroupMod (`16`), while disabling pair router, PairTransport, SetTransport and cross-group uniqueness | `/data4/litianhao/PairMmot/workdir_197/0719_04_paper_liquid_widelaf_groupmod_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-19 | `10.106.15.178` | `0719_05_paper_base_rerun_r18_coco_full_1200x900_bf16_1xb8` | `0` | queued behind `0719_02`. This is the unmodified Paper Base model with the same seed 3407, COCO-adapted initialization, LR `1e-4`, 72 epochs, BF16 and full evaluation protocol; only the batch topology changes from `2x4` to the profile-validated `1x8` with 8 workers, preserving global batch 8. Queue requires the predecessor to exit and GPU 0 memory to remain below 2048 MiB for three consecutive checks | `/data4/litianhao/PairMmot/workdir_178/queue_0719_05_after_0719_02.log` |
+| 2026-07-19 | local `10.106.14.99` | `0719_06_paper_base_longtail_reweight_r18_coco_full_1200x900_bf16_orderedpairs_fresh` | `0,1` | completed 72 epochs and final validation at 00:16 CST on 2026-07-21. This is a strict Paper Base single-variable experiment using positive-class weights `[1.0,1.3,1.0,1.25,1.8,1.6,1.7,1.25]`; its exit released the guarded `0720_03` queue | `/data4/litianhao/PairMmot/workdir_99/0719_06_paper_base_longtail_reweight_r18_coco_full_1200x900_bf16_orderedpairs_fresh/launch.log` |
+| 2026-07-21 | local `10.106.14.99` | `0720_03_paper_liquid_diffproduct_qc_dualmoment_r18_coco_full_1200x900_bf16_orderedpairs_accuracyfix_20260721_fresh` | `0,1` | the first formal run started at 00:19 and was intentionally stopped at 03:02 after about 2 h 43 min because it predated the 20260721 training-accuracy fixes. The replacement is a fresh, non-resumed run from the same adapted COCO checkpoint; epoch 1 iter 550 is about 0.96 s/iter with finite loss and gradient | `/data4/litianhao/PairMmot/workdir_99/0720_03_paper_liquid_diffproduct_qc_dualmoment_r18_coco_full_1200x900_bf16_orderedpairs_accuracyfix_20260721_fresh/launch.log` |
+| 2026-07-21 | `10.106.15.178` | `0721_01_paper_liquid_diffproduct_qc_responsemass_r18_coco_full_1200x900_bf16_orderedpairs_1xb8_shm_accuracyfix_20260721_fresh` | `0` | the original run started at 01:23 and was intentionally stopped at 03:02 after about 1 h 39 min because it predated the 20260721 training-accuracy fixes. The replacement is fresh and non-resumed, retains the validated tmpfs JPEG cache and NVMe fallback, and reached epoch 1 iter 200 at about 0.83 s/iter in the stable compute interval. A transient `/data4` NFS stall recovered without intervention | `/data4/litianhao/PairMmot/workdir_178/0721_01_paper_liquid_diffproduct_qc_responsemass_r18_coco_full_1200x900_bf16_orderedpairs_1xb8_shm_accuracyfix_20260721_fresh/launch.log` |
 
 ## Current 0708 Runs
 
@@ -620,4 +658,130 @@ pair AP50 为 `0.5094`。该版本为正式通用方案，下一全局编号为 
 
 ```text
 /data4/litianhao/PairMmot/workdir_99/0716_01_full_sizeaware_elliptical_spectral_rank30_zeroshot
+```
+
+## 2026-07-18 Liquid并行实验与99温控
+
+- 99 GPU 0/1：`0718_03` adaptive-anchor ARCR Liquid，运行中。
+- 252 GPU 0/1：`0718_04` SASE-Liquid，运行中；该机RTX 3090当前功率上限为200W，低于默认
+  350W，是其吞吐较慢的重要原因。
+- 99 GPU 2/3：`0718_05` PCDP-Liquid于15:06 CST fresh启动，15:14:29因GPU 3达到
+  90摄氏度被温控守护按设计暂停，随后按决定主动终止并释放GPU 2/3；该不完整运行不进入
+  结果表，workdir为
+  `/data4/litianhao/PairMmot/workdir_99/0718_05_paper_liquid_adaptiveanchor_pcdp_r18_coco_full_1200x900_bf16_orderedpairs_fresh_interrupted_20260718_epoch1`。
+
+`0718_05`训练进程位于独立process group，PGID记录在
+`thermal_guard/train.pgid`。`thermal_pause_guard.sh`每10秒检查本机GPU 0--3温度；任一卡
+达到90摄氏度，立即仅对0718_05进程组发送`SIGSTOP`，并写入
+`thermal_guard/THERMAL_PAUSED`。检查温度和原因后可用下式继续：
+
+```bash
+kill -CONT -- -$(cat /data4/litianhao/PairMmot/workdir_99/0718_05_paper_liquid_adaptiveanchor_pcdp_r18_coco_full_1200x900_bf16_orderedpairs_fresh/thermal_guard/train.pgid)
+```
+
+并发日志分析不支持训练数据I/O竞争。`0718_03`在0718_05启动前、并发期间、0718_05暂停后
+的平均`time/data_time`分别为`0.9125/0.0335`、`0.8609/0.0329`、
+`0.9179/0.0353 s`；`0718_05`并发期间为`0.9465/0.0312 s`。HSMOT训练数据位于本地
+`/data` NVMe，只有workdir位于`/data4` NFS；因此checkpoint/异步评测可能在每4 epoch产生
+阶段性NFS竞争，但常规训练迭代没有可测的I/O瓶颈。本次实际限制是四卡并行散热。
+
+23:39状态：197的`0718_01`已完成72 epochs和18/18 TrackEval，唯一最佳epoch 64为
+`cls_HOTA=55.276, det_HOTA=61.812`；AutoDL `0718_02`也已完成18/18 TrackEval，唯一最佳
+epoch 64为`cls_HOTA=53.357, det_HOTA=61.054`，finalizer已归档；99 `0718_03`运行至
+epoch 44；252 `0718_04`运行至epoch 28；99 `0718_05`已主动终止；197 `0718_06`已启动至
+epoch 1 iter 50，GPU 4/5温度正常。
+
+## 2026-07-19 0718_05顺序重跑队列
+
+00:49 CST，`0718_05 PCDP-Liquid`已重新排队到99当前`0718_03 adaptive-anchor ARCR`
+之后，改用GPU 0/1顺序运行，不再与另一双卡任务并发。队列同时要求0718_03精确配置进程
+退出且GPU 0/1显存均低于1024 MiB，满足后才从COCO适配权重fresh启动，禁止resume。
+
+- screen：`pairmot_queue_0718_05_99`
+- queue driver：`tools/queue_0718_05_after_0718_03_99.sh`
+- queue log：`/data4/litianhao/PairMmot/workdir_99/0718_05_queue_driver.log`
+- 正式workdir：`/data4/litianhao/PairMmot/workdir_99/0718_05_paper_liquid_adaptiveanchor_pcdp_r18_coco_full_1200x900_bf16_orderedpairs_fresh`
+- 旧的不完整epoch 1运行：正式workdir加后缀`_interrupted_20260718_epoch1`
+
+启动后的训练仍使用2卡BF16、`find_unused_parameters=False`、1200x900全量数据和ordered
+pairs。00:49检查时队列正确报告`predecessor=1`，GPU 0/1显存为20899/20933 MiB，未发现
+任何提前启动的0718_05训练进程。
+
+## 2026-07-19 0719_01 AutoDL候选
+
+`0719_01 pair-consensus relaxed-set Liquid`已在本机实现并同步至当前AutoDL系统盘
+`/root/PairMOT`。模型让pair共享同一group，
+采用不强制hard唯一的margin门控Set-Transport、同group Pair-Aligned Fusion及
+Pair-Aligned Compact Detail Enhancement；不使用ARCR、CPAS、SASE、coverage-based
+PairTransport或额外diversity loss。
+
+2026-07-19在新AutoDL双RTX 4080 SUPER实例完成最终校验：PACDE相关测试累计`39/39`
+通过；正式配置完成单卡2步BF16训练、反向、checkpoint和推理；正式1200x900、全局batch 8、
+`find_unused_parameters=False`配置完成4步双卡DDP训练，loss/grad有限且无未使用参数或NCCL
+错误。真实GMC重新严格核验为train `8297` pairs、test `5416` pairs。镜像保留PyTorch
+`2.8.0+cu128`，仅清理混装的科学计算包并固定NumPy/SciPy/OpenCV为
+`1.26.4/1.12.0/4.10.0.84`。
+
+02:08 CST已在GPU 0,1 fresh启动正式72-epoch训练，workdir为
+`/root/autodl-tmp/work_dirs/0719_01_paper_liquid_pairconsensus_relaxedset_r18_coco_full_1200x900_bf16_orderedpairs_autodl_fresh`。
+启动验收时双卡显存约`18861/21071 MiB`、温度`42/43 C`。finalizer使用
+`0716_02` Paper Base作为同协议基线，等待18个异步TrackEval后按唯一最大
+`cls_HOTA + det_HOTA`选epoch、归档共享盘并自动关机；当前实例无GitHub deploy key，因此
+共享盘结果为权威副本，不执行自动push。
+
+同日确认初版PACDE正式训练稳定约`0.938 s/iter`，较AutoDL既有Liquid约`0.845 s/iter`
+慢11%，主要是PACDE重复计算`groups.mean(dim=1)`并单独执行第二次大张量group乘加归约。
+随后实施数学等价优化：复用LAF已有`x_se`，将SE gate与detail gate相加后只执行一次
+`[B,C,G,H,W]`乘法和group归约；仅`return_sampling=True`调试路径保留原gated-groups输出。
+40项测试（含非零PACDE输出与梯度等价）通过，100-iter正式尺寸双卡短测的稳定点由
+`0.9340`降至`0.8931 s/iter`，显存由约`11212`降至`11153 MiB/rank`。
+
+旧实现于epoch 1主动停止并保存在后缀`preopt_interrupted_epoch1`目录，不产生正式结果、不
+resume。优化版继续使用同一实验ID，于02:22 CST从COCO适配权重重新fresh启动，finalizer也
+重新绑定新launcher；正式结论只使用本次优化版run。
+
+## 2026-07-19 178单卡容量测试
+
+178登录账户确认是`litianhao01`，代码、环境和工作目录分别为
+`/data1/users/litianhao01/PairMOT/ai4rs`、`~/anaconda3/envs/py310`和
+`/data4/litianhao/PairMmot/workdir_178`。两张GPU均为32 GB RTX 5090；本次仅使用GPU 0，
+测试结束后两卡均恢复空闲。当前projects、mmrotate和真实GMC已同步，GMC覆盖train/test
+`8297/5416` pairs。
+
+以当前最重的`0719_01 Pair-Consensus + PACDE`、全量协议1200x900 BF16做80样本短测：
+
+| single-GPU mode | micro iters / optimizer updates | peak memory | result |
+| --- | ---: | ---: | --- |
+| `batch_size=8` | 10 / 10 | 21715 MiB | 完整通过，无OOM和数值错误；推荐正式方案 |
+| `batch_size=4, accumulative_counts=2` | 20 / 10 | 11206 MiB | 完整通过，但出现scheduler先于optimizer step警告，不应直接用于既定论文调度 |
+
+两种方式有效batch均为8，但累计方案对同样80个样本执行两倍micro前反向，且现有iter-based
+warmup/scheduler每个micro step推进，不能与原两卡global-batch-8轨迹等价。由于`bs=8`
+仍有约10 GB物理显存余量，178正式单卡实验应优先直接使用`batch_size=8`，保持原学习率、
+epoch、scheduler和`accumulative_counts=1`。短测还观察到HSMOT所在`/data1`偶发数秒读取
+抖动；正式启动前应以4--8个worker做较长吞吐测试，显存容量本身不是阻塞。
+
+## 2026-07-19 178 worker profile与0719_02
+
+在相同`0719_02`模型、GPU 0、单卡batch 8和320个训练样本上比较worker数量；统计去掉前
+10 iter后的30个训练点：
+
+| workers | time / iter | data time | compute time |
+| ---: | ---: | ---: | ---: |
+| 2 | 2.9916 s | 2.1171 s | 0.8746 s |
+| 4 | 2.4447 s | 1.5367 s | 0.9080 s |
+| 8 | **1.7405 s** | **0.8530 s** | 0.8875 s |
+| 16 | 2.1036 s | 1.2235 s | 0.8801 s |
+
+8 workers最优；16 workers已出现I/O和调度竞争。有效profile均完成40 iter，峰值MMEngine
+显存约21.7 GB，无NaN或模型OOM。一次4-worker误启动与尚未退出的2-worker尾部进程重叠
+而OOM，该进程未完成任何iter，已清理，不属于bs=8容量问题。
+
+正式`0719_02`使用GPU 0、单卡batch 8、8 workers、BF16、full HSMOT 1200x900、ordered
+gap-1 pairs和COCO适配初始化，于03:02 CST fresh启动；GPU 1保持空闲。iter 50为
+`time=0.9082 s`、`data_time=0.0758 s`、`memory=21833 MiB`，无OOM、NaN或traceback。
+workdir为：
+
+```text
+/data4/litianhao/PairMmot/workdir_178/0719_02_paper_liquid_pairconsensus_reliability_r18_coco_full_1200x900_bf16_1xb8
 ```

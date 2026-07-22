@@ -179,18 +179,17 @@ def main() -> None:
             f'`{delta_det:+.3f}`, and their sum by `{delta_sum:+.3f}`.')
         if delta_cls > 0 and delta_det > 0:
             lines.append(
-                'Both primary HOTA axes improve, so Set-Transport is a '
-                'positive candidate under this protocol.')
+                'Both primary HOTA axes improve, so this model is a positive '
+                'candidate under the same protocol.')
         else:
             lines.append(
                 'Both primary HOTA axes do not improve simultaneously; '
-                'Set-Transport should not replace the mainline Liquid model.')
+                'this model should not replace the current mainline model.')
     else:
         lines.append(
-            'No same-protocol `0716_04` baseline JSON was available at report '
+            'No same-protocol baseline JSON was available at report '
             'generation time. This run has a valid selected checkpoint, but '
-            'the report does not claim that Set-Transport improves the '
-            'mainline Liquid model.')
+            'the report does not make an improvement claim.')
     args.output_md.write_text('\n'.join(lines) + '\n', encoding='utf-8')
 
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from mmdet.datasets.transforms import RandomFlip
 
 from mmrotate.datasets.hsmot_pair import HSMOTPairDataset
 from mmrotate.datasets.pair_gt import (
@@ -19,6 +20,7 @@ from mmrotate.datasets.transforms.loading_hsmot_pair import (
     LoadHSMOTPairImages,
     PackHSMOTPairInputs,
 )
+from mmrotate.datasets.transforms.transforms import Rotate
 from mmrotate.datasets.transforms.transforms_hsmot_pair import (
     PairSharedRandomFlip,
     PairSharedRandomRotate,
@@ -237,6 +239,76 @@ class TestHSMOTPairPipeline(unittest.TestCase):
         self.assertTrue(pair_gt.valid_curr[0])
         self.assertTrue(pair_gt.valid_curr[1])
 
+    def test_pack_is_exact_for_contiguous_and_negative_stride_images(self):
+        rng = np.random.default_rng(7)
+        img_prev = rng.integers(
+            0, 256, size=(31, 47, 8), dtype=np.uint8)
+        img_curr_base = rng.integers(
+            0, 256, size=(31, 47, 8), dtype=np.uint8)
+        for img_curr in (img_curr_base, img_curr_base[:, ::-1, :]):
+            expected = torch.stack([
+                torch.from_numpy(img_prev).permute(2, 0, 1).contiguous(),
+                torch.from_numpy(
+                    np.ascontiguousarray(img_curr.transpose(2, 0, 1))),
+            ])
+
+            results = self._make_results()
+            results['img'] = [img_prev, img_curr]
+            results['img_shape'] = (31, 47)
+            results['ori_shape'] = (31, 47)
+            results = HSMOTPairLoadAnnotations().transform(results)
+            results = ConvertPairBoxType(dst_box_type='rbox').transform(
+                results)
+            actual = PackHSMOTPairInputs().transform(results)['inputs']
+
+            self.assertEqual(actual.dtype, expected.dtype)
+            self.assertTrue(torch.equal(actual, expected))
+
+    def test_shared_flip_matches_previous_implementation_exactly(self):
+        image = _checkerboard(31, 47)
+        for seed in range(12):
+            legacy_imgs = [image.copy(), (255 - image).copy()]
+            random_flip = RandomFlip(
+                prob=0.5, direction=['horizontal', 'vertical'])
+            np.random.seed(seed)
+            dummy = {
+                'img': legacy_imgs[0].copy(),
+                'img_shape': legacy_imgs[0].shape[:2],
+            }
+            random_flip.transform(dummy)
+            for img_idx in range(2):
+                sub = {
+                    'img': legacy_imgs[img_idx],
+                    'img_shape': legacy_imgs[img_idx].shape[:2],
+                    'flip': dummy['flip'],
+                    'flip_direction': dummy['flip_direction'],
+                }
+                if dummy['flip']:
+                    random_flip._flip(sub)
+                legacy_imgs[img_idx] = sub['img']
+
+            actual = {
+                'img': [image.copy(), (255 - image).copy()],
+                'img_shape': image.shape[:2],
+                'ori_shape': image.shape[:2],
+            }
+            np.random.seed(seed)
+            actual = PairSharedRandomFlip(
+                prob=0.5,
+                direction=['horizontal', 'vertical']).transform(actual)
+
+            self.assertEqual(actual['flip'], dummy['flip'])
+            self.assertEqual(
+                actual['flip_direction'], dummy['flip_direction'])
+            for img_idx in range(2):
+                self.assertTrue(np.array_equal(
+                    actual['img'][img_idx], legacy_imgs[img_idx]))
+                self.assertTrue(actual['img'][img_idx].flags.c_contiguous)
+            if dummy['flip']:
+                self.assertTrue(np.array_equal(
+                    actual['homography_matrix'],
+                    dummy['homography_matrix']))
+
     def test_shared_flip_horizontal(self):
         results = self._make_results()
         results['img'] = [
@@ -285,6 +357,9 @@ class TestHSMOTPairPipeline(unittest.TestCase):
         self.assertEqual(results['img'][0].shape[:2], (32, 32))
         self.assertEqual(results['img'][1].shape[:2], (32, 32))
         self.assertEqual(tuple(results['scale_factor']), (0.5, 0.5))
+        self.assertTrue(np.allclose(
+            results['homography_matrix'],
+            np.diag([0.5, 0.5, 1.0]).astype(np.float32)))
 
     def test_shared_rotate_same_angle(self):
         results = self._make_results()
@@ -303,6 +378,56 @@ class TestHSMOTPairPipeline(unittest.TestCase):
         np.random.seed(0)
         results = rotate.transform(results)
         self.assertEqual(results['img'][0].shape, results['img'][1].shape)
+
+    def test_pair_augmentation_composes_gmc_once(self):
+        results = self._make_results()
+        results['img'] = [
+            np.zeros((64, 64, 8), dtype=np.uint8),
+            np.zeros((64, 64, 8), dtype=np.uint8),
+        ]
+        results['img_shape'] = (64, 64)
+        results['ori_shape'] = (64, 64)
+        gmc = np.array([
+            [1.0, 0.0, 4.0],
+            [0.0, 1.0, -2.0],
+            [0.0, 0.0, 1.0],
+        ], dtype=np.float32)
+        results['gmc_matrix'] = gmc
+        results = HSMOTPairLoadAnnotations().transform(results)
+        results = ConvertPairBoxType(dst_box_type='rbox').transform(results)
+
+        results = PairSharedResize(
+            scale=(32, 32), keep_ratio=False).transform(results)
+        scale_h = np.diag([0.5, 0.5, 1.0]).astype(np.float32)
+
+        results = PairSharedRandomFlip(
+            prob=1.0, direction='horizontal').transform(results)
+        flip_h = np.array([
+            [-1.0, 0.0, 32.0],
+            [0.0, 1.0, 0.0],
+            [0.0, 0.0, 1.0],
+        ], dtype=np.float32)
+
+        rotate = PairSharedRandomRotate(prob=1.0, angle_range=30)
+        rotate._pick_angle = lambda _: 30.0
+        results = rotate.transform(results)
+        rotate_h = Rotate(rotate_angle=30)._get_homography_matrix(
+            {'img_shape': (32, 32)})
+
+        augmentation_h = rotate_h @ flip_h @ scale_h
+        self.assertTrue(np.allclose(
+            results['homography_matrix'], augmentation_h, atol=1e-6))
+        self.assertFalse(np.allclose(
+            results['homography_matrix'],
+            rotate_h @ rotate_h @ flip_h @ scale_h,
+            atol=1e-6))
+
+        packed = PackHSMOTPairInputs().transform(results)
+        expected_gmc = augmentation_h @ gmc @ np.linalg.inv(augmentation_h)
+        self.assertTrue(np.allclose(
+            packed['data_samples'].metainfo['gmc_matrix'],
+            expected_gmc,
+            atol=1e-5))
 
     def test_rotate_filters_outside_pair_rows(self):
         results = self._make_results()

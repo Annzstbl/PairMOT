@@ -18,6 +18,17 @@ GITHUB_BRANCH="${GITHUB_BRANCH:-autodl/${EXPERIMENT_ID}-results-$(date +%Y%m%d)}
 DEPLOY_KEY="${DEPLOY_KEY:-/root/.ssh/pairmot_results_ed25519}"
 BASELINE_JSON="${BASELINE_JSON:-/root/autodl-fs/PairMOT_results/baselines/0716_04.json}"
 STATE_DIR="$FS_RESULT_ROOT/finalizer_state"
+
+if [[ -z "${PYTHON_BIN:-}" ]]; then
+  for candidate in python python3 /root/miniconda3/bin/python3.12; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      PYTHON_BIN=$(command -v "$candidate")
+      break
+    fi
+  done
+fi
+: "${PYTHON_BIN:?No Python interpreter found for AutoDL finalization}"
+
 mkdir -p "$STATE_DIR"
 exec >> "$STATE_DIR/finalizer.log" 2>&1
 
@@ -77,13 +88,13 @@ STAGE="$FS_RESULT_ROOT/stage"
 mkdir -p "$STAGE"
 baseline_args=()
 [[ -f "$BASELINE_JSON" ]] && baseline_args=(--baseline "$BASELINE_JSON")
-python "$SCRIPT_DIR/analyze_experiment.py" \
+"$PYTHON_BIN" "$SCRIPT_DIR/analyze_experiment.py" \
   --work-dir "$WORK_DIR" --experiment-id "$EXPERIMENT_ID" \
   --experiment-name "$EXPERIMENT_NAME" --expected-evals "$EXPECTED_EVALS" \
   --output-md "$STAGE/result.md" --output-json "$STAGE/result.json" \
   "${baseline_args[@]}"
 
-best_epoch=$(python -c \
+best_epoch=$("$PYTHON_BIN" -c \
   'import json,sys; print(json.load(open(sys.argv[1]))["best"]["epoch"])' \
   "$STAGE/result.json")
 ARTIFACTS="$FS_RESULT_ROOT/artifacts"
@@ -99,6 +110,14 @@ tar -C "$WORK_DIR" -czf "$ARTIFACTS/val_track_eval.tar.gz" val_track_eval
 find "$ARTIFACTS" -type f -print0 | sort -z | \
   xargs -0 sha256sum > "$FS_RESULT_ROOT/SHA256SUMS"
 printf 'artifacts_preserved\n' > "$STATE_DIR/status"
+
+if [[ ! -s "$DEPLOY_KEY" ]]; then
+  printf 'publish_skipped_no_deploy_key artifacts_preserved best_epoch=%s\n' \
+    "$best_epoch" > "$STATE_DIR/status"
+  echo "No GitHub deploy key; shared-FS artifacts are authoritative."
+  power_off
+  exit 0
+fi
 
 PUBLISH_ROOT=/root/autodl-tmp/pairmot_result_publish
 cloned=0

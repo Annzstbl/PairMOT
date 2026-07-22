@@ -7,6 +7,7 @@ import sys
 import unittest
 
 import torch
+from mmdet.structures import DetDataSample
 from mmengine.structures import InstanceData
 
 _AI4RS_ROOT = osp.abspath(osp.join(osp.dirname(__file__), '../..'))
@@ -19,6 +20,9 @@ from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr import
     PairInstanceData,
     PairRotatedRTDETRHead,
     PairRotatedRTDETRTransformerDecoder,
+)
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_cdn_query_generator import (
+    PairCdnQueryGenerator,
 )
 
 register_all_modules(init_default_scope=True)
@@ -381,7 +385,7 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
         self.assertEqual(bbox_prev_weights[0].abs().sum().item(), 0.0)
         self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
 
-    def test_pair_dn_targets_keep_all_gt(self):
+    def test_pair_dn_targets_use_background_negative_half(self):
         head = _build_head(
             num_layers=1,
             use_presence=False,
@@ -401,26 +405,89 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
             valid_curr=[True, False],
         )
         dn_meta = dict(
-            num_denoising_queries=4,
-            num_denoising_groups=1,
+            num_denoising_queries=8,
+            num_denoising_groups=2,
             max_num_dn_targets=2)
         targets = head._get_pair_dn_targets(
             [gt], [IMG_META], dn_meta, torch.device('cpu'))
         labels, label_weights = targets[0][0], targets[1][0]
         bbox_prev_weights, bbox_curr_weights = targets[3][0], targets[5][0]
         pres_prev_targets, pres_curr_targets = targets[6][0], targets[7][0]
-        num_total_pos = targets[-1]
+        num_total_pos, num_total_neg = targets[-2:]
 
         self.assertEqual(num_total_pos, 4)
-        self.assertEqual(labels[:2].tolist(), [0, 1])
-        self.assertEqual(labels[2:].tolist(), [0, 1])
-        self.assertEqual(label_weights.sum().item(), 4.0)
+        self.assertEqual(num_total_neg, 4)
+        self.assertEqual(labels.tolist(), [
+            0, 1, head.num_classes, head.num_classes,
+            0, 1, head.num_classes, head.num_classes,
+        ])
+        self.assertEqual(label_weights.sum().item(), 8.0)
         self.assertEqual(pres_prev_targets[:2].tolist(), [0.0, 1.0])
         self.assertEqual(pres_curr_targets[:2].tolist(), [1.0, 0.0])
         self.assertEqual(bbox_prev_weights[0].abs().sum().item(), 0.0)
         self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
         self.assertGreater(bbox_prev_weights[1].abs().sum().item(), 0.0)
         self.assertEqual(bbox_curr_weights[1].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_prev_weights[2:4].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_curr_weights[2:4].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_prev_weights[6:8].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_curr_weights[6:8].abs().sum().item(), 0.0)
+
+    def test_pair_cdn_mask_keeps_positive_and_negative_in_same_group(self):
+        gt = _pair_gt(
+            labels=[0, 1],
+            prev_boxes=[
+                _norm_rbox(0.3, 0.3, 0.1, 0.1),
+                _norm_rbox(0.7, 0.7, 0.1, 0.1),
+            ],
+            curr_boxes=[
+                _norm_rbox(0.32, 0.3, 0.1, 0.1),
+                _norm_rbox(0.72, 0.7, 0.1, 0.1),
+            ],
+            valid_prev=[True, True],
+            valid_curr=[True, True],
+        )
+        sample = DetDataSample(metainfo=IMG_META)
+        sample.pair_gt_instances = gt
+        generator = PairCdnQueryGenerator(
+            num_classes=3,
+            embed_dims=16,
+            num_matching_queries=3,
+            group_cfg=dict(dynamic=False, num_groups=2))
+
+        _, _, _, mask, meta = generator([sample])
+
+        self.assertEqual(meta['num_denoising_queries'], 8)
+        self.assertFalse(mask[:4, :4].any())
+        self.assertFalse(mask[4:8, 4:8].any())
+        self.assertTrue(mask[:4, 4:8].all())
+        self.assertTrue(mask[4:8, :4].all())
+        self.assertTrue(mask[8:, :8].all())
+
+    def test_pair_cdn_negative_noise_stays_in_outer_band(self):
+        generator = PairCdnQueryGenerator(
+            num_classes=3,
+            embed_dims=16,
+            num_matching_queries=3,
+            box_noise_scale=1.0)
+        refs = torch.tensor([
+            [0.5, 0.5, 0.2, 0.2, 0.5],
+            [0.5, 0.5, 0.2, 0.2, 0.5],
+        ])
+        valid = torch.tensor([True, False])
+        torch.manual_seed(7)
+
+        positive = generator._noisy_refs(refs, valid, negative=False)
+        negative = generator._noisy_refs(refs, valid, negative=True)
+
+        scales = torch.tensor([0.1, 0.1, 0.1, 0.1, 0.25])
+        positive_magnitude = ((positive[0] - refs[0]) / scales).abs()
+        negative_magnitude = ((negative[0] - refs[0]) / scales).abs()
+        self.assertTrue(torch.all(positive_magnitude < 1.0))
+        self.assertTrue(torch.all(negative_magnitude >= 1.0))
+        self.assertTrue(torch.all(negative_magnitude < 2.0))
+        self.assertTrue(torch.equal(positive[1], torch.full((5,), 0.5)))
+        self.assertTrue(torch.equal(negative[1], torch.full((5,), 0.5)))
 
     def test_pair_dn_zero_missing_side_does_not_enter_gd_loss(self):
         head = _build_head(
@@ -455,6 +522,47 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
         self.assertTrue(all(torch.isfinite(loss) for loss in losses))
         self.assertEqual(losses[-2].item(), 0.0)
         self.assertGreater(losses[-1].item(), 0.0)
+
+    def test_pair_dn_negative_has_cls_but_no_box_gradient(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        gt = _pair_gt(
+            labels=[0],
+            prev_boxes=[_norm_rbox(0.4, 0.4, 0.2, 0.2)],
+            curr_boxes=[_norm_rbox(0.5, 0.5, 0.2, 0.2)],
+            valid_prev=[True],
+            valid_curr=[True],
+        )
+        dn_meta = dict(
+            num_denoising_queries=2,
+            num_denoising_groups=1,
+            max_num_dn_targets=1)
+        cls_prev = torch.zeros(
+            1, 2, head.cls_out_channels, requires_grad=True)
+        cls_curr = torch.zeros_like(cls_prev, requires_grad=True)
+        bbox_prev = torch.tensor(
+            [[[0.42, 0.42, 0.2, 0.2, 0.0],
+              [0.8, 0.8, 0.1, 0.1, 0.0]]], requires_grad=True)
+        bbox_curr = torch.tensor(
+            [[[0.52, 0.52, 0.2, 0.2, 0.0],
+              [0.2, 0.2, 0.1, 0.1, 0.0]]], requires_grad=True)
+
+        losses = head._loss_pair_dn_dual_cls_single(
+            cls_prev, cls_curr, bbox_prev, bbox_curr,
+            batch_pair_gt_instances=[gt],
+            batch_img_metas=[IMG_META],
+            dn_meta=dn_meta)
+        sum(losses).backward()
+
+        self.assertGreater(cls_prev.grad[0, 1].abs().sum().item(), 0.0)
+        self.assertGreater(cls_curr.grad[0, 1].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_prev.grad[0, 0].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_curr.grad[0, 0].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_prev.grad[0, 1].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_curr.grad[0, 1].abs().sum().item(), 0.0)
 
 
 class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
@@ -513,6 +621,24 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
         self.assertIsInstance(results[0], PairInstanceData)
         self.assertEqual(results[0].bboxes_prev.shape[-1], 5)
         self.assertEqual(results[0].bboxes_curr.shape[-1], 5)
+
+    def test_dual_cls_common_label_uses_stronger_visible_side(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        cls_prev = torch.tensor([[5.0, -3.0, -3.0]])
+        cls_curr = torch.tensor([[-3.0, 0.2, -3.0]])
+        bbox_prev = torch.rand(1, 5)
+        bbox_curr = torch.rand(1, 5)
+
+        result = head._predict_by_feat_single_dual_cls(
+            cls_prev, cls_curr, bbox_prev, bbox_curr, IMG_META)
+
+        self.assertEqual(result.labels_prev.item(), 0)
+        self.assertEqual(result.labels_curr.item(), 1)
+        self.assertEqual(result.labels.item(), 0)
 
     def test_aux_layer_loss_keys(self):
         head = _build_head(num_layers=2)
