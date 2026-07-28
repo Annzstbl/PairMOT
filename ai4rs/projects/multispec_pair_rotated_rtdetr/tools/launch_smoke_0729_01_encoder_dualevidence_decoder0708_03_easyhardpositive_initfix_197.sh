@@ -37,6 +37,13 @@ echo "[$(date '+%F %T')] fixed-init fresh 0729_01 4-iter smoke" >> "${LOG}"
 bash tools/dist_train.sh "${CONFIG}" 2 --work-dir "${WORK_DIR}" \
     >> "${LOG}" 2>&1
 
+if grep -Eiq \
+        'Traceback|CUDA out of memory|loss: (nan|inf)|grad_norm: (nan|inf)' \
+        "${LOG}"; then
+    echo "Smoke log contains a fatal or non-finite signal" >&2
+    exit 3
+fi
+
 CHECKPOINT=${WORK_DIR}/iter_4.pth
 test -f "${CHECKPOINT}"
 python projects/multispec_pair_rotated_rtdetr/tools/verify_tristate_decoder_smoke_init.py \
