@@ -514,6 +514,96 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
         self.assertTrue(mask[6:, :6].all())
         self.assertFalse(query_padding_mask.any())
 
+    def test_pair_cdn_easy_hard_positive_layout_and_mask(self):
+        gt = _pair_gt(
+            labels=[0, 1],
+            prev_boxes=[_norm_rbox(.3, .3, .1, .08),
+                        _norm_rbox(.7, .7, .12, .08)],
+            curr_boxes=[_norm_rbox(.31, .3, .1, .08),
+                        _norm_rbox(.71, .7, .12, .08)],
+            valid_prev=[True, True], valid_curr=[True, True])
+        sample = DetDataSample(metainfo=IMG_META)
+        sample.pair_gt_instances = gt
+        generator = PairCdnQueryGenerator(
+            num_classes=3,
+            embed_dims=16,
+            num_matching_queries=3,
+            dn_target_mode='easy_hard_positive',
+            share_pair_noise=False,
+            group_cfg=dict(dynamic=False, num_groups=2))
+
+        _, _, _, mask, query_padding_mask, meta = generator([sample])
+
+        self.assertEqual(meta['dn_target_mode'], 'easy_hard_positive')
+        self.assertEqual(meta['num_denoising_queries'], 8)
+        self.assertEqual(meta['max_num_hard_positive_dn_targets'], 2)
+        self.assertEqual(
+            meta['num_hard_positive_dn_targets_per_image'], [2])
+        for start in (0, 4):
+            self.assertFalse(mask[start:start + 2, start:start + 2].any())
+            self.assertFalse(mask[start + 2:start + 4,
+                                  start + 2:start + 4].any())
+            self.assertTrue(mask[start:start + 2,
+                                 start + 2:start + 4].all())
+            self.assertTrue(mask[start + 2:start + 4,
+                                 start:start + 2].all())
+        self.assertTrue(mask[:4, 4:8].all())
+        self.assertTrue(mask[4:8, :4].all())
+        self.assertTrue(mask[8:, :8].all())
+        self.assertFalse(query_padding_mask.any())
+
+        easy = generator._sample_unit_noise(
+            128, torch.device('cpu'), torch.float32, negative=False,
+            positive_hard=False)
+        hard = generator._sample_unit_noise(
+            128, torch.device('cpu'), torch.float32, negative=False,
+            positive_hard=True)
+        self.assertTrue(torch.all(easy.abs() < 1.0))
+        self.assertTrue(torch.all(
+            hard.abs() >= generator.positive_hard_min_magnitude))
+        self.assertTrue(torch.all(
+            hard.abs() < generator.positive_hard_max_magnitude))
+
+    def test_pair_dn_easy_hard_positive_targets(self):
+        head = _build_head(
+            num_layers=1,
+            use_presence=False,
+            dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        gt = _pair_gt(
+            labels=[0, 1],
+            prev_boxes=[_norm_rbox(0.0, 0.0, 0.1, 0.1),
+                        _norm_rbox(.5, .5, .2, .2)],
+            curr_boxes=[_norm_rbox(.5, .5, .2, .2),
+                        _norm_rbox(0.0, 0.0, 0.1, 0.1)],
+            valid_prev=[False, True],
+            valid_curr=[True, False])
+        dn_meta = dict(
+            dn_target_mode='easy_hard_positive',
+            num_denoising_queries=4,
+            num_denoising_groups=1,
+            max_num_dn_targets=2,
+            max_num_hard_positive_dn_targets=2,
+            num_hard_positive_dn_targets_per_image=[2])
+
+        targets = head._get_pair_dn_targets(
+            [gt], [IMG_META], dn_meta, torch.device('cpu'))
+        labels, label_weights = targets[0][0], targets[1][0]
+        bbox_prev_weights, bbox_curr_weights = targets[3][0], targets[5][0]
+        pres_prev_targets, pres_curr_targets = targets[6][0], targets[7][0]
+        num_total_pos, num_total_neg = targets[-2:]
+
+        self.assertEqual(labels.tolist(), [0, 1, 0, 1])
+        self.assertEqual(label_weights.tolist(), [1.0, 1.0, 1.0, 1.0])
+        self.assertEqual(num_total_pos, 4)
+        self.assertEqual(num_total_neg, 0)
+        self.assertEqual(pres_prev_targets.tolist(), [0.0, 1.0, 0.0, 1.0])
+        self.assertEqual(pres_curr_targets.tolist(), [1.0, 0.0, 1.0, 0.0])
+        self.assertEqual(bbox_prev_weights[0].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_curr_weights[0].abs().sum().item(), 0.0)
+        self.assertEqual(bbox_prev_weights[2].abs().sum().item(), 0.0)
+        self.assertGreater(bbox_curr_weights[2].abs().sum().item(), 0.0)
+
     def test_pair_cdn_negative_noise_stays_in_outer_band(self):
         generator = PairCdnQueryGenerator(
             num_classes=3,
@@ -597,6 +687,49 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
         label_weights = targets[1]
         self.assertEqual(label_weights[0].tolist(), [1.0, 1.0, 1.0])
         self.assertEqual(label_weights[1].tolist(), [1.0, 0.0, 1.0])
+
+    def test_pair_cdn_easy_hard_positive_padding_is_unsupervised(self):
+        gt_full = _pair_gt(
+            labels=[0, 1],
+            prev_boxes=[_norm_rbox(.3, .3, .1, .08),
+                        _norm_rbox(.7, .7, .12, .08)],
+            curr_boxes=[_norm_rbox(.31, .3, .1, .08),
+                        _norm_rbox(.71, .7, .12, .08)],
+            valid_prev=[True, True], valid_curr=[True, True])
+        gt_short = _pair_gt(
+            labels=[0],
+            prev_boxes=[_norm_rbox(.4, .4, .1, .08)],
+            curr_boxes=[_norm_rbox(.41, .4, .1, .08)],
+            valid_prev=[True], valid_curr=[True])
+        samples = []
+        for gt in (gt_full, gt_short):
+            sample = DetDataSample(metainfo=IMG_META)
+            sample.pair_gt_instances = gt
+            samples.append(sample)
+        generator = PairCdnQueryGenerator(
+            num_classes=3,
+            embed_dims=16,
+            num_matching_queries=3,
+            dn_target_mode='easy_hard_positive',
+            share_pair_noise=False,
+            group_cfg=dict(dynamic=False, num_groups=1))
+
+        _, _, _, _, query_padding_mask, meta = generator(samples)
+        self.assertEqual(meta['num_denoising_queries'], 4)
+        self.assertEqual(query_padding_mask[0].tolist(),
+                         [False, False, False, False, False, False, False])
+        self.assertEqual(query_padding_mask[1].tolist(),
+                         [False, True, False, True, False, False, False])
+
+        head = _build_head(
+            num_layers=1, use_presence=False, dual_cls=True,
+            train_cfg=_no_presence_train_cfg())
+        targets = head._get_pair_dn_targets(
+            [gt_full, gt_short], [IMG_META, IMG_META], meta,
+            torch.device('cpu'))
+        self.assertEqual(targets[1][0].tolist(), [1.0, 1.0, 1.0, 1.0])
+        self.assertEqual(targets[1][1].tolist(), [1.0, 0.0, 1.0, 0.0])
+        self.assertEqual(targets[-2:], (6, 0))
 
     def test_pair_dn_zero_missing_side_does_not_enter_gd_loss(self):
         head = _build_head(

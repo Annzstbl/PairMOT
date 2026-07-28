@@ -2,7 +2,7 @@
 """Contrastive denoising queries for paired rotated detection."""
 
 import math
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 from mmdet.models.layers.transformer.utils import inverse_sigmoid
@@ -37,6 +37,7 @@ class PairCdnQueryGenerator(nn.Module):
                  positive_hard_min_magnitude: float = 0.5,
                  positive_hard_max_magnitude: float = 1.25,
                  share_pair_noise: bool = True,
+                 dn_target_mode: str = 'positive_negative',
                  negative_ratio: float = 0.5,
                  negative_min_magnitude: float = 0.75,
                  negative_max_magnitude: float = 1.5,
@@ -64,6 +65,7 @@ class PairCdnQueryGenerator(nn.Module):
         self.positive_hard_max_magnitude = float(
             positive_hard_max_magnitude)
         self.share_pair_noise = bool(share_pair_noise)
+        self.dn_target_mode = str(dn_target_mode)
         self.negative_ratio = float(negative_ratio)
         self.negative_min_magnitude = float(negative_min_magnitude)
         self.negative_max_magnitude = float(negative_max_magnitude)
@@ -71,6 +73,11 @@ class PairCdnQueryGenerator(nn.Module):
         self.negative_resample_attempts = int(negative_resample_attempts)
         if not 0 <= self.positive_hard_ratio <= 1:
             raise ValueError('positive_hard_ratio must be in [0, 1]')
+        if self.dn_target_mode not in {
+                'positive_negative', 'easy_hard_positive'}:
+            raise ValueError(
+                'dn_target_mode must be positive_negative or '
+                'easy_hard_positive')
         if not (0 <= self.positive_hard_min_magnitude
                 < self.positive_hard_max_magnitude):
             raise ValueError('Invalid positive-hard magnitude interval')
@@ -110,7 +117,8 @@ class PairCdnQueryGenerator(nn.Module):
         return min(num_targets, int(math.ceil(num_targets * self.negative_ratio)))
 
     def _sample_unit_noise(self, num_targets: int, device: torch.device,
-                           dtype: torch.dtype, *, negative: bool) -> Tensor:
+                           dtype: torch.dtype, *, negative: bool,
+                           positive_hard: Optional[bool] = None) -> Tensor:
         """Sample unitless noise shared by both frames of a pair."""
         if num_targets == 0:
             return torch.zeros((0, 5), device=device, dtype=dtype)
@@ -135,6 +143,8 @@ class PairCdnQueryGenerator(nn.Module):
         hard = hard_sign * hard_magnitude
         hard_rows = torch.rand(
             num_targets, 1, device=device) < self.positive_hard_ratio
+        if positive_hard is not None:
+            return hard if positive_hard else normal
         return torch.where(hard_rows, hard, normal)
 
     def _apply_noise(self, refs: Tensor, valid: Tensor, unit_noise: Tensor,
@@ -170,16 +180,18 @@ class PairCdnQueryGenerator(nn.Module):
 
     def _noisy_pair_refs(self, refs_prev: Tensor, refs_curr: Tensor,
                          valid_prev: Tensor, valid_curr: Tensor, factor: Tensor,
-                         *, negative: bool) -> Tuple[Tensor, Tensor]:
+                         *, negative: bool,
+                         positive_hard: Optional[bool] = None
+                         ) -> Tuple[Tensor, Tensor]:
         unit_noise_prev = self._sample_unit_noise(
             refs_prev.size(0), refs_prev.device, refs_prev.dtype,
-            negative=negative)
+            negative=negative, positive_hard=positive_hard)
         if self.share_pair_noise:
             unit_noise_curr = unit_noise_prev
         else:
             unit_noise_curr = self._sample_unit_noise(
                 refs_curr.size(0), refs_curr.device, refs_curr.dtype,
-                negative=negative)
+                negative=negative, positive_hard=positive_hard)
         return (
             self._apply_noise(
                 refs_prev, valid_prev, unit_noise_prev, factor),
@@ -274,9 +286,12 @@ class PairCdnQueryGenerator(nn.Module):
 
         counts = [len(labels) for labels in labels_list]
         max_targets = max(counts, default=0)
-        max_negative_targets = self._num_negative_targets(max_targets)
+        easy_hard_positive = self.dn_target_mode == 'easy_hard_positive'
+        max_secondary_targets = (
+            max_targets if easy_hard_positive
+            else self._num_negative_targets(max_targets))
         num_groups = self._get_num_groups(max_targets)
-        group_width = max_targets + max_negative_targets
+        group_width = max_targets + max_secondary_targets
         num_dn = group_width * num_groups
         batch_size = len(batch_data_samples)
         dn_query = torch.zeros(batch_size, num_dn, self.embed_dims, device=device,
@@ -289,40 +304,54 @@ class PairCdnQueryGenerator(nn.Module):
         query_key_padding_mask = torch.zeros(
             batch_size, total_queries, device=device, dtype=torch.bool)
         query_key_padding_mask[:, :num_dn] = True
-        negative_counts = []
+        secondary_counts = []
 
         for batch_idx, (labels, refs_prev, refs_curr, valid_prev,
                         valid_curr, factor) in enumerate(zip(
                             labels_list, refs_prev_list, refs_curr_list,
                             valid_prev_list, valid_curr_list, factor_list)):
             num_targets = len(labels)
-            num_negative_targets = self._num_negative_targets(num_targets)
-            negative_counts.append(num_negative_targets)
+            num_secondary_targets = (
+                num_targets if easy_hard_positive
+                else self._num_negative_targets(num_targets))
+            secondary_counts.append(num_secondary_targets)
             if num_targets == 0:
                 continue
-            negative_indices = torch.randperm(
-                num_targets, device=device)[:num_negative_targets]
+            negative_indices = None
+            if not easy_hard_positive and num_secondary_targets > 0:
+                negative_indices = torch.randperm(
+                    num_targets, device=device)[:num_secondary_targets]
             repeated_prev = refs_prev.repeat(num_groups, 1)
             repeated_curr = refs_curr.repeat(num_groups, 1)
             repeated_valid_prev = valid_prev.repeat(num_groups)
             repeated_valid_curr = valid_curr.repeat(num_groups)
             pos_prev_all, pos_curr_all = self._noisy_pair_refs(
                 repeated_prev, repeated_curr, repeated_valid_prev,
-                repeated_valid_curr, factor, negative=False)
+                repeated_valid_curr, factor, negative=False,
+                positive_hard=False if easy_hard_positive else None)
             pos_labels_all = self._noisy_labels(labels.repeat(num_groups))
 
-            if num_negative_targets > 0:
+            if easy_hard_positive:
+                secondary_prev_all, secondary_curr_all = (
+                    self._noisy_pair_refs(
+                        repeated_prev, repeated_curr, repeated_valid_prev,
+                        repeated_valid_curr, factor, negative=False,
+                        positive_hard=True))
+                secondary_labels_all = self._noisy_labels(
+                    labels.repeat(num_groups))
+            elif num_secondary_targets > 0:
                 negative_prev = refs_prev[negative_indices]
                 negative_curr = refs_curr[negative_indices]
                 negative_valid_prev = valid_prev[negative_indices]
                 negative_valid_curr = valid_curr[negative_indices]
-                neg_prev_all, neg_curr_all = self._sample_negative_pair_refs(
-                    negative_prev.repeat(num_groups, 1),
-                    negative_curr.repeat(num_groups, 1),
-                    negative_valid_prev.repeat(num_groups),
-                    negative_valid_curr.repeat(num_groups), refs_prev,
-                    refs_curr, valid_prev, valid_curr, factor)
-                neg_labels_all = self._noisy_labels(
+                secondary_prev_all, secondary_curr_all = (
+                    self._sample_negative_pair_refs(
+                        negative_prev.repeat(num_groups, 1),
+                        negative_curr.repeat(num_groups, 1),
+                        negative_valid_prev.repeat(num_groups),
+                        negative_valid_curr.repeat(num_groups), refs_prev,
+                        refs_curr, valid_prev, valid_curr, factor))
+                secondary_labels_all = self._noisy_labels(
                     labels[negative_indices].repeat(num_groups))
             for group_idx in range(num_groups):
                 group_start = group_idx * group_width
@@ -338,21 +367,25 @@ class PairCdnQueryGenerator(nn.Module):
                     pos_source_start:pos_source_end]
                 query_key_padding_mask[batch_idx, pos_start:pos_end] = False
 
-                neg_start = group_start + max_targets
-                neg_end = neg_start + num_negative_targets
-                if num_negative_targets > 0:
-                    neg_source_start = group_idx * num_negative_targets
-                    neg_source_end = neg_source_start + num_negative_targets
-                    dn_query[batch_idx, neg_start:neg_end] = (
+                secondary_start = group_start + max_targets
+                secondary_end = secondary_start + num_secondary_targets
+                if num_secondary_targets > 0:
+                    secondary_source_start = group_idx * num_secondary_targets
+                    secondary_source_end = (
+                        secondary_source_start + num_secondary_targets)
+                    dn_query[batch_idx, secondary_start:secondary_end] = (
                         self.label_embedding(
-                            neg_labels_all[
-                                neg_source_start:neg_source_end]).to(dtype))
-                    dn_prev[batch_idx, neg_start:neg_end] = neg_prev_all[
-                        neg_source_start:neg_source_end]
-                    dn_curr[batch_idx, neg_start:neg_end] = neg_curr_all[
-                        neg_source_start:neg_source_end]
+                            secondary_labels_all[
+                                secondary_source_start:
+                                secondary_source_end]).to(dtype))
+                    dn_prev[batch_idx, secondary_start:secondary_end] = (
+                        secondary_prev_all[
+                            secondary_source_start:secondary_source_end])
+                    dn_curr[batch_idx, secondary_start:secondary_end] = (
+                        secondary_curr_all[
+                            secondary_source_start:secondary_source_end])
                     query_key_padding_mask[
-                        batch_idx, neg_start:neg_end] = False
+                        batch_idx, secondary_start:secondary_end] = False
 
         attn_mask = torch.zeros(total_queries, total_queries, device=device,
                                 dtype=torch.bool)
@@ -365,11 +398,22 @@ class PairCdnQueryGenerator(nn.Module):
                 end = start + group_width
                 attn_mask[start:end, :start] = True
                 attn_mask[start:end, end:num_dn] = True
+                if easy_hard_positive:
+                    split = start + max_targets
+                    attn_mask[start:split, split:end] = True
+                    attn_mask[split:end, start:split] = True
         dn_meta = dict(
             num_denoising_queries=num_dn,
             num_denoising_groups=num_groups,
             max_num_dn_targets=max_targets,
-            max_num_negative_dn_targets=max_negative_targets,
-            num_negative_dn_targets_per_image=negative_counts)
+            dn_target_mode=self.dn_target_mode)
+        if easy_hard_positive:
+            dn_meta.update(
+                max_num_hard_positive_dn_targets=max_secondary_targets,
+                num_hard_positive_dn_targets_per_image=secondary_counts)
+        else:
+            dn_meta.update(
+                max_num_negative_dn_targets=max_secondary_targets,
+                num_negative_dn_targets_per_image=secondary_counts)
         return (dn_query, inverse_sigmoid(dn_prev), inverse_sigmoid(dn_curr),
                 attn_mask, query_key_padding_mask, dn_meta)

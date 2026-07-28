@@ -953,28 +953,39 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
     def _get_pair_dn_targets(self, batch_pair_gt_instances: InstanceList,
                              batch_img_metas: List[dict],
                              dn_meta: Dict[str, int], device: torch.device):
-        """Build DINO-style positive/negative targets for pair DN slots."""
+        """Build positive/negative or easy/hard-positive pair DN targets."""
+        target_mode = dn_meta.get('dn_target_mode', 'positive_negative')
         max_targets = dn_meta['max_num_dn_targets']
-        max_negative_targets = dn_meta['max_num_negative_dn_targets']
-        negative_counts = dn_meta['num_negative_dn_targets_per_image']
+        easy_hard_positive = target_mode == 'easy_hard_positive'
+        if easy_hard_positive:
+            max_secondary_targets = dn_meta[
+                'max_num_hard_positive_dn_targets']
+            secondary_counts = dn_meta[
+                'num_hard_positive_dn_targets_per_image']
+        else:
+            max_secondary_targets = dn_meta[
+                'max_num_negative_dn_targets']
+            secondary_counts = dn_meta[
+                'num_negative_dn_targets_per_image']
         num_groups = dn_meta['num_denoising_groups']
         num_dn = dn_meta['num_denoising_queries']
-        group_width = max_targets + max_negative_targets
+        group_width = max_targets + max_secondary_targets
         expected_num_dn = num_groups * group_width
         if num_dn != expected_num_dn:
             raise ValueError(
                 'Pair CDN layout does not match positive/negative capacities: '
                 f'expected {expected_num_dn} queries, got {num_dn}')
-        if len(negative_counts) != len(batch_pair_gt_instances):
-            raise ValueError('DN negative counts must match batch size')
+        if len(secondary_counts) != len(batch_pair_gt_instances):
+            raise ValueError('DN secondary-block counts must match batch size')
         target_lists = [[] for _ in range(9)]
         num_total_pos = 0
         num_total_neg = 0
-        for pair_gt, img_meta, num_negative_targets in zip(
-                batch_pair_gt_instances, batch_img_metas, negative_counts):
+        for pair_gt, img_meta, num_secondary_targets in zip(
+                batch_pair_gt_instances, batch_img_metas, secondary_counts):
             labels = torch.full((num_dn,), self.num_classes, device=device,
                                 dtype=torch.long)
-            # Padding has no loss; populated negative slots are background.
+            # Padding has no loss. Populated secondary slots are either
+            # background negatives or a second positive block.
             label_weights = torch.zeros(num_dn, device=device)
             bbox_prev_targets = torch.zeros(num_dn, 5, device=device)
             bbox_curr_targets = torch.zeros(num_dn, 5, device=device)
@@ -997,8 +1008,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 valid_curr = torch.as_tensor(
                     pair_gt.valid_curr, device=device, dtype=torch.bool)
                 for group_idx in range(num_groups):
-                    # Layout: [max_targets positives, max_negative_targets
-                    # negatives]. Unused capacity is attention/loss padding.
+                    # Layout: [max_targets primary positives,
+                    # max_secondary_targets secondary slots]. Unused capacity
+                    # is attention/loss padding.
                     pos_start = group_idx * group_width
                     pos_end = pos_start + num_targets
                     labels[pos_start:pos_end] = pair_gt.labels.to(device)
@@ -1011,13 +1023,34 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                         valid_curr.float().unsqueeze(-1).expand(-1, 5))
                     pres_prev_targets[pos_start:pos_end] = valid_prev.float()
                     pres_curr_targets[pos_start:pos_end] = valid_curr.float()
-                    neg_start = pos_start + max_targets
-                    neg_end = neg_start + num_negative_targets
-                    label_weights[neg_start:neg_end] = 1
+                    secondary_start = pos_start + max_targets
+                    secondary_end = (
+                        secondary_start + num_secondary_targets)
+                    label_weights[secondary_start:secondary_end] = 1
                     pres_weights[pos_start:pos_end] = 1
-                    pres_weights[neg_start:neg_end] = 1
-                num_total_pos += num_targets * num_groups
-                num_total_neg += num_negative_targets * num_groups
+                    pres_weights[secondary_start:secondary_end] = 1
+                    if easy_hard_positive:
+                        labels[secondary_start:secondary_end] = (
+                            pair_gt.labels.to(device))
+                        bbox_prev_targets[
+                            secondary_start:secondary_end] = gt_prev
+                        bbox_curr_targets[
+                            secondary_start:secondary_end] = gt_curr
+                        bbox_prev_weights[
+                            secondary_start:secondary_end] = (
+                                valid_prev.float().unsqueeze(-1).expand(-1, 5))
+                        bbox_curr_weights[
+                            secondary_start:secondary_end] = (
+                                valid_curr.float().unsqueeze(-1).expand(-1, 5))
+                        pres_prev_targets[
+                            secondary_start:secondary_end] = valid_prev.float()
+                        pres_curr_targets[
+                            secondary_start:secondary_end] = valid_curr.float()
+                positive_multiplier = 2 if easy_hard_positive else 1
+                num_total_pos += (
+                    num_targets * num_groups * positive_multiplier)
+                if not easy_hard_positive:
+                    num_total_neg += num_secondary_targets * num_groups
             for bucket, value in zip(target_lists, (
                     labels, label_weights, bbox_prev_targets,
                     bbox_prev_weights, bbox_curr_targets, bbox_curr_weights,
