@@ -255,6 +255,7 @@ def _build_generator(cfg: Config, model) -> PairCdnQueryGenerator:
         embed_dims=model.decoder.embed_dims,
         num_matching_queries=cfg.model['num_queries'],
         angle_factor=model.decoder.angle_factor,
+        angle_cfg=model.bbox_head.angle_cfg,
         **dn_cfg)
     return generator.to(device)
 
@@ -264,8 +265,8 @@ def _draw_dn_single_visible(cfg: Config, model, generator: PairCdnQueryGenerator
                             out_path: str, draw_limit: int) -> dict:
     generator.train()
     with torch.no_grad():
-        _dn_query, dn_prev_unact, dn_curr_unact, _attn_mask, dn_meta = (
-            generator([data_sample]))
+        (_dn_query, dn_prev_unact, dn_curr_unact, _attn_mask,
+         _query_padding_mask, dn_meta) = generator([data_sample])
     dn_prev = torch.sigmoid(dn_prev_unact[0]).detach().cpu()
     dn_curr = torch.sigmoid(dn_curr_unact[0]).detach().cpu()
     img_shape = data_sample.metainfo['img_shape']
@@ -274,12 +275,15 @@ def _draw_dn_single_visible(cfg: Config, model, generator: PairCdnQueryGenerator
     gt = data_sample.pair_gt_instances
     masks = _gt_type_masks(gt)
     max_targets = int(dn_meta['max_num_dn_targets'])
+    max_negative_targets = int(dn_meta['max_num_negative_dn_targets'])
     num_groups = int(dn_meta['num_denoising_groups'])
+    group_width = max_targets + max_negative_targets
     manifest = {
         'num_gt': int(len(gt.labels)),
         'gt_counts': {k: int(v.sum()) for k, v in masks.items()},
         'num_denoising_groups': num_groups,
         'max_num_dn_targets': max_targets,
+        'max_num_negative_dn_targets': max_negative_targets,
         'num_denoising_queries': int(dn_meta['num_denoising_queries']),
         'files': [],
     }
@@ -287,15 +291,14 @@ def _draw_dn_single_visible(cfg: Config, model, generator: PairCdnQueryGenerator
         target_idxs = torch.nonzero(masks[mode], as_tuple=False).flatten().tolist()
         if not target_idxs:
             continue
-        for group_idx in range(min(2 * num_groups, 4)):
+        for group_idx in range(min(num_groups, 4)):
             prev = _to_preview(packed_inputs[0])
             curr = _to_preview(packed_inputs[1])
             _draw_gt(prev, curr, gt, limit=60)
-            negative = bool(group_idx % 2)
-            color = (255, 0, 255) if negative else (255, 255, 0)
-            name = 'negative' if negative else 'positive'
+            color = (255, 255, 0)
+            name = 'positive'
             for local_rank, tgt_idx in enumerate(target_idxs[:draw_limit]):
-                dn_idx = group_idx * max_targets + tgt_idx
+                dn_idx = group_idx * group_width + tgt_idx
                 if mode in ('both', 'disappear'):
                     _draw_box(prev, dn_prev_px[dn_idx].tolist(), color,
                               f'd{local_rank}', 1)
@@ -310,11 +313,14 @@ def _draw_dn_single_visible(cfg: Config, model, generator: PairCdnQueryGenerator
                 prev, curr,
                 f'PairDN {mode} targets: group {group_idx} ({name})',
                 [
-                    f'gt_counts={manifest["gt_counts"]}, drawn_targets={min(draw_limit, len(target_idxs))}',
+                    f'gt_counts={manifest["gt_counts"]}, '
+                    f'drawn_targets={min(draw_limit, len(target_idxs))}',
                     f'max_targets={max_targets}, num_groups={num_groups}',
-                    'green/orange/magenta: GT; cyan: positive DN; magenta: negative DN; gray cross: invalid side',
+                    'green/orange/magenta: GT; cyan: positive DN; '
+                    'gray cross: invalid side',
                 ])
-            sub_path = out_path.replace('.jpg', f'_{mode}_g{group_idx}_{name}.jpg')
+            sub_path = out_path.replace(
+                '.jpg', f'_{mode}_g{group_idx}_{name}.jpg')
             cv2.imwrite(sub_path, canvas)
             manifest['files'].append(sub_path)
     return manifest

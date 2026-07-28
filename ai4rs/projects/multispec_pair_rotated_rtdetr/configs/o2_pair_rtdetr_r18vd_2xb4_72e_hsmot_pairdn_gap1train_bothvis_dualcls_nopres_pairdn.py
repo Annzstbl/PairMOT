@@ -13,12 +13,21 @@ model.update(
     pair_dn_cfg=dict(
         label_noise_scale=0.5,
         box_noise_scale=0.4,
+        positive_hard_ratio=0.75,
+        positive_hard_min_magnitude=0.5,
+        positive_hard_max_magnitude=1.25,
+        negative_ratio=0.5,
+        negative_min_magnitude=0.75,
+        negative_max_magnitude=1.5,
+        negative_max_iou=0.4,
+        negative_resample_attempts=4,
         group_cfg=dict(dynamic=True, num_dn_queries=100),
     ),
 )
 
 model.bbox_head.update(
     dn_loss_weight=0.2,
+    bbox_angle_l1_weight=0.05,
 )
 
 work_dir = (

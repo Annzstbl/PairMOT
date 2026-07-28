@@ -66,6 +66,26 @@ class DiffusionNet(nn.Module):
 
         features=(pre_features,cur_features)
 
+        if getattr(self, "capture_train_features", False):
+            snapshots = []
+            for side, side_features in (
+                    ("REF", pre_features), ("CUR", cur_features)):
+                for level, feature in enumerate(side_features, start=3):
+                    # Reduce on-device before copying so the diagnostic adds
+                    # only a few 2-D maps rather than full CxHxW activations.
+                    sample = feature[0].detach().float()
+                    snapshots.append({
+                        "side": side,
+                        "level": "P{}".format(level),
+                        "shape": tuple(feature.shape),
+                        "mean_abs": sample.abs().mean(dim=0).cpu(),
+                        "max_abs": sample.abs().amax(dim=0).cpu(),
+                        "mean": float(sample.mean().item()),
+                        "std": float(sample.std().item()),
+                        "absmax": float(sample.abs().max().item()),
+                    })
+            self.last_train_features = snapshots
+
         if self.training:
             assert pre_targets is not None
             if cur_targets is None:

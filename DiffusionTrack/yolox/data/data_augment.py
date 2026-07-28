@@ -210,6 +210,38 @@ def _mirror(image, boxes):
     return image, boxes
 
 
+def _distort_hsmot_lx(image):
+    """Reproduce LX's 8-channel photometric distortion exactly."""
+    def convert(array, alpha=1.0, beta=0.0):
+        converted = array.astype(float) * alpha + beta
+        converted[converted < 0] = 0
+        converted[converted > 255] = 255
+        array[:] = converted
+
+    image = image.copy()
+    if random.randrange(2):
+        convert(image, beta=random.uniform(-32, 32))
+    if random.randrange(2):
+        convert(image, alpha=random.uniform(0.5, 1.5))
+    if random.randrange(2):
+        channel = image[:, :, 0].astype(int) + random.randint(-18, 18)
+        channel %= 180
+        image[:, :, 0] = channel
+    if random.randrange(2):
+        convert(image[:, :, 1], alpha=random.uniform(0.5, 1.5))
+    return image
+
+
+def _mirror_hsmot_lx(image, qboxes):
+    """Reproduce LX's horizontal flip for raw quadrilateral coordinates."""
+    _, width, _ = image.shape
+    if random.randrange(2):
+        image = image[:, ::-1]
+        qboxes = qboxes.copy()
+        qboxes[:, 0::2] = width - qboxes[:, 0::2]
+    return image, qboxes
+
+
 def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
     if len(image.shape) == 3:
         padded_img = np.ones(
@@ -238,17 +270,22 @@ def preproc(image, input_size, mean, std, swap=(2, 0, 1)):
 
 
 class TrainTransform:
-    def __init__(self, p=0.5, rgb_means=None, std=None, max_labels=100):
+    def __init__(self, p=0.5, rgb_means=None, std=None, max_labels=100,
+                 hsmot_augment_mode="none"):
         self.means = rgb_means
         self.std = std
         self.p = p
         self.max_labels = max_labels
+        if hsmot_augment_mode not in ("none", "lx"):
+            raise ValueError(
+                "hsmot_augment_mode must be 'none' or 'lx'")
+        self.hsmot_augment_mode = hsmot_augment_mode
 
     def __call__(self, image, targets, input_dim):
         if targets.shape[1] >= 10:
             return _hsmot_single_transform(
                 image, targets, input_dim, self.means, self.std,
-                self.max_labels)
+                self.max_labels, self.hsmot_augment_mode)
         boxes = targets[:, :4].copy()
         labels = targets[:, 4].copy()
         ids = targets[:, 5].copy()
@@ -427,8 +464,17 @@ class DiffusionTrainTransform:
 
 
 def _hsmot_single_transform(image, targets, input_dim, means, std,
-                            max_labels):
+                            max_labels, augment_mode="none"):
     """Resize/normalize one multispectral image without RGB HSV distortion."""
+    if augment_mode == "lx":
+        image = _distort_hsmot_lx(image)
+        qboxes = targets[:, :8].copy()
+        image, qboxes = _mirror_hsmot_lx(image, qboxes)
+        targets = targets.copy()
+        targets[:, :8] = qboxes
+    elif augment_mode != "none":
+        raise ValueError(
+            "augment_mode must be 'none' or 'lx'")
     image_t, ratio = preproc(image, input_dim, means, std)
     packed = np.zeros((max_labels, 10), dtype=np.float32)
     if len(targets):

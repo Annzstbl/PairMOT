@@ -253,6 +253,21 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 self.assertEqual(module.weight.abs().sum().item(), 0.0)
                 self.assertEqual(module.bias.abs().sum().item(), 0.0)
 
+    def test_tristate_disables_structurally_unused_parameters(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            tristate_decoder=True,
+            tristate_zero_init_coupling=True)
+        for layer in decoder.layers:
+            self.assertFalse(layer.cross_fusion.weight.requires_grad)
+            self.assertFalse(layer.cross_fusion.bias.requires_grad)
+        self.assertTrue(
+            decoder.layers[0].pointer_update.weight.requires_grad)
+        self.assertTrue(decoder.layers[0].norms[5].weight.requires_grad)
+        self.assertFalse(
+            decoder.layers[-1].pointer_update.weight.requires_grad)
+        self.assertFalse(decoder.layers[-1].norms[5].weight.requires_grad)
+
     def test_references_change_across_layers(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)
         _, refs_prev, refs_curr, _, _ = self._forward(
@@ -373,6 +388,50 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         for tensor in hidden + refs_prev + refs_curr:
             self.assertFalse(torch.isnan(tensor).any().item())
             self.assertFalse(torch.isinf(tensor).any().item())
+
+    def test_padding_query_cannot_change_valid_outputs(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=2, num_queries=5, device=self.device)
+        decoder.eval()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        torch.manual_seed(17)
+        memory_prev = torch.randn(1, num_value, decoder.embed_dims)
+        memory_curr = torch.randn(1, num_value, decoder.embed_dims)
+        query = torch.randn(1, 5, decoder.embed_dims)
+        ref_prev = torch.rand(1, 5, 5).clamp(1e-3, 1 - 1e-3)
+        ref_curr = torch.rand(1, 5, 5).clamp(1e-3, 1 - 1e-3)
+        query_padding_mask = torch.tensor(
+            [[False, False, False, True, True]])
+
+        def run(current_query, current_prev, current_curr):
+            with torch.no_grad():
+                return decoder(
+                    memory_prev=memory_prev,
+                    memory_curr=memory_curr,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
+                    reg_branches_prev=reg_prev,
+                    reg_branches_curr=reg_curr,
+                    query=current_query,
+                    reference_prev=current_prev,
+                    reference_curr=current_curr,
+                    query_key_padding_mask=query_padding_mask)
+
+        baseline = run(query, ref_prev, ref_curr)
+        perturbed_query = query.clone()
+        perturbed_prev = ref_prev.clone()
+        perturbed_curr = ref_curr.clone()
+        perturbed_query[:, 3:] = torch.randn_like(
+            perturbed_query[:, 3:]) * 1000
+        perturbed_prev[:, 3:] = torch.rand_like(perturbed_prev[:, 3:])
+        perturbed_curr[:, 3:] = torch.rand_like(perturbed_curr[:, 3:])
+        perturbed = run(perturbed_query, perturbed_prev, perturbed_curr)
+
+        for base_tensors, changed_tensors in zip(baseline, perturbed):
+            for base, changed in zip(base_tensors, changed_tensors):
+                self.assertTrue(torch.allclose(
+                    base[:, :3], changed[:, :3], atol=1e-6, rtol=1e-6))
 
     def test_static_import_from_package(self):
         from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr import (  # noqa: E501

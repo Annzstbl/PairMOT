@@ -60,6 +60,25 @@ def regularize_rboxes(boxes):
          angle.unsqueeze(-1)], dim=-1)
 
 
+def regularize_rboxes_degrees(boxes):
+    """Canonicalize degree-valued rotated boxes to LE135.
+
+    This is the degree-space equivalent of :func:`regularize_rboxes`.  It is
+    intentionally implemented without a degree->radian round trip because
+    these boxes feed the next detached refinement stage and RotatedROIAlign.
+    """
+    center = boxes[..., :2]
+    width, height = boxes[..., 2], boxes[..., 3]
+    swap = width < height
+    long_edge = torch.where(swap, height, width)
+    short_edge = torch.where(swap, width, height)
+    angle = boxes[..., 4] + swap.to(boxes.dtype) * 90.0
+    angle = torch.remainder(angle + 45.0, 180.0) - 45.0
+    return torch.cat(
+        [center, long_edge.unsqueeze(-1), short_edge.unsqueeze(-1),
+         angle.unsqueeze(-1)], dim=-1)
+
+
 def qbox_to_rbox(qboxes):
     """Convert ordered quadrilaterals ``[..., 8]`` to le135 rboxes."""
     is_numpy = isinstance(qboxes, np.ndarray)
@@ -81,6 +100,59 @@ def qbox_to_rbox(qboxes):
         [center, width[:, None], height[:, None], angle[:, None]], dim=1)
     result = result.reshape(*shape, 5)
     return result.cpu().numpy() if is_numpy else result.to(qboxes.device)
+
+
+def qbox_to_rbox_lx(qboxes, angle_in_degrees=False):
+    """Reproduce LX's scalar qbox-to-LE135 conversion exactly.
+
+    LX orders each quadrilateral around its centroid and uses Python's double
+    precision ``hypot``/``atan2`` before materialising the result back in the
+    input dtype.  It is intentionally separate from the vectorised HSMOT
+    converter: this function exists solely for a controlled parity bridge.
+    """
+    is_numpy = isinstance(qboxes, np.ndarray)
+    source = torch.as_tensor(qboxes)
+    if source.shape[-1] != 8:
+        raise ValueError(f"Expected (..., 8) qboxes, got {tuple(source.shape)}")
+    shape = source.shape[:-1]
+    flat = source.reshape(-1, 4, 2)
+    if flat.numel() == 0:
+        result = source.new_zeros((*shape, 5))
+        return result.cpu().numpy() if is_numpy else result
+    values = []
+    for points in flat:
+        center = points.mean(dim=0, keepdim=True)
+        order = torch.argsort(torch.atan2(
+            points[:, 1] - center[0, 1], points[:, 0] - center[0, 0]))
+        points = points[order]
+        cx = points[:, 0].mean().item()
+        cy = points[:, 1].mean().item()
+        # Keep the scalar arithmetic textually identical to LX.  In
+        # particular, let ``math`` coerce the 0-D tensors itself rather than
+        # materialising each endpoint first; the latter changes a few FP32
+        # widths by one ULP on CUDA.
+        dx1 = points[1, 0] - points[0, 0]
+        dy1 = points[1, 1] - points[0, 1]
+        dx2 = points[2, 0] - points[1, 0]
+        dy2 = points[2, 1] - points[1, 1]
+        len1 = math.hypot(dx1, dy1)
+        len2 = math.hypot(dx2, dy2)
+        if len1 >= len2:
+            width, height = len1, len2
+            theta = math.degrees(math.atan2(dy1, dx1))
+        else:
+            width, height = len2, len1
+            theta = math.degrees(math.atan2(dy2, dx2))
+        if theta >= 135.0:
+            theta -= 180.0
+        elif theta < -45.0:
+            theta += 180.0
+        if not angle_in_degrees:
+            theta = math.radians(theta)
+        values.append([cx, cy, width, height, theta])
+    result = torch.tensor(values, dtype=source.dtype, device=source.device)
+    result = result.reshape(*shape, 5)
+    return result.cpu().numpy() if is_numpy else result
 
 
 def rbox_to_qbox(rboxes):

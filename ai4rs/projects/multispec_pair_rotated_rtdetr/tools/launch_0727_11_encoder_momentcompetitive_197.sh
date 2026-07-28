@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO=/data/users/litianhao/PairMOT/ai4rs
+WORK_DIR=/data4/litianhao/PairMmot/workdir_197/0727_11_paper_base_liquid_encoder_p5temporal_momentcompetitive_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_orderedpairs_fresh
+CONFIG=projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_base_liquid_encoder_p5temporal_momentcompetitive_pairdn_paircoherent_le180_coco_full_1200x900_bf16_197.py
+LOG=${WORK_DIR}/launch.log
+
+mkdir -p "${WORK_DIR}"
+if find "${WORK_DIR}" -mindepth 1 -maxdepth 1 ! -name launch.log | grep -q .; then
+    echo "Refusing a fresh launch into non-empty ${WORK_DIR}" >&2
+    exit 2
+fi
+
+set +u
+source /data/users/litianhao/anaconda3/etc/profile.d/conda.sh
+conda activate py310
+set -u
+cd "${REPO}"
+test -f /data4/litianhao/PairMmot/pretrained_weights/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/pair_coco_adapted_pretrain.pth
+test -d /data/users/litianhao/PairMOT/workdir/aux/gmc_cache/hsmot_train_gap1
+test -d /data/users/litianhao/PairMOT/workdir/aux/gmc_cache/hsmot_test_gap1
+
+export CUDA_VISIBLE_DEVICES=4,5
+export PORT=29941
+export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
+unset CUBLAS_WORKSPACE_CONFIG
+unset TORCH_DISTRIBUTED_DEBUG
+
+echo "[$(date '+%F %T')] fresh 0727_11 moment-competitive Dual-Evidence encoder" >> "${LOG}"
+bash tools/dist_train.sh "${CONFIG}" 2 --work-dir "${WORK_DIR}" >> "${LOG}" 2>&1

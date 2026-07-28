@@ -1,33 +1,37 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-22 23:55 CST。
+更新时间：2026-07-28 11:17 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
 `detcheck` 等短测不作为正式实验单列；同一实验的失败启动、重启和最终有效目录合并说明。
 
 状态统一使用英文：`RUNNING`表示当前存在训练进程；`QUEUED`表示等待脚本仍存活且尚未
-启动正式训练；`COMPLETED`表示完成目标训练或评估；`STOPPED`表示主动取消、硬件中断或不再续跑；
-`NONE`表示该服务器当前无运行或排队任务。时间均为CST；无法从日志或启动记录可靠确定时留空。
+启动正式训练；`PREPARED`表示代码和静态验证已完成但尚未进入队列；`COMPLETED`表示完成目标
+训练或评估；`STOPPED`表示主动取消、硬件中断或不再续跑；`NONE`表示该服务器当前无运行或
+排队任务。时间均为CST；无法从日志或启动记录可靠确定时留空。
 
 ## 当前资源总览
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0721_05 DSE-Liquid` | epoch 43 iter 800；TrackEval 10/18 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0722_01 corrected Negative-DN 0718_01 rerun` | epoch 50 iter 350；TrackEval 12/18 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0721_04 BSAC-Liquid` | epoch 34 iter 300；TrackEval 8/18 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0721_03 BSR + corrected Negative DN` | epoch 9 iter 350；TrackEval 2/18 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL | 无卡模式，无训练 | `0719_01`已完成72 epochs和18/18 TrackEval | 无 | `/autodl-fs/data/PairMOT_results/0719_01` |
+| 99 本机 | `0727_12 cross-scale evidence-budget dual-evidence encoder` | epoch 49；12/18 TrackEval | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0728_01 0727_01 + 0708_03 decoder` | epoch 1 iter 50；约`0.9245 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0727_04 detail-energy-conserved common-detail encoder` | epoch 28；6/18 TrackEval | 无；`0726_03`已完成并相对Base+Liquid双提升 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | 无PairMOT训练 | `0727_08`按用户指令停在epoch 3 iter 750 | 无；`0727_05`保持准备 | `/data4/litianhao/PairMmot/workdir_178` |
+| AutoDL | 无训练 | `0727_11`完成72 epochs、18/18 TrackEval及共享盘归档 | 无；Encoder阶段不再向AutoDL追加实验 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
 
-代码路径：`/data/users/wangying01/lth/PairMOT/ai4rs`。正式训练通常使用GPU 0、1；GPU
-2、3有掉卡历史，不再并行安排正式任务。
+代码路径：`/data/users/wangying01/lth/PairMOT/ai4rs`。正式训练通常使用GPU 0、1；`0723_01`
+按用户指令例外使用GPU 2、3，不设置温度watchdog或自动暂停限制。
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0721_05_liquid_dse_diffproduct_accuracyfix` | 2026-07-21 23:57 |  | accuracy-fixed `0718_01` + DSE；以identity初始化的grouped `1x1`融合Conv3D响应的channel mean/RMS，增强稀疏目标证据；启动时仍使用修复前的Negative-DN噪声 | epoch 43 iter 800，10/18 TrackEval；阶段最佳epoch 40为cls/det HOTA `53.398/60.479`；约`0.89 s/iter`，loss和梯度有限 |
+| RUNNING | `0727_12_paper_base_liquid_encoder_p5temporal_crossscalebudget` | 2026-07-27 20:18 |  | 严格继承`0727_01`的Base+Liquid、P5 temporal MHA及common/detail Dual-Evidence；用每层`[common mean, abs(detail) mean]`生成三尺度token，并结合三尺度均值上下文预测逐通道common/detail尺度预算。预算在P3/P4/P5维softmax后乘3，每个分支/通道总预算严格为3，仅重分配尺度贡献，不改变平均残差强度；描述侧停止梯度，输出层零初始化，无额外loss或高分辨率卷积 | 新增37,696参数，完整模型`22,796,471`，相对父配置`+0.166%`。32项功能/梯度/帧交换等变测试、配置深拷贝、完整构建和精确2卡真实数据4-iter DDP smoke全部通过；正式GPU 0、1 fresh训练已到epoch 7，约`0.972 s/iter`、MMEngine峰值约11.25 GB/rank，总/DN/encoder loss及grad norm有限；尚未产生首个正式评测点 |
+| COMPLETED | `0723_05_pairdn_paircoherent_le180_cpdse_local` | 2026-07-24 03:56 | 2026-07-25 03:56 | `0723_01` + consistency-preserving DSE local：保留`x.mean`主路径，以归一化通道离散度生成零初始化、最大绝对值0.5的逐像素SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`；相对Paper Base为`+0.222/-0.363`，不满足双提升。PairMOT训练及评测进程已退出，99不排新任务；不对其他用户当前GPU占用做清理或调度 |
+| COMPLETED | `0723_01_paper_liquid_independent_diffproduct_pairdn_paircoherent_le180` | 2026-07-23 03:21 | 2026-07-24 03:25 | accuracy-fixed `0718_01` + PairDN重构：pair两侧共享相对噪声，正负比2:1，正样本加难，负样本按旋转IoU筛选；DN padding隔离；保持`width_longer=True,start_angle=0`并使用等价框一致、固定角度权重的L1 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 64为`53.955/62.032`，同epoch pair mAP/AP50为`0.3114/0.5268`；相对Paper Base双提升`+0.641/+0.050` |
+| COMPLETED | `0721_05_liquid_dse_diffproduct_accuracyfix` | 2026-07-21 23:57 | 2026-07-22 21:25 | accuracy-fixed `0718_01` + DSE；以identity初始化的grouped `1x1`融合Conv3D响应的channel mean/RMS，增强稀疏目标证据；启动时仍使用修复前的Negative-DN噪声 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.635/61.895`，同epoch pair mAP/AP50为`0.3254/0.5438`；相对同协议父配置`0721_02`双提升`+0.308/+0.236` |
 | COMPLETED | `0720_03_liquid_diffproduct_qc_dualmoment_accuracyfix_20260721` | 2026-07-21 03:03 | 2026-07-21 23:54 | `0718_01` + 同时守恒SE总门控量和响应相关一阶矩；加入20260721训练准确性修复 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.650/61.547`，相对旧Paper Base为`+1.336/-0.435`，不满足双提升目标 |
 | STOPPED | `0720_03_liquid_diffproduct_qc_dualmoment`原run | 2026-07-21 00:19 | 2026-07-21 03:02 | 与上项模型配置相同，但未包含20260721训练准确性修复 | 主进程运行约2小时43分、到epoch 9后主动停止；旧checkpoint保留，不resume |
 | COMPLETED | `0719_06_paper_base_longtail_reweight` | 2026-07-20 05:47 | 2026-07-21 00:16 | Paper Base仅增加已验证的long-tail正样本分类权重 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.087/62.336`，是当前首个相对Paper Base双HOTA提升结果 |
@@ -65,7 +69,17 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0722_01_liquid_independent_diffproduct_dnnegativefix` | 2026-07-22 10:34 |  | `0721_02`的PairDN生成器修复版：将Negative DN从可趋近零的乘积噪声改为独立符号乘`uniform(1,2)`，并将attention mask修正为同一contrastive group内正负块互相可见；因此不是单独的box-noise消融 | epoch 50 iter 350，12/18 TrackEval；阶段最佳epoch 48为cls/det HOTA `53.775/60.531`，同epoch pair mAP/AP50为`0.3079/0.5229`；相对`0721_02`同epoch为`+0.157/-0.224`；训练loss和梯度有限，ETA约5小时31分；screen：`queue_0722_01_197` |
+| RUNNING | `0728_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder0708_03` | 2026-07-28 09:30 |  | 严格以`0727_01`为父配置，冻结Base、Liquid、P5 temporal、Dual-Evidence encoder、proposal、PairDN和loss；仅加入`0708_03`的`pointer/query_prev/query_curr` tri-state decoder，并启用零初始化frame-pointer循环耦合，不使用separate FFN | 条件队列在`0727_09`完成后正确进入smoke，但旧tri-state结构保留的不可达`cross_fusion`和末层无消费者pointer更新与`find_unused_parameters=False`冲突，首次smoke于04:04退出。已保持预测逻辑不变，冻结这些结构性不可训练参数；18项单测及修复后双卡4-iter真数据smoke通过。09:30 fresh启动，09:31确认epoch 1 iter 50为`0.9245 s/iter`、`grad_norm=86.8207`、MMEngine显存约11.27 GB/rank，GPU设备占用约19.3 GB/rank；总/DN/encoder loss有限，无DDP、NaN、OOM或NCCL错误 |
+| STOPPED | `0727_11_paper_base_liquid_encoder_p5temporal_momentcompetitive`的197队列 | 2026-07-27 12:15 | 2026-07-27 12:59 | 继承当前最强的`0727_01` P5 MHA与Dual-Evidence双残差；用每通道`RMS-mean(abs(x))`稀疏性矩补充common/detail全局描述，并以两路softmax共享预算替代彼此独立的sigmoid门 | 队列本身运行正常，但用户明确改在AutoDL立即训练；197未运行smoke、未创建正式workdir，队列在AutoDL正式训练通过iter 50验收后关闭。同一实验ID及科学配置迁移至AutoDL，不构成新实验 |
+| STOPPED | `0727_10_paper_base_liquid_encoder_p5temporal_detailredistribute` | 2026-07-27 08:10 | 2026-07-27 12:14 | 严格继承`0727_09`，将空间门描述停止梯度并把detail空间调制归一化为均值1 | `0727_09` epoch 16已相对Base+Liquid双降`-0.075/-0.399`，det DetA/AssA也同时下降`0.375/0.353`，表明问题并非仅是空间门全局能量漂移；在smoke和正式训练前取消，两个目标workdir均未创建，由不使用空间门的`0727_11`替代 |
+| COMPLETED | `0727_09_paper_base_liquid_encoder_p5temporal_detailspatial` | 2026-07-27 05:31 | 2026-07-28 04:02 | 严格继承`0727_01`的P5 MHA和Dual-Evidence；common共享残差完全不变，仅用局部common/detail幅值生成单通道空间可靠性，对signed-detail残差做逐位置调制。空间卷积零初始化并使用`2*sigmoid`，因此初始函数与父配置逐元素相同 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.106/62.321`，同epoch pair mAP/AP50为`0.3122/0.5273`。相对`0727_01`为`-0.331/-0.072`，未明显超过，故按计划进入Decoder阶段 |
+| STOPPED | `0727_07_paper_base_liquid_encoder_p5temporal_spatialbranchtrust` | 2026-07-27 03:05 | 2026-07-27 05:24 | 完整继承`0727_02`的双分支空间门，并增加无参数branch-energy trust region | `0727_02` epoch 12已相对Base+Liquid双降，证明其主要问题是common空间门压低检测覆盖，而不是后期残差能量失控；队列在执行smoke或正式训练前取消，未产生正式workdir |
+| STOPPED | `0727_02_paper_base_liquid_encoder_p5temporal_spatialevidence` | 2026-07-27 01:39 | 2026-07-27 05:24 | 固定`0723_01` Liquid和`0705_01` P5 MHA；post-FPN使用common/detail双残差，并以2通道局部空间证据门控P3/P4/P5两条更新 | 主动停在epoch 12后。epoch 12为`47.411/54.593`，相对同epoch Base+Liquid双降`-0.676/-1.042`；det DetA/AssA分别下降`1.052/0.829`，pair mAP下降`0.0108`。与epoch 8的`-0.035/+0.465`结合，说明同时空间门控common/detail会持续削弱检测覆盖，后继改为只门控detail |
+| COMPLETED | `0726_01_pairdn_paircoherent_le180_dse_cpdse_sparsereserve` | 2026-07-26 01:57 | 2026-07-27 01:36 | `0725_01` + Sparse-Reserve CP-DSE：以现有归一化dispersion map的空间RMS减均值衡量类别无关的稀疏小目标证据，对pair两帧取共享group reserve；仅衰减负向CP-DSE残差，正向修正和pair共享性质不变；无新参数、阈值或loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`54.230/61.634`，同epoch pair mAP/AP50为`0.3138/0.5301`。相对Paper Base为`+0.916/-0.348`，相对父配置`0725_01`为`-0.896/-0.364`，不再派生Sparse-Reserve |
+| COMPLETED | `0725_01_pairdn_paircoherent_le180_dse_cpdse_pairglobal` | 2026-07-25 02:45 | 2026-07-26 01:41 | `0723_01` + DSE + pair-global CP-DSE：DSE以mean/RMS增强局部检测证据，CP-DSE以pair共享group残差补充关联一致性；两条路径分别针对`0723_03`的det AssA下降和`0723_06`的det DetA下降，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`55.126/61.998`，同epoch pair mAP/AP50为`0.3231/0.5449`；相对Paper Base双提升`+1.812/+0.016`，det DetA/AssA为`-0.138/+0.545`；相对DSE父配置同epoch为`+0.328/+0.245` |
+| COMPLETED | `0723_06_pairdn_paircoherent_le180_cpdse_pairglobal` | 2026-07-24 03:58 | 2026-07-25 01:53 | `0723_01` + consistency-preserving DSE pair-global：保留`x.mean`主路径，将归一化离散度汇聚为pair共享group标量后生成有界SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`54.124/61.914`，同点pair mAP/AP50为`0.3124/0.5241`；相对Paper Base为`+0.810/-0.068`，det AssA提高`0.645`但DetA下降`0.432` |
+| COMPLETED | `0723_03_pairdn_paircoherent_le180_dse` | 2026-07-23 06:19 | 2026-07-24 03:41 | `0723_01` + DSE；保留两帧共享DN相对噪声和全部新PairDN/L1设置，只用identity初始化的16参数mean/RMS evidence mixer增强fusion证据 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`55.036/61.745`，同epoch pair mAP/AP50为`0.3239/0.5402`；相对Paper Base为`+1.722/-0.237`，不能视为双提升 |
+| COMPLETED | `0722_01_liquid_independent_diffproduct_dnnegativefix` | 2026-07-22 10:34 | 2026-07-23 05:54 | `0721_02`的PairDN生成器修复版：将Negative DN从可趋近零的乘积噪声改为独立符号乘`uniform(1,2)`，并将attention mask修正为同一contrastive group内正负块互相可见；因此不是单独的box-noise消融 | 完成epoch 72和计划TrackEval；最终指标见Paper Mainline报告 |
 | COMPLETED | `0721_02_liquid_independent_diffproduct_accuracyfix` | 2026-07-21 14:59 | 2026-07-22 10:31 | 修复训练几何/GMC及PairDN negative目标后的`0718_01`严格复跑；尚未包含Negative-DN外环噪声修复 | 完成epoch 72和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.327/61.659`，HOTA和`115.986`；同epoch pair mAP/AP50为`0.3161/0.5340` |
 | COMPLETED | `0720_02_liquid_diffproduct_qc_responsemass` | 2026-07-20 18:19 | 2026-07-21 13:52 | `0718_01` + response-weighted fusion quality conservation | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.463/61.437`，HOTA和`115.900`，但det低于Base `0.545` |
 | COMPLETED | `0719_04_paper_liquid_widelaf_groupmod` | 2026-07-19 20:41 | 2026-07-20 16:31 | Paper协议严格复现`0711_01`核心：独立8-group + Wide LAF + GroupMod，无pair router/transport和set约束 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `53.932/60.908`，HOTA和`114.840` |
@@ -86,6 +100,29 @@
 | COMPLETED | `0716_04_groupsetunique` |  |  | 跨group集合唯一hard约束 | epoch 72、18/18 TrackEval |
 | STOPPED | `0717_03_hardsoftcontext` |  |  | hard采样 + soft context | epoch 12 checkpoint，约epoch 15主动停止，不resume |
 
+资源测试（2026-07-23 13:40-13:48）：在用户私有目录
+`/dev/shm/litianhao/pairmot_hsmot_cache`构建了带锁、容量预检、文件指纹校验和原子切换的
+HSMOT JPEG缓存。缓存复制train/test共41,514张JPEG、占用约11 GiB，标注和GMC仍指向持久盘；
+构建后`/dev/shm`剩余约239 GiB、系统available memory约452 GiB。GPU3对`0723_03 DSE`
+进行单卡physical batch 8、8 workers、120 iter并发测试：默认allocator在首次反向OOM；
+设置`PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128`后完成测试，去除前20 iter后的均值为
+`2.5767 s/iter`，其中`data_time=0.1823 s`，MMEngine峰值memory约21.1 GiB，设备采样峰值约
+23.8 GiB。同期GPU4/5正式训练均值未下降（相对紧邻运行前窗口约快1%，属于正常波动），仅
+出现少量`data_time`尖峰。结论：tmpfs缓存本身容量和隔离方式安全，也未测得对GPU4/5总吞吐
+的负面影响；但DSE单卡batch 8显存余量不足，不建议作为长期正式配置，正式单卡应使用
+batch 4 + accumulation 2或先进一步降低峰值显存。
+
+CSPR-DSE一epoch候选试验（2026-07-23 14:01-14:45）：在`0723_03`的PairDN+DSE上增加
+CSPR，分别用低分辨率共享Conv3D预览增强route descriptor、用mean/RMS混合增强fusion
+evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical batch 8、8 workers及
+`PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:128`完成完整epoch；checkpoint元数据确认
+`epoch=1, iter=1038, seed=3407`。跳过前100 iter后平均`2.4174 s/iter`，其中
+`data_time=0.0494 s`、计算约`2.3679 s`，MMEngine记录峰值约21.2 GiB，设备采样峰值约
+24.17 GB。GPU4/5同期由`0.8975`变为`0.9094 s/iter`，约慢1.33%。当前数据读取只占约2%，
+增加`num_workers`不会解决单卡相对双卡慢的问题；差距主要来自3090单卡承担双倍样本及
+极限显存下的计算/工作区效率。该epoch证明组合结构和梯度路径可训练，不构成最终性能证据；
+是否正式长训应结合178上独立CSPR的中期结果决定。
+
 ## 252 服务器
 
 登录：`litianhao01@10.106.15.252`；代码路径：
@@ -93,7 +130,13 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0721_04_liquid_bsac_diffproduct_accuracyfix` | 2026-07-22 00:52 |  | accuracy-fixed `0718_01` + BSAC；在Liquid采样后、共享Conv3D前加入24参数的band-slot条件校准；启动时仍使用修复前的Negative-DN噪声 | epoch 34 iter 300，8/18 TrackEval；阶段最佳epoch 32为cls/det HOTA `51.916/59.067`；约`1.05 s/iter`，loss和梯度有限；screen：`train_0721_04` |
+| RUNNING | `0727_04_paper_base_liquid_encoder_p5temporal_detailenergy` | 2026-07-28 00:50 |  | 固定`0723_01` Liquid与P5 MHA，保持`0726_03` common/detail结构；仅对两帧反向的signed-detail残差施加逐通道、逐样本的原始pair-detail RMS上限，防止时序修正能量超过输入帧差。约束使用detached统计、无参数、无loss且仍严格保持pair均值与帧交换等变 | 严格队列在父实验18/18完成后通过真实数据smoke并fresh启动；当前epoch 4 iter 350，约`1.29 s/iter`、峰值约11.0 GB/rank，总/DN/encoder loss与梯度有限 |
+| COMPLETED | `0726_03_paper_base_liquid_encoder_p5temporal_commondetail_pairdn_paircoherent_le180` | 2026-07-26 20:35 | 2026-07-28 00:49 | `0726_02`的严格encoder后继：保留`0723_01` Base + Liquid、P5双向全局MHA和全部训练协议；将原三尺度方向性pyramid-local替换为pair-common/detail分解。共享`[mean, abs(detail)]`描述控制奇函数local detail变换，两帧施加等大反向残差，严格保持pair均值且交换帧时输出等变 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`54.654/62.240`，同epoch pair mAP/AP50为`0.3239/0.5380`。相对Base+Liquid双提升`+0.699/+0.208`，相对Paper Base双提升`+1.340/+0.258`；det DetA/AssA相对Base+Liquid也同时提高`+0.039/+0.447` |
+| COMPLETED | `0725_03_pairdn_paircoherent_le180_dse_cpdse_dettangent_fast` | 2026-07-25 11:05 | 2026-07-26 17:44 | `0725_01` + Detection-Tangent CP-DSE：按已有Conv3D second moment和DSE gate的group敏感度形成pair共享检测重要性向量，只移除CP-DSE残差沿该向量的一阶检测响应分量；保留其余关联修正，无新增参数/loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.229/61.808`，同epoch pair mAP/AP50为`0.3196/0.5340`；相对Paper Base为`+0.915/-0.174`，det DetA/AssA分别为`-0.074/-0.122`；相对未投影父配置`0725_01`同epoch为`-0.897/-0.190`，不再沿该方向派生 |
+| STOPPED | `0725_03`两个速度审计启动 | 2026-07-25 10:54 | 2026-07-25 11:03 | 与上项模型语义相同；依次消除重复`[B,C,G,H,W]`二阶矩归约，并将完整gate-map sigmoid导数改为group-pooled logit导数 | 两个启动均只到epoch 1 iter 100、无正式checkpoint/TrackEval，不resume且不进入结果；保留目录仅用于速度审计，分别以`orderedpairs_fresh`和`optimized_fresh`结尾 |
+| COMPLETED | `0723_07_pairdn_paircoherent_le180_pecg` | 2026-07-24 06:42 | 2026-07-25 10:44 | `0723_01` + Pair Evidence Consensus Gate：仅在route覆盖和Conv3D证据均一致的位置收缩两帧SE gate差异；修正项两侧反号，严格保持pair平均gate；8参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 52为`53.693/61.151`，同点pair mAP/AP50为`0.3096/0.5262`；相对Paper Base为`+0.379/-0.831`，det DetA/AssA分别下降`1.227/0.079`，不再派生该方向 |
+| COMPLETED | `0723_02_paper_liquid_independent_diffproduct_pairdn_independent_le180` | 2026-07-23 03:30 | 2026-07-24 06:12 | `0723_01`严格DN噪声消融：保持模型、数据、初始化、正负比、难度筛选、attention mask和loss不变，仅将pair两帧共享的相对box噪声改为两帧独立采样 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`53.637/61.679`，同epoch pair mAP/AP50为`0.3155/0.5308`；相对Paper Base为`+0.323/-0.303`，不满足双提升 |
+| COMPLETED | `0721_04_liquid_bsac_diffproduct_accuracyfix` | 2026-07-22 00:52 | 2026-07-23 01:50 | accuracy-fixed `0718_01` + BSAC；在Liquid采样后、共享Conv3D前加入24参数的band-slot条件校准；启动时仍使用修复前的Negative-DN噪声 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.530/61.528`，同epoch pair mAP/AP50为`0.3211/0.5353`；相对同协议父配置`0721_02`为`+0.203/-0.131` |
 | COMPLETED | `0720_01_liquid_diffproduct_qc_gatemass` | 2026-07-20 18:19 | 2026-07-21 19:25 | `0718_01` + gate-mass tangent fusion quality conservation | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.103/61.581`，相对Paper Base为`+0.789/-0.401`，不满足双提升目标 |
 | COMPLETED | `0719_03_pairconsensus_relaxedset_nopacde` | 2026-07-19 16:45 | 2026-07-20 18:04 | 0719 pair-consensus严格消融，仅移除PACDE | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.209/61.504`，HOTA和`115.713` |
 | COMPLETED | `0718_04_adaptiveanchor_sase` | 2026-07-18 13:12 | 2026-07-19 16:15 | adaptive-anchor + SASE小目标增强 | epoch 72、18/18 TrackEval |
@@ -119,7 +162,16 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0721_03_liquid_bsr_diffproduct_accuracyfix_dnnegativefix` | 2026-07-22 10:07 |  | BSR-Liquid：以12x16 block recurrent descriptor替换全局route statistics；同时采用修复后的Negative-DN外环采样和contrastive-group attention mask | 补齐漏同步的BSR实现后v2 smoke通过4/4真实迭代并fresh启动；epoch 9 iter 350，2/18 TrackEval；阶段最佳epoch 8为cls/det HOTA `43.793/49.771`；约`0.82 s/iter`，loss/梯度有限；screen：`queue_0721_03_178` |
+| STOPPED | `0727_08_paper_base_liquid_encoder_p5temporal_dualbranchtrust` | 2026-07-27 20:51 | 2026-07-27 21:37 | 完整保留`0727_01`的P5 MHA与common/detail双残差，不使用空间门；仅分别限制shared-common和signed-detail更新RMS不超过其对应输入证据RMS，未超限更新不变 | 前序完成18/18评测且GPU连续空闲后，严格队列完成真实数据smoke并fresh启动；按用户指令主动停在epoch 3 iter 750。未生成正式epoch checkpoint，不resume、不进入论文结果；训练、launcher及队列进程均已退出，GPU 0释放，GPU 1上的其他任务未受影响 |
+| STOPPED | `0727_06_paper_base_liquid_encoder_p5temporal_sharedscalar` | 2026-07-27 02:43 | 2026-07-27 03:47 | 保留P5 MHA和signed-detail，但以两帧共享的逐位置标量增益替代channel-mixing common残差 | 只进入等待队列，未创建smoke、正式目录或训练进程。`0727_01` epoch 12的det AssA已恢复到相对Base `+0.006`，同时det DetA `+1.449`，证明原common分支可实现无关联代价的检测增益；移除其通道表达能力的设计依据消失，因此队列撤销并由`0727_08`替代 |
+| STOPPED | `0727_03_paper_base_liquid_encoder_p5temporal_scalesplit` | 2026-07-27 00:29 | 2026-07-27 02:40 | 固定`0723_01` Liquid和P5 MHA；P3只启用common共享检测增强，P4/P5启用common+signed-detail | 只进入等待队列，未创建smoke、正式目录或训练进程。epoch 8诊断表明实际矛盾是common残差带来det DetA `+2.710`但det AssA `-2.918`；移除P3 detail没有针对该问题，因此主动撤销队列并由`0727_06`替代 |
+| COMPLETED | `0727_01_paper_base_liquid_encoder_p5temporal_dualevidence` | 2026-07-27 00:17 | 2026-07-27 20:48 | 固定`0723_01` Liquid、PairDN、proposal、decoder和loss，保留`0705_01` P5双向MHA；post-FPN将common共享检测证据同向注入两帧，将signed detail关联证据反向注入两帧，零门控且严格帧交换等变 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.437/62.393`，同epoch pair mAP/AP50为`0.3201/0.5371`。相对Base+Liquid双提升`+0.482/+0.361`；相对Paper Base双提升`+1.123/+0.411`，det DetA/AssA也分别提高`+0.526/+0.311` |
+| PREPARED | `0727_05_paper_base_liquid_encoder_p5temporal_spatialdetail` |  |  | 回退到`0726_03`的detail-only、pair均值守恒结构；以逐层空间均值归一化的common/detail局部能量生成`2→1`空间可靠性门，只调制signed-detail，不改共享单帧特征。门初值严格为1、范围`[0,2]`，总计57参数，无额外loss | 本地和178均通过20项单测及逐文件哈希，包含相同父权重与非零gamma下逐元素严格等价测试；完整模型参数为22,677,421。仅完成准备，未启动、未占GPU；作为detail-only保守回退候选，当前优先执行更直接针对DetA/AssA矛盾的`0727_06` |
+| COMPLETED | `0725_02_pairdn_paircoherent_le180_dse_cpdse_centered_protocolfix` | 2026-07-25 08:30 | 2026-07-26 11:57 | `0725_01`的DSE + pair-global CP-DSE组合，但将8个group的CP-DSE logit残差去均值；单卡physical batch 4 + accumulation 2，并将warmup从2000改为4000 micro-iter、EMA改为`interval=2,gamma=4000`，保持按optimizer update计的原协议时间尺度 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为cls HOTA `53.730`、det HOTA `61.864`，同epoch pair mAP/AP50为`0.3100/0.5239`；相对Paper Base为`+0.416/-0.118`，相对Base+Liquid仍未双侧超过 |
+| STOPPED | `0725_02_pairdn_paircoherent_le180_dse_cpdse_centered`初始accumulation run | 2026-07-25 06:57 | 2026-07-25 08:27 | 模型与上项相同，physical batch 4 + accumulation 2，但仍沿用2000 micro-iter warmup和每micro-iter计数的EMA | 到epoch 4后主动停止，不resume；MMEngine源码核实ParamSchedulerHook和EMAHook均按micro-iteration推进，导致warmup和EMA时间尺度相对原bs8协议缩短一半。该run及其1/18 TrackEval只作审计，不进入结果表 |
+| COMPLETED | `0723_08_pairdn_paircoherent_le180_scpd` | 2026-07-24 08:53 | 2026-07-25 06:38 | `0723_01` + Spectral-Coordinate Pair Dispersion：将只读group色散经soft coverage投影到8个物理谱段，在谱段坐标求pair共识后投影回各帧自身route；跨group去均值、零初始化、有界8参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`54.465/61.213`，同点pair mAP/AP50为`0.3152/0.5334`；相对Paper Base为`+1.151/-0.769`，det DetA/AssA为`53.712/72.176`，失败原因主要是关联质量下降 |
+| COMPLETED | `0723_04_pairdn_paircoherent_le180_cspr` | 2026-07-23 12:31 | 2026-07-24 08:50 | `0723_01` + CSPR；保留两帧共享DN相对噪声，以detached shared-Conv3D在24x32低分辨率生成谱段预览统计，替换简单global route descriptor | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`54.523/61.738`，同epoch pair mAP/AP50为`0.3162/0.5376`；相对Paper Base为`+1.209/-0.244`，不满足双提升 |
+| COMPLETED | `0721_03_liquid_bsr_diffproduct_accuracyfix_dnnegativefix` | 2026-07-22 10:07 | 2026-07-23 06:36 | 配置继承`0721_02`并以12x16 block recurrent descriptor替换global route statistics；正式启动源码同时包含修复后的Negative-DN外环采样和contrastive-group attention mask，实际语义更接近`0722_01 + BSR` | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `53.107/61.118`，同epoch pair mAP/AP50为`0.3082/0.5220`，结果不支持用BSR替换global descriptor |
 | COMPLETED | `0721_01_liquid_diffproduct_qc_responsemass_1xb8_shm_accuracyfix_20260721` | 2026-07-21 03:03 | 2026-07-22 02:43 | `0718_01` + response-weighted fusion quality conservation；单卡batch 8；JPEG使用安全tmpfs缓存；加入20260721训练准确性修复 | 完成epoch 72和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.006/60.934`，HOTA和`114.940`；同epoch pair mAP/AP50为`0.3148/0.5297` |
 | STOPPED | `0721_01_liquid_diffproduct_qc_responsemass_1xb8_shm`原run | 2026-07-21 01:23 | 2026-07-21 03:02 | 与上项模型配置相同，但未包含20260721训练准确性修复 | 主进程运行约1小时39分、到epoch 4后主动停止；旧checkpoint保留，不resume |
 | COMPLETED | `0719_05_paper_base_rerun` | 2026-07-20 00:20 | 2026-07-21 01:02 | 无Liquid的Paper Base复跑；seed 3407、LR `1e-4`、BF16、全量1200x900；单卡batch 8保持global batch 8 | 已完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `52.417/61.265`，HOTA和比主Base低`1.614` |
@@ -129,7 +181,8 @@
 队列日志：
 `/data4/litianhao/PairMmot/workdir_178/queue_0721_01_after_0719_05.log`、
 `/data4/litianhao/PairMmot/workdir_178/queue_0719_05_after_0719_02.log`、
-`/data4/litianhao/PairMmot/workdir_178/queue_0721_03_after_0721_01.log`。
+`/data4/litianhao/PairMmot/workdir_178/queue_0721_03_after_0721_01.log`、
+`/data4/litianhao/PairMmot/workdir_178/queue_0723_04_after_0721_03.log`。
 
 ## AutoDL 临时服务器
 
@@ -139,15 +192,116 @@ AutoDL实例地址会变化，初始化、数据布局、训练、finalizer和�
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| COMPLETED | `0727_11_paper_base_liquid_encoder_p5temporal_momentcompetitive` | 2026-07-27 12:57 | 2026-07-28 06:37 | 固定`0723_01` Base+Liquid、P5 MHA和全部论文协议；保留Dual-Evidence双残差，以逐通道`RMS-mean(abs(x))`感知稀疏目标证据，并用common/detail两路softmax共享门控预算。单卡RTX 5090 physical batch 8保持global batch、LR、EMA和72-epoch语义 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为cls/det HOTA `54.853/62.050`，同epoch pair mAP/AP50为`0.3190/0.5384`，HOTA和`116.903`。相对Base+Liquid为`+0.898/+0.018`，相对`0727_01`为`+0.416/-0.343`且HOTA和仅高`0.073`，不能视为明显胜出。finalizer已归档epoch 68、epoch 72、日志和完整TrackEval，状态为`publish_skipped_no_deploy_key artifacts_preserved best_epoch=68`；权威结果已取回`autodl/results/0727_11` |
+| COMPLETED | `0726_02_paper_base_liquid_encoder_p5temporal_pyramidlocal_pairdn_paircoherent_le180` | 2026-07-26 15:37 | 2026-07-27 09:23 | `0723_01` Base + Liquid + `0705_01` Encoder：在FPN前P5加入全局双向pair temporal MHA，在FPN后P3/P4/P5加入逐层pyramid-local adapter；两支均以零初始化gamma残差接入，不改Liquid、proposal、decoder、PairDN或loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.742/61.631`，同点pair mAP/AP50为`0.3223/0.5429`。相对直接父配置`0723_01`最佳点为`+0.787/-0.401`，不满足双侧超过Base+Liquid；相对Paper Base为`+1.428/-0.351`。finalizer已将epoch 72、日志、完整TrackEval归档到`/autodl-fs/data/PairMOT_results/0726_02`；因无deploy key跳过GitHub发布，权威结果已取回`autodl/results/0726_02` |
 | COMPLETED | `0719_01_pairconsensus_relaxedset_pacde` | 2026-07-19 02:22 | 2026-07-19 22:39 | pair共享route + relaxed Set-Transport + pair-aligned fusion + PACDE | epoch 72、18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `53.883/61.411`；结果已从共享盘取回 |
 | COMPLETED | `0717_01_paper_base_plus_liquid_settransport` |  |  | Set-Transport Liquid | epoch 72、18/18 TrackEval；结果归档于`/root/autodl-fs/PairMOT_results/0717_01` |
 | COMPLETED | `0718_02_paper_base_plus_liquid_anchorcompetitive` |  |  | anchor-competitive Liquid | epoch 72、18/18 TrackEval；finalizer已归档到`/autodl-fs/data/PairMOT_results/0718_02` |
-| NONE | - |  |  | - | 当前为无卡模式，无持续占用GPU的进程，也没有AutoDL等待任务 |
+
+2026-07-27 11:18在无卡模式完成数据盘整理。删除前逐项验证`0717_01`、`0718_02`、
+`0719_01`和`0726_02`共享归档中的finalizer状态及全部`SHA256SUMS`；随后清理四个完整
+workdir、过时smoke、epoch1中断目录、MMCV临时编译树和空launcher日志。数据盘由
+`49GB/98%`降至`11GB/21%`，释放约`38GB`；保留完整HSMOT、13,713个真实GMC JSON、
+AutoDL元数据和空`work_dirs`。审计位于
+`/root/autodl-fs/PairMOT_maintenance/cleanup_20260727_111815`，相对路径哈希复核全部通过。
+可复用流程已保存为`~/.codex/skills/pairmot-autodl-data-cleanup`。
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0722_01`，下一编号为`0722_02`。`0721_06 CSPR`当前仅为已实现候选，不在正式训练队列中。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0728_01`，下一编号为`0728_02`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
 4. 论文结果表只采用完整评估结果；中止训练和smoke/profile目录不得混入正式指标。
+5. 当前Encoder目标严格固定`0723_01` Base+Liquid：唯一最佳epoch 64的cls HOTA为
+   `53.955`、det HOTA为`62.032`。Liquid、PairDN、proposal、decoder、loss及论文数据协议
+   均保持不变，只允许修改Encoder；成功条件是在同一个唯一最佳epoch上同时超过两个门槛。
+   正式实验使用252/197双卡和178单卡，不使用研究代码重跑Base。
+6. 正式结果使用
+   `projects/multispec_pair_rotated_rtdetr/tools/summarize_pair_experiment.py WORK_DIR`
+   复核。工具默认要求18个完整TrackEval目录、按payload真实step映射epoch、拒绝HOTA和并列，
+   并从同一step的`val_det/metrics.json`读取AP；阶段诊断必须显式使用`--allow-partial`。
+7. 用户于2026-07-27明确重新启用99进行两卡Encoder探索；当前仅使用GPU 0、1运行
+   `0727_12`，GPU 2、3保持空闲。不得添加温度watchdog，也不得未经新指令在GPU 2、3并行
+   启动第二个任务。
+8. AutoDL不纳入自主排队或自动启动；只有用户明确介入并提供运行资源时才训练。其余时间
+   只读取已有日志、checkpoint和评测产物进行监控，不因其他服务器任务结束而唤醒实例。
+9. 197的Encoder阶段在`0727_09`结束后执行条件收口：若其未同时明显超过`0727_01`两侧
+   HOTA，则转入Decoder阶段。首个Decoder实验`0728_01`固定`0727_01`的全部上游模块，只
+   复用历史最佳`0708_03` tri-state zero-init decoder；不得混入新的Encoder、proposal或
+   loss改动。
+10. `0727_11`是AutoDL上的最后一个Encoder实验。整个Encoder阶段只等待已运行的99
+    `0727_12`和252 `0727_04`完成，不再追加新Encoder结构；两项收尾后按统一选点规则确定
+    最终Encoder，并继续已启动的Decoder主线。
+
+2026-07-23 22:56阶段趋势（仅用于调度，不作为最终结果）：四个任务共同已有的epoch 36中，
+`0723_01`共享DN噪声为`51.673/59.845`，`0723_02`独立DN噪声为`50.912/59.227`，
+`0723_03`共享噪声+DSE为`53.553/60.704`，`0723_04`共享噪声+CSPR为
+`52.506/59.513`（均为cls/det HOTA）。当前证据不支持独立pair噪声；DSE同时领先两个HOTA，
+CSPR主要提高cls DetA但det AssA低于`0723_01`。较晚点中`0723_03`在epoch 52达到
+`54.581/61.335`，相对`0723_01`同epoch为`+0.869/-0.227`，提示DSE后期的剩余问题是关联
+质量而非分类覆盖。epoch 56继续得到`54.705/61.465`，相对`0723_01`同epoch
+`53.922/61.721`为`+0.783/-0.256`，该分化具有连续性。所有判断必须等各自18/18评估后
+重新计算，当前不据此提前启动新实验。
+
+2026-07-24 04:13补充：`0723_02`截至epoch 64为`53.571/61.726`，相对Paper Base为
+`+0.257/-0.256`，同点pair mAP/AP50为`0.3125/0.5267`；`0723_04`截至epoch 52为
+`54.369/60.721`，相对Base为`+1.055/-1.261`。两者继续证明扩大帧间随机性或route描述
+能力容易损害det关联。为利用252即将释放的双卡，新增`0723_07 PECG`：保持`0723_01`
+共享PairDN和原Liquid结构，仅在谱段覆盖与Conv3D证据均一致的位置，对两帧SE gate做
+保持pair均值的收缩。53项测试、完整模型构建及本机双卡4-iteration smoke已通过；252队列
+在04:13正确报告`epoch72=no, eval=16/18`，没有提前占用GPU。
+
+2026-07-23 23:29补充：`0723_02`独立pair噪声在epoch 52为`52.852/61.211`，相对
+`0723_01`同epoch`53.712/61.562`双降`-0.860/-0.351`；其中cls/det AssA分别下降
+`2.147/0.522`。连续评测证据已经足以停止继续探索独立pair噪声，后续PairDN保留两帧共享
+相对扰动。
+
+2026-07-24 00:22补充：`0723_03`在epoch 60为`54.699/61.695`，相对共享PairDN同epoch
+`53.951/61.907`为`+0.748/-0.212`。DSE的HOTA和达到`116.394`，与`0719_06`
+的`116.423`接近，但det仍未达标；类别上主要是car和tricycle AssA下降，而truck和bus
+DetA明显提高。`0723_04`在epoch 40为`53.303/59.914`，相对共享PairDN为
+`+0.810/-0.734`，且det AssA下降`1.500`。下一候选优先保留DSE的谱段离散度证据，但必须
+用有界残差调制替代无约束mean/RMS替换；CSPR不作为主方向。
+
+2026-07-24 00:54补充：`0723_01`在epoch 64达到`53.955/62.032`，已相对Paper Base唯一
+最佳epoch 68的`53.314/61.982`双提升`+0.641/+0.050`，但尚未超过`0719_06`
+`54.087/62.336`，也尚未完成18/18评测。`0723_02`在epoch 56仍相对共享噪声双降
+`-0.590/-0.322`，其中cls AssA下降`1.321`，进一步确认独立pair噪声无效。
+
+2026-07-24 01:26补充：`0723_03`epoch 64为`54.685/61.824`，相对共享PairDN同epoch
+继续保持`+0.730/-0.208`，说明DSE增益与det代价在后期均稳定。`0723_04`epoch 44为
+`53.728/60.314`，相对共享PairDN为`+0.269/-0.769`，其中det AssA下降`1.421`；CSPR
+中后期未扭转关联损失。
+
+2026-07-24 02:43补充：`0723_01`epoch 68为`53.847/62.060`，当前按HOTA和选取的阶段
+唯一最佳仍是epoch 64的`53.955/62.032`。`0723_03`epoch 68达到`55.036/61.745`，
+相对共享PairDN同epoch为`+1.189/-0.315`；其cls DetA增加`1.912`，但det AssA下降
+`0.743`。DSE已有足够分类裕量，下一结构应以有界残差主动换回关联质量。`0723_02`
+epoch 60为`53.610/61.561`，相对共享PairDN仍双降`-0.341/-0.346`；`0723_04`
+epoch 48为`54.063/60.831`，相对共享PairDN为`+0.592/-0.349`。
+
+2026-07-24 04:27补充：`0723_04`新增epoch 56结果`54.421/60.887`，相对Paper Base为
+`+1.107/-1.095`。固定epoch 56对比直接父配置`0723_01`，cls/det HOTA为
+`+0.499/-0.834`；det DetA仅下降`0.111`，det AssA下降`1.737`，IDSW由`1844`增加到
+`2379`。CSPR的主要代价因此确定为帧间身份排序不稳定，而非检测覆盖不足；不再沿其route
+preview方向扩展。正在排队的PECG保持原route，只收缩高一致性位置的SE gate差异，与该诊断
+直接对应。
+
+2026-07-24 05:32补充：CP-DSE首个epoch 4评测已完成。local `0723_05`为
+`37.778/44.770`，pair-global `0723_06`为`37.388/44.660`；相对`0723_01`同epoch分别为
+`+1.077/-0.240`与`+0.687/-0.350`。local的det AssA提高`0.502`、IDSW减少75，但det
+DetA下降`0.698`，说明局部色散早期有利于关联但抑制检测覆盖；pair-global同时损失det
+DetA/AssA。两组8参数残差仍小于`0.005`，首点不足以判定最终性能，继续训练。`0723_02`
+epoch 68为`53.609/61.680`，阶段唯一最佳仍是epoch 64的`53.571/61.726`。
+
+2026-07-24 06:05补充：`0723_04`epoch 60为`54.231/61.263`，相对`0723_01`同epoch为
+`+0.280/-0.644`。det DetA仅下降`0.074`，det AssA下降`1.290`，IDSW增加513；CSPR的
+关联损失连续存在，不再作为后续结构基础，但保留运行至完整18/18用于正式报告。
+
+2026-07-24 06:47补充：`0723_02`完成72 epochs和18/18 TrackEval，唯一最佳epoch 72为
+`53.637/61.679`，相对Paper Base为`+0.323/-0.303`；相对共享噪声父配置同epoch为
+`+0.043/-0.333`。其det AssA提高`0.102`，但det DetA下降`0.552`且FP增加2748，证明独立
+pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke并于06:42双卡fresh启动，
+正式iter 200及全部五项启动门槛通过。同期`0723_06`epoch 8达到`44.661/50.551`，相对父
+配置同epoch双提升`+0.349/+0.714`，det DetA/AssA提高`0.441/1.150`，是当前最积极趋势。

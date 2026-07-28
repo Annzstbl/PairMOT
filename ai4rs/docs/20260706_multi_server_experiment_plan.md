@@ -83,11 +83,35 @@ Current allocation state:
 | 2026-07-20 | `0720_03` | `0718_01` + dual-moment fusion quality conservation | 99 GPU 0,1, queued after `0719_06` | `0720_04` |
 | 2026-07-21 | `0721_01` | `0718_01` + response-weighted fusion quality conservation; single-GPU global batch 8 with validated tmpfs JPEG cache and NVMe fallback | 178 GPU 0, queued after `0719_05` final evaluation | `0721_02` |
 | 2026-07-21 | `0721_02` | Accuracy-fixed strict rerun of `0718_01`; independent groups and difference/product pair coupling, without quality conservation | completed on 197 with 72 epochs and 18/18 TrackEval; best epoch 72 is `54.327/61.659` cls/det HOTA | `0721_03` |
-| 2026-07-21 | `0721_03` | BSR-Liquid; replace global route statistics with 12x16 blockwise eight-band recurrent descriptors and block hidden mean/std/max aggregation; use corrected Negative-DN outer-band sampling and contrastive-group attention mask | running on 178 GPU 0 since 2026-07-22 10:07 after corrected BSR implementation sync and a passing 4-iter smoke | `0721_04` |
-| 2026-07-21 | `0721_04` | BSAC-Liquid; accuracy-fixed `0718_01` plus 24-parameter physical-band/kernel-slot calibration before shared Conv3D | running on 252 GPU 0,1; epoch 34 with 8/18 TrackEval at 2026-07-22 12:20 | `0721_05` |
-| 2026-07-21 | `0721_05` | DSE-Liquid; accuracy-fixed `0718_01` plus identity-initialized channel mean/RMS evidence mixing before SE/LAF | running on 99 GPU 0,1; epoch 43 with 10/18 TrackEval at 2026-07-22 12:20 | `0721_06` |
+| 2026-07-21 | `0721_03` | BSR-Liquid; replace global route statistics with 12x16 blockwise eight-band recurrent descriptors and block hidden mean/std/max aggregation; use corrected Negative-DN outer-band sampling and contrastive-group attention mask | running on 178 GPU 0; epoch 64 and 15/18 TrackEval at 2026-07-23 03:44; stage-best epoch 60 has cls/det HOTA `52.943/60.739`, below the same-DN epoch-60 control by `1.549/0.625` | `0721_04` |
+| 2026-07-21 | `0721_04` | BSAC-Liquid; accuracy-fixed `0718_01` plus 24-parameter physical-band/kernel-slot calibration before shared Conv3D | completed 72 epochs and 18/18 TrackEval on 252; unique best epoch 72 has cls/det HOTA `54.530/61.528` and same-epoch pair mAP/AP50 `0.3211/0.5353` | `0721_05` |
+| 2026-07-21 | `0721_05` | DSE-Liquid; accuracy-fixed `0718_01` plus identity-initialized channel mean/RMS evidence mixing before SE/LAF | completed 72 epochs and 18/18 TrackEval on 99; unique best epoch 72 has cls/det HOTA `54.635/61.895` and same-epoch pair mAP/AP50 `0.3254/0.5438` | `0721_06` |
 | 2026-07-21 | `0721_06` | CSPR-Liquid candidate; replace global route statistics with detached 24x32 cyclic shared-Conv3D spectral preview statistics | implemented and tested; not queued | `0721_07` |
 | 2026-07-22 | `0722_01` | `0721_02` PairDN-generator correction: replace the near-zero-capable negative product with signed `[1,2)` sampling and let positive/negative blocks attend within each contrastive group; this is not a box-noise-only ablation | running on 197 GPU 4,5 since 2026-07-22 10:34; epoch 7 with 1/18 TrackEval at 12:20 | `0722_02` |
+| 2026-07-23 | `0723_01` | Accuracy-fixed `0718_01` with pair-coherent relative DN noise, 2:1 positive/negative slots, harder positives, rotated-IoU-filtered negatives, padding-query isolation, and representation-consistent LE180-start0 L1 with fixed angle weight | completed 72 epochs and 18/18 TrackEval on local 99; unique best epoch 64 is `53.955/62.032`, a dual Paper-Base improvement of `+0.641/+0.050` | `0723_02` |
+| 2026-07-23 | `0723_02` | strict `0723_01` ablation changing only pair-side DN relative noise from shared to independently sampled | completed 72 epochs and 18/18 TrackEval on 252; unique best epoch 72 is `53.637/61.679`, so independent noise raises cls but lowers det relative to Paper Base | `0723_03` |
+| 2026-07-23 | `0723_03` | `0723_01` + 16-parameter identity-initialized DSE mean/RMS fusion evidence | completed 72 epochs and 18/18 TrackEval on 197; unique best epoch 68 is `55.036/61.745`, improving cls but leaving det below Paper Base | `0723_04` |
+| 2026-07-23 | `0723_04` | `0723_01` + detached 24x32 shared-Conv3D CSPR route preview; single-GPU batch 8 preserves global batch | completed 72 epochs and 18/18 TrackEval on 178; unique best epoch 72 is `54.523/61.738`, or `+1.209/-0.244` versus Paper Base; CSPR is rejected for future extension | `0723_05` |
+| 2026-07-24 | `0723_05` | `0723_01` + local consistency-preserving DSE; retain the mean-evidence path and add an eight-parameter zero-initialized bounded SE-logit residual from normalized channel dispersion | completed 72 epochs and 18/18 TrackEval; unique best epoch 68 is `53.536/61.619`, or `+0.222/-0.363` versus Paper Base; local CP-DSE is rejected and local 99 is intentionally left idle | `0723_06` |
+| 2026-07-24 | `0723_06` | `0723_01` + pair-global consistency-preserving DSE; pool normalized dispersion into one shared group correction for both frames to prioritize association consistency | completed 72 epochs and 18/18 TrackEval; unique best epoch 72 is `54.124/61.914`, with det AssA `+0.645` and det DetA `-0.432` versus Paper Base | `0723_07` |
+| 2026-07-24 | `0723_07` | `0723_01` + Pair Evidence Consensus Gate; contract paired SE gates only where spectral coverage and Conv3D evidence agree while preserving their pair mean exactly | completed 72 epochs and 18/18 TrackEval on 252; unique best epoch 52 is `53.693/61.151`, or `+0.379/-0.831` versus Paper Base; det loss is dominated by DetA `-1.227`, so PECG is rejected | `0723_08` |
+| 2026-07-24 | `0723_08` | `0723_01` + Spectral-Coordinate Pair Dispersion; project read-only group dispersion to physical bands with soft coverage, form pair consensus in spectral coordinates, project into each frame route, and use a zero-mean bounded eight-parameter residual | completed 72 epochs and 18/18 TrackEval on 178; unique best epoch 72 is `54.465/61.213`, or `+1.151/-0.769` versus Paper Base | `0725_01` |
+| 2026-07-25 | `0725_01` | `0723_01` + DSE + pair-global CP-DSE; combine DSE's local mean/RMS detection evidence with CP-DSE's pair-shared association residual, based on their complementary det DetA/AssA outcomes | completed 72 epochs and 18/18 TrackEval on 197; unique best epoch 72 is `55.126/61.998`, a dual Paper-Base improvement of `+1.812/+0.016`; versus DSE at epoch 72 it gains `+0.328/+0.245` | `0725_02` |
+| 2026-07-25 | `0725_02` | `0725_01` with the pair-global CP-DSE residual centered across eight groups; physical batch 4 plus accumulation 2 uses 4000-micro-iter warmup and EMA `interval=2,gamma=4000` to preserve the original optimizer-update time scale | completed 72 epochs and 18/18 TrackEval on 178; unique best epoch 68 is cls HOTA `53.730` and det HOTA `61.864`, so centering does not exceed Base+Liquid | `0725_03` |
+| 2026-07-25 | `0725_03` | `0725_01` + Detection-Tangent CP-DSE; project the pair-shared CP residual away from the first-order detection-importance direction formed by existing Conv3D second moments and pooled DSE-gate sensitivity | completed 72 epochs and 18/18 TrackEval on 252; unique best epoch 72 is `54.229/61.808`, or `+0.915/-0.174` versus Paper Base and `-0.897/-0.190` versus its direct parent | `0726_01` |
+| 2026-07-26 | `0726_01` | `0725_01` + Sparse-Reserve CP-DSE; use the pair-shared spatial RMS-minus-mean of the existing normalized dispersion map to attenuate only negative CP residuals where sparse target evidence exists; positive residuals remain unchanged | 59 local/remote tests, config deepcopy, hashes and exact 4-iter DDP smoke passed; formal 197 GPU 4,5 run passed iter 100 at 01:59 with finite total, DN, encoder and gradient values | `0726_02` |
+| 2026-07-26 | `0726_02` | `0723_01` Base + Liquid followed by the `0705_01` encoder design: global bidirectional pair-temporal MHA on P5 before FPN and zero-gated pyramid-local adapters on P3/P4/P5 after FPN | completed 72 epochs and 18/18 TrackEval on AutoDL; unique best epoch 72 is `54.742/61.631` cls/det HOTA with pair mAP/AP50 `0.3223/0.5429`. Versus direct Base+Liquid best it is `+0.787/-0.401`: classification and AP improve, while det DetA/AssA fall `0.386/0.299`, motivating the common/detail and dual-evidence successors | `0726_03` |
+| 2026-07-26 | `0726_03` | `0726_02` encoder successor: retain P5 global MHA, replace directional post-FPN pyramid-local with an order-equivariant common/detail adapter whose invariant reliability gate controls an odd local detail transform and whose opposite residuals preserve the pair mean exactly | epoch 32 remains a strict `+0.159/+0.078` cls/det HOTA gain versus Base+Liquid. cls DetA/AssA are `+1.189/-1.937`, while det DetA/AssA are `+0.340/-0.195`; coverage improves but classification association remains the limiting factor, preserving the target for queued `0727_04` | `0726_04` |
+| 2026-07-27 | `0727_01` | fixed `0723_01` Liquid + `0705_01` P5 MHA; replace post-FPN local fusion with a frame-swap-equivariant dual-evidence adapter that adds shared common residuals for detection and opposite signed-detail residuals for association | epoch 28 remains a strict dual gain of `+0.031/+0.445` cls/det HOTA versus same-epoch Base+Liquid, extending the run to six consecutive dual-gain points. However det DetA/AssA are now `+1.523/-1.147` and the cls margin is nearly zero, so late branch growth is consuming association margin and keeps `0727_08` branch trust well targeted | `0727_02` |
+| 2026-07-27 | `0727_02` | spatially selective successor of `0727_01`; add a two-channel local common/detail magnitude gate so P3/P4/P5 temporal updates focus on reliable object evidence without changing Liquid or adding a loss | stopped after epoch 12 at `-0.676/-1.042` cls/det HOTA versus Base+Liquid; det DetA/AssA are `-1.052/-0.829` and mAP is `-0.0108`, identifying spatial suppression of the common detection branch as the failure | `0727_03` |
+| 2026-07-27 | `0727_03` | scale-split successor of `0727_01`: retain shared common evidence on P3/P4/P5 but restrict signed temporal detail to P4/P5, based on historical evidence that P3 local interaction is detection-oriented while higher levels better support classification/association | queue stopped at 02:40 before any smoke/formal directory was created. Epoch-8 decomposition showed common evidence, not P3 detail, produced the actual DetA/AssA tradeoff, so this candidate did not target the observed failure and was replaced by `0727_06` | `0727_04` |
+| 2026-07-27 | `0727_04` | association-conservative successor of `0726_03`: retain P5 MHA and pair-mean-preserving common/detail post-FPN adapter, but cap each signed-detail update by the original pair-detail channel RMS using detached, parameter-free statistics | epoch 36 parent improves cls/det HOTA by `+0.688/+0.416` and det DetA/AssA simultaneously by `+0.272/+0.744`, weakening the earlier over-energy diagnosis. 18 tests, full build and 252 audit passed; queue remains alive, but launch now requires a final parent-trajectory review rather than automatic handoff | `0727_05` |
+| 2026-07-27 | `0727_05` | conservative alternative to dual common residuals: retain the pair-mean-preserving detail-only adapter and use scale-normalized local common/detail energy to produce a zero-logit, unit-initialized spatial reliability modulation for signed detail only | 57 additional parameters and no loss; 20 local/178 tests, exact hashes and full build passed, including elementwise equality to the parent at initialization with nonzero gamma. Prepared but not launched. `0727_01` epoch 4 is `-0.492/-6.257` versus same-epoch Base+Liquid, so epoch 8 will decide whether this replaces queued `0727_03` | `0727_06` |
+| 2026-07-27 | `0727_06` | association-conservative common-evidence successor: replace the channel-mixing additive common residual with a positive bounded spatial scalar shared by both frames; retain P5 MHA and signed detail | queue canceled at 03:47 before smoke/formal launch. `0727_01` epoch 12 recovers det AssA to `+0.006` while retaining DetA `+1.449` versus Base+Liquid, so removing channel-mixing common capacity no longer targets an observed failure; replaced by `0727_08` | `0727_07` |
+| 2026-07-27 | `0727_07` | branch-energy trust-region successor of `0727_02`: retain its spatial common/detail gates, but separately cap shared-common and signed-detail update RMS by the corresponding input-evidence RMS on every sample and channel | queue canceled at 05:24 before smoke/formal launch. The epoch-12 `0727_02` failure is caused by suppressing the common detection branch, which an upper energy cap cannot repair; replaced by `0727_09` | `0727_08` |
+| 2026-07-27 | `0727_08` | strict `0727_01` successor that retains the validated channel-mixing common/detail branches and adds only the parameter-free per-branch RMS trust region, without the `0727_02` spatial gate | epoch 32 `0727_01` is still a strict dual gain (`+0.248/+0.553` cls/det HOTA), but det DetA/AssA are `+1.524/-0.906` and EMA branch gamma reaches `2.926`. The cap therefore targets late-stage stability and must preserve the validated free branch rather than being assumed beneficial. 24 local/178 tests, full build, exact hashes and config/shell audit passed; strict queue remains healthy | `0727_09` |
+| 2026-07-27 | `0727_09` | strict `0727_01` successor that preserves its common detection branch exactly and applies a zero-initialized unit-output spatial reliability gate only to signed temporal detail | epoch 12 is `+1.123/-0.202` cls/det HOTA versus same-epoch Base+Liquid: cls DetA/AssA and det DetA improve, but det AssA falls `1.057`. It is also `-0.470/-1.108` behind `0727_01`, confirming that the unconstrained spatial gate improves local evidence but degrades association and the parent optimization path. Continue the run for a complete trajectory; structural correction is delegated to `0727_10` | `0727_10` |
+| 2026-07-27 | `0727_10` | strict `0727_09` successor: detach the local common/detail energy descriptor and normalize each detail spatial modulation to unit spatial mean, so it can only redistribute signed-detail evidence without globally scaling it or injecting descriptor gradients into shared features | no added parameters, loss or threshold; exact parent function remains at initialization. 26 local/197 tests, config deepcopy, full `22,758,832`-parameter build, shell audit and six exact hashes passed. Strict 197 queue started at 08:10 and will run its own real-data 4-iter DDP smoke only after `0727_09` reaches epoch 72, 18/18 evaluations and free GPUs | `0727_11` |
 
 ## Current Paper Runs
 
@@ -785,3 +809,105 @@ workdir为：
 ```text
 /data4/litianhao/PairMmot/workdir_178/0719_02_paper_liquid_pairconsensus_reliability_r18_coco_full_1200x900_bf16_1xb8
 ```
+
+## 2026-07-23 0723_02 PairDN两帧独立噪声消融
+
+在252服务器GPU 0、1启动`0723_02`。该实验以`0723_01`为严格父配置，模型、全量1200x900
+数据、COCO适配初始化、BF16、全局batch 8、学习率、PairDN正负比与难度、DN attention mask
+及loss均保持一致，唯一变量是将同一pair两帧共享的相对box噪声改为两帧独立采样，用于检验
+pair-coherent DN对时序一致性的贡献。
+
+- 配置：`projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_paper_liquid_independent_diffproduct_pairdn_independent_le180_coco_full_1200x900_bf16_252.py`
+- workdir：`/data4/litianhao/PairMmot/workdir_252/0723_02_paper_liquid_independent_diffproduct_pairdn_independent_le180_r18_coco_full_1200x900_bf16_orderedpairs_fresh`
+- 启动时间：2026-07-23 03:30 CST
+- 启动验证：精确配置4/4双卡DDP smoke完成；正式epoch 1 iter 50约`1.1441 s/iter`，总loss、
+  DN loss、encoder proposal loss及梯度均有限，未发现OOM、NaN、NCCL、DDP reduction或
+  unused-parameter错误。
+
+## 2026-07-25 99让出与Liquid后续探索
+
+- 99的`0723_05 local CP-DSE`已完成72 epochs和18/18 TrackEval；按用户要求，99此后暂时
+  让出，不再安排或启动PairMOT任务。
+- 197的`0725_01 DSE + pair-global CP-DSE`已完成。唯一最佳epoch 72为
+  `55.126/61.998`，相对Paper Base双提升`+1.812/+0.016`；det DetA/AssA为
+  `-0.138/+0.545`。后续`0726_01 Sparse-Reserve CP-DSE`仅保护稀疏证据位置对应group的
+  负向残差，于2026-07-26 01:57在GPU 4/5 fresh启动并通过iter 100五项门槛。
+- 252的`0723_07 PECG`已完成且否决；当前运行`0725_03 Detection-Tangent CP-DSE`。epoch 4
+  相对未投影组合为`+0.861/+0.345`，关联分量改善但det DetA仍低`0.241`。
+- 178的`0723_08 SCPD`已完成，唯一最佳epoch 72为`54.465/61.213`，失败主要来自det AssA
+  下降。后续`0725_02`将DSE与去group均值的pair-global CP-DSE组合，限制残差只做相对group
+  重分配。单卡physical batch 8 smoke反向OOM后改为physical batch 4 + accumulation 2。
+  后续源码审计发现scheduler和EMA仍按micro-iteration推进，初始run在epoch 4停止、不resume；
+  protocol-fixed配置将warmup改为4000 micro-iter、EMA改为`interval=2,gamma=4000`，保持
+  原bs8按optimizer update计算的时间尺度。修复版epoch 12相对纯DSE为
+  `-1.759/-0.275`，仅det AssA提高`0.965`，继续训练但不作为当前首选方向；GPU 1不占用。
+
+## 2026-07-27 0727_11 MCDE Encoder
+
+根据当前Encoder中期结果，主线改为保留`0727_01 Dual-Evidence`的自由双残差容量，不再
+派生高分辨率空间门或严格能量守恒。`0727_11 Moment-Competitive Dual Evidence`在现有
+common/detail逐通道描述中加入停止输入梯度的`RMS-mean(abs(x))`稀疏性矩，并将两路独立
+sigmoid改为分支维softmax共享预算，以增强小目标稀疏证据感知并减少common/detail同时
+过激更新。模型只增加1,536参数（完整模型`+0.00675%`），无额外loss、阈值或空间attention。
+
+197上的`0727_10`因其空间门父配置`0727_09`在epoch 16已相对Base+Liquid双降而于12:14
+取消，未运行smoke或正式训练。`0727_11`代码、29项测试、配置、完整模型及远端哈希全部
+通过；原197队列于12:15启动，但在未运行smoke或正式训练前按用户要求迁移至AutoDL，并于
+12:59关闭。
+
+AutoDL使用单卡RTX 5090 physical batch 8，严格保持global batch 8、LR、EMA、BF16、
+72 epochs及每4 epoch评测协议。HSMOT与非identity GMC完整验证为train/test
+`8297/5416` pairs；正式尺寸4-iter smoke的总/DN/encoder loss及grad norm全部有限，
+MMEngine峰值显存约21.8 GB。正式训练于12:57 fresh启动，iter 50为`0.819 s/iter`，
+MCDE参数已更新且无OOM、NaN、未使用参数错误。唯一finalizer已挂接，等待训练和18/18
+TrackEval完成后选择唯一最大`cls_HOTA+det_HOTA`的epoch、归档共享盘并自动关机。
+
+## 2026-07-27 99双卡0727_12 CSEB Encoder
+
+178上的`0727_01 Dual-Evidence`在17/18个评测点中的阶段唯一最佳epoch 64达到
+cls/det HOTA `54.673/62.140`，相对固定Base+Liquid基准双提升`+0.718/+0.108`。
+其P3/P4/P5的common/detail缩放学习方向明显不同，说明下一步应协调尺度间证据分配，同时
+保留已验证有效的双残差容量。
+
+`0727_12 Cross-Scale Evidence Budget`在`0727_01`上加入轻量跨尺度协调器：复用每层
+common/detail全局描述形成32维尺度token，结合三尺度均值上下文预测逐通道分支预算；预算
+在P3/P4/P5维softmax并乘3，只做尺度间重分配。描述停止梯度、输出零初始化，保证初始函数
+与父配置完全一致；无额外loss、空间attention或高分辨率卷积。新增37,696参数，占完整模型
+`0.166%`。
+
+32项测试、配置深拷贝、完整模型构建及真实数据2卡4-iter DDP smoke均通过。99使用GPU 0、1、
+global batch 8、BF16、`find_unused_parameters=False`和完整论文协议，于20:18 CST fresh
+启动；epoch 1 iter 50为`0.9595 s/iter`，峰值约11.25 GB/rank，总/DN/encoder loss和梯度
+有限。GPU 2、3保持空闲，不设置温度watchdog。
+
+## 2026-07-28 0728_01 Decoder阶段条件启动
+
+197的`0727_09 detail-only spatial reliability`结束后先完成18/18 TrackEval，并按唯一最大
+`cls_HOTA + det_HOTA`选点。为了把“明显超过`0727_01`”变成可执行条件，只有其最佳点同时
+满足cls HOTA `>54.437`、det HOTA `>62.393`且HOTA和`>=117.130`（至少高`0.300`）时，
+才停止后续派生；否则进入Decoder探索。
+
+首个Decoder实验编号为`0728_01`。它严格继承`0727_01`的Paper Base、`0723_01` Liquid、
+P5双向temporal MHA、Dual-Evidence post-FPN encoder、proposal、PairDN、loss、COCO适配
+初始化、full HSMOT 1200x900、BF16边界和global batch 8，唯一模型变量是加入历史
+`0708_03` decoder：
+
+- 使用`pointer/query_prev/query_curr`三状态逐层解码；
+- 启用`pointer_to_prev`、`pointer_to_curr`及`pointer_update`的零初始化循环耦合；
+- 不启用separate FFN，避免混入`0708_04`变量；
+- 不修改matching、proposal top-k、PairDN或head loss。
+
+本地完整模型构建成功，17项decoder单测通过，三层decoder的18个循环耦合权重/偏置在
+初始化后均严格为0且可训练。代码与配置已同步197并通过远端配置解析。条件队列于
+2026-07-28 02:15 CST启动，PID为`671579`；首个心跳确认`0727_09`仍在运行、epoch 72尚未
+生成、TrackEval为16/18、GPU 4/5均被前序实验占用。前序满足完成条件后，队列会先运行
+精确正式配置的双卡4-iter真实数据DDP smoke，验证checkpoint、关键loss、梯度和DDP状态，
+通过后才fresh启动正式训练。
+
+实际切换记录：`0727_09`于04:02完成18/18 TrackEval，唯一最佳epoch 72为
+`54.106/62.321`，未超过`0727_01`，条件队列正确进入`0728_01` smoke。首次smoke发现
+历史`0708_03`依赖`find_unused_parameters=True`：tri-state下遗留的`cross_fusion`不可达，
+末层post-frame pointer更新没有后续消费者。保持预测逻辑不变，将这些结构性无梯度参数
+排除训练后，18项单测及双卡4-iter真实数据smoke通过。正式训练于09:30 CST在197 GPU 4、5
+fresh启动；09:31确认epoch 1 iter 50为`0.9245 s/iter`，关键loss和梯度有限，无DDP、NaN、
+OOM或NCCL错误。

@@ -116,6 +116,7 @@ def _build_generator(cfg: Config) -> PairCdnQueryGenerator:
         embed_dims=model.decoder.embed_dims,
         num_matching_queries=model_cfg['num_queries'],
         angle_factor=model.decoder.angle_factor,
+        angle_cfg=model.bbox_head.angle_cfg,
         **dn_cfg)
 
 
@@ -127,8 +128,8 @@ def visualize_one(cfg: Config, pipeline: Compose, generator: PairCdnQueryGenerat
     data_sample = packed['data_samples']
     generator.train()
     with torch.no_grad():
-        dn_query, dn_prev_unact, dn_curr_unact, _attn_mask, dn_meta = generator(
-            [data_sample])
+        (dn_query, dn_prev_unact, dn_curr_unact, _attn_mask,
+         _query_padding_mask, dn_meta) = generator([data_sample])
     del dn_query
     dn_prev = torch.sigmoid(dn_prev_unact[0])
     dn_curr = torch.sigmoid(dn_curr_unact[0])
@@ -150,8 +151,10 @@ def visualize_one(cfg: Config, pipeline: Compose, generator: PairCdnQueryGenerat
         f'{int(pair_info["frame_id_prev"]):06d}_{int(pair_info["frame_id"]):06d}')
     mkdir_or_exist(seq_dir)
     max_targets = int(dn_meta['max_num_dn_targets'])
+    max_negative_targets = int(dn_meta['max_num_negative_dn_targets'])
     num_groups = int(dn_meta['num_denoising_groups'])
-    num_draw_groups = min(max_groups, 2 * num_groups)
+    group_width = max_targets + max_negative_targets
+    num_draw_groups = min(max_groups, num_groups)
 
     manifest = dict(
         seq_name=pair_info['seq_name'],
@@ -161,6 +164,7 @@ def visualize_one(cfg: Config, pipeline: Compose, generator: PairCdnQueryGenerat
         num_gt=int(len(gt.labels)),
         num_denoising_groups=num_groups,
         max_num_dn_targets=max_targets,
+        max_num_negative_dn_targets=max_negative_targets,
         num_denoising_queries=int(dn_meta['num_denoising_queries']),
         files=[],
     )
@@ -173,41 +177,46 @@ def visualize_one(cfg: Config, pipeline: Compose, generator: PairCdnQueryGenerat
     manifest['files'].append(gt_path)
 
     for group_idx in range(num_draw_groups):
-        start = group_idx * max_targets
-        end = start + max_targets
-        negative = bool(group_idx % 2)
-        color = (255, 0, 255) if negative else (255, 255, 0)
-        name = 'negative' if negative else 'positive'
-        path = osp.join(seq_dir, f'{group_idx + 1:02d}_dn_group{group_idx:02d}_{name}.jpg')
-        _draw_view(
-            inputs, gt_prev, gt_curr, dn_prev[start:end], dn_curr[start:end],
-            f'DN group {group_idx:02d} ({name})',
-            [
-                'green: GT; cyan: positive DN; magenta: negative DN',
-                f'max_targets={max_targets}, group={group_idx}/{2 * num_groups - 1}',
-            ],
-            color, path, draw_limit)
-        manifest['files'].append(path)
+        group_start = group_idx * group_width
+        blocks = (
+            ('positive', group_start, group_start + max_targets,
+             (255, 255, 0)),
+            ('negative', group_start + max_targets,
+             group_start + group_width, (255, 0, 255)),
+        )
+        for name, start, end, color in blocks:
+            path = osp.join(
+                seq_dir,
+                f'{group_idx + 1:02d}_dn_group{group_idx:02d}_{name}.jpg')
+            _draw_view(
+                inputs, gt_prev, gt_curr, dn_prev[start:end],
+                dn_curr[start:end], f'DN group {group_idx:02d} ({name})',
+                [
+                    'green: GT; cyan: positive DN; magenta: negative DN',
+                    f'max_targets={max_targets}, group={group_idx}/{num_groups - 1}',
+                ], color, path, draw_limit)
+            manifest['files'].append(path)
 
-    if num_draw_groups >= 2:
+    if num_draw_groups >= 1:
         prev = _to_preview(inputs[0])
         curr = _to_preview(inputs[1])
         _draw_rboxes(prev, gt_prev, (0, 220, 0), 'g', thickness=2,
                      limit=draw_limit)
         _draw_rboxes(curr, gt_curr, (0, 220, 0), 'g', thickness=2,
                      limit=draw_limit)
+        first_negative = slice(max_targets, group_width)
         _draw_rboxes(prev, dn_prev[:max_targets], (255, 255, 0), 'p',
                      thickness=1, limit=draw_limit)
         _draw_rboxes(curr, dn_curr[:max_targets], (255, 255, 0), 'p',
                      thickness=1, limit=draw_limit)
-        _draw_rboxes(prev, dn_prev[max_targets:2 * max_targets],
+        _draw_rboxes(prev, dn_prev[first_negative],
                      (255, 0, 255), 'n', thickness=1, limit=draw_limit)
-        _draw_rboxes(curr, dn_curr[max_targets:2 * max_targets],
+        _draw_rboxes(curr, dn_curr[first_negative],
                      (255, 0, 255), 'n', thickness=1, limit=draw_limit)
         path = osp.join(seq_dir, 'overlay_first_pos_neg.jpg')
         cv2.imwrite(path, _side_by_side(
             prev, curr, 'First positive/negative DN groups',
-            ['green: GT; cyan: positive DN group 0; magenta: negative DN group 1']))
+            ['green: GT; cyan: positive DN; magenta: negative DN']))
         manifest['files'].append(path)
 
     json_path = osp.join(seq_dir, 'summary.json')

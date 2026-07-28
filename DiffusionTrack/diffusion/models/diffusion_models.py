@@ -9,7 +9,10 @@ import torch.nn.functional as F
 from einops import rearrange, repeat
 from einops_exts import rearrange_many
 from mmcv.ops import roi_align_rotated
-from yolox.utils.rotated_boxes import regularize_rboxes
+from yolox.utils.rotated_boxes import (
+    regularize_rboxes,
+    regularize_rboxes_degrees,
+)
 
 
 
@@ -26,6 +29,10 @@ class RotatedROIPooler(nn.Module):
         self.output_size = (output_size, output_size)
         self.scales = tuple(scales)
         self.sampling_ratio = sampling_ratio
+        # Historical HSMOT adaptation used True. Detectron2's
+        # ROIAlignRotated is numerically equivalent to MMCV clockwise=False
+        # for the same positive atan2(dy, dx) angle.
+        self.clockwise = True
 
     def forward(self, features, boxes_per_image):
         counts = [len(boxes) for boxes in boxes_per_image]
@@ -55,9 +62,47 @@ class RotatedROIPooler(nn.Module):
             with torch.cuda.amp.autocast(enabled=False):
                 pooled = roi_align_rotated(
                     feature.float(), rois[indices].float(), self.output_size,
-                    scale, self.sampling_ratio, True, True)
+                    scale, self.sampling_ratio, True, self.clockwise)
             output[indices] = pooled.to(output.dtype)
         return output
+
+
+class Detectron2RotatedROIPooler(nn.Module):
+    """Native Detectron2 FPN ROIAlignRotated for the LX parity path.
+
+    Detectron2 accepts degree angles, unlike the MMCV kernel used by the
+    HSMOT default.  Construction is lazy so the ordinary HSMOT environment
+    does not gain a Detectron2 import dependency.
+    """
+
+    def __init__(self, output_size, scales, sampling_ratio=2,
+                 input_angles_in_degrees=True):
+        super().__init__()
+        from detectron2.modeling.poolers import ROIPooler
+
+        self.output_size = (output_size, output_size)
+        self.scales = tuple(scales)
+        self.sampling_ratio = sampling_ratio
+        self.input_angles_in_degrees = bool(input_angles_in_degrees)
+        self.pooler = ROIPooler(
+            output_size=output_size,
+            scales=self.scales,
+            sampling_ratio=sampling_ratio,
+            pooler_type="ROIAlignRotated",
+        )
+
+    def forward(self, features, boxes_per_image):
+        from detectron2.structures import RotatedBoxes
+
+        converted = []
+        for boxes in boxes_per_image:
+            if self.input_angles_in_degrees:
+                degree_boxes = boxes
+            else:
+                degree_boxes = torch.cat(
+                    [boxes[:, :4], torch.rad2deg(boxes[:, 4:5])], dim=1)
+            converted.append(RotatedBoxes(degree_boxes))
+        return self.pooler(features, converted)
 
 
 
@@ -117,7 +162,8 @@ class DynamicHead(nn.Module):
                 return_intermediate=True,
                 use_focal=False,
                 use_fed_loss=False,
-                prior_prob=0.01
+                prior_prob=0.01,
+                lx_regression_init=False,
                 ):
         super().__init__()
 
@@ -126,8 +172,13 @@ class DynamicHead(nn.Module):
         self.box_pooler = box_pooler
         
         # Build heads.
-        rcnn_head = RCNNHead(d_model, num_classes,pooler_resolution, dim_feedforward, nhead, dropout, activation,use_focal=use_focal,use_fed_loss=use_fed_loss)
+        rcnn_head = RCNNHead(
+            d_model, num_classes, pooler_resolution, dim_feedforward,
+            nhead, dropout, activation, use_focal=use_focal,
+            use_fed_loss=use_fed_loss,
+            lx_regression_init=lx_regression_init)
         self.head_series = _get_clones(rcnn_head, num_heads)
+        self.lx_regression_init = bool(lx_regression_init)
         self.num_heads = num_heads
         self.return_intermediate = return_intermediate
 
@@ -167,9 +218,10 @@ class DynamicHead(nn.Module):
         # useful early-stage rotated box before any head has learned.  Zeroing
         # only the final regression projection preserves the original cascade
         # and lets every stage learn its own residual from a stable start.
-        for head in self.head_series:
-            nn.init.zeros_(head.bboxes_delta.weight)
-            nn.init.zeros_(head.bboxes_delta.bias)
+        if not self.lx_regression_init:
+            for head in self.head_series:
+                nn.init.zeros_(head.bboxes_delta.weight)
+                nn.init.zeros_(head.bboxes_delta.bias)
 
     @staticmethod
     def _init_box_pooler(pooler_resolution,strides,in_channels):
@@ -215,7 +267,8 @@ class DynamicHead(nn.Module):
 class RCNNHead(nn.Module):
 
     def __init__(self,d_model, num_classes, pooler_resolution,dim_feedforward=2048, nhead=8, dropout=0.1, activation="relu",
-                 scale_clamp: float = _DEFAULT_SCALE_CLAMP, bbox_weights=(2.0, 2.0, 1.0, 1.0, 1.0),use_focal=False,use_fed_loss=False):
+                 scale_clamp: float = _DEFAULT_SCALE_CLAMP, bbox_weights=(2.0, 2.0, 1.0, 1.0, 1.0),use_focal=False,use_fed_loss=False,
+                 lx_regression_init=False):
         super().__init__()
 
         self.d_model = d_model
@@ -286,14 +339,40 @@ class RCNNHead(nn.Module):
         self.bboxes_delta = nn.Linear(d_model, 5)
         self.scale_clamp = scale_clamp
         self.bbox_weights = bbox_weights
+        # MMRotate-style local-axis center projection and per-stage LE135
+        # canonicalization are the corrected HSMOT defaults.  Controlled LX
+        # bridges may disable them independently.
+        self.proj_xy = True
+        self.canonicalize_refined_boxes = True
+        # Internal HSMOT boxes use radians.  LX stores angles in degrees and
+        # adds the raw regression output as degrees, making the same numeric
+        # delta pi/180 as large in physical angle.  Keep the corrected radian
+        # default and expose that scale independently.
+        self.angle_delta_scale = 1.0
+        # The public HSMOT representation is always radians.  This flag is
+        # only for the six-stage DynamicHead geometry.  It must control every
+        # unit-sensitive operation in apply_deltas, not just ROIAlign.
+        self.box_angle_degrees = False
+        self.lx_delta_numerics = False
+        self.min_refined_side = 0.0
         nn.init.constant_(self.class_logits.bias,-math.log((1 - 1e-2) / 1e-2))
         # Box outputs are residuals (dx, dy, dw, dh, dtheta).  Zero bias is
         # the identity transform; using the classification prior here would
         # shrink w/h by ~100x at every refinement head.
         nn.init.zeros_(self.bboxes_delta.bias)
+        if lx_regression_init:
+            # Exact LX constructor order. DynamicHead's later Xavier reset
+            # overwrites this weight, but these draws shift every subsequent
+            # random tensor and therefore must be reproduced.
+            nn.init.normal_(self.bboxes_delta.weight, std=0.001)
         for sub_module in self.reg_module:
             if isinstance(sub_module,nn.Linear):
-                nn.init.zeros_(sub_module.bias)
+                if lx_regression_init:
+                    nn.init.constant_(
+                        sub_module.bias,
+                        -math.log((1 - 1e-2) / 1e-2))
+                else:
+                    nn.init.zeros_(sub_module.bias)
 
     def forward(self, features,bboxes,pro_features,pooler,time_emb,lost_features=None,fix_ref_boxes=False):
         """
@@ -429,6 +508,17 @@ class RCNNHead(nn.Module):
             assert not self.training,"fix reference bboxes only for inference mode"
             pred_bboxes_pre[:nr_boxes]=bboxes_pre[0,:nr_boxes]
         pred_bboxes_curr = self.apply_deltas(bboxes_deltas_curr, bboxes_cur.view(-1, 5))
+        if self.min_refined_side > 0:
+            pred_bboxes_pre = torch.cat([
+                pred_bboxes_pre[:, :2],
+                pred_bboxes_pre[:, 2:4].clamp_min(self.min_refined_side),
+                pred_bboxes_pre[:, 4:],
+            ], dim=-1)
+            pred_bboxes_curr = torch.cat([
+                pred_bboxes_curr[:, :2],
+                pred_bboxes_curr[:, 2:4].clamp_min(self.min_refined_side),
+                pred_bboxes_curr[:, 4:],
+            ], dim=-1)
             
         return (class_logits_pre.view(N, nr_boxes, -1),class_logits_curr.view(N, nr_boxes, -1)), (pred_bboxes_pre.view(N, nr_boxes, -1),pred_bboxes_curr.view(N, nr_boxes, -1)),obj_features,association_score.view(N, nr_boxes, -1)
 
@@ -442,6 +532,29 @@ class RCNNHead(nn.Module):
                 box transformations for the single box boxes[i].
             boxes (Tensor): boxes to transform, of shape (N, 5)
         """
+        if self.lx_delta_numerics:
+            boxes = boxes.to(deltas.dtype)
+            ctr_x, ctr_y = boxes[:, 0], boxes[:, 1]
+            widths = boxes[:, 2].clamp_min(1e-6)
+            heights = boxes[:, 3].clamp_min(1e-6)
+            angles = boxes[:, 4]
+            wx, wy, ww, wh, wa = self.bbox_weights
+            dx = deltas[:, 0::5] / wx
+            dy = deltas[:, 1::5] / wy
+            dw = torch.clamp(
+                deltas[:, 2::5] / ww, max=self.scale_clamp)
+            dh = torch.clamp(
+                deltas[:, 3::5] / wh, max=self.scale_clamp)
+            da = deltas[:, 4::5] / wa
+            pred_boxes = torch.zeros_like(deltas)
+            pred_boxes[:, 0::5] = dx * widths[:, None] + ctr_x[:, None]
+            pred_boxes[:, 1::5] = dy * heights[:, None] + ctr_y[:, None]
+            pred_boxes[:, 2::5] = torch.exp(dw) * widths[:, None]
+            pred_boxes[:, 3::5] = torch.exp(dh) * heights[:, None]
+            pred_boxes[:, 4::5] = (
+                angles[:, None] + da * self.angle_delta_scale)
+            return pred_boxes
+
         # BBox decoding is particularly sensitive to AMP overflow: an FP16
         # angle delta can become inf and ``remainder(inf, pi)`` is NaN.  Keep
         # this small geometry operation in FP32.  The clipping only affects
@@ -470,10 +583,31 @@ class RCNNHead(nn.Module):
             dw = torch.clamp(dw, -self.scale_clamp, self.scale_clamp)
             dh = torch.clamp(dh, -self.scale_clamp, self.scale_clamp)
 
-            pred_ctr_x = (dx * widths[:, None] + ctr_x[:, None]).clamp(
-                -32768.0, 32768.0)
-            pred_ctr_y = (dy * heights[:, None] + ctr_y[:, None]).clamp(
-                -32768.0, 32768.0)
+            # Rotated proposal refinement uses proposal-local center offsets
+            # (MMRotate ``proj_xy=True``): dx follows the box width axis and
+            # dy follows its height axis.  Rotate that local displacement back
+            # into image coordinates before updating the center.  This keeps
+            # center regression consistent with RotatedROIAlign and avoids
+            # coupling global x/y motion to LE135 long/short edge ordering.
+            local_x = dx * widths[:, None]
+            local_y = dy * heights[:, None]
+            if self.proj_xy:
+                geometric_angles = (
+                    torch.deg2rad(angles)
+                    if self.box_angle_degrees else angles)
+                cos_a = torch.cos(geometric_angles)[:, None]
+                sin_a = torch.sin(geometric_angles)[:, None]
+                pred_ctr_x = (
+                    ctr_x[:, None] + local_x * cos_a - local_y * sin_a
+                ).clamp(-32768.0, 32768.0)
+                pred_ctr_y = (
+                    ctr_y[:, None] + local_x * sin_a + local_y * cos_a
+                ).clamp(-32768.0, 32768.0)
+            else:
+                pred_ctr_x = (ctr_x[:, None] + local_x).clamp(
+                    -32768.0, 32768.0)
+                pred_ctr_y = (ctr_y[:, None] + local_y).clamp(
+                    -32768.0, 32768.0)
             pred_w = (torch.exp(dw) * widths[:, None]).clamp(
                 1e-6, 32768.0)
             pred_h = (torch.exp(dh) * heights[:, None]).clamp(
@@ -484,15 +618,24 @@ class RCNNHead(nn.Module):
             pred_boxes[:, 1::5] = pred_ctr_y
             pred_boxes[:, 2::5] = pred_w
             pred_boxes[:, 3::5] = pred_h
-            pred_boxes[:, 4::5] = torch.remainder(
-                angles[:, None] + da + math.pi / 4, math.pi) - math.pi / 4
+            refined_angles = angles[:, None] + da * self.angle_delta_scale
+            if self.box_angle_degrees:
+                pred_boxes[:, 4::5] = torch.remainder(
+                    refined_angles + 45.0, 180.0) - 45.0
+            else:
+                pred_boxes[:, 4::5] = torch.remainder(
+                    refined_angles + math.pi / 4, math.pi) - math.pi / 4
 
             # The regression head predicts generic positive w/h values.  Make
             # every stage output a unique LE135 box before it is consumed by
             # direct L1, the next refinement stage, inference, or tracking.
-            original_shape = pred_boxes.shape
-            pred_boxes = regularize_rboxes(
-                pred_boxes.reshape(-1, 5)).reshape(original_shape)
+            if self.canonicalize_refined_boxes:
+                original_shape = pred_boxes.shape
+                regularize = (
+                    regularize_rboxes_degrees
+                    if self.box_angle_degrees else regularize_rboxes)
+                pred_boxes = regularize(
+                    pred_boxes.reshape(-1, 5)).reshape(original_shape)
 
         return pred_boxes
 

@@ -719,6 +719,566 @@ class PairTemporalPyramidLocalAdapter(BaseModule):
         return tuple(outs)
 
 
+class PairTemporalPyramidCommonDetailAdapter(BaseModule):
+    """Order-equivariant local temporal adapter with pair-mean preservation.
+
+    Each pyramid level is decomposed into a pair-common feature and a signed
+    temporal detail.  An order-invariant descriptor gates an odd local
+    transform of the detail, then equal and opposite residuals are applied to
+    the two frames.  Consequently, swapping the two input frames swaps the
+    outputs and the per-location pair mean is preserved exactly.
+    """
+
+    def __init__(self,
+                 in_channels: List[int],
+                 level_indices: Optional[List[int]] = None,
+                 reduction: int = 4,
+                 pointwise_groups: int = 8,
+                 conserve_detail_energy: bool = False,
+                 use_spatial_reliability: bool = False,
+                 use_shared_scalar_gain: bool = False,
+                 gamma_init: float = 0.0,
+                 init_cfg: OptMultiConfig = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        self.in_channels = list(in_channels)
+        self.conserve_detail_energy = bool(conserve_detail_energy)
+        self.use_spatial_reliability = bool(use_spatial_reliability)
+        self.use_shared_scalar_gain = bool(use_shared_scalar_gain)
+        if level_indices is None:
+            level_indices = list(range(len(self.in_channels)))
+        self.level_indices = [
+            idx if idx >= 0 else len(self.in_channels) + idx
+            for idx in level_indices
+        ]
+        if any(idx < 0 or idx >= len(self.in_channels)
+               for idx in self.level_indices):
+            raise ValueError(
+                f'Invalid level_indices={level_indices} for '
+                f'{len(self.in_channels)} input levels.')
+
+        self.gate_mlps = nn.ModuleList()
+        self.local_blocks = nn.ModuleList()
+        self.spatial_gates = nn.ModuleList()
+        self.shared_gain_gates = nn.ModuleList()
+        for idx in self.level_indices:
+            channels = self.in_channels[idx]
+            hidden_dims = max(channels // reduction, 16)
+            groups = min(pointwise_groups, channels)
+            while channels % groups != 0:
+                groups -= 1
+            self.gate_mlps.append(
+                nn.Sequential(
+                    nn.Linear(channels * 2, hidden_dims),
+                    nn.SiLU(inplace=True),
+                    nn.Linear(hidden_dims, channels),
+                    nn.Sigmoid(),
+                ))
+            # Bias-free linear convolutions followed by tanh form an odd
+            # transform, which makes the adapter equivariant to frame swaps.
+            self.local_blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(
+                        channels,
+                        channels,
+                        kernel_size=3,
+                        padding=1,
+                        groups=channels,
+                        bias=False),
+                    nn.Tanh(),
+                    nn.Conv2d(
+                        channels,
+                        channels,
+                        kernel_size=1,
+                        groups=groups,
+                        bias=False),
+                ))
+            if self.use_spatial_reliability:
+                spatial_gate = nn.Conv2d(
+                    2, 1, kernel_size=3, padding=1, bias=True)
+                nn.init.zeros_(spatial_gate.weight)
+                nn.init.zeros_(spatial_gate.bias)
+                self.spatial_gates.append(spatial_gate)
+            if self.use_shared_scalar_gain:
+                shared_gain_gate = nn.Conv2d(
+                    2, 1, kernel_size=3, padding=1, bias=True)
+                nn.init.zeros_(shared_gain_gate.weight)
+                nn.init.zeros_(shared_gain_gate.bias)
+                self.shared_gain_gates.append(shared_gain_gate)
+        self.gamma = nn.Parameter(
+            torch.full((len(self.level_indices), ), float(gamma_init)))
+
+    def forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor]:
+        outs = list(feats)
+        if not outs:
+            return feats
+        batch_size = outs[0].shape[0]
+        if batch_size % 2 != 0:
+            raise ValueError(
+                'PairTemporalPyramidCommonDetailAdapter expects an even batch '
+                'ordered as [prev batch, curr batch].')
+        pair_batch = batch_size // 2
+
+        for module_idx, level_idx in enumerate(self.level_indices):
+            feat = outs[level_idx]
+            channels = feat.shape[1]
+            expected_channels = self.in_channels[level_idx]
+            if channels != expected_channels:
+                raise ValueError(
+                    'PairTemporalPyramidCommonDetailAdapter expected '
+                    f'{expected_channels} channels at level {level_idx}, '
+                    f'but got {channels}.')
+
+            prev = feat[:pair_batch]
+            curr = feat[pair_batch:]
+            common = (prev + curr) * 0.5
+            detail = (curr - prev) * 0.5
+            descriptor = torch.cat(
+                [
+                    common.mean(dim=(-2, -1)),
+                    detail.abs().mean(dim=(-2, -1)),
+                ],
+                dim=1)
+            gate = self.gate_mlps[module_idx](descriptor).view(
+                pair_batch, channels, 1, 1)
+            delta = self.local_blocks[module_idx](detail) * gate
+            spatial_descriptor = None
+            if (self.use_spatial_reliability
+                    or self.use_shared_scalar_gain):
+                common_energy = common.abs().mean(dim=1, keepdim=True)
+                detail_energy = detail.abs().mean(dim=1, keepdim=True)
+                common_scale = common_energy.detach().mean(
+                    dim=(-2, -1), keepdim=True).clamp_min(1e-6)
+                detail_scale = detail_energy.detach().mean(
+                    dim=(-2, -1), keepdim=True).clamp_min(1e-6)
+                spatial_descriptor = torch.cat(
+                    [
+                        common_energy / common_scale,
+                        detail_energy / detail_scale,
+                    ],
+                    dim=1)
+            if self.use_spatial_reliability:
+                # Zero logits produce unit modulation. The bounded range can
+                # suppress unreliable differences without unbounded updates.
+                spatial_reliability = 2.0 * torch.sigmoid(
+                    self.spatial_gates[module_idx](spatial_descriptor))
+                delta = delta * spatial_reliability
+            gamma = self.gamma[module_idx].view(1, 1, 1, 1)
+            signed_update = gamma * delta
+            if self.conserve_detail_energy:
+                detail_rms = detail.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).clamp_min(1e-6).sqrt()
+                update_rms = signed_update.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).clamp_min(1e-6).sqrt()
+                energy_scale = (detail_rms / update_rms).clamp(max=1.0)
+                signed_update = signed_update * energy_scale
+            if self.use_shared_scalar_gain:
+                # A shared scalar cannot rotate or mix the channel vector at
+                # a location. Its bounded positive gain preserves pair-local
+                # feature geometry while allowing common evidence to grow.
+                shared_gain = 1.0 + torch.tanh(
+                    self.shared_gain_gates[module_idx](spatial_descriptor))
+                prev = prev * shared_gain
+                curr = curr * shared_gain
+            outs[level_idx] = torch.cat(
+                [prev + signed_update, curr - signed_update], dim=0)
+        return tuple(outs)
+
+
+class PairTemporalPyramidDualEvidenceAdapter(BaseModule):
+    """Pair-equivariant common/detail fusion for pyramid features.
+
+    The common branch adds the same cross-frame evidence to both frames,
+    while the odd detail branch adds equal and opposite residuals. This
+    separates shared detection evidence from temporal association evidence.
+    An optional two-channel spatial gate suppresses local updates where common
+    evidence is weak or frame disagreement is high.
+    """
+
+    def __init__(self,
+                 in_channels: List[int],
+                 level_indices: Optional[List[int]] = None,
+                 common_level_indices: Optional[List[int]] = None,
+                 detail_level_indices: Optional[List[int]] = None,
+                 reduction: int = 4,
+                 pointwise_groups: int = 8,
+                 use_spatial_evidence: bool = False,
+                 spatial_common_evidence: bool = True,
+                 spatial_detail_evidence: bool = True,
+                 spatial_unit_init: bool = False,
+                 spatial_detach_descriptor: bool = False,
+                 spatial_preserve_mean: bool = False,
+                 conserve_branch_energy: bool = False,
+                 moment_competitive_gating: bool = False,
+                 cross_scale_evidence_budget: bool = False,
+                 cross_scale_hidden_dims: int = 32,
+                 gamma_init: float = 0.0,
+                 init_cfg: OptMultiConfig = None) -> None:
+        super().__init__(init_cfg=init_cfg)
+        self.in_channels = list(in_channels)
+        if level_indices is None:
+            level_indices = list(range(len(self.in_channels)))
+        self.level_indices = [
+            idx if idx >= 0 else len(self.in_channels) + idx
+            for idx in level_indices
+        ]
+        if any(idx < 0 or idx >= len(self.in_channels)
+               for idx in self.level_indices):
+            raise ValueError(
+                f'Invalid level_indices={level_indices} for '
+                f'{len(self.in_channels)} input levels.')
+        selected_levels = set(self.level_indices)
+
+        def _normalize_branch_levels(
+                indices: Optional[List[int]], branch: str) -> set[int]:
+            if indices is None:
+                return selected_levels.copy()
+            normalized = {
+                idx if idx >= 0 else len(self.in_channels) + idx
+                for idx in indices
+            }
+            if not normalized.issubset(selected_levels):
+                raise ValueError(
+                    f'{branch}_level_indices={indices} must be a subset of '
+                    f'level_indices={self.level_indices}.')
+            return normalized
+
+        self.common_level_indices = _normalize_branch_levels(
+            common_level_indices, 'common')
+        self.detail_level_indices = _normalize_branch_levels(
+            detail_level_indices, 'detail')
+        self.use_spatial_evidence = bool(use_spatial_evidence)
+        self.spatial_common_evidence = bool(spatial_common_evidence)
+        self.spatial_detail_evidence = bool(spatial_detail_evidence)
+        self.spatial_unit_init = bool(spatial_unit_init)
+        self.spatial_detach_descriptor = bool(spatial_detach_descriptor)
+        self.spatial_preserve_mean = bool(spatial_preserve_mean)
+        if (self.use_spatial_evidence
+                and not (self.spatial_common_evidence
+                         or self.spatial_detail_evidence)):
+            raise ValueError(
+                'At least one spatial evidence branch must be enabled.')
+        self.conserve_branch_energy = bool(conserve_branch_energy)
+        self.moment_competitive_gating = bool(
+            moment_competitive_gating)
+        self.cross_scale_evidence_budget = bool(
+            cross_scale_evidence_budget)
+        self.latest_branch_energy_stats = {}
+        self.latest_cross_scale_budget = None
+
+        if self.cross_scale_evidence_budget:
+            selected_channels = [
+                self.in_channels[idx] for idx in self.level_indices
+            ]
+            if len(selected_channels) < 2:
+                raise ValueError(
+                    'cross_scale_evidence_budget requires at least two '
+                    'selected feature levels.')
+            if len(set(selected_channels)) != 1:
+                raise ValueError(
+                    'cross_scale_evidence_budget requires equal channel '
+                    f'dimensions, but got {selected_channels}.')
+            if cross_scale_hidden_dims <= 0:
+                raise ValueError(
+                    'cross_scale_hidden_dims must be positive, but got '
+                    f'{cross_scale_hidden_dims}.')
+            channels = selected_channels[0]
+            descriptor_dims = channels * 2
+            self.cross_scale_token_norm = nn.LayerNorm(descriptor_dims)
+            self.cross_scale_token_proj = nn.Linear(
+                descriptor_dims, cross_scale_hidden_dims)
+            self.cross_scale_embeddings = nn.Parameter(
+                torch.zeros(
+                    len(self.level_indices), cross_scale_hidden_dims))
+            self.cross_scale_mixer = nn.Sequential(
+                nn.LayerNorm(cross_scale_hidden_dims * 2),
+                nn.Linear(
+                    cross_scale_hidden_dims * 2,
+                    cross_scale_hidden_dims),
+                nn.SiLU(inplace=True),
+                nn.Linear(
+                    cross_scale_hidden_dims,
+                    cross_scale_hidden_dims),
+                nn.SiLU(inplace=True),
+            )
+            self.cross_scale_out = nn.Linear(
+                cross_scale_hidden_dims, descriptor_dims)
+            nn.init.zeros_(self.cross_scale_out.weight)
+            nn.init.zeros_(self.cross_scale_out.bias)
+
+        self.gate_mlps = nn.ModuleList()
+        self.moment_mix = nn.ParameterList()
+        self.local_blocks = nn.ModuleList()
+        self.detail_blocks = nn.ModuleList()
+        self.spatial_gates = nn.ModuleList()
+        for idx in self.level_indices:
+            channels = self.in_channels[idx]
+            hidden_dims = max(channels // reduction, 16)
+            groups = min(pointwise_groups, channels)
+            while channels % groups != 0:
+                groups -= 1
+            gate_layers = [
+                nn.Linear(channels * 2, hidden_dims),
+                nn.SiLU(inplace=True),
+                nn.Linear(hidden_dims, channels * 2),
+            ]
+            if not self.moment_competitive_gating:
+                gate_layers.append(nn.Sigmoid())
+            self.gate_mlps.append(nn.Sequential(*gate_layers))
+            if self.moment_competitive_gating:
+                self.moment_mix.append(
+                    nn.Parameter(torch.zeros(2, channels)))
+            if idx in self.common_level_indices:
+                self.local_blocks.append(
+                    nn.Sequential(
+                        nn.Conv2d(
+                            channels,
+                            channels,
+                            kernel_size=3,
+                            padding=1,
+                            groups=channels,
+                            bias=False),
+                        nn.SiLU(inplace=True),
+                        nn.Conv2d(
+                            channels,
+                            channels,
+                            kernel_size=1,
+                            groups=groups,
+                            bias=False),
+                    ))
+            else:
+                self.local_blocks.append(nn.Identity())
+            # Bias-free convolutions and tanh make this transform odd, which
+            # is required for exact equivariance when frame order is swapped.
+            if idx in self.detail_level_indices:
+                self.detail_blocks.append(
+                    nn.Sequential(
+                        nn.Conv2d(
+                            channels,
+                            channels,
+                            kernel_size=3,
+                            padding=1,
+                            groups=channels,
+                            bias=False),
+                        nn.Tanh(),
+                        nn.Conv2d(
+                            channels,
+                            channels,
+                            kernel_size=1,
+                            groups=groups,
+                            bias=False),
+                    ))
+            else:
+                self.detail_blocks.append(nn.Identity())
+            if self.use_spatial_evidence:
+                spatial_outputs = (
+                    int(self.spatial_common_evidence)
+                    + int(self.spatial_detail_evidence))
+                spatial_gate = nn.Conv2d(
+                    2,
+                    spatial_outputs,
+                    kernel_size=3,
+                    padding=1,
+                    bias=True)
+                if self.spatial_unit_init:
+                    nn.init.zeros_(spatial_gate.weight)
+                else:
+                    nn.init.normal_(spatial_gate.weight, std=0.01)
+                nn.init.zeros_(spatial_gate.bias)
+                self.spatial_gates.append(spatial_gate)
+        # Column 0 controls common evidence and column 1 controls detail.
+        self.gamma = nn.Parameter(
+            torch.full(
+                (len(self.level_indices), 2), float(gamma_init)))
+
+    def forward(self, feats: Tuple[Tensor]) -> Tuple[Tensor]:
+        outs = list(feats)
+        if not outs:
+            return feats
+        self.latest_branch_energy_stats = {}
+        self.latest_cross_scale_budget = None
+        batch_size = outs[0].shape[0]
+        if batch_size % 2 != 0:
+            raise ValueError(
+                'PairTemporalPyramidDualEvidenceAdapter expects an even '
+                'batch ordered as [prev batch, curr batch].')
+        pair_batch = batch_size // 2
+        common_energy_scales = []
+        detail_energy_scales = []
+        prepared_levels = []
+
+        for module_idx, level_idx in enumerate(self.level_indices):
+            feat = outs[level_idx]
+            channels = feat.shape[1]
+            expected_channels = self.in_channels[level_idx]
+            if channels != expected_channels:
+                raise ValueError(
+                    'PairTemporalPyramidDualEvidenceAdapter expected '
+                    f'{expected_channels} channels at level {level_idx}, '
+                    f'but got {channels}.')
+
+            prev = feat[:pair_batch]
+            curr = feat[pair_batch:]
+            common = (prev + curr) * 0.5
+            detail = (curr - prev) * 0.5
+            common_mean = common.mean(dim=(-2, -1))
+            detail_abs_mean = detail.abs().mean(dim=(-2, -1))
+            if self.moment_competitive_gating:
+                # RMS-minus-mean-absolute responds to sparse strong evidence
+                # without adding a high-resolution gradient path.
+                common_stats = common.detach()
+                detail_stats = detail.detach()
+                common_gap = (
+                    common_stats.square().mean(dim=(-2, -1)).sqrt()
+                    - common_stats.abs().mean(dim=(-2, -1))).clamp_min(0.0)
+                detail_gap = (
+                    detail_stats.square().mean(dim=(-2, -1)).sqrt()
+                    - detail_stats.abs().mean(dim=(-2, -1))).clamp_min(0.0)
+                moment_mix = self.moment_mix[module_idx].tanh()
+                common_mean = (
+                    common_mean + moment_mix[0] * common_gap)
+                detail_abs_mean = (
+                    detail_abs_mean + moment_mix[1] * detail_gap)
+            descriptor = torch.cat(
+                [common_mean, detail_abs_mean], dim=1)
+            channel_gates = self.gate_mlps[module_idx](descriptor)
+            if self.moment_competitive_gating:
+                channel_gates = channel_gates.view(
+                    pair_batch, 2, channels).softmax(dim=1)
+                common_gate, detail_gate = channel_gates.unbind(dim=1)
+            else:
+                common_gate, detail_gate = channel_gates.chunk(2, dim=1)
+            prepared_levels.append(
+                (prev, curr, common, detail, descriptor, common_gate,
+                 detail_gate))
+
+        cross_scale_budget = None
+        if self.cross_scale_evidence_budget:
+            descriptors = torch.stack(
+                [item[4].detach() for item in prepared_levels], dim=1)
+            scale_tokens = self.cross_scale_token_proj(
+                self.cross_scale_token_norm(descriptors))
+            scale_tokens = (
+                scale_tokens + self.cross_scale_embeddings.unsqueeze(0))
+            global_token = scale_tokens.mean(dim=1, keepdim=True).expand_as(
+                scale_tokens)
+            mixed_tokens = self.cross_scale_mixer(
+                torch.cat([scale_tokens, global_token], dim=-1))
+            channels = prepared_levels[0][0].shape[1]
+            budget_logits = self.cross_scale_out(mixed_tokens).view(
+                pair_batch, len(self.level_indices), 2, channels)
+            cross_scale_budget = budget_logits.softmax(dim=1)
+            cross_scale_budget = (
+                cross_scale_budget * len(self.level_indices))
+            self.latest_cross_scale_budget = cross_scale_budget.detach()
+
+        for module_idx, level_idx in enumerate(self.level_indices):
+            prev, curr, common, detail, _, common_gate, detail_gate = (
+                prepared_levels[module_idx])
+            channels = common.shape[1]
+            if cross_scale_budget is not None:
+                common_gate = (
+                    common_gate * cross_scale_budget[:, module_idx, 0])
+                detail_gate = (
+                    detail_gate * cross_scale_budget[:, module_idx, 1])
+            common_gate = common_gate.view(pair_batch, channels, 1, 1)
+            detail_gate = detail_gate.view(pair_batch, channels, 1, 1)
+
+            if self.use_spatial_evidence:
+                spatial_descriptor = torch.cat(
+                    [
+                        common.abs().mean(dim=1, keepdim=True),
+                        detail.abs().mean(dim=1, keepdim=True),
+                    ],
+                    dim=1)
+                if self.spatial_detach_descriptor:
+                    spatial_descriptor = spatial_descriptor.detach()
+                spatial_gates = torch.sigmoid(
+                    self.spatial_gates[module_idx](spatial_descriptor))
+                if self.spatial_unit_init:
+                    spatial_gates = spatial_gates * 2.0
+                if self.spatial_preserve_mean:
+                    spatial_gates = spatial_gates / spatial_gates.mean(
+                        dim=(-2, -1), keepdim=True).clamp_min(
+                            torch.finfo(spatial_gates.dtype).tiny)
+                spatial_idx = 0
+                if self.spatial_common_evidence:
+                    common_spatial = spatial_gates[:, spatial_idx:spatial_idx + 1]
+                    spatial_idx += 1
+                else:
+                    common_spatial = 1.0
+                if self.spatial_detail_evidence:
+                    detail_spatial = spatial_gates[:, spatial_idx:spatial_idx + 1]
+                else:
+                    detail_spatial = 1.0
+            else:
+                common_spatial = detail_spatial = 1.0
+
+            if level_idx in self.common_level_indices:
+                common_delta = (
+                    self.local_blocks[module_idx](common) * common_gate *
+                    common_spatial)
+            else:
+                common_delta = torch.zeros_like(common)
+            if level_idx in self.detail_level_indices:
+                detail_delta = (
+                    self.detail_blocks[module_idx](detail) * detail_gate *
+                    detail_spatial)
+            else:
+                detail_delta = torch.zeros_like(detail)
+            gamma_common = self.gamma[module_idx, 0].view(1, 1, 1, 1)
+            gamma_detail = self.gamma[module_idx, 1].view(1, 1, 1, 1)
+            shared_update = gamma_common * common_delta
+            signed_update = gamma_detail * detail_delta
+            if self.conserve_branch_energy:
+                common_rms = common.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).sqrt()
+                shared_rms = shared_update.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).sqrt()
+                shared_denom = shared_rms.clamp_min(
+                    torch.finfo(shared_rms.dtype).tiny)
+                common_energy_scale = (
+                    common_rms / shared_denom).clamp(max=1.0)
+                shared_update = shared_update * common_energy_scale
+
+                detail_rms = detail.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).sqrt()
+                signed_rms = signed_update.detach().square().mean(
+                    dim=(-2, -1), keepdim=True).sqrt()
+                signed_denom = signed_rms.clamp_min(
+                    torch.finfo(signed_rms.dtype).tiny)
+                detail_energy_scale = (
+                    detail_rms / signed_denom).clamp(max=1.0)
+                signed_update = signed_update * detail_energy_scale
+                common_energy_scales.append(common_energy_scale)
+                detail_energy_scales.append(detail_energy_scale)
+            outs[level_idx] = torch.cat(
+                [
+                    prev + shared_update - signed_update,
+                    curr + shared_update + signed_update,
+                ],
+                dim=0)
+        if common_energy_scales:
+            self.latest_branch_energy_stats = {
+                'common_scale': torch.stack([
+                    scale.detach().mean()
+                    for scale in common_energy_scales
+                ]).mean(),
+                'detail_scale': torch.stack([
+                    scale.detach().mean()
+                    for scale in detail_energy_scales
+                ]).mean(),
+                'common_clip': torch.stack([
+                    scale.detach().lt(1.0).float().mean()
+                    for scale in common_energy_scales
+                ]).mean(),
+                'detail_clip': torch.stack([
+                    scale.detach().lt(1.0).float().mean()
+                    for scale in detail_energy_scales
+                ]).mean(),
+            }
+        return tuple(outs)
+
+
 class RTDETRHybridEncoder(BaseModule):
     """HybridEncoder of RTDETR.
 
@@ -811,6 +1371,12 @@ class RTDETRHybridEncoder(BaseModule):
             if adapter_type == 'pyramid_local':
                 self.post_pair_temporal_adapter = (
                     PairTemporalPyramidLocalAdapter(**adapter_cfg))
+            elif adapter_type == 'pyramid_common_detail':
+                self.post_pair_temporal_adapter = (
+                    PairTemporalPyramidCommonDetailAdapter(**adapter_cfg))
+            elif adapter_type == 'pyramid_dual_evidence':
+                self.post_pair_temporal_adapter = (
+                    PairTemporalPyramidDualEvidenceAdapter(**adapter_cfg))
             else:
                 raise ValueError(
                     'Unsupported post pair temporal adapter type: '

@@ -1374,6 +1374,22 @@ block hidden的mean/std/max进入route，同时保持整图只生成一套路由
 测试44项通过，配置解析确认为full HSMOT、`1200x900`、BF16、global batch 8和
 pair difference/product路径。当前仅完成代码和配置，尚未启动训练或GPU smoke。
 
+截至2026-07-23 03:44，BSR正式训练到epoch 64 iter 650，完成15/18 TrackEval。当前唯一阶段
+最佳为epoch 60：cls/det HOTA `52.943/60.739`，同epoch pair mAP/AP50为
+`0.3078/0.5230`。其配置继承链是`0721_03 BSR -> 0721_02 accuracy-fix -> 0718_01`，但
+178正式启动前同步的源码已包含Negative-DN外环采样和attention mask修复，因此实际训练语义
+更接近`0722_01 + BSR`，不再等同原始`0721_02`。与采用相同DN修复源码的最近对照
+`0722_01`在epoch 60比较，cls/det HOTA低`1.549/0.625`，pair mAP/AP50低约
+`0.0100/0.0121`；但二者分别为178单卡`1x8`和197双卡`2x4`，所以这是高价值近似对照，
+不是严格单变量消融。
+
+BSR确实实现了结构目标：末段hard route保持8个unique sets，`image_variant_ratio`在不同
+batch可达`0.125--0.875`，明显高于global descriptor系列多数为0的状态。但性能下降集中在
+van `-3.139`、truck `-4.274`和tricycle `-3.333`，只有pedestrian `+0.326`和
+awning-bike `+0.247`小幅提高。这表明12x16 block recurrent descriptor对局部空间内容和
+增强扰动过于敏感，route多样性增加但语义稳定性下降。剩余epoch 64/68/72评测完成前不作
+最终选点，但当前趋势不支持用BSR替代global descriptor。
+
 ## 33. 0721_04--0721_06 BSAC, DSE and CSPR
 
 为避免只依赖BSR，本轮从Conv3D输入适配、稀疏检测证据和更强route语义三个互补位置实现
@@ -1412,6 +1428,188 @@ mean/RMS/absolute peak构建8步spectral recurrent route。预览输入和共享
 加载和首轮计算均已开始；screen为`train_0721_04`。epoch 1 iter 50/100分别为
 `1.1234/1.0864 s/iter`，日志显存`11107 MB/rank`，总loss、PairDN loss、encoder proposal
 loss和grad norm均有限，未发现NaN、OOM、unused parameter或DDP错误。
+
+### 33.1 BSAC与DSE最终结果
+
+两项实验均完成72 epochs和18/18 TrackEval。严格按18个评测点中唯一最大
+`cls_HOTA + det_HOTA`选点，两者最佳点均为epoch 72；AP取同一epoch，不跨epoch拼接。
+
+| 实验 | epoch | cls HOTA | det HOTA | cls DetA | cls AssA | det DetA | det AssA | pair mAP | pair AP50 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `0721_02` accuracy-fixed父配置 | 72 | 54.327 | 61.659 | 44.644 | 67.872 | 53.500 | 73.494 | 0.3161 | 0.5340 |
+| `0721_04 BSAC` | 72 | 54.530 | 61.528 | 45.482 | 67.136 | 53.635 | 72.967 | 0.3211 | 0.5353 |
+| `0721_05 DSE` | 72 | 54.635 | 61.895 | 45.178 | 67.823 | 53.768 | 73.613 | 0.3254 | 0.5438 |
+| Paper Base `0716_02` | 68 | 53.314 | 61.982 | 43.386 | 68.287 | 53.890 | 73.643 | 0.3149 | 0.5225 |
+
+DSE相对父配置实现cls/det HOTA `+0.308/+0.236`，同时pair mAP/AP50提高
+`+0.0093/+0.0098`。分量上cls/det DetA提高`0.534/0.268`，det AssA也提高`0.119`，说明
+RMS补充的离散响应证据确实改善了有效检测，而不是只改变分类阈值。相对Paper Base为
+`+1.321/-0.087`，已经非常接近绝对双超，但det仍低0.087，不能写成双提升。
+
+BSAC相对父配置为cls/det HOTA `+0.203/-0.131`。其cls/det DetA提高`0.838/0.135`，但
+cls/det AssA下降`0.736/0.527`，表明按slot校准虽然增强了帧内证据，却降低了pair关联表示的
+一致性。BSAC作为独立模块不进入主线，后续不应直接叠加到DSE。
+
+逐类HOTA相对父配置，DSE主要提高pedestrian `+1.179`、truck `+0.743`和bus `+2.734`，
+下降集中在bike `-0.133`、van `-0.609`、tricycle `-0.991`和awning-bike `-0.413`。
+相对Paper Base，DSE的pedestrian已持平并略高`0.050`，truck/bus/tricycle分别提高
+`9.470/1.997/2.875`，但bike和van仍下降`1.743/1.421`。这说明DSE有效保留了小目标行人的
+离散响应，当前剩余短板主要是bike/van，而不是pedestrian。
+
+最终hard route均未发生跨group集合坍塌：DSE与BSAC末段通常为8个unique sets，最大集合
+重复约1；但`image_variant_ratio`多数日志点仍为0，偶尔为0.125--0.25，说明route主要形成
+稳定全局组合，只有弱图像自适应性。DSE的性能增益来自fusion evidence增强，不能归因于
+route多样性提升。
+
+### 33.2 与0723 PairDN组合实验
+
+为检验fusion evidence与新PairDN是否互补，新增两个以`0723_01`为直接父配置的正式实验。
+`0723_03`仅增加DSE，保留pair两侧共享相对DN噪声、2:1正负slot、hard positive、旋转IoU
+negative筛选、padding隔离及表示一致L1；DSE新增16参数并以mean identity初始化，使用
+`1.0x` base LR。它排在197的`0722_01`之后，使用GPU 4/5和`2x4` batch。
+
+`0723_04`仅增加CSPR：将8谱段输入缩放到`24x32`，用停止权重梯度的共享Conv3D构建每组
+mean/RMS/absolute-peak预览统计，再预测route；正式高分辨率stem和检测损失路径不变，也不
+增加额外loss。它排在178的`0721_03`之后，使用GPU 0、单卡batch 8和安全tmpfs缓存。
+
+两套配置均为BF16、LR `1e-4`、`find_unused_parameters=False`、fresh 72 epochs和完整
+18点TrackEval。48项Liquid测试通过，完整模型构建成功；DSE/CSPR可训练参数分别为
+`22,021,639/22,021,623`。远端配置和launcher哈希已与本地一致，两条队列在
+2026-07-23 03:55正确报告前序仍活跃、epoch72缺失和15/18评测，没有提前执行smoke或训练。
+前序完成并连续三次确认GPU空闲后，队列会先执行目标配置4-iteration smoke，只有生成
+`epoch_1.pth`后才允许正式launcher启动。
+
+178队列在06:36确认`0721_03`完成72 epochs、18/18 TrackEval及GPU连续空闲，随后按设计
+执行CSPR精确smoke，但在Runner构建前因配置顶层`import os`进入MMEngine配置字典、无法
+deepcopy而于06:38标记`FAILED_TO_START`，因此没有误启动正式训练。配置改用项目既有的
+`__import__('os')`环境读取方式，并将TrackEval标注固定到持久化NVMe路径；本地deepcopy
+检查通过。12:30重新执行的精确smoke完成4/4真实iteration、保存checkpoint，loss和梯度
+均有限，峰值MMEngine显存约20.7 GB。`0723_04`于12:31在178 GPU 0 fresh启动，正式
+epoch 1 iter 50为`0.9096 s/iter`、`20763 MiB`，未发现OOM、NaN、unused parameter或
+DDP错误。
+
+### 33.3 PairDN结果与一致性保持色散证据
+
+`0723_01`完成72 epochs和18/18 TrackEval。按`cls_HOTA + det_HOTA`唯一选出的最佳点为
+epoch 64：`cls_HOTA=53.955`、`det_HOTA=62.032`，相对Paper Base分别
+`+0.641/+0.050`；同点pair mAP/AP50为`0.3114/0.5268`。这是修复后PairDN协议下首个
+cls和det同时超过Base的模型，但提升主要来自长尾类别和det AssA，裕量仍小。
+
+`0723_03`在同一父配置上加入旧DSE，最佳点为epoch 68：
+`cls_HOTA=55.036`、`det_HOTA=61.745`，相对Base为`+1.722/-0.237`，同点pair
+mAP/AP50为`0.3239/0.5402`。固定epoch 68对比`0723_01`时，DSE令cls DetA提高
+`1.912`，但det AssA下降`0.743`；16个学习系数中有5个在epoch 36后保持负值，说明
+无约束证据重写提高了分类响应，却可能破坏原SE融合及pair关联排序。因此不直接沿用旧DSE。
+
+后续改为一致性保持色散证据（CP-DSE）。它完整保留原始`x.mean -> SE`主路径，只从每个
+谱段组的归一化色散
+`sqrt(E[x^2]-E[x]^2) / sqrt(E[x^2])`预测零初始化、幅值受限的SE logit残差：
+`0.5 * tanh(gain)`。模块仅新增8个参数，不增加loss，也不重写已有SE证据。
+`0723_05`采用逐像素local色散，`0723_06`先做空间汇聚再在pair帧间共享色散，使同一pair
+得到相同的group残差。
+
+首次local smoke暴露出零方差输入处`sqrt(0)`导数导致的`0 * inf`梯度NaN；实现已在开方
+前对方差执行`clamp_min(eps)`，并增加零方差有限梯度回归测试。修复后本机双卡和197双卡
+4-iteration真实数据smoke均完成，全部loss、PairDN、encoder loss和grad norm有限。
+`0723_05`于2026-07-24 03:56在99 GPU 2/3启动，`0723_06`于03:58在197 GPU 4/5启动；
+两者均已通过正式训练五项启动检查。
+
+独立DN噪声`0723_02`已完成，唯一最佳epoch 72为`53.637/61.679`，相对Base为
+`+0.323/-0.303`；CSPR `0723_04`截至epoch 52为`54.369/60.721`，相对Base为
+`+1.055/-1.261`。两组阶段证据都指向det AssA，而不是分类响应不足。为此新增
+`0723_07 Pair Evidence Consensus Gate (PECG)`：保留`0723_01`的共享PairDN和完整Liquid
+结构，计算prev/curr的谱段覆盖一致度与Conv3D mean evidence一致度，仅在二者均高的位置
+收缩两侧SE gate差异。prev/curr修正量严格反号，逐元素保持pair平均gate；一致度停止梯度，
+避免route为了规避收缩而改变。模块只新增8个强度参数且不增加loss。53项stem测试、完整
+模型构建和本机双卡4-iteration smoke通过；远端精确smoke通过后，已于2026-07-24 06:42
+在252 GPU 0/1 fresh启动，五项正式启动检查全部通过。
+
+`0723_04`后续epoch 56为`54.421/60.887`。固定epoch与`0723_01`比较时，CSPR令cls HOTA
+提高`0.499`，但det HOTA下降`0.834`；det DetA只下降`0.111`，det AssA下降`1.737`，
+IDSW从`1844`增加至`2379`。因此CSPR不是漏检问题，而是更动态的route preview改变了
+pair detection排序并造成身份切换。后续不继续扩展CSPR，PECG则刻意不修改route。
+
+CP-DSE到epoch 8时，local `0723_05`为`44.620/49.897`，pair-global `0723_06`为
+`44.661/50.551`。相对`0723_01`同epoch，local双提升`+0.308/+0.060`，pair-global
+双提升`+0.349/+0.714`。其中pair-global的det DetA/AssA分别提高`0.441/1.150`，
+IDSW减少179，已由epoch 4的双侧det下降转为明显双提升。但epoch 12时pair-global变为
+`48.092/55.124`，相对父配置同epoch仅`+0.005/-0.511`；det DetA/AssA分别下降
+`0.360/0.784`，IDSW增加62。AP50基本持平，mAP下降`0.0031`。因此epoch 8优势尚未稳定，
+不能外推最终结果，也暂不以该结构直接派生下一实验。
+
+local `0723_05`在epoch 12为`47.444/54.076`，相对父配置同epoch为
+`-0.643/-1.559`。它比pair-global退化更明显，证明逐像素色散残差会扰动小目标空间响应和
+pair排序；后续不再使用local CP-DSE作为父配置。
+
+epoch 16时local进一步变为`48.291/56.194`，相对父配置为`-1.613/-1.435`；det DetA/AssA
+均下降且IDSW增加208。local CP-DSE失败结论明确。
+
+pair-global `0723_06`在epoch 16为`49.834/56.473`，相对父配置同epoch为
+`-0.070/-1.156`；det AssA下降`2.171`且IDSW增加216。按slot共享修正并未保持物理谱段
+语义或关联质量，进一步支持SCPD改到物理谱段坐标的动机。
+
+进一步审查发现pair-global CP-DSE按group slot共享修正，而两帧独立route下同一slot可能
+对应不同物理谱段。新增`0723_08 Spectral-Coordinate Pair Dispersion (SCPD)`修复这一
+语义错位：用soft coverage将group色散投影到8个物理谱段，求pair共同谱段证据，再投影回
+各帧自身route。descriptor对sampler和Conv3D停止梯度，残差跨group去均值、零初始化且有界，
+仅新增8参数，不增加loss或空间分支。55项测试、完整模型构建和远端部署检查通过；
+`0723_04`完整收尾后精确4-iter smoke通过，并于2026-07-24 08:53 fresh单卡启动。五项
+正式启动门槛全部通过，新增参数已从零有限更新。
+
+`0723_02`与共享噪声父配置固定epoch 72比较，cls/det HOTA变化为`+0.043/-0.333`。
+det AssA微增`0.102`，det DetA下降`0.552`，全序列FP从`23253`增加到`26001`。因此独立
+DN噪声主要损害检测精度，后续PairDN保持两帧共享相对噪声。
+
+CSPR `0723_04`的epoch 60为`54.231/61.263`，相对父配置同epoch为
+`+0.280/-0.644`；det DetA仅下降`0.074`，det AssA下降`1.290`，IDSW增加513。连续三个
+后期点都表明它以关联质量换取cls提升，因此仅跑完用于完整消融，不再沿该方向设计模型。
+
+epoch 64时CSPR为`54.561/61.586`，相对父配置同epoch为`+0.606/-0.446`。det侧较epoch 60
+有所恢复，但仍低于Paper Base `0.396`，未改变上述结构判断。
+
+epoch 68时CSPR为`54.500/61.719`，相对父配置同epoch为`+0.653/-0.341`，相对Paper Base
+为`+1.186/-0.263`。det继续缓慢恢复，但分类增益换关联质量的方向仍未改变。
+
+CSPR最终完成72 epochs和18/18 TrackEval，唯一最佳epoch 72为`54.523/61.738`，同点pair
+mAP/AP50为`0.3162/0.5376`。相对Paper Base为`+1.209/-0.244`，相对父配置固定epoch 72
+为`+0.929/-0.274`。truck/tricycle提高`4.628/3.605`，pedestrian/van下降
+`0.575/2.135`。因此CSPR正式结论为失败，不再延伸该route-preview方向。
+
+PECG `0723_07`首个epoch 4为`36.870/45.005`，相对父配置同epoch为
+`+0.169/-0.005`。det AssA提高`0.316`、IDSW减少97，DetA下降`0.278`；它基本守住det并
+改善关联，首点优于两种CP-DSE，但仍需epoch 8以后确认。
+
+### 33.4 CP-DSE最终结果与互补组合
+
+`0723_06 pair-global CP-DSE`已完成72 epochs和18/18 TrackEval。按
+`cls_HOTA + det_HOTA`唯一选出的最佳点为epoch 72：cls/det HOTA
+`54.124/61.914`，cls DetA/AssA `44.281/68.134`，det DetA/AssA
+`53.458/74.288`，同点pair mAP/AP50为`0.3124/0.5241`。相对Paper Base的cls/det HOTA
+为`+0.810/-0.068`；det AssA提高`0.645`，但det DetA下降`0.432`。相对直接父配置
+`0723_01`同为epoch 72时，cls/det HOTA为`+0.530/-0.098`，det AssA提高`0.413`，
+det DetA下降`0.366`。因此早期和中期波动不能代表最终作用，pair-global残差的稳定后期
+贡献是增强关联，而非提升检测证据。
+
+该结果与`0723_03 DSE`的指标分解互补。DSE最佳点相对Base的det DetA/AssA为
+`+0.087/-0.444`，而CP-DSE为`-0.432/+0.645`：前者通过mean/RMS局部证据增强检测，
+后者通过pair共享group残差增强关联。据此构建`0725_01 DSE + pair-global CP-DSE`，
+两条路径同时接入SE，但不增加额外loss，也不从训练后checkpoint加载。实现只解除DSE
+证据构造与CP-DSE logit残差之间不必要的互斥；CP-DSE与SCPD两个logit残差仍保持互斥。
+56项stem测试、配置deepcopy、远端逐文件哈希和双卡真实数据4-iteration smoke均通过；
+2026-07-25 02:45在197 GPU 4/5 fresh启动，正式epoch 1 iter 50的总损失、DN、
+encoder proposal loss及grad norm均有限。
+
+PECG `0723_07`到epoch 48为`53.211/60.805`，相对父配置同epoch
+`-0.260/-0.375`；SCPD `0723_08`到epoch 56为`53.891/60.333`，相对父配置同epoch
+`-0.031/-1.388`。二者目前都未显示超过父配置的趋势，继续跑完只用于完整消融，不作为
+下一结构的父配置。
+
+local CP-DSE `0723_05`已完成72 epochs和18/18 TrackEval，唯一最佳epoch 68为
+`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`。相对Paper Base为
+`+0.222/-0.363`，相对父配置同epoch为`-0.311/-0.441`；det DetA下降`0.500`，
+det AssA仅提高`0.007`，说明逐像素色散残差主要扰动检测响应，并未换来关联收益。相对
+Base逐类cls HOTA中truck/tricycle提高`4.136/4.780`，但van/awning-bike下降
+`2.872/3.436`。该方向正式终止；训练和评测进程均已退出，99按用户要求保持空闲。
 
 ## 34. 0718_01--0722_01 PairDN Audit
 
@@ -1527,3 +1725,176 @@ PairDN的prev/curr噪声是两次独立调用，因此又在`284205`个原始bot
 推荐先完成`0722_01`，然后以其正确目标和group mask为基础做“padding mask only”严格消融；
 若det召回恢复，再叠加pair-coherent noise。外环难度和negative权重不应同时修改，否则仍无法
 确定收益来源。
+
+### 34.2 SCPD最终结果与DSE/CP-DSE后续组合
+
+`0723_08 SCPD`已完成72 epochs和18/18 TrackEval。按
+`cls_HOTA + det_HOTA`唯一选出的epoch 72为cls/det HOTA `54.465/61.213`，
+cls DetA/AssA `44.470/69.321`，det DetA/AssA `53.712/72.176`，
+cls MOTA/IDF1 `46.178/63.988`，det MOTA/IDF1 `61.188/71.986`；同点pair
+mAP/AP50为`0.3152/0.5334`。相对Paper Base为`+1.151/-0.769`。det DetA仅下降
+`0.178`，但det AssA下降`1.467`，说明将色散证据显式映射到物理谱段坐标没有破坏基本检测
+响应，却明显扰动了pair排序与关联，SCPD方向终止。
+
+与之相对，`0725_01 DSE + pair-global CP-DSE`在epoch 8相对父配置提高
+`+2.130/+2.161`，epoch 12仍提高`+2.731/+0.903`；epoch 12的det DetA/AssA分别提高
+`1.089/0.437`。该组合将DSE的局部检测证据与CP-DSE的pair共享关联残差放在同一SE路径，
+但不增加额外loss，是当前最有潜力同时跨过Paper Base两侧HOTA的候选。
+
+epoch 16继续为`52.058/58.339`，相对父配置同epoch提高`+2.154/+0.710`；det
+DetA/AssA分别提高`1.007/0.300`，pair mAP/AP50提高`0.0187/0.0300`。逐类cls HOTA
+有6/8类提高，表明收益已连续跨越epoch 8/12/16，并非单个类别或单个早期点造成。当前仍不
+提前选点，等待完整18/18评测确认中后期是否保持。
+
+epoch 20为`52.556/59.200`，相对父配置同epoch提高`+1.693/+1.039`；det
+DetA/AssA分别提高`1.105/0.997`，pair mAP/AP50提高`0.0197/0.0318`。关联优势随训练由
+epoch 16的`+0.300`扩大到`+0.997`，当前证据支持DSE与pair-global CP-DSE确实形成互补，
+而不是简单叠加后由某一路径主导。
+
+为防止普通CP-DSE通过整体抬高或压低SE logit换取关联、后期损害DetA，新增
+`0725_02 centered pair-global CP-DSE`：在DSE + CP-DSE组合中，对每个frame的8-group
+CP-DSE残差减去group均值，使残差和严格为0；它只改变group间相对权重，不改变平均SE logit。
+单卡physical batch 8 smoke因组合峰值显存OOM，改成physical batch 4 + accumulation 2后
+保持effective batch 8，峰值约15.9 GiB并完成4次optimizer update。2026-07-25 06:57在178
+GPU 0 fresh启动，正式epoch 1 iter 100已通过数值和进程检查。
+
+PECG `0723_07`到epoch 64仍未出现后期反转。该点cls/det HOTA为
+`53.338/61.340`，相对父配置同epoch为`-0.617/-0.692`；det DetA/AssA分别下降
+`0.992/0.110`，pair mAP/AP50下降`0.0010/0.0047`。截至16个完整评测点，阶段唯一最佳仍为
+epoch 52的`53.693/61.151`，det HOTA比Paper Base低`0.831`。PECG继续完成剩余评测作为
+正式消融，但不再作为后续结构父配置。
+
+epoch 68仍为`53.034/61.455`，相对父配置同epoch双降`-0.813/-0.605`。det AssA只提高
+`0.146`，但det DetA下降`1.047`，pair mAP/AP50下降`0.0024/0.0059`；阶段最佳仍是
+epoch 52。PECG已无继续派生价值，只等待epoch 72完成正式选点。
+
+`0725_02`首次单卡accumulation启动随后被协议审计否决。MMEngine的iteration scheduler和
+EMA均按micro-iteration推进，原设置虽有`physical batch 4 + accumulation 2`，但2000
+micro-iter warmup和默认每步EMA会把相对原bs8的时间尺度缩短一半。初始run在epoch 4停止，
+不resume，其1/18 TrackEval不进入结果。protocol-fixed版本将warmup改为4000 micro-iter，
+EMA设为`interval=2,gamma=4000`；57项测试、effective配置deepcopy、远端哈希及4次
+optimizer-update smoke通过，于2026-07-25 08:30在178 GPU0新workdir fresh启动。
+
+PECG `0723_07`最终完成72 epochs和18/18 TrackEval。唯一最佳epoch 52为cls/det HOTA
+`53.693/61.151`，cls DetA/AssA `43.764/67.994`，det DetA/AssA
+`52.663/73.564`，cls MOTA/IDF1 `44.958/63.355`，det MOTA/IDF1
+`59.512/72.250`；同点pair mAP/AP50为`0.3096/0.5262`。相对Paper Base为
+`+0.379/-0.831`，其中det AssA只下降`0.079`而det DetA下降`1.227`。这验证了PECG能够
+限制关联扰动，但直接收缩pair gate差异会损失检测响应；PECG不再作为后续父配置。
+
+`0725_01`在epoch 24为`53.393/59.910`，相对父配置同epoch提高
+`+2.472/+1.253`；det DetA/AssA提高`1.189/1.404`，pair mAP/AP50提高
+`0.0181/0.0293`。组合增益已连续覆盖epoch 8、12、16、20和24，且最新点同时增强检测与
+关联分解，继续作为主候选训练。
+
+`0725_02` protocol-fixed版本首个epoch 4为`35.079/43.891`，相对同epoch未center组合
+低`3.671/0.820`，相对父配置低`1.622/1.119`。虽然det AssA较父配置提高`1.436`，
+det DetA却下降`2.974`；简单跨group去均值在早期过度约束了检测响应。当前只有一个有效
+评测点，继续到epoch 8复核，不将旧的协议错误run混入比较。
+
+为避免centered CP-DSE把残差投影到与检测贡献无关的全1方向，新增
+`0725_03 Detection-Tangent CP-DSE`。在DSE + pair-global CP-DSE中，先用CP-DSE已经计算的
+Conv3D group second moment表示响应能量，再用DSE base-gate的group-pooled sigmoid导数表示
+门控敏感度；两者乘积构成pair共享的8维检测重要性向量。CP-DSE残差只移除该方向上的投影，
+因此一阶检测响应保持不变，其余7维pair-shared修正仍用于增强关联。重要性向量停止梯度，
+不增加参数或loss。
+
+代码优化复用了已有second moment，并将gate敏感度计算放到空间池化后，只增加低成本group
+统计和8维投影。两个epoch-1速度审计run均停止且不作为结果；最终`fast_fresh`版本通过58项
+测试、双卡4-iteration exact smoke及iter 100五项启动门槛，于2026-07-25 11:05在252 GPU
+0/1正式训练。
+
+`0725_01` epoch 28为`53.599/60.252`，相对父配置同epoch提高`+1.890/+0.867`；
+det DetA/AssA提高`0.982/0.794`，pair mAP/AP50提高`0.0142/0.0202`。组合优势已连续
+覆盖epoch 8--28的七个评测点，虽然相对增益较epoch 24收窄，仍同时来自检测和关联。
+
+`0725_02` epoch 8恢复到`44.630/51.546`，相对父配置提高`+0.318/+1.709`，
+det DetA/AssA提高`0.471/2.947`；相对未center组合仍低`1.812/0.452`，但det AssA高
+`0.457`、DetA低`1.281`。因此centered结构没有整体失效，而是更偏向关联质量；继续训练
+判断检测响应能否在中后期追上。
+
+epoch 32时，`0725_01`达到`53.758/60.621`，相对纯DSE父配置同epoch仍为
+`+0.574/+0.337`；det DetA/AssA提高`0.464/0.231`，而pair mAP/AP50仅变化
+`-0.0001/-0.0006`。组合已连续八个评测点双提升，但相对优势从epoch 28的
+`+1.890/+0.867`收窄，最终能否超过Base仍取决于后期曲线。
+
+`0725_02` epoch 12为`48.079/56.189`，相对纯DSE变为`-1.759/-0.275`；det DetA下降
+`1.102`、AssA提高`0.965`。相对未center组合为`-2.739/-0.349`。这进一步表明强制
+跨group零均值把容量偏向关联但损害检测与cls，当前优先级低于未center组合。
+
+`0725_03` epoch 4为`39.611/45.056`，相对未投影组合提高`+0.861/+0.345`，
+cls/det AssA提高`2.242/1.537`，det DetA下降`0.241`；相对纯DSE则为
+`-0.514/-1.590`。Detection-Tangent首点能够保留更多关联质量，但尚未证明可同时保住DSE
+的检测能力，继续等待epoch 8及更晚点。
+
+`0725_01`最终完成72 epochs和18/18 TrackEval，唯一最佳epoch 72为
+`55.126/61.998`，同epoch pair mAP/AP50为`0.3231/0.5449`。相对Paper Base达到
+`+1.812/+0.016`，是当前正式Liquid主线的双提升结果；相对纯DSE父配置同epoch也提高
+`+0.328/+0.245`。det分解为DetA `-0.138`、AssA `+0.545`，说明组合已经恢复绝大部分检测
+覆盖，同时保留pair共享修正带来的关联收益。
+
+逐类上，truck、tricycle、bus分别较Base提高`9.677/5.543/2.338` HOTA；bike和
+awning-bike下降`1.139/1.257`，bike DetA下降`2.568`。epoch 72 checkpoint的8个CP-DSE
+gain中7个为负，表明当前pair-global分支主要执行共享抑制。新增`0726_01 Sparse-Reserve
+CP-DSE`，用归一化dispersion map的空间RMS减均值构建pair共享、类别无关的稀疏证据reserve，
+只衰减负向CP残差，正向修正保持不变；无新参数、阈值或loss。59项本地/远端测试、配置
+deepcopy、哈希和双卡4-iteration smoke通过，2026-07-26 01:57在197 GPU 4/5 fresh启动，
+正式iter 100总损失、DN、encoder proposal loss和grad norm均有限。
+
+### 2026-07-26：0725_03 Detection-Tangent最终结果
+
+`0725_03`完成72 epochs和18/18 TrackEval。按唯一最大
+`cls_HOTA + det_HOTA`选择epoch 72：cls/det HOTA为`54.229/61.808`，同epoch
+pair mAP/AP50为`0.3196/0.5340`。相对Paper Base为`+0.915/-0.174`；det DetA和AssA
+分别低`0.074/0.122`。相对直接父配置`0725_01`同epoch，cls/det HOTA下降
+`0.897/0.190`。epoch 56--72的五个评测点中，该投影分支始终没有追上未投影父配置，
+说明投影去除的不只是检测冲突方向，也削弱了DSE与pair-global CP-DSE的有效联合表达。
+该方向停止派生。
+
+## 35. 最后一批Liquid实验统一收尾
+
+2026-07-27重新从正式workdir运行统一汇总工具。下表所有实验均完成72 epochs和18/18
+TrackEval，按唯一最大`cls_HOTA + det_HOTA`选择epoch，pair mAP/AP50来自同一epoch。
+Paper Base为`53.314/61.982`，后续Encoder主线固定使用的Base+Liquid `0723_01`为
+`53.955/62.032`。
+
+| 实验 | 主要改动 | epoch | cls HOTA | det HOTA | HOTA和 | pair mAP | pair AP50 |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `0723_01` | pair-coherent PairDN及几何/L1修复 | 64 | 53.955 | **62.032** | 115.987 | 0.3114 | 0.5268 |
+| `0723_02` | `0723_01`仅改为pair两侧独立DN噪声 | 72 | 53.637 | 61.679 | 115.316 | 0.3155 | 0.5308 |
+| `0723_03` | `0723_01` + DSE | 68 | 55.036 | 61.745 | 116.781 | **0.3239** | 0.5402 |
+| `0723_04` | `0723_01` + CSPR | 72 | 54.523 | 61.738 | 116.261 | 0.3162 | 0.5376 |
+| `0723_05` | `0723_01` + local CP-DSE | 68 | 53.536 | 61.619 | 115.155 | 0.3148 | 0.5320 |
+| `0723_06` | `0723_01` + pair-global CP-DSE | 72 | 54.124 | 61.914 | 116.038 | 0.3124 | 0.5241 |
+| `0723_07` | `0723_01` + PECG | 52 | 53.693 | 61.151 | 114.844 | 0.3096 | 0.5262 |
+| `0723_08` | `0723_01` + SCPD | 72 | 54.465 | 61.213 | 115.678 | 0.3152 | 0.5334 |
+| `0725_01` | `0723_01` + DSE + pair-global CP-DSE | 72 | **55.126** | 61.998 | **117.124** | 0.3231 | **0.5449** |
+| `0725_02` | `0725_01` + centered CP-DSE | 68 | 53.730 | 61.864 | 115.594 | 0.3100 | 0.5239 |
+| `0725_03` | `0725_01` + Detection-Tangent投影 | 72 | 54.229 | 61.808 | 116.037 | 0.3196 | 0.5340 |
+| `0726_01` | `0725_01` + Sparse-Reserve CP-DSE | 68 | 54.230 | 61.634 | 115.864 | 0.3138 | 0.5301 |
+
+### 35.1 补齐的两个最终结果
+
+`0725_02 centered CP-DSE`最终最佳epoch 68为`53.730/61.864`，同epoch pair
+mAP/AP50为`0.3100/0.5239`。相对Paper Base为`+0.416/-0.118`；det DetA下降
+`0.719`、AssA提高`0.848`。强制跨group零均值确实把容量偏向关联，但检测覆盖损失更大，
+不能替代未center的`0725_01`。
+
+`0726_01 Sparse-Reserve CP-DSE`最终最佳epoch 68为`54.230/61.634`，同epoch pair
+mAP/AP50为`0.3138/0.5301`。相对Paper Base为`+0.916/-0.348`，相对直接父配置
+`0725_01`为`-0.896/-0.364`。仅保护稀疏位置对应group的负向残差没有保住父配置优势，
+说明`0725_01`的共享抑制并非可用简单稀疏reserve裁剪的有害分量，该方向终止。
+
+### 35.2 最终选择
+
+若目标是最后一批Liquid实验中的最大`cls_HOTA + det_HOTA`，`0725_01`以`117.124`排名
+第一；相对Paper Base的cls/det HOTA为`+1.812/+0.016`，并且pair AP50最高。它验证了DSE
+局部检测证据和pair-global CP-DSE关联残差的互补性。
+
+若目标是为后续模块消融提供det侧更稳的Base+Liquid，继续使用`0723_01`更合适：它的det
+HOTA为该批最高的`62.032`，相对Paper Base为`+0.050`；`0725_01`虽然综合分高
+`1.137`，但det HOTA比`0723_01`低`0.034`。因此当前论文组织保持：
+
+- Liquid内部最佳综合结构：`0725_01`。
+- Encoder及后续逐模块消融的固定Base+Liquid：`0723_01`。
+- centered、Detection-Tangent、Sparse-Reserve及显式物理谱段投影均不再继续派生。

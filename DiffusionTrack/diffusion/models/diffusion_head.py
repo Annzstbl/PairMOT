@@ -9,14 +9,15 @@ from torch import nn
 from .diffusion_losses import SetCriterionDynamicK, HungarianMatcherDynamicK
 from .diffusion_models import DynamicHead
 
-from yolox.utils.rotated_boxes import qbox_to_rbox
+from yolox.utils.rotated_boxes import qbox_to_rbox, qbox_to_rbox_lx
 from yolox.utils import synchronize
 import time
 
 ModelPrediction = namedtuple('ModelPrediction', ['pred_noise', 'pred_x_start'])
 
 
-def unit_rboxes_to_absolute(boxes, images_whwh, min_side=1.0):
+def unit_rboxes_to_absolute(
+        boxes, images_whwh, min_side=1.0, angle_in_degrees=False):
     """Convert unit LE135 boxes to pixels with a geometric size floor.
 
     Diffusion clipping can map width or height exactly to zero.  A zero-area
@@ -31,7 +32,17 @@ def unit_rboxes_to_absolute(boxes, images_whwh, min_side=1.0):
     # Clamp after conversion so BF16 rounding cannot turn a normalized
     # one-pixel floor back into a 0.998-pixel side.
     boxes[..., 2:4] = boxes[..., 2:4].clamp_min(float(min_side))
-    boxes[..., 4] = boxes[..., 4] * math.pi - math.pi / 4
+    if angle_in_degrees:
+        boxes[..., 4] = boxes[..., 4] * 180.0 - 45.0
+    else:
+        boxes[..., 4] = boxes[..., 4] * math.pi - math.pi / 4
+    return boxes
+
+
+def rboxes_degrees_to_radians(boxes):
+    """Convert only the angle channel while retaining the box tensor layout."""
+    boxes = boxes.clone()
+    boxes[..., 4] = torch.deg2rad(boxes[..., 4])
     return boxes
 
 
@@ -52,13 +63,13 @@ def extract(a, t, x_shape):
     return out.reshape(batch_size, *((1,) * (len(x_shape) - 1)))
 
 
-def cosine_beta_schedule(timesteps, s=0.008):
+def cosine_beta_schedule(timesteps, s=0.008, dtype=torch.float32):
     """
     cosine schedule
     as proposed in https://openreview.net/forum?id=-NEXDKk8gZ
     """
     steps = timesteps + 1
-    x = torch.linspace(0, timesteps, steps, dtype=torch.float32)
+    x = torch.linspace(0, timesteps, steps, dtype=dtype)
     alphas_cumprod = torch.cos(((x / timesteps) + s) / (1 + s) * math.pi * 0.5) ** 2
     alphas_cumprod = alphas_cumprod / alphas_cumprod[0]
     betas = 1 - (alphas_cumprod[1:] / alphas_cumprod[:-1])
@@ -74,13 +85,22 @@ class DiffusionHead(nn.Module):
                 width=1.0,
                 strides=[8, 16, 32],
                 num_proposals=500,
-                num_heads=6,):
+                num_heads=6,
+                bbox_angle_l1_weight=0.05,
+                min_diffusion_side=1.0,
+                diffusion_schedule_float64=False,
+                lx_regression_init=False,
+                box_angle_degrees=False,
+                target_rbox_converter="native"):
         super().__init__()
         self.device="cpu"
         self.dtype=torch.float32
         self.width=width
         self.num_classes = num_classes
         self.num_proposals = num_proposals
+        self.bbox_angle_l1_weight = float(bbox_angle_l1_weight)
+        if self.bbox_angle_l1_weight < 0:
+            raise ValueError("bbox_angle_l1_weight must be non-negative")
         # self.num_proposals = 512
         self.hidden_dim = int(256*width)
         self.num_heads = num_heads
@@ -91,7 +111,9 @@ class DiffusionHead(nn.Module):
         timesteps = 1000
         sampling_timesteps = 1
         self.objective = 'pred_x0'
-        betas = cosine_beta_schedule(timesteps)
+        schedule_dtype = (
+            torch.float64 if diffusion_schedule_float64 else torch.float32)
+        betas = cosine_beta_schedule(timesteps, dtype=schedule_dtype)
         alphas = 1. - betas
         alphas_cumprod = torch.cumprod(alphas, dim=0)
         alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.)
@@ -111,7 +133,20 @@ class DiffusionHead(nn.Module):
         self.scale = 2.0
         # Minimum geometric side of a decoded diffusion proposal, in pixels.
         # This affects only boxes clipped to an (almost) zero normalized side.
-        self.min_diffusion_side = 1.0
+        self.min_diffusion_side = float(min_diffusion_side)
+        if self.min_diffusion_side < 0:
+            raise ValueError("min_diffusion_side must be non-negative")
+        self.diffusion_schedule_float64 = bool(
+            diffusion_schedule_float64)
+        # The HSMOT adaptation historically keeps the geometric boxes in
+        # radians, whereas LX stores the same fifth coordinate in degrees all
+        # the way through RotatedROIAlign and iterative refinement.  This flag
+        # changes only the DynamicHead boundary; supervision and external
+        # inference remain canonical radians.
+        self.box_angle_degrees = bool(box_angle_degrees)
+        if target_rbox_converter not in ("native", "lx"):
+            raise ValueError("target_rbox_converter must be 'native' or 'lx'")
+        self.target_rbox_converter = target_rbox_converter
         self.box_renewal = True
         self.use_ensemble = True
 
@@ -154,12 +189,22 @@ class DiffusionHead(nn.Module):
         self.pooler_resolution=7
         self.noise_strategy="xywhtheta"
    
-        self.head = DynamicHead(num_classes,self.hidden_dim,self.pooler_resolution,strides,[self.hidden_dim]*len(strides),return_intermediate=self.deep_supervision,num_heads=self.num_heads,use_focal=self.use_focal,use_fed_loss=self.use_fed_loss)
+        self.head = DynamicHead(
+            num_classes, self.hidden_dim, self.pooler_resolution, strides,
+            [self.hidden_dim] * len(strides),
+            return_intermediate=self.deep_supervision,
+            num_heads=self.num_heads, use_focal=self.use_focal,
+            use_fed_loss=self.use_fed_loss,
+            lx_regression_init=lx_regression_init)
+        self.set_internal_box_angle_degrees(self.box_angle_degrees)
         # Loss parameters:
 
         # Build Criterion.
         matcher = HungarianMatcherDynamicK(
-            cost_class=class_weight, cost_bbox=l1_weight, cost_giou=giou_weight, use_focal=self.use_focal,use_fed_loss=self.use_fed_loss
+            cost_class=class_weight, cost_bbox=l1_weight,
+            cost_giou=giou_weight, use_focal=self.use_focal,
+            use_fed_loss=self.use_fed_loss,
+            bbox_angle_l1_weight=self.bbox_angle_l1_weight,
         )
         weight_dict = {"loss_ce": class_weight, "loss_bbox": l1_weight,
                        "loss_giou": giou_weight}
@@ -173,7 +218,25 @@ class DiffusionHead(nn.Module):
 
         self.criterion = SetCriterionDynamicK(
             num_classes=self.num_classes, matcher=matcher, weight_dict=weight_dict, eos_coef=no_object_weight,
-            losses=losses, use_focal=self.use_focal,use_fed_loss=self.use_fed_loss)
+            losses=losses, use_focal=self.use_focal,
+            use_fed_loss=self.use_fed_loss,
+            bbox_angle_l1_weight=self.bbox_angle_l1_weight)
+
+    def set_internal_box_angle_degrees(self, enabled):
+        """Atomically configure every unit-sensitive refinement head."""
+        enabled = bool(enabled)
+        self.box_angle_degrees = enabled
+        for refinement_head in self.head.head_series:
+            refinement_head.box_angle_degrees = enabled
+
+    def _validate_internal_box_angle_unit(self):
+        units = {
+            bool(refinement_head.box_angle_degrees)
+            for refinement_head in self.head.head_series
+        }
+        if units != {bool(self.box_angle_degrees)}:
+            raise RuntimeError(
+                "DiffusionHead/DynamicHead internal angle units disagree")
 
     def predict_noise_from_start(self, x_t, t, x0):
         return (
@@ -182,12 +245,14 @@ class DiffusionHead(nn.Module):
         )
 
     def model_predictions(self, backbone_feats,images_whwh,x,t,lost_features=None,fix_bboxes=False,x_self_cond=None,clip_x_start=False):
+        self._validate_internal_box_angle_unit()
 
         def prepare(x,images_whwh):
             x_boxes = torch.clamp(x, min=-1 * self.scale, max=self.scale)
             x_boxes = ((x_boxes / self.scale) + 1) / 2
             return unit_rboxes_to_absolute(
-                x_boxes, images_whwh, self.min_diffusion_side)
+                x_boxes, images_whwh, self.min_diffusion_side,
+                angle_in_degrees=self.box_angle_degrees)
         
         def post(x_start,images_whwh):
             x_start = x_start.clone()
@@ -203,7 +268,9 @@ class DiffusionHead(nn.Module):
         outputs_class, outputs_coord,outputs_score = self.head(backbone_feats,torch.split(bboxes,bs,dim=0),t,lost_features,fix_bboxes)
         end_time=time.time()
 
-        x_start = outputs_coord[-1]  # (batch, num_proposals, 4) predict boxes: absolute coordinates (x1, y1, x2, y2)
+        if self.box_angle_degrees:
+            outputs_coord = rboxes_degrees_to_radians(outputs_coord)
+        x_start = outputs_coord[-1]  # absolute radian rboxes at the public boundary
         x_start=post(x_start,images_whwh=images_whwh)
         pred_noise = self.predict_noise_from_start(x,t,x_start)
         return ModelPrediction(pred_noise, x_start), outputs_class,outputs_coord,outputs_score,end_time-start_time
@@ -412,6 +479,7 @@ class DiffusionHead(nn.Module):
         return sqrt_alphas_cumprod_t * x_start + sqrt_one_minus_alphas_cumprod_t * noise
 
     def forward(self,features,mate_info,targets=None):
+        self._validate_internal_box_angle_unit()
 
         mate_shape,mate_device,mate_dtype=mate_info
         self.device=mate_device
@@ -428,13 +496,24 @@ class DiffusionHead(nn.Module):
             t=t.squeeze(-1)
             # t[b:]=t[:b]
             x_boxes = unit_rboxes_to_absolute(
-                x_boxes, images_whwh, self.min_diffusion_side)
-            initial_boxes_debug = (
-                x_boxes.detach().float().cpu().clone()
-                if self.capture_train_debug else None)
+                x_boxes, images_whwh, self.min_diffusion_side,
+                angle_in_degrees=self.box_angle_degrees)
+            if self.capture_train_debug:
+                debug_initial_boxes = (
+                    rboxes_degrees_to_radians(x_boxes)
+                    if self.box_angle_degrees else x_boxes)
+                initial_boxes_debug = (
+                    debug_initial_boxes.detach().float().cpu().clone())
+            else:
+                initial_boxes_debug = None
             pre_x_boxes,cur_x_boxes=torch.split(x_boxes,b,dim=0)
 
             outputs_class,outputs_coord,outputs_score = self.head(features,(pre_x_boxes,cur_x_boxes),t)
+            if self.box_angle_degrees:
+                # Criterion/matcher and all HSMOT output interfaces remain
+                # radian based.  The conversion is intentionally after all
+                # six internal refine/pooling stages.
+                outputs_coord = rboxes_degrees_to_radians(outputs_coord)
             output = {'pred_logits': outputs_class[-1], 'pred_boxes': outputs_coord[-1],'pred_scores':outputs_score[-1]}
 
             if self.deep_supervision:
@@ -597,10 +676,27 @@ class DiffusionHead(nn.Module):
             gt_qboxes = labels[batch_idx, :num_gt, 1:9]
             gt_classes = labels[batch_idx, :num_gt, 0]
             image_size_xyxy = images_whwh[batch_idx]
-            gt_boxes_abs = qbox_to_rbox(gt_qboxes)
-            gt_boxes = gt_boxes_abs.clone()
-            gt_boxes[:, :4] /= image_size_xyxy
-            gt_boxes[:, 4] = (gt_boxes_abs[:, 4] + math.pi / 4) / math.pi
+            if self.target_rbox_converter == "lx" and self.box_angle_degrees:
+                # Retain LX's degree result through normalization.  Converting
+                # degree -> radian -> normalized unit introduces a one-ULP
+                # drift in GT-seeded diffusion boxes, which is amplified by
+                # the six detached refinement stages.
+                gt_boxes_abs_degrees = qbox_to_rbox_lx(
+                    gt_qboxes, angle_in_degrees=True)
+                gt_boxes_abs = rboxes_degrees_to_radians(
+                    gt_boxes_abs_degrees)
+                gt_boxes = gt_boxes_abs_degrees.clone()
+                gt_boxes[:, :4] /= image_size_xyxy
+                gt_boxes[:, 4] = (
+                    gt_boxes_abs_degrees[:, 4] + 45.0) / 180.0
+            else:
+                if self.target_rbox_converter == "lx":
+                    gt_boxes_abs = qbox_to_rbox_lx(gt_qboxes)
+                else:
+                    gt_boxes_abs = qbox_to_rbox(gt_qboxes)
+                gt_boxes = gt_boxes_abs.clone()
+                gt_boxes[:, :4] /= image_size_xyxy
+                gt_boxes[:, 4] = (gt_boxes_abs[:, 4] + math.pi / 4) / math.pi
             x_gt_boxes=gt_boxes
             fixed_training_t = getattr(self, "fixed_training_t", None)
             if fixed_training_t is None:

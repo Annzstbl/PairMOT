@@ -11,9 +11,11 @@ from projects.multispec_rotated_rtdetr.multispec_rotated_rtdetr.pretrain_utils i
     adapt_state_dict_in_channels, adapt_state_dict_stem_conv3d_se,
     expand_conv1_weight)
 from projects.multispec_rotated_rtdetr.multispec_rotated_rtdetr.stem_conv3d_se import (
-    BandSlotAdaptiveCalibration, DispersionAwareSpectralEvidence,
-    FusionQualityConservation, LiquidSpectralSampler, MultispecStemConv3dSE,
-    PairAlignedCompactDetailEnhancement)
+    BandSlotAdaptiveCalibration, ConsistencyPreservingDispersionEvidence,
+    DispersionAwareSpectralEvidence, FusionQualityConservation,
+    LiquidSpectralSampler, MultispecStemConv3dSE,
+    PairAlignedCompactDetailEnhancement, PairEvidenceConsensusGate,
+    SpectralCoordinatePairDispersion)
 
 
 class TestMultispecPretrainUtils(unittest.TestCase):
@@ -181,6 +183,114 @@ class TestMultispecPretrainUtils(unittest.TestCase):
         self.assertGreater(gradient[:, 1].abs().sum().item(), 0)
         self.assertTrue(torch.isfinite(gradient).all())
 
+    def test_consistency_dispersion_is_zero_init_bounded_and_learns(self):
+        evidence = ConsistencyPreservingDispersionEvidence(
+            num_groups=8, max_logit_delta=0.5)
+        groups = torch.randn(4, 16, 8, 9, 11)
+
+        delta = evidence(groups, pair_batch_size=2)
+
+        torch.testing.assert_close(delta, torch.zeros_like(delta))
+        delta.sum().backward()
+        self.assertGreater(evidence.logit_gain.grad.abs().sum().item(), 0)
+        with torch.no_grad():
+            evidence.logit_gain.fill_(20)
+        bounded = evidence(groups, pair_batch_size=2)
+        self.assertLessEqual(bounded.abs().max().item(), 0.5 + 1e-6)
+        self.assertGreater(bounded.abs().sum().item(), 0)
+
+    def test_pair_global_dispersion_shares_group_correction(self):
+        evidence = ConsistencyPreservingDispersionEvidence(
+            num_groups=8, mode='pair_global')
+        groups = torch.randn(4, 16, 8, 9, 11)
+        with torch.no_grad():
+            evidence.logit_gain.copy_(torch.linspace(-1, 1, 8))
+
+        delta = evidence(groups, pair_batch_size=2)
+
+        self.assertEqual(delta.shape, (4, 8, 1, 1))
+        torch.testing.assert_close(delta[:2], delta[2:])
+        self.assertTrue(torch.isfinite(delta).all())
+
+    def test_consistency_dispersion_zero_variance_gradient_is_finite(self):
+        evidence = ConsistencyPreservingDispersionEvidence(num_groups=8)
+        groups = torch.ones(4, 16, 8, 9, 11, requires_grad=True)
+
+        evidence(groups, pair_batch_size=2).sum().backward()
+
+        self.assertTrue(torch.isfinite(groups.grad).all())
+        self.assertTrue(torch.isfinite(evidence.logit_gain.grad).all())
+
+    def test_spectral_coordinate_dispersion_is_zero_init_and_learns(self):
+        module = SpectralCoordinatePairDispersion(
+            num_groups=8, num_spectral=8)
+        groups = torch.randn(4, 16, 8, 9, 11, requires_grad=True)
+        logits = torch.randn(4, 8, 3, 8, requires_grad=True)
+        probs = logits.softmax(dim=-1)
+
+        delta = module(groups, probs, pair_batch_size=2)
+        self.assertEqual(delta.shape, (4, 8, 1, 1))
+        torch.testing.assert_close(delta, torch.zeros_like(delta))
+        weights = torch.linspace(-1, 1, 8).view(1, 8, 1, 1)
+        (delta * weights).sum().backward()
+        self.assertIsNotNone(module.spectral_logit_gain.grad)
+        self.assertGreater(
+            module.spectral_logit_gain.grad.abs().sum().item(), 0)
+        self.assertTrue(torch.isfinite(
+            module.spectral_logit_gain.grad).all())
+        self.assertIsNone(groups.grad)
+        self.assertIsNone(logits.grad)
+
+    def test_spectral_coordinate_dispersion_is_group_permutation_equivariant(
+            self):
+        module = SpectralCoordinatePairDispersion(
+            num_groups=8, num_spectral=8)
+        groups = torch.randn(4, 16, 8, 9, 11)
+        probs = torch.randn(4, 8, 3, 8).softmax(dim=-1)
+        permutation = torch.tensor([3, 0, 7, 1, 6, 2, 5, 4])
+        with torch.no_grad():
+            module.spectral_logit_gain.copy_(torch.linspace(-1, 1, 8))
+
+        delta = module(groups, probs, pair_batch_size=2)
+        permuted = module(
+            groups.index_select(2, permutation),
+            probs.index_select(1, permutation),
+            pair_batch_size=2)
+        torch.testing.assert_close(
+            permuted, delta.index_select(1, permutation))
+        self.assertLess(
+            delta.mean(dim=1).abs().max().item(), 1e-6)
+
+    def test_pair_evidence_consensus_preserves_mean_and_learns(self):
+        module = PairEvidenceConsensusGate(num_groups=8)
+        gate = torch.rand(4, 8, 9, 11, requires_grad=True)
+        evidence = torch.randn_like(gate)
+        logits = torch.randn(4, 8, 3, 8)
+        probs = logits.softmax(dim=-1)
+
+        output = module(gate, evidence, probs, pair_batch_size=2)
+
+        torch.testing.assert_close(
+            output[:2] + output[2:], gate[:2] + gate[2:])
+        self.assertTrue(torch.all((output >= 0) & (output <= 1)))
+        self.assertGreater(module.last_correction.abs().sum().item(), 0)
+        output.square().mean().backward()
+        self.assertIsNotNone(module.strength_logit.grad)
+        self.assertGreater(module.strength_logit.grad.abs().sum().item(), 0)
+        self.assertTrue(torch.isfinite(module.strength_logit.grad).all())
+        self.assertTrue(torch.isfinite(gate.grad).all())
+
+    def test_pair_evidence_consensus_ignores_unpaired_input(self):
+        module = PairEvidenceConsensusGate(num_groups=8)
+        gate = torch.rand(3, 8, 9, 11)
+        evidence = torch.randn_like(gate)
+        probs = torch.randn(3, 8, 3, 8).softmax(dim=-1)
+
+        output = module(gate, evidence, probs, pair_batch_size=None)
+
+        self.assertIs(output, gate)
+        self.assertIsNone(module.last_correction)
+
     def test_coarse_spectral_preview_router_shapes_and_gradients(self):
         sampler = LiquidSpectralSampler(
             num_spectral=8,
@@ -248,6 +358,120 @@ class TestMultispecPretrainUtils(unittest.TestCase):
             self.assertTrue(all(
                 parameter.grad is not None and torch.isfinite(parameter.grad).all()
                 for parameter in stem.parameters() if parameter.requires_grad))
+
+    def test_stem_combines_dse_with_pair_global_cpdse(self):
+        stem = MultispecStemConv3dSE(
+            out_channels=16,
+            num_spectral=8,
+            reduction=2,
+            liquid_sampler=dict(
+                embed_dims=16,
+                num_groups=8,
+                head_weight_std=1e-3,
+                hard=False,
+                eval_hard=False,
+                dispersion_aware_spectral_evidence=True,
+                consistency_preserving_dispersion_evidence=dict(
+                    mode='pair_global', max_logit_delta=0.5)),
+        ).train()
+        stem.set_pair_batch_size(2)
+        output = stem(torch.randn(4, 8, 18, 22))
+
+        self.assertEqual(output.shape, (4, 16, 9, 11))
+        output.square().mean().backward()
+        self.assertTrue(all(
+            parameter.grad is not None and torch.isfinite(parameter.grad).all()
+            for parameter in stem.parameters() if parameter.requires_grad))
+
+    def test_pair_global_cpdse_can_preserve_group_mean(self):
+        evidence = ConsistencyPreservingDispersionEvidence(
+            num_groups=8,
+            mode='pair_global',
+            center_groups=True)
+        with torch.no_grad():
+            evidence.logit_gain.copy_(torch.linspace(-0.4, 0.4, 8))
+        delta = evidence(torch.randn(4, 12, 8, 7, 9), pair_batch_size=2)
+
+        self.assertEqual(delta.shape, (4, 8, 1, 1))
+        self.assertTrue(torch.allclose(
+            delta.sum(dim=1), torch.zeros_like(delta.sum(dim=1)),
+            atol=1e-6))
+        self.assertTrue(torch.allclose(delta[:2], delta[2:], atol=1e-6))
+
+    def test_pair_global_cpdse_can_preserve_detection_tangent(self):
+        evidence = ConsistencyPreservingDispersionEvidence(
+            num_groups=8,
+            mode='pair_global',
+            preserve_detection_tangent=True)
+        groups = torch.randn(4, 12, 8, 7, 9, requires_grad=True)
+        gate_logits = torch.randn(4, 8, 7, 9, requires_grad=True)
+        with torch.no_grad():
+            evidence.logit_gain.copy_(torch.linspace(-0.4, 0.4, 8))
+
+        delta = evidence(
+            groups, pair_batch_size=2, gate_logits=gate_logits)
+        importance = evidence.last_detection_importance
+
+        self.assertEqual(delta.shape, (4, 8, 1, 1))
+        self.assertIsNotNone(importance)
+        torch.testing.assert_close(delta[:2], delta[2:])
+        torch.testing.assert_close(importance[:2], importance[2:])
+        group_energy = groups.detach().square().mean(
+            dim=(1, 3, 4)).add(evidence.eps).sqrt()
+        pooled_gate = gate_logits.detach().mean(dim=(-2, -1)).sigmoid()
+        expected_importance = (
+            group_energy * pooled_gate * (1 - pooled_gate))
+        expected_importance = 0.5 * (
+            expected_importance[:2] + expected_importance[2:])
+        torch.testing.assert_close(importance[:2], expected_importance)
+        weighted_change = (
+            delta.flatten(1) * importance).sum(dim=1)
+        torch.testing.assert_close(
+            weighted_change, torch.zeros_like(weighted_change),
+            atol=1e-6, rtol=1e-5)
+        delta.square().sum().backward()
+        self.assertIsNotNone(evidence.logit_gain.grad)
+        self.assertTrue(torch.isfinite(evidence.logit_gain.grad).all())
+        self.assertIsNotNone(groups.grad)
+        self.assertTrue(torch.isfinite(groups.grad).all())
+        self.assertIsNone(gate_logits.grad)
+
+    def test_pair_global_cpdse_can_reserve_sparse_detection_evidence(self):
+        plain = ConsistencyPreservingDispersionEvidence(
+            num_groups=8, mode='pair_global')
+        reserved = ConsistencyPreservingDispersionEvidence(
+            num_groups=8,
+            mode='pair_global',
+            preserve_sparse_detection_evidence=True)
+        source_groups = torch.randn(
+            4, 12, 8, 7, 9, requires_grad=True)
+        groups = source_groups * torch.linspace(
+            0.1, 2.0, 7).view(1, 1, 1, 7, 1)
+        gains = torch.linspace(-0.4, 0.4, 8)
+        with torch.no_grad():
+            plain.logit_gain.copy_(gains)
+            reserved.logit_gain.copy_(gains)
+
+        plain_delta = plain(groups, pair_batch_size=2)
+        delta = reserved(groups, pair_batch_size=2)
+        reserve = reserved.last_sparse_detection_reserve
+
+        self.assertIsNotNone(reserve)
+        self.assertEqual(reserve.shape, (4, 8))
+        torch.testing.assert_close(delta[:2], delta[2:])
+        torch.testing.assert_close(reserve[:2], reserve[2:])
+        self.assertTrue(((reserve >= 0) & (reserve <= 1)).all())
+        self.assertGreater(reserve.max().item(), 0)
+        negative = plain_delta < 0
+        self.assertTrue(
+            (delta[negative].abs() <= plain_delta[negative].abs()).all())
+        torch.testing.assert_close(
+            delta[~negative], plain_delta[~negative])
+        delta.square().sum().backward()
+        self.assertIsNotNone(reserved.logit_gain.grad)
+        self.assertTrue(torch.isfinite(reserved.logit_gain.grad).all())
+        self.assertIsNotNone(source_groups.grad)
+        self.assertTrue(torch.isfinite(source_groups.grad).all())
 
     def test_liquid_spectral_sampler_cyclic_initial_windows(self):
         init_patterns = [

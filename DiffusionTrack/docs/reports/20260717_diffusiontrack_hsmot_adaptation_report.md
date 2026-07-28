@@ -330,3 +330,39 @@ GPU训练张量写图和验证GT/预测写图均已通过独立烟雾测试。�
 CPU FP32/BF16及223 GPU BF16边界测试均确认零宽高输入精确输出为1像素，正常框、中心与角度不变。`data43-2`固定`t=999/noise seed=0`的首个真实训练快照中，原本会退化的40个初始框均被提升到1像素，500个框中低于1像素和非有限框数量均为0；六个refinement stage仍全部覆盖15/15 GT。随后从MMOT官方YOLO11L骨干完整训练41 epoch，全程无NaN、OOM或漏分配，总损失从40.512降至8.311，最佳验证出现在epoch 35：`mAP50=0.5842、mAP50:95=0.3782`。bike仍未在该短程严格诊断中拟合，说明尺寸下限解决的是退化几何污染而不是普通IoU对不相交小框缺少几何梯度的问题。损失继续使用可微普通旋转IoU，未改为ProbIoU或GIoU。
 
 223实验目录为`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/yolo11l_diffusion_det_hsmot_overfit_data43_2_minside1px_exact_plainriou_fixedseed_gpu3_v30`，日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_overfit_data43_2_minside1px_exact_plainriou_fixedseed_gpu3_v30_20260721.log`。
+
+## 20. 无增强正式Stage-1单卡训练（2026-07-23）
+
+在223服务器物理GPU 2上启动完整HSMOT Stage-1检测训练。配置固定输入为`896×1184`，关闭Mosaic、MixUp和多尺度，使用完整本地3-JPG数据、MMOT官方YOLO11L+ConvMSI权重、BF16、20 epoch、每3 epoch验证并在最终epoch 20强制验证。单卡命令采用物理BS=2、梯度累积2次，有效全局BS=4，与计划中的双卡物理全局BS=4、accumulate=1保持相同的optimizer更新频率和峰值学习率；普通网络峰值LR为`6.25e-5`，ConvMSI stem为其10倍。
+
+正式实验名为`yolo11l_diffusion_det_hsmot_nomosaic_fixed896x1184_b2_d1_acc2_bf16_plainriou_v4`，工作目录位于`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/`，日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_det_nomosaic_fixed896x1184_b2_d1_acc2_bf16_plainriou_v4_20260723.log`，screen名为`diffusion_stage1_gpu2_b2acc2`。启动后已真实完成epoch 1前40个micro-batch iteration（20次optimizer step）；主输出和五层辅助输出的分类、L1及两帧独立普通旋转IoU损失全部有限，稳定数据时间约`0.001s`，训练器报告峰值显存约`19.2GB`。`nvidia-smi`进程占用约`24.2GB/24.576GB`，因此该配置可以运行但显存余量较小，后续需持续关注首次完整验证后的显存回收。
+
+## 21. LE135长边一致性与图像均衡L1（2026-07-23）
+
+参考ai4rs主线最新的旋转框参数回归处理，DiffusionTrack的matcher与监督L1改为先在物理像素坐标中把预测和GT都规范为LE135长边框，再编码回归量。由此，表示同一矩形的`(w,h,theta)`和`(h,w,theta+pi/2)`得到完全一致的L1目标，不再因为长短边交换产生虚假的尺寸及角度误差。旋转框的`w/h`是局部坐标轴上的边长，不是图像x/y方向分量，因此`cx,cy,w,h`四项统一除以图像几何平均尺度`sqrt(W*H)`；这同时使1像素x位移与1像素y位移的回归代价相等，避免固定`896×1184`输入下宽高方向权重失衡。
+
+角度仍按既定要求采用直接、非周期LE135 L1，不引入sin/cos、最短周期距离或ProbIoU；其归一化角度项固定乘`0.05`，与主线一致，使LE135边界两侧的最大直接角度代价有界而不会压过空间回归。该权重同时传入Dynamic-K匹配与所有六层监督损失，保证正样本分配和训练目标使用同一参数语义。扩散前向过程仍保留原来的`[cx/W,cy/H,w/W,h/H,(theta+pi/4)/pi]` latent、噪声和反解码，未被L1编码修改。
+
+本机py310完成四项张量回归测试：长短边等价框编码相同、x/y单像素代价相同、角度增量精确等于`0.05*dtheta/pi`且边界代价保持直接非周期、五个参数反向梯度均有限；matcher与criterion的权重透传也已验证。
+
+## 22. 正式配置随机扩散单图过拟合（2026-07-23）
+
+旧GPU 2正式训练在epoch 7停止。新的`data43-2`第一帧重复20次实验不再沿用此前41 epoch、关闭EMA、固定`t=999`或固定noise的诊断配置，而是直接继承当前无Mosaic正式Stage-1配置，仅替换训练/验证数据根目录并打开调试快照。因此训练仍为20 epoch、1 epoch warmup、EMA、固定`896×1184`、3-JPG、BS=2、accumulate=2、BF16、有效全局BS=4、同一AdamW及warmcos schedule；扩散时间步逐样本独立从`[0,999]`均匀采样，高斯噪声和placeholder也保持正式随机过程。首个epoch六次快照的实际`t`分别包含`[159,730,798,749]`、`[348,600,816,427]`等不同取值，确认没有诊断固定化。
+
+Dynamic-K调试输出扩展到六个refinement layer。每个保存点生成完整NPZ、逐match CSV、REF/CUR六层总览，以及layer 1–6各一张全分辨率详情图。详情图左/中显示该层REF/CUR的query→GT匹配框，右侧逐行给出每个match的总cost、加权分类/L1/负旋转IoU cost、center/foreground先验惩罚，以及该匹配query实际的加权分类、两帧平均L1和两帧旋转IoU监督值；CSV保存物理BS内全部样本的同一字段。首批182条六层匹配记录全部有限，layer 1–6均存在。实验`yolo11l_diffusion_det_hsmot_overfit_data43_2_formal_randomt_l1fix_gpu2_v2`已在223物理GPU 2完成epoch 1的5次optimizer update、保存4 GB完整checkpoint并进入epoch 2。
+
+随后明确了可视化中物理BS与内部self-pair的索引：BS=2时四个side依次为`pair0 REF、pair1 REF、pair0 CUR、pair1 CUR`。旧详情图只画pair0，且GT只显示类别；现改为pair0/pair1分别出图，绿色GT显示`g索引:类别`，青色框显示`query→GT`。epoch 18 global 180快照已离线重生成`indexed_pair0/1_layer1-6_match_details.jpg`，CSV与图可直接逐项对应。
+
+## 23. 移除扩散query的中心先验（2026-07-23）
+
+YOLOX SimOTA的严格box-and-center先验会给不同时位于REF/CUR中心区域的query固定增加100，而本实验学习得到的分类、L1和IoU cost通常只有0至5；该项因而近似硬约束。扩散query不是固定特征网格anchor，继续使用此先验缺少对应的网格位置语义。新实验从总匹配cost中移除`center_penalty`，调试列保留并恒为0；明显不属于宽松前景候选区域的`fg_penalty=10000`仍保留，其他Dynamic-K、逐GT覆盖修复和监督损失均不变。
+
+新实验`yolo11l_diffusion_det_hsmot_overfit_data43_2_formal_randomt_l1fix_nocenter_nockpt_gpu2_v3`仍从MMOT官方骨干权重开始并使用同一正式随机扩散配置。为避免诊断占用大容量存储，关闭`latest/epoch/best/last-mosaic`全部checkpoint入口及NPZ张量快照，调试改为首iteration和每epoch末保存一次，只保留逐层图片、CSV和文本日志。首批182条六层记录全部有限且`match_cost_center_penalty`唯一值为0；epoch 1完成后目录中没有`.pth/.pt/.npz`及超过100 MB的文件，实验已继续进入epoch 3。
+
+## 24. 旋转局部坐标refinement与200轮随机扩散过拟合（2026-07-23）
+
+逐行对照MMRotate的`proj_xy=True`旋转框coder后，将六层中心残差从全局轴更新改为proposal局部轴更新：先计算`u=(raw_dx/2)*w、v=(raw_dy/2)*h`，再以当前LE135角度旋转为`delta_x=u*cos(theta)-v*sin(theta)、delta_y=u*sin(theta)+v*cos(theta)`并加到图像中心。`dw/dh`仍保持原方法的指数相对尺度更新，角度、每层LE135规范化、层间detach、六层独立监督及所有匹配损失不变。远端测试确认90度框的局部长边位移映射到全局正y、局部短边位移映射到全局负x，零残差仍为严格恒等变换。
+
+为观察每层真实行为，单图overfit配置现于每个epoch第一个train iteration保存两类附加诊断。`train_feature_visualizations/`把送入DiffusionHead的REF/CUR P3/P4/P5投影特征分别画成channel mean-absolute与max-absolute热图，并标注shape、mean、std和absmax；`train_diffusion_diagnostics/`为物理batch中每个pair、layer 1至6新增`assign_movement.jpg`，只画该层最终分配为正样本的query，蓝框表示进入该层前的框、黄框表示该层输出、绿框表示GT，白箭头连接before/after中心，同时统计中心、尺度和角度变化。20轮v5完整生成20张特征图和240张movement图，无checkpoint/NPZ；最终`mAP50=0.0001`、`mAP50:95`按四位小数仍为0，说明合理的局部投影本身不足以在约100次optimizer update内解决正式随机proposal的拟合。
+
+随后把同一实验扩展到200 epoch。为保持20轮实验语义，显式固定`l1_start_epoch=15`；否则继承规则会因`max_epoch`变化把L1错误推迟到epoch 195。验证仍每3 epoch执行，BS=2、accumulate=2、BF16、随机`t/noise`、EMA、固定`896x1184`及所有可视化保持不变，全部checkpoint入口继续关闭。由于单图集每epoch只有10 iter而原`print_interval=20`不会落盘训练损失，现将该配置改为每10 iter打印一次，并把全部train loss与LR同步写入TensorBoard。v6工作目录为`/data4/linxu/PairMOT_DiffusionTrack/work_dirs/yolo11l_diffusion_det_hsmot_overfit_data43_2_formal_randomt_l1fix_nocenter_projxy_featurevis_200e_nockpt_gpu2_v6`，外层日志为`/data4/linxu/PairMOT_DiffusionTrack/logs/stage1_overfit_data43_2_formal_randomt_l1fix_nocenter_projxy_featurevis_200e_nockpt_gpu2_v6_20260723.log`。首轮已完成，最终层分类/L1/旋转IoU分别为`1.770/4.052/3.948`，包含五层辅助监督的`total_loss=55.972`，全部有限；GPU2进程显存约24.2 GiB，预计总时长约1小时9分。

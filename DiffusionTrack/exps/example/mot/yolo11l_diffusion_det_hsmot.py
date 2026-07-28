@@ -62,6 +62,7 @@ class Exp(MyExp):
         self.nms_thresh3d = 0.7
         self.interval = 5
         self.data_num_workers = 4
+        self.max_labels = 500
         # Global validation BS=6 is split across both DDP ranks (3 per GPU).
         # Backbone features are shared by prev->curr and curr->curr.
         self.val_batch_size = 6
@@ -73,27 +74,44 @@ class Exp(MyExp):
             "HSMOT_VAL_ROOT", os.path.join(_PAIRMOT_ROOT, "data/hsmot/test"))
         self.hsmot_img_subdir = os.environ.get("HSMOT_IMG_SUBDIR", "npy")
         self.hsmot_img_format = os.environ.get("HSMOT_IMG_FORMAT", "npy")
+        self.hsmot_target_dtype = "float32"
         self.yolo11_cfg = "yolo11l-obb.yaml"
         self.yolo11_weights = os.environ.get(
             "YOLO11_WEIGHTS",
             "/data4/litianhao/PairMmot/pretrained_weights/mmot_official/"
             "yolo11L-8ch-3dstem.pt")
         self.freeze_yolo11_backbone = False
+        self.yolo11_stem_type = "convmsi"
+        self.yolo11_native_stem_weights = ""
+        self.yolo11_align_convmsi_rng = True
+        self.yolo11_backbone_load_mode = "direct"
+        self.min_diffusion_side = 1.0
+        self.diffusion_schedule_float64 = False
+        self.lx_regression_init = False
+        self.optimizer_group_mode = "split_stem"
+        self.adamw_foreach = None
+        self.lr_update_timing = "before"
 
     def _dataset(self, root, transform):
         from yolox.data import HSMOTDataset
         return HSMOTDataset(
             data_dir=root, img_size=self.input_size, preproc=transform,
             ann_subdir="mot", img_subdir=self.hsmot_img_subdir,
-            img_format=self.hsmot_img_format)
+            img_format=self.hsmot_img_format,
+            target_dtype=self.hsmot_target_dtype)
 
     def get_data_loader(self, batch_size, is_distributed, no_aug=False):
         from yolox.data import (DataLoader, InfiniteSampler, MosaicDetection,
                                 TrainTransform, YoloBatchSampler)
         # Match the MMOT official Ultralytics checkpoint preprocessing:
         # uint8 -> float32 / 255, with no additional mean/std normalization.
+        input_means = getattr(self, "input_means", None)
+        input_stds = getattr(self, "input_stds", None)
         transform = TrainTransform(
-            rgb_means=None, std=None, max_labels=500)
+            rgb_means=input_means, std=input_stds,
+            max_labels=self.max_labels,
+            hsmot_augment_mode=getattr(
+                self, "hsmot_augment_mode", "none"))
         dataset = self._dataset(self.train_data_dir, transform)
         dataset = MosaicDetection(
             dataset, mosaic=not no_aug, img_size=self.input_size,
@@ -116,7 +134,9 @@ class Exp(MyExp):
         dataset = HSMOTPairEvalDataset(self._dataset(
             self.val_data_dir,
             DiffusionValTransform(
-                rgb_means=None, std=None, max_labels=500)))
+                rgb_means=getattr(self, "input_means", None),
+                std=getattr(self, "input_stds", None),
+                max_labels=self.max_labels)))
         sampler = (torch.utils.data.distributed.DistributedSampler(
             dataset, shuffle=False) if is_distributed else
             torch.utils.data.SequentialSampler(dataset))
@@ -144,9 +164,18 @@ class Exp(MyExp):
             backbone = YOLO11BackboneAdapter(
                 model_cfg=self.yolo11_cfg, weights=weights,
                 freeze=self.freeze_yolo11_backbone, num_spectral=8,
-                num_classes=self.num_classes)
+                num_classes=self.num_classes,
+                stem_type=self.yolo11_stem_type,
+                native_stem_weights=self.yolo11_native_stem_weights,
+                align_convmsi_rng=self.yolo11_align_convmsi_rng,
+                load_mode=self.yolo11_backbone_load_mode)
             self.model = DiffusionNet(
-                backbone, DiffusionHead(self.num_classes, self.width))
+                backbone, DiffusionHead(
+                    self.num_classes, self.width,
+                    min_diffusion_side=self.min_diffusion_side,
+                    diffusion_schedule_float64=(
+                        self.diffusion_schedule_float64),
+                    lx_regression_init=self.lx_regression_init))
             self.model.apply(init_bn)
         return self.model
 
@@ -171,6 +200,8 @@ class Exp(MyExp):
     def get_optimizer(self, batch_size):
         if "optimizer" not in self.__dict__:
             base_lr = getattr(self, "optimizer_base_lr", 2.5e-5)
+            stem_lr_multiplier = getattr(
+                self, "stem_lr_multiplier", 10.0)
             stem = self.model.backbone.task_model.model[0]
             stem_ids = {id(parameter) for parameter in stem.parameters()}
             stem_parameters = [
@@ -179,11 +210,36 @@ class Exp(MyExp):
             other_parameters = [
                 parameter for parameter in self.model.parameters()
                 if parameter.requires_grad and id(parameter) not in stem_ids]
-            self.optimizer = AdamW(
-                [
-                    dict(params=other_parameters, lr=base_lr, lr_scale=1.0),
-                    dict(params=stem_parameters, lr=base_lr * 10,
-                         lr_scale=10.0),
-                ],
-                lr=base_lr, weight_decay=1e-4)
+            if self.optimizer_group_mode == "single":
+                if stem_lr_multiplier != 1.0:
+                    raise ValueError(
+                        "single optimizer group requires stem LR multiplier 1")
+                parameters = [
+                    parameter for parameter in self.model.parameters()
+                    if parameter.requires_grad]
+                optimizer_kwargs = {}
+                if self.adamw_foreach is not None:
+                    optimizer_kwargs["foreach"] = self.adamw_foreach
+                self.optimizer = AdamW(
+                    parameters, lr=base_lr, weight_decay=1e-4,
+                    **optimizer_kwargs)
+            elif self.optimizer_group_mode == "split_stem":
+                optimizer_kwargs = {}
+                if self.adamw_foreach is not None:
+                    optimizer_kwargs["foreach"] = self.adamw_foreach
+                self.optimizer = AdamW(
+                    [
+                        dict(
+                            params=other_parameters, lr=base_lr,
+                            lr_scale=1.0),
+                        dict(
+                            params=stem_parameters,
+                            lr=base_lr * stem_lr_multiplier,
+                            lr_scale=stem_lr_multiplier),
+                    ],
+                    lr=base_lr, weight_decay=1e-4,
+                    **optimizer_kwargs)
+            else:
+                raise ValueError(
+                    "optimizer_group_mode must be 'split_stem' or 'single'")
         return self.optimizer

@@ -22,6 +22,7 @@ from yolox.utils import (
     save_checkpoint,
     save_diffusion_train_diagnostic,
     save_hsmot_pair_visualization,
+    save_train_feature_visualization,
     setup_logger,
     synchronize,
 )
@@ -145,12 +146,20 @@ class Trainer:
         debug_interval = int(getattr(
             self.exp, "diffusion_debug_interval", 0))
         global_iteration = self.progress_in_iter + 1
+        debug_first_iter = bool(getattr(
+            self.exp, "diffusion_debug_first_iter_each_epoch", False))
         capture_debug = (
-            self.rank == 0 and debug_interval > 0 and
-            (global_iteration == 1 or
-             global_iteration % debug_interval == 0))
+            self.rank == 0 and (
+                (debug_first_iter and self.iter == 0) or
+                (debug_interval > 0 and (
+                    global_iteration == 1 or
+                    global_iteration % debug_interval == 0))))
         raw_model = (self.model.module
                      if hasattr(self.model, "module") else self.model)
+        capture_features = (
+            self.rank == 0 and self.iter == 0 and bool(getattr(
+                self.exp, "train_feature_vis_first_iter", False)))
+        raw_model.capture_train_features = capture_features
         diffusion_head = getattr(raw_model, "head", None)
         if diffusion_head is not None:
             diffusion_head.capture_train_debug = capture_debug
@@ -160,6 +169,10 @@ class Trainer:
             with torch.cuda.amp.autocast(
                     enabled=self.amp_training, dtype=self.amp_dtype):
                 outputs = self.model(inps,targets,self.random_flip,self.input_size)
+            if capture_features:
+                self._save_train_feature_visualization(
+                    raw_model.last_train_features)
+                raw_model.capture_train_features = False
             if capture_debug:
                 self._save_diffusion_diagnostic(
                     pre_inps, diffusion_head.last_train_debug,
@@ -173,11 +186,13 @@ class Trainer:
             # Set LR for the update about to run. Previously the first update
             # used the optimizer constructor's peak LR before jumping back to
             # warmup, and every later update used a one-step-old LR.
-            self.current_lr = self.lr_scheduler.update_lr(
-                self.optimizer_step + 1)
-            for param_group in self.optimizer.param_groups:
-                param_group["lr"] = (
-                    self.current_lr * param_group.get("lr_scale", 1.0))
+            if self.lr_update_timing == "before":
+                self.current_lr = self.lr_scheduler.update_lr(
+                    self.optimizer_step + 1)
+                for param_group in self.optimizer.param_groups:
+                    param_group["lr"] = (
+                        self.current_lr
+                        * param_group.get("lr_scale", 1.0))
 
             optimizer_ran = True
             if self.scaler.is_enabled():
@@ -192,6 +207,13 @@ class Trainer:
                 self.optimizer_step += 1
                 if self.use_model_ema:
                     self.ema_model.update(self.model)
+                if self.lr_update_timing == "after":
+                    self.current_lr = self.lr_scheduler.update_lr(
+                        self.optimizer_step)
+                    for param_group in self.optimizer.param_groups:
+                        param_group["lr"] = (
+                            self.current_lr
+                            * param_group.get("lr_scale", 1.0))
             else:
                 self.skipped_optimizer_steps += 1
 
@@ -234,6 +256,21 @@ class Trainer:
         except Exception as error:
             logger.warning("failed to save training visualization: {}", error)
 
+    def _save_train_feature_visualization(self, snapshots):
+        path = os.path.join(
+            self.file_name, "train_feature_visualizations",
+            "epoch_{:03d}_iter_{:05d}_features.jpg".format(
+                self.epoch + 1, self.iter + 1))
+        try:
+            save_train_feature_visualization(
+                path, snapshots,
+                title="epoch {} first train iteration; projected YOLO11 "
+                      "features".format(self.epoch + 1))
+            logger.info("saved training feature visualization to {}", path)
+        except Exception as error:
+            logger.warning(
+                "failed to save training feature visualization: {}", error)
+
     def _save_diffusion_diagnostic(self, pre_inps, debug,
                                    global_iteration):
         if debug is None:
@@ -249,10 +286,12 @@ class Trainer:
             self.file_name, "train_diffusion_diagnostics")
         try:
             paths = save_diffusion_train_diagnostic(
-                output_dir, stem, pre_inps[0], debug,
+                output_dir, stem, pre_inps, debug,
                 class_names=class_names,
                 max_proposals=int(getattr(
-                    self.exp, "diffusion_debug_max_proposals", 60)))
+                    self.exp, "diffusion_debug_max_proposals", 60)),
+                save_snapshot=bool(getattr(
+                    self.exp, "diffusion_debug_save_snapshot", True)))
             logger.info("saved diffusion diagnostics to {} ({} files)",
                         output_dir, len(paths))
         except Exception as error:
@@ -302,11 +341,21 @@ class Trainer:
             # successful optimizer-step counter was persisted.
             self.optimizer_step = (
                 self.start_epoch * self.optimizer_iters_per_epoch)
-        self.current_lr = self.lr_scheduler.update_lr(
-            self.optimizer_step + 1)
-        for param_group in self.optimizer.param_groups:
-            param_group["lr"] = (
-                self.current_lr * param_group.get("lr_scale", 1.0))
+        self.lr_update_timing = getattr(
+            self.exp, "lr_update_timing", "before")
+        if self.lr_update_timing == "before":
+            self.current_lr = self.lr_scheduler.update_lr(
+                self.optimizer_step + 1)
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = (
+                    self.current_lr * param_group.get("lr_scale", 1.0))
+        elif self.lr_update_timing == "after":
+            # Reproduce native LX: the first optimizer update uses the
+            # constructor LR; scheduler value 1 is installed afterward.
+            self.current_lr = self.optimizer.param_groups[0]["lr"]
+        else:
+            raise ValueError(
+                "lr_update_timing must be 'before' or 'after'")
         if self.args.occupy:
             occupy_mem(self.local_rank)
 
@@ -428,6 +477,14 @@ class Trainer:
                 )
                 + (", size: {:d}, {}".format(self.input_size[0], eta_str))
             )
+            if self.rank == 0:
+                tensorboard_step = self.progress_in_iter + 1
+                for name, meter in loss_meter.items():
+                    self.tblogger.add_scalar(
+                        "train/{}".format(name),
+                        meter.latest, tensorboard_step)
+                self.tblogger.add_scalar(
+                    "train/lr", self.meter["lr"].latest, tensorboard_step)
             self.meter.clear_meters()
 
         # random resizing

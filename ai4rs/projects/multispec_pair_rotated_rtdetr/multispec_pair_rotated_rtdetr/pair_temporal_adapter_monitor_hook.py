@@ -54,6 +54,15 @@ class PairTemporalAdapterMonitorHook(Hook):
         self._prev_named_params[name] = param.detach().clone()
         return delta
 
+    @staticmethod
+    def _first_last_weight(blocks):
+        for block in blocks:
+            for module in reversed(list(block.modules())):
+                weight = getattr(module, 'weight', None)
+                if weight is not None:
+                    return weight
+        return None
+
     def after_train_iter(self,
                          runner: Runner,
                          batch_idx: int,
@@ -83,6 +92,7 @@ class PairTemporalAdapterMonitorHook(Hook):
                 runner.message_hub.update_scalar(
                     f'{prefix}_gamma_delta_abs', gamma_delta)
                 delta_items = []
+                stat_items = []
                 if hasattr(adapter, 'attn'):
                     delta_items.append((
                         'attn',
@@ -118,7 +128,36 @@ class PairTemporalAdapterMonitorHook(Hook):
                         'local_block',
                         self._param_delta(
                             f'{adapter_name}.local_blocks.0.last.weight',
-                            adapter.local_blocks[0][-1].weight)))
+                            self._first_last_weight(
+                                adapter.local_blocks))))
+                if hasattr(adapter, 'detail_blocks'):
+                    delta_items.append((
+                        'detail_block',
+                        self._param_delta(
+                            f'{adapter_name}.detail_blocks.0.last.weight',
+                            self._first_last_weight(
+                                adapter.detail_blocks))))
+                if (hasattr(adapter, 'spatial_gates')
+                        and len(adapter.spatial_gates) > 0):
+                    delta_items.append((
+                        'spatial_gate',
+                        self._param_delta(
+                            f'{adapter_name}.spatial_gates.0.weight',
+                            adapter.spatial_gates[0].weight)))
+                if (hasattr(adapter, 'shared_gain_gates')
+                        and len(adapter.shared_gain_gates) > 0):
+                    delta_items.append((
+                        'shared_gain_gate',
+                        self._param_delta(
+                            f'{adapter_name}.shared_gain_gates.0.weight',
+                            adapter.shared_gain_gates[0].weight)))
+                energy_stats = getattr(
+                    adapter, 'latest_branch_energy_stats', {})
+                for name, value in energy_stats.items():
+                    value = float(value.item())
+                    runner.message_hub.update_scalar(
+                        f'{prefix}_{name}', value)
+                    stat_items.append((name, value))
                 for name, value in delta_items:
                     runner.message_hub.update_scalar(
                         f'{prefix}_{name}_delta_abs', value)
@@ -128,7 +167,11 @@ class PairTemporalAdapterMonitorHook(Hook):
                     f'gamma_delta={gamma_delta:.6g} '
                     + ' '.join(
                         f'{name}_delta={value:.6g}'
-                        for name, value in delta_items))
+                        for name, value in delta_items)
+                    + (' ' if stat_items else '')
+                    + ' '.join(
+                        f'{name}={value:.6g}'
+                        for name, value in stat_items))
 
         if not self.every_n_train_iters(runner, self.interval):
             return

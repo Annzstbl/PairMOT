@@ -66,6 +66,8 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
         self.cross_fusion = nn.Linear(self.embed_dims * 2, self.embed_dims)
         self._init_pair_average_fusion(self.cross_fusion)
         if self.tristate:
+            # Tri-state decoding consumes the two frame outputs directly.
+            self.cross_fusion.requires_grad_(False)
             self.pointer_to_prev_gate = nn.Sequential(
                 nn.Linear(self.embed_dims, self.embed_dims),
                 nn.Sigmoid(),
@@ -96,6 +98,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
         query_pos_prev: Tensor,
         query_pos_curr: Tensor,
         key_padding_mask: Optional[Tensor] = None,
+        query_key_padding_mask: Optional[Tensor] = None,
         self_attn_mask: Optional[Tensor] = None,
         spatial_shapes: Optional[Tensor] = None,
         level_start_index: Optional[Tensor] = None,
@@ -125,6 +128,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             query_pos=query_pos,
             key_pos=query_pos,
             attn_mask=self_attn_mask,
+            key_padding_mask=query_key_padding_mask,
             **kwargs)
         query = self.norms[0](query)
 
@@ -164,6 +168,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
         query_pos_prev: Tensor,
         query_pos_curr: Tensor,
         key_padding_mask: Optional[Tensor] = None,
+        query_key_padding_mask: Optional[Tensor] = None,
         self_attn_mask: Optional[Tensor] = None,
         spatial_shapes: Optional[Tensor] = None,
         level_start_index: Optional[Tensor] = None,
@@ -180,6 +185,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             query_pos=query_pos_pointer,
             key_pos=query_pos_pointer,
             attn_mask=self_attn_mask,
+            key_padding_mask=query_key_padding_mask,
             **kwargs)
         pointer = self.norms[0](pointer)
 
@@ -249,6 +255,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 tristate_separate_ffn=self.tristate_separate_ffn)
             for _ in range(self.num_layers)
         ])
+        if self.tristate_decoder:
+            # A post-frame pointer update only seeds the next layer. The final
+            # update has no loss consumer and remains the historical no-op.
+            self.layers[-1].pointer_update.requires_grad_(False)
+            self.layers[-1].norms[5].requires_grad_(False)
         self.embed_dims = self.layers[0].embed_dims
         if self.post_norm_cfg is not None:
             raise ValueError(f'There is not post_norm in {self._get_name()}')
@@ -364,6 +375,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         initial_cls_prev: Optional[Tensor] = None,
         initial_cls_curr: Optional[Tensor] = None,
         key_padding_mask: Optional[Tensor] = None,
+        query_key_padding_mask: Optional[Tensor] = None,
         self_attn_mask: Optional[Tensor] = None,
         valid_ratios: Optional[Tensor] = None,
         query: Optional[Tensor] = None,
@@ -475,6 +487,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     query_pos_prev=query_pos_prev,
                     query_pos_curr=query_pos_curr,
                     key_padding_mask=key_padding_mask,
+                    query_key_padding_mask=query_key_padding_mask,
                     self_attn_mask=self_attn_mask,
                     spatial_shapes=spatial_shapes,
                     level_start_index=level_start_index,
@@ -495,6 +508,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     query_pos_prev=query_pos_prev,
                     query_pos_curr=query_pos_curr,
                     key_padding_mask=key_padding_mask,
+                    query_key_padding_mask=query_key_padding_mask,
                     self_attn_mask=self_attn_mask,
                     spatial_shapes=spatial_shapes,
                     level_start_index=level_start_index,

@@ -149,3 +149,34 @@ Baseline 使用 252 上补齐的高指标 `0704_01 resume`，而不是早期手�
 3. `0708_04` 不建议作为主线继续投入；它证明 separated FFN 能强化 det 侧，但会压低 cls HOTA。
 4. 裸 `0708_01` 不应作为结论点；两次运行一正一负，稳定性不足。
 5. 后续 decoder 改动应优先沿 `0708_03` 做小步实验；若想利用 `0708_04` 的 det-side 优势，需要设计机制避免 cls-side HOTA 损失。
+
+## 7. 论文主线复验：0728_01
+
+历史Decoder实验均基于旧half-data协议，不能直接证明`0708_03`可与当前Paper
+Base+Liquid+Encoder叠加。因此新建`0728_01`，在当前完整论文协议下复验历史最佳decoder。
+
+严格父配置为`0727_01`，其唯一最佳epoch 72为cls/det HOTA `54.437/62.393`。`0728_01`
+保持其Base、Liquid、P5 temporal、Dual-Evidence encoder、proposal、PairDN、loss、数据、
+初始化与训练设置不变，只设置：
+
+```python
+tristate_decoder = True
+tristate_zero_init_coupling = True
+tristate_separate_ffn = False
+```
+
+该结构维护`pointer/query_prev/query_curr`三种隐状态；每层分别让共享pointer从两帧特征
+读取信息，再将更新后的pointer回传给两个frame query。frame-pointer循环映射零初始化，
+使训练起点不被随机耦合扰动，同时允许主损失直接学习跨帧交互。关闭separate FFN是为了
+只验证`0708_03`变量，不混入`0708_04`偏向det侧的额外容量。
+
+197的条件队列于2026-07-28 02:15 CST启动。前序`0727_09`最终最佳epoch 72为
+`54.106/62.321`，未超过`0727_01`，因此进入`0728_01`。首次smoke暴露了旧tri-state实现
+在`find_unused_parameters=False`下的结构问题：三层`cross_fusion`在tri-state路径不可达，
+末层post-frame pointer更新也没有后续消费者。修复仅将这些无梯度参数排除训练，不改变任何
+预测张量或有效传播路径；18项单测和双卡4-iter真数据smoke通过。
+
+`0728_01`已于2026-07-28 09:30 CST在197 GPU 4、5 fresh启动。epoch 1 iter 50为
+`0.9245 s/iter`，总/DN/encoder loss及梯度均有限，未发现DDP、NaN、OOM或NCCL错误。
+正式结果仍按唯一最大`cls_HOTA + det_HOTA`选取epoch，并从该epoch记录全部分类、检测和
+AP指标。

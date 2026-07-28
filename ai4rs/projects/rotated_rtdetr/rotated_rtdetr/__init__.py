@@ -3,6 +3,8 @@ from .hgnetv2 import HGNetV2
 from .rotated_rtdetr import RotatedRTDETR
 from .rtdetr_layers import (PairTemporalAdapter,
                             PairTemporalPoolGateAdapter,
+                            PairTemporalPyramidCommonDetailAdapter,
+                            PairTemporalPyramidDualEvidenceAdapter,
                             PairTemporalPyramidLocalAdapter, RTDETRFPN,
                             RTDETRHybridEncoder)
 from .varifocal_loss import RTDETRVarifocalLoss, DEIMMalLoss
@@ -17,6 +19,8 @@ __all__ = [
     'RTDETRHybridEncoder',
     'PairTemporalAdapter',
     'PairTemporalPoolGateAdapter',
+    'PairTemporalPyramidCommonDetailAdapter',
+    'PairTemporalPyramidDualEvidenceAdapter',
     'PairTemporalPyramidLocalAdapter',
     'RTDETRVarifocalLoss',
     'DEIMMalLoss',

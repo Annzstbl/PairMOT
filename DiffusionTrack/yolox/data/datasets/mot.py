@@ -152,14 +152,18 @@ class HSMOTDataset(Dataset):
 
     def __init__(self, data_dir, img_size=(900, 1200), preproc=None,
                  ann_subdir="mot", img_subdir="npy", sequence_file="",
-                 img_format="npy"):
+                 img_format="npy", target_dtype="float32"):
         super().__init__(img_size)
         self.data_dir = os.path.abspath(data_dir)
         self.img_root = os.path.join(self.data_dir, img_subdir)
         self.ann_root = os.path.join(self.data_dir, ann_subdir)
         if img_format not in ("npy", "3jpg"):
             raise ValueError("img_format must be 'npy' or '3jpg'")
+        if target_dtype not in ("float32", "float64"):
+            raise ValueError("target_dtype must be 'float32' or 'float64'")
         self.img_format = img_format
+        self.target_dtype = (
+            np.float32 if target_dtype == "float32" else np.float64)
         self.img_size = img_size
         self.preproc = preproc
         self._classes = self.classes
@@ -194,7 +198,8 @@ class HSMOTDataset(Dataset):
                 frame_id = int(os.path.splitext(
                     os.path.basename(frame_path))[0].split("_")[0])
                 rows = frame_annotations.get(frame_id, [])
-                target = np.asarray(rows, dtype=np.float32).reshape(-1, 10)
+                target = np.asarray(
+                    rows, dtype=self.target_dtype).reshape(-1, 10)
                 image_id = len(self.ids) + 1
                 rel_name = os.path.join(sequence, os.path.basename(frame_path))
                 info = (900, 1200, frame_id, video_id, rel_name)

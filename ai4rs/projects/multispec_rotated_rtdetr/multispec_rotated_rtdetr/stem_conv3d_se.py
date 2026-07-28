@@ -2449,6 +2449,307 @@ class DispersionAwareSpectralEvidence(nn.Module):
         return self.evidence_mixer(statistics)
 
 
+class ConsistencyPreservingDispersionEvidence(nn.Module):
+    """Add bounded dispersion evidence without replacing mean evidence.
+
+    The local variant retains spatially sparse evidence. The pair-global
+    variant shares one group-wise correction across both frames, so the
+    branch cannot alter their relative spatial ordering.
+    """
+
+    def __init__(self,
+                 num_groups: int,
+                 mode: str = 'local',
+                 max_logit_delta: float = 0.5,
+                 center_groups: bool = False,
+                 preserve_detection_tangent: bool = False,
+                 preserve_sparse_detection_evidence: bool = False,
+                 eps: float = 1e-6) -> None:
+        super().__init__()
+        assert num_groups > 0
+        assert mode in ('local', 'pair_global')
+        assert max_logit_delta > 0
+        assert eps > 0
+        self.num_groups = num_groups
+        self.mode = mode
+        self.max_logit_delta = float(max_logit_delta)
+        self.center_groups = bool(center_groups)
+        self.preserve_detection_tangent = bool(
+            preserve_detection_tangent)
+        self.preserve_sparse_detection_evidence = bool(
+            preserve_sparse_detection_evidence)
+        assert sum((
+            self.center_groups,
+            self.preserve_detection_tangent,
+            self.preserve_sparse_detection_evidence,
+        )) <= 1, (
+            'group centering, detection-tangent preservation, and sparse '
+            'detection evidence preservation are alternative residual '
+            'constraints')
+        if (self.preserve_detection_tangent
+                or self.preserve_sparse_detection_evidence):
+            assert self.mode == 'pair_global', (
+                'detection preservation requires pair_global mode')
+        self.eps = float(eps)
+        self.logit_gain = nn.Parameter(torch.zeros(num_groups))
+        self.last_normalized_dispersion = None
+        self.last_detection_importance = None
+        self.last_sparse_detection_reserve = None
+        self.last_delta = None
+
+    def forward(self, groups: torch.Tensor,
+                pair_batch_size: Optional[int],
+                gate_logits: Optional[torch.Tensor] = None) -> torch.Tensor:
+        assert groups.ndim == 5
+        assert groups.size(2) == self.num_groups
+        channel_mean = groups.mean(dim=1)
+        second_moment = groups.square().mean(dim=1)
+        variance = (second_moment - channel_mean.square()).clamp_min(self.eps)
+        normalized = (
+            variance.sqrt() /
+            second_moment.clamp_min(self.eps).sqrt()).clamp_max(1)
+
+        sparse_detection_reserve = None
+        if self.preserve_sparse_detection_evidence:
+            spatial_mean = normalized.mean(dim=(-2, -1))
+            spatial_rms = torch.linalg.vector_norm(
+                normalized, ord=2, dim=(-2, -1)) / math.sqrt(
+                    normalized.size(-2) * normalized.size(-1))
+            frame_reserve = (spatial_rms - spatial_mean).clamp_(0, 1)
+            assert pair_batch_size is not None and pair_batch_size > 0
+            sparse_detection_reserve = 0.5 * (
+                frame_reserve[:pair_batch_size] +
+                frame_reserve[pair_batch_size:])
+            sparse_detection_reserve = torch.cat(
+                [sparse_detection_reserve, sparse_detection_reserve],
+                dim=0).detach()
+
+        if self.mode == 'pair_global':
+            assert pair_batch_size is not None and pair_batch_size > 0
+            assert groups.size(0) == pair_batch_size * 2
+            pooled = normalized.mean(dim=(-2, -1))
+            shared = 0.5 * (
+                pooled[:pair_batch_size] + pooled[pair_batch_size:])
+            normalized = torch.cat([shared, shared], dim=0)
+            normalized = normalized.unsqueeze(-1).unsqueeze(-1)
+
+        gain = self.max_logit_delta * torch.tanh(self.logit_gain)
+        gain = gain.to(dtype=normalized.dtype)
+        delta = normalized * gain.view(1, -1, 1, 1)
+        if self.center_groups:
+            delta = delta - delta.mean(dim=1, keepdim=True)
+        if self.preserve_sparse_detection_evidence:
+            assert sparse_detection_reserve is not None
+            negative_scale = (
+                1 - sparse_detection_reserve).to(dtype=delta.dtype)
+            negative_scale = negative_scale.unsqueeze(-1).unsqueeze(-1)
+            delta = torch.where(delta < 0, delta * negative_scale, delta)
+            self.last_sparse_detection_reserve = (
+                sparse_detection_reserve.detach())
+        else:
+            self.last_sparse_detection_reserve = None
+        if self.preserve_detection_tangent:
+            assert gate_logits is not None
+            assert gate_logits.shape == (
+                groups.size(0), self.num_groups,
+                groups.size(-2), groups.size(-1))
+            # Reuse the moment already needed by the dispersion descriptor;
+            # recomputing it from [B,C,G,H,W] measurably slows the full stem.
+            group_energy = second_moment.detach().mean(
+                dim=(-2, -1)).add(self.eps).sqrt()
+            pooled_logits = gate_logits.detach().mean(dim=(-2, -1))
+            pooled_gate = pooled_logits.sigmoid()
+            gate_sensitivity = pooled_gate * (1 - pooled_gate)
+            importance = group_energy * gate_sensitivity
+            shared_importance = 0.5 * (
+                importance[:pair_batch_size] +
+                importance[pair_batch_size:])
+            importance = torch.cat(
+                [shared_importance, shared_importance], dim=0)
+            delta_vector = delta.flatten(1)
+            projection_scale = (
+                (delta_vector * importance).sum(dim=1, keepdim=True) /
+                importance.square().sum(
+                    dim=1, keepdim=True).clamp_min(self.eps))
+            delta = (
+                delta_vector - projection_scale * importance
+            ).unsqueeze(-1).unsqueeze(-1)
+            self.last_detection_importance = importance.detach()
+        else:
+            self.last_detection_importance = None
+        self.last_normalized_dispersion = normalized.detach()
+        self.last_delta = delta.detach()
+        return delta
+
+
+class SpectralCoordinatePairDispersion(nn.Module):
+    """Inject pair dispersion in physical spectral coordinates.
+
+    Group slots may select different bands in paired frames. This module first
+    projects group dispersion back to physical bands, forms one pair-common
+    spectral descriptor, and then projects it into each frame's own groups.
+    Evidence and coverage are read-only so this branch cannot steer the
+    sampler or Conv3D features to manufacture an easier correction.
+    """
+
+    def __init__(self,
+                 num_groups: int,
+                 num_spectral: int,
+                 max_logit_delta: float = 0.25,
+                 eps: float = 1e-6) -> None:
+        super().__init__()
+        assert num_groups > 0
+        assert num_spectral > 0
+        assert max_logit_delta > 0
+        assert eps > 0
+        self.num_groups = num_groups
+        self.num_spectral = num_spectral
+        self.max_logit_delta = float(max_logit_delta)
+        self.eps = float(eps)
+        self.spectral_logit_gain = nn.Parameter(torch.zeros(num_spectral))
+        self.last_common_spectral_evidence = None
+        self.last_delta = None
+
+    def _group_dispersion(self, groups: torch.Tensor) -> torch.Tensor:
+        channel_mean = groups.mean(dim=1)
+        second_moment = groups.square().mean(dim=1)
+        variance = (second_moment - channel_mean.square()).clamp_min(self.eps)
+        normalized = (
+            variance.sqrt() /
+            second_moment.clamp_min(self.eps).sqrt()).clamp_max(1)
+        return normalized.mean(dim=(-2, -1))
+
+    def forward(self, groups: torch.Tensor, probs: torch.Tensor,
+                pair_batch_size: Optional[int]) -> torch.Tensor:
+        assert groups.ndim == 5
+        assert groups.size(2) == self.num_groups
+        assert probs.ndim == 4
+        assert probs.shape[:2] == groups.shape[:1] + (self.num_groups, )
+        assert probs.size(-1) == self.num_spectral
+        batch_size = groups.size(0)
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            return groups.new_zeros(batch_size, self.num_groups, 1, 1)
+
+        # Keep the auxiliary evidence branch from changing route optimization
+        # or the Conv3D response path through its descriptor construction.
+        dispersion = self._group_dispersion(groups).detach()
+        coverage = probs.detach().sum(dim=2)
+        coverage = coverage / coverage.sum(dim=-1, keepdim=True).clamp_min(
+            self.eps)
+
+        def _to_spectral(frame_coverage: torch.Tensor,
+                         frame_dispersion: torch.Tensor) -> torch.Tensor:
+            numerator = torch.einsum(
+                'bgs,bg->bs', frame_coverage, frame_dispersion)
+            denominator = frame_coverage.sum(dim=1).clamp_min(self.eps)
+            return numerator / denominator
+
+        prev_coverage = coverage[:pair_batch_size]
+        curr_coverage = coverage[pair_batch_size:]
+        prev_spectral = _to_spectral(
+            prev_coverage, dispersion[:pair_batch_size])
+        curr_spectral = _to_spectral(
+            curr_coverage, dispersion[pair_batch_size:])
+        common_spectral = 0.5 * (prev_spectral + curr_spectral)
+
+        gain = self.max_logit_delta * torch.tanh(
+            self.spectral_logit_gain)
+        weighted_spectral = common_spectral * gain.to(
+            dtype=common_spectral.dtype)
+        prev_delta = torch.einsum(
+            'bgs,bs->bg', prev_coverage, weighted_spectral)
+        curr_delta = torch.einsum(
+            'bgs,bs->bg', curr_coverage, weighted_spectral)
+        delta = torch.cat([prev_delta, curr_delta], dim=0)
+        # Preserve the per-frame average SE logit to first order.
+        delta = delta - delta.mean(dim=1, keepdim=True)
+        delta = delta.unsqueeze(-1).unsqueeze(-1)
+        self.last_common_spectral_evidence = common_spectral.detach()
+        self.last_delta = delta.detach()
+        return delta
+
+
+class PairEvidenceConsensusGate(nn.Module):
+    """Contract paired SE gates only where their evidence agrees.
+
+    The correction is antisymmetric, so the pair mean gate is preserved
+    exactly. Detached agreement weights prevent the sampler or Conv3D
+    responses from gaming the consensus strength.
+    """
+
+    def __init__(self,
+                 num_groups: int,
+                 max_strength: float = 1.0,
+                 init_logit: float = -4.0,
+                 eps: float = 1e-6) -> None:
+        super().__init__()
+        assert num_groups > 0
+        assert 0 < max_strength <= 1
+        assert eps > 0
+        self.num_groups = num_groups
+        self.max_strength = float(max_strength)
+        self.eps = float(eps)
+        self.strength_logit = nn.Parameter(
+            torch.full((num_groups, ), float(init_logit)))
+        self.last_strength = None
+        self.last_route_agreement = None
+        self.last_evidence_agreement = None
+        self.last_correction = None
+
+    def forward(self, gate: torch.Tensor, evidence: torch.Tensor,
+                probs: torch.Tensor,
+                pair_batch_size: Optional[int]) -> torch.Tensor:
+        assert gate.ndim == evidence.ndim == 4
+        assert gate.shape == evidence.shape
+        assert gate.size(1) == self.num_groups
+        assert probs.ndim == 4
+        assert probs.shape[:2] == gate.shape[:2]
+        batch_size = gate.size(0)
+        if (pair_batch_size is None or pair_batch_size <= 0
+                or pair_batch_size * 2 != batch_size):
+            self.last_strength = None
+            self.last_route_agreement = None
+            self.last_evidence_agreement = None
+            self.last_correction = None
+            return gate
+
+        prev_gate = gate[:pair_batch_size]
+        curr_gate = gate[pair_batch_size:]
+        prev_evidence = evidence[:pair_batch_size]
+        curr_evidence = evidence[pair_batch_size:]
+
+        coverage = probs.sum(dim=2)
+        coverage = coverage / coverage.sum(
+            dim=-1, keepdim=True).clamp_min(self.eps)
+        prev_coverage = coverage[:pair_batch_size]
+        curr_coverage = coverage[pair_batch_size:]
+        route_agreement = (
+            prev_coverage.clamp_min(0).sqrt()
+            * curr_coverage.clamp_min(0).sqrt()).sum(dim=-1)
+        route_agreement = route_agreement.clamp(0, 1).detach()
+
+        relative_gap = (
+            (prev_evidence - curr_evidence).abs()
+            / (prev_evidence.abs() + curr_evidence.abs()).clamp_min(self.eps))
+        evidence_agreement = (1.0 - relative_gap).clamp(0, 1).detach()
+
+        strength = self.max_strength * self.strength_logit.sigmoid()
+        strength = strength.to(dtype=gate.dtype)
+        correction = 0.5 * (prev_gate - curr_gate)
+        correction = correction * evidence_agreement
+        correction = correction * route_agreement.unsqueeze(-1).unsqueeze(-1)
+        correction = correction * strength.view(1, -1, 1, 1)
+        output = torch.cat(
+            [prev_gate - correction, curr_gate + correction], dim=0)
+
+        self.last_strength = strength.detach()
+        self.last_route_agreement = route_agreement.detach()
+        self.last_evidence_agreement = evidence_agreement.detach()
+        self.last_correction = correction.detach()
+        return output
+
+
 @MODELS.register_module()
 class MultispecStemConv3dSE(nn.Module):
     """Replace deep-stem first 3x3 Conv2d with 3D conv + pixel-wise SE fusion.
@@ -2514,6 +2815,12 @@ class MultispecStemConv3dSE(nn.Module):
             band_slot_cfg = sampler_cfg.pop('band_slot_calibration', None)
             dispersion_evidence_cfg = sampler_cfg.pop(
                 'dispersion_aware_spectral_evidence', None)
+            consistency_evidence_cfg = sampler_cfg.pop(
+                'consistency_preserving_dispersion_evidence', None)
+            spectral_coordinate_dispersion_cfg = sampler_cfg.pop(
+                'spectral_coordinate_pair_dispersion', None)
+            pair_consensus_gate_cfg = sampler_cfg.pop(
+                'pair_evidence_consensus_gate', None)
             fusion_cfg = sampler_cfg.pop('liquid_aware_fusion', None)
             pair_fusion_cfg = sampler_cfg.pop('pair_aware_liquid_fusion',
                                               None)
@@ -2535,6 +2842,9 @@ class MultispecStemConv3dSE(nn.Module):
         else:
             band_slot_cfg = None
             dispersion_evidence_cfg = None
+            consistency_evidence_cfg = None
+            spectral_coordinate_dispersion_cfg = None
+            pair_consensus_gate_cfg = None
             fusion_cfg = None
             pair_fusion_cfg = None
             group_modulator_cfg = None
@@ -2567,6 +2877,45 @@ class MultispecStemConv3dSE(nn.Module):
                 DispersionAwareSpectralEvidence(**dispersion_evidence_cfg))
         else:
             self.dispersion_aware_spectral_evidence = None
+        assert not (consistency_evidence_cfg is not None
+                    and spectral_coordinate_dispersion_cfg is not None), (
+                        'SE-logit dispersion residual branches are mutually '
+                        'exclusive')
+        if consistency_evidence_cfg is True:
+            consistency_evidence_cfg = {}
+        if consistency_evidence_cfg is not None:
+            consistency_evidence_cfg = dict(consistency_evidence_cfg)
+            consistency_evidence_cfg.setdefault(
+                'num_groups', temporal_output_size)
+            self.consistency_preserving_dispersion_evidence = (
+                ConsistencyPreservingDispersionEvidence(
+                    **consistency_evidence_cfg))
+        else:
+            self.consistency_preserving_dispersion_evidence = None
+        if spectral_coordinate_dispersion_cfg is True:
+            spectral_coordinate_dispersion_cfg = {}
+        if spectral_coordinate_dispersion_cfg is not None:
+            spectral_coordinate_dispersion_cfg = dict(
+                spectral_coordinate_dispersion_cfg)
+            spectral_coordinate_dispersion_cfg.setdefault(
+                'num_groups', temporal_output_size)
+            spectral_coordinate_dispersion_cfg.setdefault(
+                'num_spectral', num_spectral)
+            self.spectral_coordinate_pair_dispersion = (
+                SpectralCoordinatePairDispersion(
+                    **spectral_coordinate_dispersion_cfg))
+        else:
+            self.spectral_coordinate_pair_dispersion = None
+        if pair_consensus_gate_cfg is True:
+            pair_consensus_gate_cfg = {}
+        if pair_consensus_gate_cfg is not None:
+            pair_consensus_gate_cfg = dict(pair_consensus_gate_cfg)
+            pair_consensus_gate_cfg.setdefault(
+                'num_groups', temporal_output_size)
+            self.pair_evidence_consensus_gate = PairEvidenceConsensusGate(
+                **pair_consensus_gate_cfg)
+        else:
+            self.pair_evidence_consensus_gate = None
 
         self.se_conv1 = nn.Conv2d(
             temporal_output_size,
@@ -2729,6 +3078,15 @@ class MultispecStemConv3dSE(nn.Module):
         else:
             x_se = x.mean(dim=1)
         gate_logits = self.se_conv2(F.relu(self.se_conv1(x_se)))
+        if self.consistency_preserving_dispersion_evidence is not None:
+            gate_logits = gate_logits + (
+                self.consistency_preserving_dispersion_evidence(
+                    x, self.pair_batch_size, gate_logits=gate_logits))
+        if self.spectral_coordinate_pair_dispersion is not None:
+            assert self.last_liquid_probs is not None
+            gate_logits = gate_logits + (
+                self.spectral_coordinate_pair_dispersion(
+                    x, self.last_liquid_probs, self.pair_batch_size))
         if self.liquid_aware_fusion is not None:
             assert self.last_liquid_context_probs is not None
             self.last_liquid_aware_delta = self.liquid_aware_fusion(
@@ -2753,6 +3111,10 @@ class MultispecStemConv3dSE(nn.Module):
         else:
             self.last_pair_aware_liquid_delta = None
         gate = torch.sigmoid(gate_logits)
+        if self.pair_evidence_consensus_gate is not None:
+            assert self.last_liquid_probs is not None
+            gate = self.pair_evidence_consensus_gate(
+                gate, x_se, self.last_liquid_probs, self.pair_batch_size)
         groups_for_detail = x
         if self.pair_aligned_compact_detail_enhancement is not None:
             detail_gate = self.pair_aligned_compact_detail_enhancement(

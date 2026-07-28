@@ -23,6 +23,8 @@ from projects.rotated_rtdetr.rotated_rtdetr.varifocal_loss import VarifocalLoss
 from torch import Tensor
 
 from .pair_instance_data import PairInstanceData
+from .rotated_box_utils import (canonicalize_le180_start0,
+                                encode_le180_l1)
 
 QUERY_TYPE_SURVIVAL = 0
 QUERY_TYPE_CURR_ONLY = 1
@@ -74,6 +76,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  cls_residual_hidden_ratio: float = 0.25,
                  cls_residual_scale: float = 0.1,
                  cls_residual_weights: Optional[List[float]] = None,
+                 bbox_angle_l1_weight: float = 0.05,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
         self.dual_cls = bool(dual_cls)
@@ -87,6 +90,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         self.cls_residual_hidden_ratio = float(cls_residual_hidden_ratio)
         self.cls_residual_scale = float(cls_residual_scale)
         self.cls_residual_weights_cfg = cls_residual_weights
+        self.bbox_angle_l1_weight = float(bbox_angle_l1_weight)
+        if self.bbox_angle_l1_weight < 0:
+            raise ValueError('bbox_angle_l1_weight must be non-negative')
         if loss_presence is None:
             loss_presence = dict(
                 type='mmdet.CrossEntropyLoss',
@@ -767,11 +773,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             bbox_curr_targets * factors,
             bbox_curr_weights,
             avg_factor=num_total_pos_val)
-        loss_bbox_prev = self.loss_bbox(
-            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+        loss_bbox_prev = self._loss_bbox_valid_le180(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights, factors,
             avg_factor=num_total_pos_val)
-        loss_bbox_curr = self.loss_bbox(
-            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+        loss_bbox_curr = self._loss_bbox_valid_le180(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights, factors,
             avg_factor=num_total_pos_val)
         return (loss_cls_prev, loss_cls_curr, loss_bbox_prev, loss_bbox_curr,
                 loss_iou_prev, loss_iou_curr)
@@ -949,21 +955,27 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                              dn_meta: Dict[str, int], device: torch.device):
         """Build DINO-style positive/negative targets for pair DN slots."""
         max_targets = dn_meta['max_num_dn_targets']
+        max_negative_targets = dn_meta['max_num_negative_dn_targets']
+        negative_counts = dn_meta['num_negative_dn_targets_per_image']
         num_groups = dn_meta['num_denoising_groups']
         num_dn = dn_meta['num_denoising_queries']
-        expected_num_dn = 2 * num_groups * max_targets
+        group_width = max_targets + max_negative_targets
+        expected_num_dn = num_groups * group_width
         if num_dn != expected_num_dn:
             raise ValueError(
-                'Pair CDN layout must contain positive and negative halves: '
+                'Pair CDN layout does not match positive/negative capacities: '
                 f'expected {expected_num_dn} queries, got {num_dn}')
+        if len(negative_counts) != len(batch_pair_gt_instances):
+            raise ValueError('DN negative counts must match batch size')
         target_lists = [[] for _ in range(9)]
         num_total_pos = 0
         num_total_neg = 0
-        for pair_gt, img_meta in zip(batch_pair_gt_instances, batch_img_metas):
+        for pair_gt, img_meta, num_negative_targets in zip(
+                batch_pair_gt_instances, batch_img_metas, negative_counts):
             labels = torch.full((num_dn,), self.num_classes, device=device,
                                 dtype=torch.long)
-            # Like DINO, padded and negative DN slots are background samples.
-            label_weights = torch.ones(num_dn, device=device)
+            # Padding has no loss; populated negative slots are background.
+            label_weights = torch.zeros(num_dn, device=device)
             bbox_prev_targets = torch.zeros(num_dn, 5, device=device)
             bbox_curr_targets = torch.zeros(num_dn, 5, device=device)
             bbox_prev_weights = torch.zeros(num_dn, 5, device=device)
@@ -985,12 +997,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 valid_curr = torch.as_tensor(
                     pair_gt.valid_curr, device=device, dtype=torch.bool)
                 for group_idx in range(num_groups):
-                    # Layout per group: [positive max_targets slots,
-                    # negative max_targets slots]. Negative slots keep the
-                    # background label and zero box/presence targets.
-                    pos_start = group_idx * 2 * max_targets
+                    # Layout: [max_targets positives, max_negative_targets
+                    # negatives]. Unused capacity is attention/loss padding.
+                    pos_start = group_idx * group_width
                     pos_end = pos_start + num_targets
                     labels[pos_start:pos_end] = pair_gt.labels.to(device)
+                    label_weights[pos_start:pos_end] = 1
                     bbox_prev_targets[pos_start:pos_end] = gt_prev
                     bbox_curr_targets[pos_start:pos_end] = gt_curr
                     bbox_prev_weights[pos_start:pos_end] = (
@@ -1000,11 +1012,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     pres_prev_targets[pos_start:pos_end] = valid_prev.float()
                     pres_curr_targets[pos_start:pos_end] = valid_curr.float()
                     neg_start = pos_start + max_targets
-                    neg_end = neg_start + num_targets
+                    neg_end = neg_start + num_negative_targets
+                    label_weights[neg_start:neg_end] = 1
                     pres_weights[pos_start:pos_end] = 1
                     pres_weights[neg_start:neg_end] = 1
                 num_total_pos += num_targets * num_groups
-                num_total_neg += num_targets * num_groups
+                num_total_neg += num_negative_targets * num_groups
             for bucket, value in zip(target_lists, (
                     labels, label_weights, bbox_prev_targets,
                     bbox_prev_weights, bbox_curr_targets, bbox_curr_weights,
@@ -1087,11 +1100,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         loss_iou_curr = self._loss_iou_valid(
             bbox_curr_flat * factors, bbox_curr_targets * factors,
             bbox_curr_weights, avg_factor=num_pos)
-        loss_bbox_prev = self.loss_bbox(
-            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+        loss_bbox_prev = self._loss_bbox_valid_le180(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights, factors,
             avg_factor=num_pos)
-        loss_bbox_curr = self.loss_bbox(
-            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+        loss_bbox_curr = self._loss_bbox_valid_le180(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights, factors,
             avg_factor=num_pos)
         return (loss_cls, loss_pres_prev, loss_pres_curr, loss_bbox_prev,
                 loss_bbox_curr, loss_iou_prev, loss_iou_curr)
@@ -1174,11 +1187,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         loss_iou_curr = self._loss_iou_valid(
             bbox_curr_flat * factors, bbox_curr_targets * factors,
             bbox_curr_weights, avg_factor=num_pos)
-        loss_bbox_prev = self.loss_bbox(
-            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights,
+        loss_bbox_prev = self._loss_bbox_valid_le180(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights, factors,
             avg_factor=num_pos)
-        loss_bbox_curr = self.loss_bbox(
-            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights,
+        loss_bbox_curr = self._loss_bbox_valid_le180(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights, factors,
             avg_factor=num_pos)
         return (loss_cls_prev, loss_cls_curr, loss_bbox_prev, loss_bbox_curr,
                 loss_iou_prev, loss_iou_curr)
@@ -1285,15 +1298,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             bboxes_curr_gt,
             bbox_curr_weights,
             avg_factor=num_total_pos_val)
-        loss_bbox_prev = self.loss_bbox(
-            bbox_prev_flat,
-            bbox_prev_targets,
-            bbox_prev_weights,
+        loss_bbox_prev = self._loss_bbox_valid_le180(
+            bbox_prev_flat, bbox_prev_targets, bbox_prev_weights, factors,
             avg_factor=num_total_pos_val)
-        loss_bbox_curr = self.loss_bbox(
-            bbox_curr_flat,
-            bbox_curr_targets,
-            bbox_curr_weights,
+        loss_bbox_curr = self._loss_bbox_valid_le180(
+            bbox_curr_flat, bbox_curr_targets, bbox_curr_weights, factors,
             avg_factor=num_total_pos_val)
 
         return (loss_cls, loss_pres_prev, loss_pres_curr, loss_bbox_prev,
@@ -1554,6 +1563,26 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             return self.loss_iou(
                 preds, targets, weights, avg_factor=avg_factor)
 
+    def _loss_bbox_valid_le180(self, bbox_preds: Tensor,
+                               bbox_targets: Tensor,
+                               bbox_weights: Tensor, factors: Tensor,
+                               avg_factor: float) -> Tensor:
+        """Compute representation-consistent L1 on visible boxes only."""
+        valid = bbox_weights[:, :4].sum(dim=-1) > 0
+        preds = bbox_preds[valid].float()
+        if preds.numel() == 0:
+            return preds.sum()
+        targets = bbox_targets[valid].float()
+        valid_factors = factors[valid].float()
+        weights = bbox_weights[valid].float()
+        with torch.cuda.amp.autocast(enabled=False):
+            preds = encode_le180_l1(
+                preds, valid_factors, self.bbox_angle_l1_weight)
+            targets = encode_le180_l1(
+                targets, valid_factors, self.bbox_angle_l1_weight)
+            return self.loss_bbox(
+                preds, targets, weights, avg_factor=avg_factor)
+
     def get_targets(
         self,
         cls_scores_list: List[Tensor],
@@ -1769,6 +1798,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             det_bboxes_prev = det_bboxes_prev / scale
             det_bboxes_curr = det_bboxes_curr / scale
 
+        det_bboxes_prev = canonicalize_le180_start0(det_bboxes_prev)
+        det_bboxes_curr = canonicalize_le180_start0(det_bboxes_curr)
+
         results = PairInstanceData()
         results.scores = scores
         results.labels = det_labels
@@ -1867,6 +1899,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             scale = det_bboxes_prev.new_tensor(scale_factor)
             det_bboxes_prev = det_bboxes_prev / scale
             det_bboxes_curr = det_bboxes_curr / scale
+
+        det_bboxes_prev = canonicalize_le180_start0(det_bboxes_prev)
+        det_bboxes_curr = canonicalize_le180_start0(det_bboxes_curr)
 
         results = PairInstanceData()
         results.scores = scores
