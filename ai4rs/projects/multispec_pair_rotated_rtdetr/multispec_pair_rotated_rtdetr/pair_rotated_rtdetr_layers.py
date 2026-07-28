@@ -239,12 +239,18 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  tristate_decoder: bool = False,
                  tristate_separate_ffn: bool = False,
                  tristate_zero_init_coupling: bool = False,
+                 dual_output_adapter: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
         self.tristate_decoder = bool(tristate_decoder)
         self.tristate_separate_ffn = bool(tristate_separate_ffn)
         self.tristate_zero_init_coupling = bool(tristate_zero_init_coupling)
+        self.dual_output_adapter = bool(dual_output_adapter)
+        if self.tristate_decoder and self.dual_output_adapter:
+            raise ValueError(
+                'tristate_decoder and dual_output_adapter are mutually '
+                'exclusive')
         super().__init__(*args, **kwargs)
 
     def _init_layers(self) -> None:
@@ -261,6 +267,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.layers[-1].pointer_update.requires_grad_(False)
             self.layers[-1].norms[5].requires_grad_(False)
         self.embed_dims = self.layers[0].embed_dims
+        if self.dual_output_adapter:
+            self.dual_output_prev_adapters = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims)
+                for _ in range(self.num_layers)
+            ])
+            self.dual_output_curr_adapters = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims)
+                for _ in range(self.num_layers)
+            ])
         if self.post_norm_cfg is not None:
             raise ValueError(f'There is not post_norm in {self._get_name()}')
         # O2-RTDETR: MLP(5 -> D) on sigmoid 5D refs (not sine encoding)
@@ -357,6 +372,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.pair_pos_fusion)
         for layer in self.layers:
             layer._init_pair_average_fusion(layer.cross_fusion)
+        if self.dual_output_adapter:
+            for adapter in (
+                    list(self.dual_output_prev_adapters)
+                    + list(self.dual_output_curr_adapters)):
+                nn.init.zeros_(adapter.weight)
+                nn.init.zeros_(adapter.bias)
         if not self.tristate_decoder:
             return
         self._init_identity_linear(self.query_to_prev)
@@ -532,8 +553,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     **kwargs)
 
                 layer_output = self.norm(query)
-                tmp_prev = reg_branches_prev[lid](layer_output)
-                tmp_curr = reg_branches_curr[lid](layer_output)
+                if self.dual_output_adapter:
+                    layer_output_prev = layer_output + (
+                        self.dual_output_prev_adapters[lid](layer_output))
+                    layer_output_curr = layer_output + (
+                        self.dual_output_curr_adapters[lid](layer_output))
+                    tmp_prev = reg_branches_prev[lid](layer_output_prev)
+                    tmp_curr = reg_branches_curr[lid](layer_output_curr)
+                else:
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
 
             new_reference_prev = tmp_prev + inverse_sigmoid(
                 reference_prev, eps=1e-3)
@@ -567,10 +596,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 hidden_states_curr.append(layer_output_curr)
             else:
                 hidden_states.append(layer_output)
+                if self.dual_output_adapter:
+                    hidden_states_prev.append(layer_output_prev)
+                    hidden_states_curr.append(layer_output_curr)
             references_prev.append(new_reference_prev)
             references_curr.append(new_reference_curr)
 
-        if self.tristate_decoder:
+        if self.tristate_decoder or self.dual_output_adapter:
             return (hidden_states, references_prev, references_curr,
                     hidden_states_prev, hidden_states_curr)
         return hidden_states, references_prev, references_curr
