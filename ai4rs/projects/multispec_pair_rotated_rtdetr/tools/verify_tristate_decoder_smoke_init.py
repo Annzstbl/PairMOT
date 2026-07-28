@@ -35,6 +35,15 @@ def _find(state: Dict[str, Tensor], suffix: str) -> Tensor:
     return matches[0].float()
 
 
+def _average_fusion_expected(weight: Tensor) -> Tensor:
+    width = weight.shape[0]
+    expected = torch.zeros_like(weight)
+    identity = torch.eye(width, dtype=weight.dtype)
+    expected[:, :width] = 0.5 * identity
+    expected[:, width:2 * width] = 0.5 * identity
+    return expected
+
+
 def main() -> None:
     args = _parse_args()
     state = _state_dict(args.checkpoint)
@@ -52,6 +61,34 @@ def main() -> None:
         if max(error, bias_max) >= args.max_identity_error:
             raise RuntimeError(
                 f'{name} does not retain the fixed identity initialization')
+
+    pair_pos = _find(state, 'decoder.pair_pos_fusion.weight')
+    pair_pos_bias = _find(state, 'decoder.pair_pos_fusion.bias')
+    pair_pos_error = (
+        pair_pos - _average_fusion_expected(pair_pos)).abs().max().item()
+    pair_pos_bias_max = pair_pos_bias.abs().max().item()
+    print(
+        'pair_pos_fusion: '
+        f'max_error={pair_pos_error:.8f} bias_max={pair_pos_bias_max:.8f}')
+    if max(pair_pos_error, pair_pos_bias_max) >= args.max_identity_error:
+        raise RuntimeError('pair_pos_fusion did not start as pair averaging')
+
+    cross_fusions = [
+        (key, value.float()) for key, value in state.items()
+        if 'decoder.layers.' in key and key.endswith('cross_fusion.weight')
+    ]
+    cross_fusion_errors = [
+        (weight - _average_fusion_expected(weight)).abs().max().item()
+        for _, weight in cross_fusions
+    ]
+    if not cross_fusion_errors:
+        raise RuntimeError('No decoder cross_fusion tensors found')
+    cross_fusion_error = max(cross_fusion_errors)
+    print(
+        f'cross_fusion_tensors={len(cross_fusions)} '
+        f'global_max_error={cross_fusion_error:.8f}')
+    if cross_fusion_error >= args.max_identity_error:
+        raise RuntimeError('cross_fusion did not retain pair averaging')
 
     fusion = _find(state, 'decoder.pointer_init_fusion.weight')
     fusion_bias = _find(state, 'decoder.pointer_init_fusion.bias')

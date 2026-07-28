@@ -349,9 +349,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
 
         ``RotatedRTDETR.init_weights`` applies Xavier initialization to every
         decoder matrix after the decoder's own initialization hook.  Keep the
-        Pair-specific identity/zero initialization in a separate idempotent
-        hook so the detector can reapply it at the end of that chain.
+        Pair-specific average/identity/zero initialization in a separate
+        idempotent hook so the detector can reapply it at the end of that
+        chain.
         """
+        PairRotatedRTDETRTransformerDecoderLayer._init_pair_average_fusion(
+            self.pair_pos_fusion)
+        for layer in self.layers:
+            layer._init_pair_average_fusion(layer.cross_fusion)
         if not self.tristate_decoder:
             return
         self._init_identity_linear(self.query_to_prev)

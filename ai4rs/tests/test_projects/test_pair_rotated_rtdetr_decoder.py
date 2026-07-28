@@ -292,7 +292,20 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             .abs().sum().item(), 0.0)
         self.assertEqual(
             decoder.pointer_init_fusion.bias.abs().sum().item(), 0.0)
+        average_fusion = torch.zeros(
+            decoder.embed_dims,
+            decoder.embed_dims * 2,
+            device=self.device)
+        average_fusion[:, :decoder.embed_dims] = 0.5 * eye
+        average_fusion[:, decoder.embed_dims:] = 0.5 * eye
+        self.assertTrue(torch.equal(
+            decoder.pair_pos_fusion.weight, average_fusion))
+        self.assertEqual(
+            decoder.pair_pos_fusion.bias.abs().sum().item(), 0.0)
         for layer in decoder.layers:
+            self.assertTrue(torch.equal(
+                layer.cross_fusion.weight, average_fusion))
+            self.assertEqual(layer.cross_fusion.bias.abs().sum().item(), 0.0)
             for module in (layer.pointer_to_prev, layer.pointer_to_curr,
                            layer.pointer_update):
                 self.assertEqual(module.weight.abs().sum().item(), 0.0)
