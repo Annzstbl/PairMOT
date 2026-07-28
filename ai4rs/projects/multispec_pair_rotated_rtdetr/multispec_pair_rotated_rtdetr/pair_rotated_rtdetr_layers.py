@@ -342,6 +342,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
 
     def init_weights(self) -> None:
         super().init_weights()
+        self.init_pair_structural_weights()
+
+    def init_pair_structural_weights(self) -> None:
+        """Restore Pair decoder invariants after detector-level init.
+
+        ``RotatedRTDETR.init_weights`` applies Xavier initialization to every
+        decoder matrix after the decoder's own initialization hook.  Keep the
+        Pair-specific identity/zero initialization in a separate idempotent
+        hook so the detector can reapply it at the end of that chain.
+        """
         if not self.tristate_decoder:
             return
         self._init_identity_linear(self.query_to_prev)

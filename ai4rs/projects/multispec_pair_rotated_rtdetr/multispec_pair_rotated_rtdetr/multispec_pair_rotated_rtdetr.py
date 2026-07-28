@@ -158,6 +158,12 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         # has no training signal even when learned_quality_weight is non-zero.
         self._freeze_module_params(getattr(self, 'pair_quality_predictor', None))
 
+    def init_weights(self) -> None:
+        """Initialize the detector, then restore Pair decoder invariants."""
+        super().init_weights()
+        if isinstance(self.decoder, PairRotatedRTDETRTransformerDecoder):
+            self.decoder.init_pair_structural_weights()
+
     def _init_layers(self) -> None:
         """Initialize encoder/decoder; pair mode swaps in Pair decoder."""
         self.encoder = RTDETRHybridEncoder(**self.encoder)

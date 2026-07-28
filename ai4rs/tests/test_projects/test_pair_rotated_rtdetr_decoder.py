@@ -5,6 +5,7 @@ import copy
 import os.path as osp
 import sys
 import unittest
+from unittest import mock
 
 import torch
 from mmengine.config import Config
@@ -14,10 +15,14 @@ if _AI4RS_ROOT not in sys.path:
     sys.path.insert(0, _AI4RS_ROOT)
 
 from mmrotate.utils import register_all_modules
+from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr import (  # noqa: E501
+    MultispecPairRotatedRTDETR,
+)
 from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_rotated_rtdetr_layers import (  # noqa: E501
     PairRotatedRTDETRTransformerDecoder,
     PairRotatedRTDETRTransformerDecoderLayer,
 )
+from projects.rotated_rtdetr.rotated_rtdetr import RotatedRTDETR
 
 
 def _spatial_meta(device: torch.device):
@@ -247,6 +252,46 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             tristate_decoder=True,
             tristate_zero_init_coupling=True)
         decoder.init_weights()
+        for layer in decoder.layers:
+            for module in (layer.pointer_to_prev, layer.pointer_to_curr,
+                           layer.pointer_update):
+                self.assertEqual(module.weight.abs().sum().item(), 0.0)
+                self.assertEqual(module.bias.abs().sum().item(), 0.0)
+
+    def test_detector_init_preserves_tristate_structural_weights(self):
+        """Detector-level Xavier must not overwrite Pair decoder invariants."""
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            tristate_decoder=True,
+            tristate_zero_init_coupling=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+
+        eye = torch.eye(decoder.embed_dims, device=self.device)
+        for module in (
+                decoder.query_to_prev,
+                decoder.query_to_curr,
+                decoder.query_to_pointer):
+            self.assertTrue(torch.equal(module.weight, eye))
+            self.assertEqual(module.bias.abs().sum().item(), 0.0)
+        self.assertTrue(torch.equal(
+            decoder.pointer_init_fusion.weight[:, :decoder.embed_dims], eye))
+        self.assertEqual(
+            decoder.pointer_init_fusion.weight[:, decoder.embed_dims:]
+            .abs().sum().item(), 0.0)
+        self.assertEqual(
+            decoder.pointer_init_fusion.bias.abs().sum().item(), 0.0)
         for layer in decoder.layers:
             for module in (layer.pointer_to_prev, layer.pointer_to_curr,
                            layer.pointer_update):
