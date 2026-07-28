@@ -36,3 +36,8 @@ unset TORCH_DISTRIBUTED_DEBUG
 echo "[$(date '+%F %T')] fixed-init fresh 0729_01 4-iter smoke" >> "${LOG}"
 bash tools/dist_train.sh "${CONFIG}" 2 --work-dir "${WORK_DIR}" \
     >> "${LOG}" 2>&1
+
+CHECKPOINT=${WORK_DIR}/iter_4.pth
+test -f "${CHECKPOINT}"
+python projects/multispec_pair_rotated_rtdetr/tools/verify_tristate_decoder_smoke_init.py \
+    "${CHECKPOINT}" >> "${LOG}" 2>&1
