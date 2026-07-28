@@ -17,12 +17,14 @@ experiments and defines the evidence gate for the corrected successor.
 However, `RotatedRTDETR.init_weights()` subsequently applied Xavier uniform
 initialization to every matrix in `self.decoder.parameters()`. This later pass
 overwrote both the identity initialization and the optional zero coupling
-initialization.
+initialization. The same pass also overwrote the explicit `0.5I + 0.5I`
+initialization of `pair_pos_fusion` and the per-layer `cross_fusion` modules.
 
 The bug was fixed in commit `71c69b4` by separating the Pair structural
 initialization into an idempotent hook and reapplying it after detector-level
 initialization. Commit `4e6ea7b` adds an isolated four-iteration smoke and a
-post-smoke checkpoint gate.
+post-smoke checkpoint gate. Commit `69d6d0d` extends the structural hook and
+checkpoint gate to the pair-average fusion matrices.
 
 ## Historical interpretation
 
@@ -52,6 +54,12 @@ After commit `71c69b4`, a full 0729 model-level initialization probe showed:
 - `pointer_init_fusion` contained only the intended identity block;
 - every tri-state coupling matrix was exactly zero;
 - the decoder test suite passed all 19 tests.
+
+Before commit `69d6d0d`, the full-model maximum error relative to the intended
+pair-average initialization was `0.58836722` for `pair_pos_fusion` and about
+`0.587--0.588` for the three layer fusion matrices. After the fix, all four
+errors are exactly zero. `model.pair_query_fusion`, which is outside the
+decoder-wide Xavier loop, was already correct and remains unchanged.
 
 A two-step CPU gradient probe further showed:
 
