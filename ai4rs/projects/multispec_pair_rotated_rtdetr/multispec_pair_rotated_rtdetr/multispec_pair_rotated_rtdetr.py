@@ -48,6 +48,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                  pair_proposal_cfg: Optional[Dict] = None,
                  fp32_transformer_loss: bool = False,
                  fp32_after_encoder_loss: bool = False,
+                 enable_component_timing: bool = False,
                  **kwargs) -> None:
         if query_init not in ('learned', 'gt_noised', 'dual_topk',
                               'pair_topk_v1', 'pair_topk_sameidx_v1',
@@ -64,6 +65,7 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
         self.pair_proposal_cfg = pair_proposal_cfg or {}
         self.fp32_transformer_loss = fp32_transformer_loss
         self.fp32_after_encoder_loss = fp32_after_encoder_loss
+        self.enable_component_timing = enable_component_timing
         if fp32_transformer_loss and fp32_after_encoder_loss:
             raise ValueError('fp32_transformer_loss and '
                              'fp32_after_encoder_loss are mutually exclusive')
@@ -1864,42 +1866,59 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
 
     def loss(self, batch_inputs: Tensor,
              batch_data_samples: OptSampleList) -> Dict:
-        """Forward + loss with per-component CUDA timing."""
-        timer = CudaComponentTimer()
+        """Compute losses, enabling synchronized timing only on request."""
+        timer = (CudaComponentTimer()
+                 if self.enable_component_timing else None)
         self._active_timer = timer
         pair_inputs = (batch_inputs if float(
             self.pair_proposal_cfg.get('spectral_weight', 0.0)) != 0.0
                        else None)
         try:
-            img_feats = timer.record(
-                'backbone_neck',
-                lambda: self.extract_feat(batch_inputs))
+            if timer is not None:
+                img_feats = timer.record(
+                    'backbone_neck',
+                    lambda: self.extract_feat(batch_inputs))
+            else:
+                img_feats = self.extract_feat(batch_inputs)
             if self.fp32_transformer_loss:
                 img_feats = tuple(feat.float() for feat in img_feats)
                 with torch.cuda.amp.autocast(enabled=False):
                     head_inputs_dict = self.forward_transformer(
                         img_feats, batch_data_samples, pair_inputs)
-                    losses = timer.record(
-                        'head_loss',
-                        lambda: self.bbox_head.loss(
+                    if timer is not None:
+                        losses = timer.record(
+                            'head_loss',
+                            lambda: self.bbox_head.loss(
+                                **head_inputs_dict,
+                                batch_data_samples=batch_data_samples))
+                    else:
+                        losses = self.bbox_head.loss(
                             **head_inputs_dict,
-                            batch_data_samples=batch_data_samples))
+                            batch_data_samples=batch_data_samples)
             else:
                 head_inputs_dict = self.forward_transformer(
                     img_feats, batch_data_samples, pair_inputs)
                 with self._post_encoder_fp32_context():
-                    losses = timer.record(
-                        'head_loss',
-                        lambda: self.bbox_head.loss(
+                    if timer is not None:
+                        losses = timer.record(
+                            'head_loss',
+                            lambda: self.bbox_head.loss(
+                                **head_inputs_dict,
+                                batch_data_samples=batch_data_samples))
+                    else:
+                        losses = self.bbox_head.loss(
                             **head_inputs_dict,
-                            batch_data_samples=batch_data_samples))
+                            batch_data_samples=batch_data_samples)
         finally:
             self._active_timer = None
-        timings = timer.get_durations()
-        assigner = getattr(self.bbox_head, 'assigner', None)
-        if assigner is not None and hasattr(assigner, 'pop_timings'):
-            timings.update(assigner.pop_timings())
-        self._last_component_timings = timings
+        if timer is not None:
+            timings = timer.get_durations()
+            assigner = getattr(self.bbox_head, 'assigner', None)
+            if assigner is not None and hasattr(assigner, 'pop_timings'):
+                timings.update(assigner.pop_timings())
+            self._last_component_timings = timings
+        else:
+            self._last_component_timings = {}
         return losses
 
     def _forward(

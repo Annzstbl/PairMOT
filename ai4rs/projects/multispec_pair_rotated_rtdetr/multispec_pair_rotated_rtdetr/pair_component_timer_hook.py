@@ -35,6 +35,11 @@ class PairComponentTimerHook(Hook):
             model = model.module
         return model
 
+    def before_train(self, runner: Runner) -> None:
+        """Enable synchronized component timing only for profiling runs."""
+        model = self._unwrap_model(runner)
+        model.enable_component_timing = True
+
     def before_train_iter(self,
                           runner: Runner,
                           batch_idx: int,
