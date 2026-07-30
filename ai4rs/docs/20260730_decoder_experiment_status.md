@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 03:12 CST
+更新时间：2026-07-31 03:16 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
-| 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `RUNNING`；01:44 fresh 启动，01:46 到 epoch 1 iter 50 | recurrent query 保持父模型；仅让 heads 通过零起点、交换不变且受限的残差恢复可能被 fusion/FFN 抑制的两帧公共证据。4-iter smoke 和 checkpoint 结构检查通过。iter 50 约 `1.1786 s/iter`，loss `21.3837`、grad norm `130.9290`，总/DN/encoder loss 有限。 |
+| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `PREPARED`；等待单测、配置审计和真数据 smoke | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，02:23 已进入 epoch 5 | cls HOTA/DetA/AssA `37.590/28.607/52.920`，det `40.313/33.923/49.759`；相对 `0727_01` 同点 HOTA `+1.381/+1.560`，两侧 DetA 和 AssA 也同时提高。pair mAP `0.173430`、both-independent AP50 `0.356102`，分别提高 `0.016177/0.032953`。6 组共享 attention 误差为零，18 组独立参数最大差异 `0.042917`；三层 antisymmetric-detail 权重范数 `0.024836/0.021828/0.023927`。结构与性能门槛完整通过，继续到 epoch 8 检查增益可持续性。 |
 | 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
 
@@ -22,6 +22,7 @@
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后于 01:35 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.386/34.314/57.656`，det `49.340/42.544/59.013`；pair mAP/AP50 `0.207499/0.401020`，both-independent mAP/AP50 `0.241319/0.431198`。早期优势未保持，明显低于 `0727_01` 同点；6 组共享 attention 误差为零、两类结构参数均已学习，故结论是结构方向失败而非未生效。 |
 | 99 GPU 0,1 | `0730_14 ... decoder_motiontrust_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `44.366/35.594/57.867`，det `50.647/44.289/60.035`；pair mAP/AP50 `0.221063/0.416210`，both-independent mAP/AP50 `0.255138/0.449079`。相对父配置 HOTA `-0.903/+0.454`、DetA `-2.069/-2.772`，检测覆盖损失明显。 |
 | 252 GPU 0,1 | `0730_13 ... decoder_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `43.310/34.380/57.487`，det `49.011/43.032/57.581`；pair mAP/AP50 `0.207615/0.397715`，both-independent mAP/AP50 `0.242288/0.429662`。相对父配置 HOTA `-1.959/-1.182`、DetA `-3.283/-4.029`；epoch 4 的关联增益在 epoch 8 退化为检测覆盖损失。 |
@@ -222,3 +223,17 @@
 - 正交组合在 epoch 4 通过完整门槛并继续到 epoch 8；其 det 侧早期增益为当前
   四路候选最高，但 cls 增益低于 `0731_01/02`，中期需重点观察共同证据是否再次
   造成检测覆盖退化。
+
+## 2026-07-31 03:16 CST 0731_03 停止与 0731_05 接替
+
+- `0731_03 common-evidence-bypass` 的 cls HOTA/DetA/AssA 为
+  `36.564/27.324/52.415`，det 为 `43.279/34.694/55.415`；HOTA 与 DetA
+  均高于父配置，结构检查也确认三层门控最大权重
+  `0.030437/0.037983/0.040347`，均有限非零。
+- pair mAP/AP50 为 `0.153565/0.313624`，both-independent mAP/AP50 为
+  `0.182670/0.341695`。pair mAP 相对父配置下降 `0.003688`，超过保护线
+  `0.000688`，因此完成全部 artifacts 后精确停止，252 GPU 0/1 已释放。
+- 接替候选 `0731_05 shared-attention + enveloped-detail` 不再引入已失败的
+  common-evidence bypass，而是组合 `0730_13` 的共享聚合几何与 `0731_02`
+  的受包络帧细节。两者作用位置不同：前者约束 cross-attention 的权重预测，
+  后者只调整逐帧 head 输入；recurrent query 与训练协议保持父配置。

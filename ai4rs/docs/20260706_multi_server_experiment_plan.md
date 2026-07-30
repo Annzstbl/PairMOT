@@ -1152,3 +1152,18 @@ pair mAP/AP50 为 `0.161207/0.315535`，both-independent mAP/AP50 为
 `0.003954/0.023214`。两类三层结构权重均有限非零，完整门槛通过并继续到
 epoch 8。现阶段该组合 det 侧增益最高，但 cls 增益较弱；需由 epoch 8 判断
 公共证据分量是否会重现中期检测覆盖退化。
+
+## 2026-07-31 03:16 CST 0731_03 Gate 与 0731_05 设计
+
+`0731_03 common-evidence-bypass` 的 epoch 4 cls HOTA/DetA/AssA 为
+`36.564/27.324/52.415`，det 为 `43.279/34.694/55.415`。虽然 HOTA 与
+DetA 均提高，pair mAP `0.153565` 相对父配置下降 `0.003688`，超过固定
+`0.003` 保护线 `0.000688`；三层门控均有限非零，因此判定为结构引起的轻微
+pair AP 搬运并停止，不继续到 epoch 8。
+
+252 的接替方向为 `0731_05 shared-attention + enveloped-detail`：共享两帧
+deformable cross-attention 的 attention-weight predictor，保留各帧独立的
+sampling offsets、value/output projection；再由真实两帧 cross-attention 差异
+逐元素包络 swap-odd head correction。该组合不引入 common-evidence bypass，
+不改变 recurrent query、proposal、PairDN、loss 或训练协议，目标是同时继承
+`0730_13` 的关联增益与 `0731_02` 更强的检测保持能力。

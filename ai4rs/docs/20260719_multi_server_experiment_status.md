@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 03:12 CST。
+更新时间：2026-07-31 03:16 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_03 common-evidence-bypass decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_05 shared-attention + enveloped-detail decoder` | `PREPARED`；等待单测、配置审计和真数据 smoke | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -454,3 +454,12 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 
 99、197、178 三路已通过 epoch 4 全门槛并继续到 epoch 8；252 `0731_03`
 仍在等待完整 epoch 4 评估，四台训练进程均保持运行。
+
+## 2026-07-31 03:16 CST 252 epoch-4 门控与接替
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 252 GPU 0,1 | `0731_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_commonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 01:44 / 2026-07-31 03:15 | epoch 4 checkpoint、检测、完整 TrackEval 与结构审计均完成。cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；HOTA/DetA 均提高，但 pair mAP `0.153565` 相对父配置下降 `0.003688`，超过固定 `0.003` 保护线 `0.000688`。三层门控均有限非零，按门槛精确停止，GPU 0/1 已释放。 |
+| PREPARED | 252 GPU 0,1 | `0731_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |  /  | 接替结构组合 shared-attention 与受真实帧差包络约束的 head-only 细节，不含 common-evidence bypass、loss 调权、类别 reweight 或 residual-scale；等待单测、配置审计和真实数据 smoke。 |
+
+当前 99、197、178 三路正式训练继续；252 已按门槛停止失败候选并进入结构接替验证。

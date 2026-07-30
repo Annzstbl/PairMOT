@@ -382,7 +382,6 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.competitive_evidence_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
-                self.enveloped_detail_decoder,
                 self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
@@ -409,11 +408,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.motion_trust_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
-                self.shared_attention_decoder,
         )):
             raise ValueError(
-                'enveloped_detail_decoder is incompatible with other '
-                'decoder variants')
+                'enveloped_detail_decoder is incompatible with decoder '
+                'variants other than shared_attention_decoder')
         if self.common_evidence_bypass_decoder and any((
                 self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,

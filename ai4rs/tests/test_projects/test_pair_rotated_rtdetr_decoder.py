@@ -1669,6 +1669,48 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                     detail_group, baseline_group):
                 self.assertTrue(torch.equal(detail_tensor, baseline_tensor))
 
+    def test_enveloped_detail_and_shared_attention_compose(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device,
+            shared_attention_decoder=True,
+            enveloped_detail_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            self.assertIs(
+                layer.cross_attn_prev.attention_weights,
+                layer.cross_attn_curr.attention_weights)
+            self.assertIsNot(
+                layer.cross_attn_prev.sampling_offsets,
+                layer.cross_attn_curr.sampling_offsets)
+        for gate in decoder.enveloped_detail_gates:
+            self.assertEqual(gate.weight.abs().sum().item(), 0.0)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        composed_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.enveloped_detail_decoder = False
+        shared_attention_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for composed_group, baseline_group in zip(
+                composed_output[:3], shared_attention_output):
+            for composed_tensor, baseline_tensor in zip(
+                    composed_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    composed_tensor, baseline_tensor))
+
     def test_enveloped_detail_is_swap_odd_and_evidence_bounded(self):
         decoder, _, _ = _build_decoder(
             device=self.device, enveloped_detail_decoder=True)
