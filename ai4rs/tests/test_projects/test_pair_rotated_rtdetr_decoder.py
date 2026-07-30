@@ -1435,7 +1435,6 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 dict(common_motion_decoder=True),
                 dict(shared_evidence_decoder=True),
                 dict(competitive_evidence_decoder=True),
-                dict(motion_trust_decoder=True),
                 dict(symmetric_pair_decoder=True),
                 dict(shared_routing_decoder=True),
         ):
@@ -1444,6 +1443,22 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                     device=self.device,
                     shared_attention_decoder=True,
                     **other)
+
+    def test_motion_trust_and_shared_attention_compose(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            motion_trust_decoder=True,
+            shared_attention_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            self.assertIs(
+                layer.cross_attn_prev.attention_weights,
+                layer.cross_attn_curr.attention_weights)
+            self.assertIsNot(
+                layer.cross_attn_prev.sampling_offsets,
+                layer.cross_attn_curr.sampling_offsets)
+        for adapter in decoder.motion_trust_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
 
     def test_tristate_disables_structurally_unused_parameters(self):
         decoder, _, _ = _build_decoder(
