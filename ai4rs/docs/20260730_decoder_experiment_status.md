@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-30 17:49 CST
+更新时间：2026-07-30 20:29 CST
 
 ## 当前研究原则
 
@@ -13,13 +13,13 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0730_07 ... decoder_commonmotion_sharedevidence ... fresh` | `RUNNING`；2026-07-30 17:40 到 epoch 4 iter 200，约 `1.20 s/iter`，loss `10.7489`、grad_norm `57.4364` 均有限 | 组合 shared-evidence 与 common-motion；两支均为零初始化，父配置为 `0727_01`，使用 2×batch4。首次启动因继承 99 绝对数据路径而在数据加载前退出、未产生参数更新；失败目录保留为 `0730_07_failed_99_path_before_iter_20260730_1635`，修复为继承 252 父配置后从全新目录启动。epoch 4 为首个判断点。 |
-| 197 GPU 4,5 | `0730_08 ... decoder_competitiveevidence ... fresh` | `RUNNING`；2026-07-30 17:40 到 epoch 4 iter 350，约 `0.87 s/iter`，loss `10.7384`、grad_norm `39.2360` 均有限 | 将两帧 cross-attention 显式分成 common/detail，以无 bias 奇函数门做逐通道 detail 竞争；帧交换时门和 detail 同时反号，乘积不变，`tanh` 限制修正幅度，输入停止梯度。新增 `196,608` 参数。41 项 decoder 测试、配置深拷贝和双卡 4-iter 真数据 smoke 已通过；epoch 4 为首个判断点。 |
+| 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... fresh` | `RUNNING`；epoch 4 完整门控通过，20:27 已进入 epoch 5 iter 350，约 `1.61 s/iter`，loss `11.3962`、grad_norm `40.1396` 均有限 | 严格继承 `0727_01`。以双帧检测置信度门控有界反对称运动修正，并将修正限制在现有帧间位移包络内。epoch 4 结构审计通过；cls HOTA/DetA/AssA `37.878/27.722/55.486`，det `44.102/34.288/58.241`，相对父配置 HOTA `+1.669/+5.349`、DetA `+0.654/+1.834`；pair mAP/AP50 `0.16257/0.31578`，both-independent mAP/AP50 `0.18872/0.34231`，全部通过固定门槛，继续到 epoch 8。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... fresh` | `STOPPED`；2026-07-30 20:12 CST 在 epoch 4 完整检测和 2/2 TrackEval 后按固定门槛停止 | cls HOTA/DetA/AssA `36.750/26.756/54.632`，det `42.604/33.160/55.890`；虽然 det HOTA/DetA 相对父配置提高 `3.851/0.706`，pair AP50 与 both-independent AP50 分别提高约 `0.0147/0.0169`，但 pair mAP `0.1496` 相对父配置下降 `0.00765`，不满足检测保护门槛。结构语义审计通过：24 组共享 attention 参数误差为零；fusion 半矩阵最大误差 `1.79e-7` 是 FP32 更新漂移，不影响显式正反序平均的交换等变计算。保留 epoch 4 checkpoint 和全部评估，GPU 已释放。 |
 | 99 GPU 0,1 | `0730_05 ... decoder_commonmotion ... fresh` | `STOPPED`；2026-07-30 17:49 CST 按 epoch 8 门槛主动停止，保留 epoch 4/8 checkpoint、检测结果及 2/2 TrackEval | epoch 8 cls/det HOTA `44.250/49.285`，相对 `0727_01` 同点 `-1.019/-0.908`。cls DetA/AssA `35.225/58.698`，相对父实验 `-2.438/+1.397`；det DetA/AssA `42.215/59.308`，相对父实验 `-4.846/+4.163`。关联增益持续存在，但以明显损害检测覆盖为代价。pair mAP/AP50 `0.2253/0.4141`，相对父实验 `-0.0124/-0.0168`；both-independent AP50 `0.4470`（`-0.0189`）。停止后精确清理两个残留 worker，GPU 0/1 连续采样最终均为 `12 MiB/0%`。 |
 | 178 GPU 0 | `0730_06 ... decoder_sharedevidence ... fresh` | `STOPPED`；2026-07-30 17:42 CST 按 epoch 8 门槛主动停止，保留 epoch 4/8 checkpoint、检测结果及 2/2 TrackEval | epoch 8 cls/det HOTA `45.218/50.225`，相对 `0727_01` 同点仅 `-0.051/+0.032`；早期 HOTA 优势已经消失。cls DetA/AssA 为 `38.087/56.460`，相对父实验 `+0.424/-0.841`；det DetA/AssA 为 `46.507/56.028`，相对父实验 `-0.554/+0.883`，属于检测与关联之间的指标搬运，不是双提升。pair mAP/AP50 `0.2414/0.4505`，相对父实验 `+0.0036/+0.0196`，both-independent AP50 `0.4839`（`+0.0179`），不足以覆盖 HOTA 门槛失败。停止后精确清理该工作目录的 orphan DataLoader，GPU 0 连续采样最终为 `1 MiB/0%`，未影响其它任务。 |
 | 252 GPU 0,1 | `0730_02 decoder_boxonly_gradisolated_reg0p25 ... fresh` | `STOPPED`；2026-07-30 16:17 CST 主动停止，保留 epoch 4 checkpoint、检测结果和完整首轮 TrackEval | epoch 4 cls/det HOTA `35.883/42.045`，相对 `0727_01` 同点 `-0.326/+3.292`。det 表面增益主要来自早期 AssA 激增，pair AP50 `+0.0284` 但 pair mAP `-0.0027`；与旧 dual-output 的早期虚高轨迹一致，因此不展开 residual-scale 扫描或长跑。 |
@@ -29,16 +29,16 @@
 
 ## 代码一致性
 
-- 99、252、178 以及 197 的干净运维副本均位于提交 `bfda295`。其中 `eb9c440` 为 common-motion decoder，`25fe052` 为 shared-evidence decoder，`a8d8ded` 为两者组合，`0517066` 为 competitive-evidence decoder，`bfda295` 记录 `0730_08` 正式启动。
+- 99、252、178 以及 197 的干净运维副本均位于提交 `fbbf137`。其中 `f231b01` 引入 motion-trust，`5341c32` 引入 symmetric-pair，`fbbf137` 记录两项正式启动；更早的 common-motion、shared-evidence、competitive-evidence 历史仍完整保留。
 - 99 原有实验提交 `c104193` 在共同历史中完整保留；各服务器未跟踪目录未覆盖或删除。
 - common-motion、shared-evidence、competitive-evidence 及组合结构共通过 41 项 decoder 单元测试；零初始化时精确等于父模型，第一步反向中 adapter 均有非零梯度。所有正式运行均在配置展开、路径检查和真数据 smoke 后启动。
 - 197 使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`。历史目录 `/data/users/litianhao/PairMOT` 保持原状，不作为新实验代码源。
 
 ## 下一步
 
-1. `0730_07` 与 `0730_08` 均以 epoch 4 为首个判断点。除 cls/det HOTA 外，同时检查 DetA/AssA、pair mAP/AP50 与 both-independent AP50，避免把单一 AssA 早期尖峰当成结构收益。
-2. 99 GPU 0,1 与 178 GPU 0 暂时空闲，不用参数扫描填卡；待两个新结构的 epoch 4 结果后，只为有明确诊断价值的下一结构使用。
-3. common-motion 已证实能提高 AssA 但损害 DetA；后续结构不能只叠加该信号，必须显式保护检测覆盖。
+1. `0730_09` 继续到 epoch 8，并按相同的 HOTA、DetA、pair mAP 与 both-independent AP50 门槛判断早期共同改善能否保持。
+2. 99 GPU 0,1、252 GPU 0,1 与 178 GPU 0 暂时空闲，不用参数扫描填卡；只为具有独立结构诊断价值的下一候选使用。
+3. motion-trust 是当前第一次同时改善 HOTA、DetA、AssA 与 AP 的 decoder 结构。下一候选优先解决跨帧 cross-attention 的参数偏置，同时保留各帧的 value/output 投影容量；不再重复无保护的 common-motion 或完全共享。
 4. 论文主线暂不改变；只有 decoder 候选在中后期同时超过 `0727_01` 的 cls/det HOTA，才进入论文递进表。
 
 ## 2026-07-30 18:25 CST 状态覆盖
@@ -58,3 +58,10 @@
 - 正式 `0730_10` 已通过五项启动门槛。18:45 到 epoch 1 iter 200，约 `1.0837 s/iter`、loss `18.9054`、grad norm `56.8993`，DN 与 encoder loss 均有限；GPU 0/1 各约 `19.2 GiB`、采样时利用率 100%，无异常。首个判断点为 epoch 4。
 - 当前实际运行：197 双卡 `0730_09`、252 双卡 `0730_10`；99 双卡与 178 单卡暂时保留。后两者只在 epoch 4 结果给出明确结构诊断后用于下一模型改动，不用于 residual-scale、loss 权重或类别重权扫描。
 - 新结构代码提交为 `5341c32`，已通过 Git bundle 精确同步到 99、197、252、178，保留各服务器原有未跟踪文件。GitHub 尚缺非交互认证，本轮未误报为已推送。
+
+## 2026-07-30 20:29 CST epoch 4 门控结果
+
+- `0730_10 symmetric-pair decoder` 已于 20:12 CST 停止。epoch 4 cls HOTA/DetA/AssA 为 `36.750/26.756/54.632`，det 为 `42.604/33.160/55.890`；pair mAP/AP50 为 `0.1496/0.3108`，both-independent mAP/AP50 为 `0.1786/0.3400`。其 det HOTA、DetA 与 AP50 有增益，但 pair mAP 相对 `0727_01` epoch 4 的 `0.157253` 下降 `0.00765`，超过 `0.003` 保护线，因此完成 checkpoint、检测和 2/2 TrackEval 后停止，252 GPU 0/1 已释放。
+- `0730_10` 的共享 attention 参数在 epoch 4 checkpoint 中仍逐项相等。fusion 半矩阵最大差异为 `1.788e-7`，略高于原检查脚本的 `1e-7` 绝对阈值；进一步 FP32 数值审计确认 24 组 attention 最大误差为零、4 个 fusion 最大半矩阵误差仅为该数值。由于前向显式平均正反两种帧序，计算上的交换等变性不依赖两半权重继续相等，故这是数值漂移而非结构失效。
+- `0730_09 motion-trust decoder` 的 epoch 4 已完成 checkpoint、检测及 2/2 TrackEval。结构审计通过，三层 adapter 最大绝对权重为 `0.14190/0.13821/0.12903`，均有限且非零。cls HOTA/DetA/AssA 为 `37.878/27.722/55.486`，相对父配置为 `+1.669/+0.654/+3.392`；det 为 `44.102/34.288/58.241`，相对父配置为 `+5.349/+1.834/+10.775`。pair mAP/AP50 为 `0.16257/0.31578`，相对父配置为 `+0.00531/+0.01965`；both-independent mAP/AP50 为 `0.18872/0.34231`，相对父配置为 `+0.00425/+0.01916`。所有预先固定的门槛均通过，不是单独 AssA 尖峰。
+- `0730_09` 保持在 197 GPU 4/5 继续到 epoch 8。20:27 已到 epoch 5 iter 350，训练 loss、DN loss、encoder loss 与 grad norm 均有限，无 Traceback、OOM、NaN、NCCL 或 unused-parameter 错误。当前空闲资源为 99 GPU 0/1、252 GPU 0/1 和 178 GPU 0；197 其他 GPU 不属于本实验资源池。

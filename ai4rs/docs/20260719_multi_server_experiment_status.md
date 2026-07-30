@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-28 11:17 CST。
+更新时间：2026-07-30 20:29 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,11 +15,11 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0727_12 cross-scale evidence-budget dual-evidence encoder` | epoch 49；12/18 TrackEval | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0728_01 0727_01 + 0708_03 decoder` | epoch 1 iter 50；约`0.9245 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0727_04 detail-energy-conserved common-detail encoder` | epoch 28；6/18 TrackEval | 无；`0726_03`已完成并相对Base+Liquid双提升 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无PairMOT训练 | `0727_08`按用户指令停在epoch 3 iter 750 | 无；`0727_05`保持准备 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL | 无训练 | `0727_11`完成72 epochs、18/18 TrackEval及共享盘归档 | 无；Encoder阶段不再向AutoDL追加实验 | `/root/autodl-tmp/work_dirs` |
+| 99 本机 | 无 PairMOT 训练 | GPU 0/1 空闲；GPU 2 为其他任务占用，不纳入调度 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 5 iter 350 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | 无 PairMOT 训练 | `0730_10` 已在 epoch 4 门控后停止；GPU 0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | 无 PairMOT 训练 | GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
 
@@ -324,3 +324,12 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 | RUNNING | 252 GPU 0,1 | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41 /  | 严格继承 `0727_01`，decoder 两帧共享 deformable cross-attention 权重，并对 cross-frame feature fusion 与 pair-position fusion 显式平均正反两种帧序；不增加参数，不修改 encoder、proposal、PairDN、head、loss 或训练协议。52 项 decoder 单测、配置深拷贝、launcher shell 审计和双卡真实数据 4-iter smoke 通过；预训练权重中 24 组 attention 参数逐项相等，smoke checkpoint 中 4 个 fusion 矩阵的帧交换误差最大为 `8.45e-09`。正式训练五项启动门槛通过，18:45 到 epoch 1 iter 200，约 `1.0837 s/iter`、loss `18.9054`、grad norm `56.8993`，GPU 0/1 各约 `19.2 GiB`，无异常。首个结构判断点为 epoch 4。 |
 
 当前资源池确认为 99 双卡、197 双卡、252 双卡、178 单卡；其中 197 GPU 4/5 与 252 GPU 0/1 正在运行结构实验，99 GPU 0/1 与 178 GPU 0 保留给 epoch 4 诊断后有明确模型依据的下一候选，不以参数扫描填卡。代码提交 `5341c32` 已通过带 prerequisite 的 Git bundle 精确同步到 99、197、252 和 178；各服务器既有未跟踪文件未覆盖或删除。
+
+## 2026-07-30 20:29 CST decoder epoch 4 门控覆盖
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 /  | epoch 4 checkpoint、检测、结构审计及 2/2 TrackEval 完成并通过固定门槛。cls HOTA/DetA/AssA `37.878/27.722/55.486`，det `44.102/34.288/58.241`；相对 `0727_01` 同点 HOTA `+1.669/+5.349`、DetA `+0.654/+1.834`。pair mAP/AP50 `0.16257/0.31578`，both-independent mAP/AP50 `0.18872/0.34231`，均高于父配置。三层 motion-trust adapter 最大绝对权重 `0.14190/0.13821/0.12903`，均有限且非零。继续训练到 epoch 8；20:27 到 epoch 5 iter 350，训练健康。 |
+| STOPPED | 252 GPU 0,1 | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41 / 2026-07-30 20:12 | epoch 4 完成 checkpoint、检测和 2/2 TrackEval。cls HOTA/DetA/AssA `36.750/26.756/54.632`，det `42.604/33.160/55.890`；pair mAP/AP50 `0.1496/0.3108`，both-independent mAP/AP50 `0.1786/0.3400`。虽 det HOTA/DetA 与 AP50 提高，但 pair mAP 相对父配置下降 `0.00765`，未通过 `0.003` 保护线，因此停止并释放 GPU。共享 attention 结构保持，fusion 半矩阵 `1.788e-7` 差异属于 FP32 漂移，不是前向交换等变失效。 |
+
+当前可调度资源仍为 99 GPU 0/1、197 GPU 4/5、252 GPU 0/1、178 GPU 0，共 7 张；197 GPU 4/5 正由 `0730_09` 占用，99 GPU 0/1、252 GPU 0/1 与 178 GPU 0 空闲。99 GPU 2 和 197 其他 GPU 不属于本实验调度范围。AutoDL 全部关机。四台服务器的目标代码提交均为 `fbbf137`，已有未跟踪文件继续保留。
