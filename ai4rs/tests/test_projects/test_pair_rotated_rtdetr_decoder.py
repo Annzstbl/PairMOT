@@ -1005,7 +1005,6 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 dict(tristate_decoder=True),
                 dict(dual_output_adapter=True),
                 dict(common_motion_decoder=True),
-                dict(shared_evidence_decoder=True),
                 dict(competitive_evidence_decoder=True),
                 dict(shared_routing_decoder=True),
         ):
@@ -1014,6 +1013,84 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                     device=self.device,
                     motion_trust_decoder=True,
                     **other)
+
+    def test_motion_trust_and_shared_evidence_compose(self):
+        """Detection-protected motion and shared evidence stay orthogonal."""
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_evidence_decoder=True,
+            motion_trust_decoder=True)
+        decoder.init_weights()
+        cls_prev = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=8)
+        cls_curr = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=9)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        reference_prev = torch.rand(
+            1, decoder.num_queries, 5, device=self.device).mul(0.2).add(0.2)
+        reference_curr = torch.rand(
+            1, decoder.num_queries, 5, device=self.device).mul(0.2).add(0.6)
+
+        combined_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr,
+            reference_prev=reference_prev,
+            reference_curr=reference_curr)
+        decoder.shared_evidence_decoder = False
+        decoder.motion_trust_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            reference_prev=reference_prev,
+            reference_curr=reference_curr)
+        for combined_group, baseline_group in zip(
+                combined_output, baseline_output):
+            for combined_tensor, baseline_tensor in zip(
+                    combined_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    combined_tensor, baseline_tensor))
+
+        decoder.shared_evidence_decoder = True
+        decoder.motion_trust_decoder = True
+        torch.manual_seed(60)
+        hidden_states, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr,
+            reference_prev=reference_prev,
+            reference_curr=reference_curr)
+        loss = sum(
+            (hidden * torch.randn_like(hidden)).mean()
+            for hidden in hidden_states)
+        loss = loss + sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in (
+                list(decoder.shared_evidence_adapters)
+                + list(decoder.motion_trust_adapters)):
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
 
     def test_symmetric_pair_decoder_shares_cross_attention(self):
         decoder, _, _ = _build_decoder(

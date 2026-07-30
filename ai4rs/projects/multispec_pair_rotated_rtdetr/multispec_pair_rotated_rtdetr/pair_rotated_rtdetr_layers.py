@@ -312,11 +312,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
-                self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,
         )):
             raise ValueError(
-                'motion_trust_decoder is incompatible with all other '
+                'motion_trust_decoder is incompatible with tristate, '
+                'dual-output, common-motion, and competitive-evidence '
                 'decoder variants')
         if self.symmetric_pair_decoder and any((
                 self.tristate_decoder,
