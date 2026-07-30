@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 03:47 CST
+更新时间：2026-07-31 04:55 CST
 
 ## 当前研究原则
 
@@ -13,10 +13,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
-| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；03:23 fresh 启动，03:25 到 epoch 1 iter 50 | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。79 项 decoder 单测、配置深拷贝、完整模型构建、双卡真数据 4-iter smoke 与组合结构审计通过；iter 50 为 `1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`，总/DN/encoder loss 有限。 |
-| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；03:45 fresh 启动，03:46 到 epoch 1 iter 50 | 分类特征保持 shared-attention 的共享 decoder 路径；受真实帧差包络约束、交换反对称的细节只进入两帧迭代框回归及 reference 更新。80 项单测、完整模型构建、真数据 4-iter smoke 和结构审计通过；iter 50 为 `0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，总/DN/encoder loss 有限，五项启动门槛通过。 |
-| 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
+| 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `RUNNING`；04:32 fresh 启动，epoch 1 正常 | shared-attention 与分类专用 enveloped-detail 的组合；回归及 reference 更新保持共享父路径。真数据 DDP smoke、checkpoint 审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
+| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `36.593/27.412/52.831`，det `43.208/34.366/55.990`；相对父配置 HOTA `+0.384/+4.455`、DetA `+0.344/+1.912`。pair mAP `0.1617`、both-independent AP50 `0.3450`，分别提高约 `0.0044/0.0219`。6 组共享 attention 最大误差为零、18 组独立参数最大差异 `0.036059`，三层 enveloped-detail 最大权重 `0.063013/0.045573/0.054088`；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
+| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 检测完成，等待异步 TrackEval | 分类特征保持 shared-attention 的共享 decoder 路径；细节只进入两帧迭代框回归及 reference 更新。epoch 4 pair mAP `0.1700`、both-independent AP50 `0.3494`，检测代理已通过；结构审计确认共享 attention 误差为零、独立参数最大差异 `0.039377`，三层回归门控均有限非零。待完整 HOTA/DetA/AssA 决定是否继续至 epoch 8。 |
+| 99 GPU 0,1 | `0731_07 ... decoder_classificationenvelopeddetail ... fresh` | `RUNNING`；04:33 fresh 启动，epoch 1 正常 | 无 shared-attention 的分类专用 enveloped-detail；回归与 reference 更新保持父路径。真数据 DDP smoke、checkpoint 门控审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
 
 ## 已完成或释放
 
@@ -305,3 +305,21 @@
   99 classification-only、197 shared-attention + classification-only。后续优先看
   det DetA 是否由分类隔离得到保护，以及 197 是否在保留 shared-attention det
   增益的同时把 cls HOTA 拉回父配置以上。
+
+## 2026-07-31 04:55 CST 0731_05 epoch-4 门控
+
+- 252 `0731_05 shared-attention + full-path enveloped-detail` 的 epoch 4
+  checkpoint、检测、完整 TrackEval、原始 CSV 和组合结构检查均已收齐。
+  cls HOTA/DetA/AssA 为 `36.593/27.412/52.831`，det 为
+  `43.208/34.366/55.990`；相对父配置分别为 HOTA `+0.384/+4.455`、
+  DetA `+0.344/+1.912`、AssA `+0.737/+8.524`。
+- pair mAP/AP50 为 `0.1617/0.3118`，both-independent mAP/AP50 为
+  `0.1910/0.3450`；相对父配置 pair mAP 和 both-independent AP50
+  分别提高约 `0.0044/0.0219`，不存在由关联分数掩盖的检测覆盖下降。
+- checkpoint 中 6 组共享 attention 最大误差为零、18 组逐帧独立参数最大差异
+  `0.036059`；三层 enveloped-detail 门控最大权重
+  `0.063013/0.045573/0.054088`。结构确已生效且所有固定门槛通过，
+  因此保留训练继续到 epoch 8。
+- 178 `0731_06` 同点检测已完成：pair mAP `0.1700`、
+  both-independent AP50 `0.3494`，检测代理先通过；等待异步 TrackEval
+  的双 HOTA 与原始 DetA/AssA 后再作去留判断。
