@@ -651,6 +651,66 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         for adapter in decoder.shared_evidence_adapters:
             self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
 
+    def test_common_motion_and_shared_evidence_compose(self):
+        """The two orthogonal decoder paths remain zero-start and trainable."""
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            common_motion_decoder=True,
+            shared_evidence_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+
+        combined_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.common_motion_decoder = False
+        decoder.shared_evidence_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for combined_group, baseline_group in zip(
+                combined_output, baseline_output):
+            for combined_tensor, baseline_tensor in zip(
+                    combined_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    combined_tensor, baseline_tensor))
+
+        decoder.common_motion_decoder = True
+        decoder.shared_evidence_decoder = True
+        torch.manual_seed(41)
+        hidden_states, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        loss = sum(
+            (hidden * torch.randn_like(hidden)).mean()
+            for hidden in hidden_states)
+        loss = loss + sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in (
+                list(decoder.common_motion_adapters)
+                + list(decoder.shared_evidence_adapters)):
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
+
     def test_shared_evidence_rejects_incompatible_decoders(self):
         for other in (
                 dict(tristate_decoder=True),
