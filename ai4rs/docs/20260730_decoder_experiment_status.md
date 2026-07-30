@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 02:24 CST
+更新时间：2026-07-31 03:12 CST
 
 ## 当前研究原则
 
@@ -13,10 +13,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；01:52 fresh 启动，01:53 到 epoch 1 iter 50 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。78 项 decoder 单测、完整模型构建、配置深拷贝、launcher 审计和双卡真实数据 4-iter smoke 通过；两组三层门控均非零且有限。iter 50 约 `0.9036 s/iter`，loss `21.5469`、grad norm `111.8402`，总/DN/encoder loss 有限。 |
+| 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
 | 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `RUNNING`；01:44 fresh 启动，01:46 到 epoch 1 iter 50 | recurrent query 保持父模型；仅让 heads 通过零起点、交换不变且受限的残差恢复可能被 fusion/FFN 抑制的两帧公共证据。4-iter smoke 和 checkpoint 结构检查通过。iter 50 约 `1.1786 s/iter`，loss `21.3837`、grad norm `130.9290`，总/DN/encoder loss 有限。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，02:23 已进入 epoch 5 | cls HOTA/DetA/AssA `37.590/28.607/52.920`，det `40.313/33.923/49.759`；相对 `0727_01` 同点 HOTA `+1.381/+1.560`，两侧 DetA 和 AssA 也同时提高。pair mAP `0.173430`、both-independent AP50 `0.356102`，分别提高 `0.016177/0.032953`。6 组共享 attention 误差为零，18 组独立参数最大差异 `0.042917`；三层 antisymmetric-detail 权重范数 `0.024836/0.021828/0.023927`。结构与性能门槛完整通过，继续到 epoch 8 检查增益可持续性。 |
-| 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；01:44 fresh 启动，01:45 到 epoch 1 iter 50 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。4-iter smoke 和 checkpoint 结构检查通过。iter 50 约 `0.9785 s/iter`，loss `21.4400`、grad norm `112.8147`，总/DN/encoder loss 有限。 |
+| 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
 
 ## 已完成或释放
 
@@ -192,3 +192,33 @@
   `0.024836/0.021828/0.023927`。两项结构均已真实学习。
 - 该组合是当前首个在统一 epoch-4 门槛上同时提高 HOTA、DetA、AssA 与 AP 的
   decoder 候选，已进入 epoch 5 并保留到 epoch 8；此时仍不改写论文最终主线。
+
+## 2026-07-31 03:08 CST 0731_02 epoch-4 全门槛
+
+- checkpoint、检测指标、完整 TrackEval 和原始 CSV 均已落盘。
+- cls HOTA/DetA/AssA 为 `37.859/28.112/54.688`，det 为
+  `42.873/34.173/55.071`；相对 `0727_01` epoch 4，cls 三项分别
+  `+1.650/+1.044/+2.594`，det 三项分别 `+4.120/+1.719/+7.605`。
+- pair mAP/AP50 为 `0.167896/0.317776`，both-independent mAP/AP50 为
+  `0.196745/0.349436`；相对父配置 pair mAP 和 both-independent AP50 分别
+  `+0.010643/+0.026287`，AP 保护线明显通过。
+- checkpoint 结构审计通过；三层 enveloped-detail 权重最大绝对值分别为
+  `0.066020/0.042205/0.063736`，均有限且非零，排除结构未生效。
+- 该 head-only 帧差包络结构在 epoch 4 同时提高 HOTA、DetA、AssA 与 AP，
+  且 det 侧早期增益强于 `0731_01`；继续到 epoch 8，重点判断是否避免既有
+  decoder 候选的中期检测覆盖退化。
+
+## 2026-07-31 03:12 CST 0731_04 epoch-4 全门槛
+
+- cls HOTA/DetA/AssA 为 `36.831/27.861/52.246`，det 为
+  `43.581/34.573/56.147`；相对 `0727_01` epoch 4，cls 三项分别
+  `+0.622/+0.793/+0.152`，det 三项分别 `+4.828/+2.119/+8.681`。
+- pair mAP/AP50 为 `0.161207/0.315535`，both-independent mAP/AP50 为
+  `0.189718/0.346363`；相对父配置 pair mAP 和 both-independent AP50 分别
+  `+0.003954/+0.023214`，AP 保护线通过。
+- checkpoint 结构审计确认 enveloped-detail 三层权重
+  `0.063819/0.046991/0.041138`，common-evidence-bypass 三层权重
+  `0.025945/0.037553/0.027217`，全部有限非零。
+- 正交组合在 epoch 4 通过完整门槛并继续到 epoch 8；其 det 侧早期增益为当前
+  四路候选最高，但 cls 增益低于 `0731_01/02`，中期需重点观察共同证据是否再次
+  造成检测覆盖退化。

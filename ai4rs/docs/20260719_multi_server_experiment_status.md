@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 02:24 CST。
+更新时间：2026-07-31 03:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,8 +15,8 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_02 enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_04 orthogonal-evidence decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_03 common-evidence-bypass decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -436,3 +436,21 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 四路结构实验保持并行：99 `0731_02` 已到 epoch 3，252 `0731_03` 与 197
 `0731_04` 均接近 epoch 3，178 `0731_01` 已通过 epoch 4 全门槛并进入 epoch 5。
 四台代码和记录统一到 `7e184b1`，同步未重启任何在途训练。
+
+## 2026-07-31 03:08 CST 99 epoch-4 全门槛
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 99 GPU 0,1 | `0731_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 01:44 /  | epoch 4 checkpoint、检测、完整 TrackEval 与结构审计均完成。cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对 `0727_01` 同点 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，全门槛通过，继续到 epoch 8。 |
+
+当前仍为四路正式结构实验并行：99 `0731_02` 与 178 `0731_01` 已通过 epoch 4
+全门槛并继续到 epoch 8；252 `0731_03`、197 `0731_04` 正等待 epoch 4 完整评估。
+
+## 2026-07-31 03:12 CST 197 epoch-4 全门槛
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0731_04_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_orthogonalevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 01:52 /  | epoch 4 checkpoint、检测、完整 TrackEval 与结构审计均完成。cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对 `0727_01` 同点 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两类三层门控均有限非零，全门槛通过，继续到 epoch 8。 |
+
+99、197、178 三路已通过 epoch 4 全门槛并继续到 epoch 8；252 `0731_03`
+仍在等待完整 epoch 4 评估，四台训练进程均保持运行。

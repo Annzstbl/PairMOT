@@ -1129,3 +1129,26 @@ checkpoint 中 6 组共享 attention 权重误差为零，18 组应独立参数�
 `0.024836/0.021828/0.023927`，排除结构未生效。该实验继续到 epoch 8，重点验证
 早期增益能否避免 `0730_13` 的中期退化。99 `0731_02` 已到 epoch 3，252
 `0731_03` 和 197 `0731_04` 均接近 epoch 3，四路结构实验继续并行。
+
+## 2026-07-31 03:08 CST 0731_02 Epoch-4 Gate
+
+`0731_02 enveloped-detail decoder` 已完成 epoch 4 checkpoint、检测、TrackEval 与
+checkpoint 结构审计。cls HOTA/DetA/AssA 为 `37.859/28.112/54.688`，det 为
+`42.873/34.173/55.071`；相对 `0727_01` 同点，cls/det HOTA 提高
+`1.650/4.120`，DetA 提高 `1.044/1.719`。pair mAP/AP50 为
+`0.167896/0.317776`，both-independent mAP/AP50 为 `0.196745/0.349436`；
+pair mAP 与 both-independent AP50 分别提高 `0.010643/0.026287`。
+三层 enveloped-detail 权重为 `0.066020/0.042205/0.063736`，均有限非零。
+结构、HOTA、DetA、AssA 与 AP 门槛同时通过，实验继续到 epoch 8；252 `0731_03`
+和 197 `0731_04` 仍按同一固定门槛等待 epoch 4 完整评估。
+
+## 2026-07-31 03:12 CST 0731_04 Epoch-4 Gate
+
+`0731_04 orthogonal-evidence decoder` 的 epoch 4 cls HOTA/DetA/AssA 为
+`36.831/27.861/52.246`，det 为 `43.581/34.573/56.147`；相对父配置同点，
+cls/det HOTA 提高 `0.622/4.828`，DetA 提高 `0.793/2.119`。
+pair mAP/AP50 为 `0.161207/0.315535`，both-independent mAP/AP50 为
+`0.189718/0.346363`，pair mAP 与 both-independent AP50 分别提高
+`0.003954/0.023214`。两类三层结构权重均有限非零，完整门槛通过并继续到
+epoch 8。现阶段该组合 det 侧增益最高，但 cls 增益较弱；需由 epoch 8 判断
+公共证据分量是否会重现中期检测覆盖退化。
