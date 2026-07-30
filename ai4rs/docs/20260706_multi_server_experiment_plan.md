@@ -1099,3 +1099,18 @@ antisymmetric-detail 结构检查。正式 fresh 训练于 01:11 启动，01:12 
 iter 50，约 `0.9344 s/iter`、loss `20.9701`、grad norm `96.9294`，GPU0 约
 `31.4 GiB`，无异常。当前 252 `0730_13`、99 `0730_14`、197 `0730_15` 已进入
 epoch 8，178 `0731_01` 首判 epoch 4，四路结构实验并行恢复。
+## 2026-07-31 01:54 CST decoder 四机并行恢复
+
+- `0730_13/14/15` 的 epoch 8 完整评估均证明 epoch 4 的早期关联增益不可持续，
+  并在中期转化为 DetA 与 AP 损失；三项均在 checkpoint、检测、TrackEval 和结构
+  审计完整后停止，不再用共享 attention、motion-trust 或 shared-evidence 组合长跑。
+- 新一轮只验证模型结构，不做类别重权、loss scale 或 residual-scale 扫描：
+  99 `0731_02` 是受真实帧差包络约束的 head-only 反对称细节；
+  252 `0731_03` 是不改变 recurrent query 的公共证据旁路；
+  197 `0731_04` 将两者正交分解并分别零起点受限注入；
+  178 继续 `0731_01 shared-attention + antisymmetric detail`。
+- 四台服务器代码统一至 `3d65dc4`。新结构通过 78 项 decoder 单元测试、配置深拷贝、
+  完整模型构建、launcher 审计和真实数据 smoke；四项正式训练均已有真实训练进程与
+  有限的总/DN/encoder loss，99、252、197 均达到 iter 50，178 已到 epoch 3。
+- 首个统一决策点为 epoch 4；固定比较 cls/det HOTA、DetA/AssA、pair mAP/AP50 与
+  both-independent AP50。仅在检测覆盖和 AP 不被搬运的前提下保留 HOTA 增益。

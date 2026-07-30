@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 01:13 CST。
+更新时间：2026-07-31 01:54 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0730_14 motion-trust + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_15 shared-evidence + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0730_13 shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | 4-iter smoke 与两项结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_02 enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_04 orthogonal-evidence decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_03 common-evidence-bypass decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | 正式 fresh 训练到 epoch 3 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
