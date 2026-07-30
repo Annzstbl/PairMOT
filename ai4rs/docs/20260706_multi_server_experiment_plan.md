@@ -1250,3 +1250,5 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 178 GPU 0 改跑 `0731_11 midpoint-preserving regression-only detail`。
   该实验不是参数扫描：它把帧细节的反对称约束从特征域推进到最终 5D 框残差域，
   精确消除两个独立回归头带来的 pair midpoint 漂移。
+- `0731_11` 已通过构建、测试、真实数据 smoke、结构 checkpoint 检查与正式
+  iter 50 门槛，06:11 fresh 启动；首个决策点为 epoch 4 的双 HOTA。

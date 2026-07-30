@@ -387,3 +387,9 @@
   两个独立非线性回归头会把特征域的 `-detail/+detail` 映射成不对称的框残差；
   新结构在框 logit residual 空间显式构造 `-box_detail/+box_detail`，保证新增
   细节不移动 pair midpoint。完成配置构建与真数据 smoke 后 fresh 启动。
+- `0731_11` 已通过完整模型构建、84 项 decoder 单测（代码级）、178 真数据
+  4-iter smoke 与 checkpoint 结构检查。smoke 的 6 组共享 attention 误差为零，
+  18 组独立参数最大差异 `0.000786`，三层 detail gate 最大权重
+  `0.000389/0.000390/0.000390`。06:11 fresh 启动，06:12 达到 epoch 1
+  iter 50：`0.9405 s/iter`、loss `20.9608`、grad norm `109.0985`，
+  GPU0 约 `31.4 GiB`，无 Traceback/OOM/NaN/NCCL。
