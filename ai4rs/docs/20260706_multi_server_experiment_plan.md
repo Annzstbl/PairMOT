@@ -1167,3 +1167,15 @@ sampling offsets、value/output projection；再由真实两帧 cross-attention 
 逐元素包络 swap-odd head correction。该组合不引入 common-evidence bypass，
 不改变 recurrent query、proposal、PairDN、loss 或训练协议，目标是同时继承
 `0730_13` 的关联增益与 `0731_02` 更强的检测保持能力。
+
+## 2026-07-31 03:25 CST 0731_05 Formal Start
+
+组合兼容性代码与零起点组合测试已完成，79 项 decoder 单测通过；正式/烟测配置
+均完成深拷贝与完整模型构建。252 双卡真实数据 4-iter smoke 的总、DN、encoder
+loss 和 grad norm 全部有限，checkpoint 同时证明 6 组 attention 权重严格共享、
+18 组 sampling/value/output 参数已分化，三层 enveloped-detail 门控获得非零更新。
+
+正式 fresh 训练于 03:23 启动，03:25 到 epoch 1 iter 50，约
+`1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`；GPU0/1 各约
+`19.2 GiB` 且满载，无训练异常。首个决策点仍为 epoch 4，并使用与其余候选
+相同的 HOTA、DetA/AssA、pair mAP 与 both-independent AP50 保护门槛。

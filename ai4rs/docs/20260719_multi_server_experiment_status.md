@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 03:16 CST。
+更新时间：2026-07-31 03:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + enveloped-detail decoder` | `PREPARED`；等待单测、配置审计和真数据 smoke | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_05 shared-attention + enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -463,3 +463,12 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 | PREPARED | 252 GPU 0,1 | `0731_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |  /  | 接替结构组合 shared-attention 与受真实帧差包络约束的 head-only 细节，不含 common-evidence bypass、loss 调权、类别 reweight 或 residual-scale；等待单测、配置审计和真实数据 smoke。 |
 
 当前 99、197、178 三路正式训练继续；252 已按门槛停止失败候选并进入结构接替验证。
+
+## 2026-07-31 03:25 CST 252 接替实验启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 252 GPU 0,1 | `0731_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 03:23 /  | 79 项 decoder 单测、配置深拷贝、完整模型构建、双卡真实数据 4-iter smoke 与组合 checkpoint 审计通过。正式训练 03:25 到 epoch 1 iter 50：`1.1589 s/iter`、loss `21.4509`、grad norm `104.0930`，总/DN/encoder loss 有限；GPU0/1 各约 `19.2 GiB`、100% 利用，无 Traceback/OOM/NaN/NCCL。五项启动门槛通过，首判 epoch 4。 |
+
+四路正式结构实验再次并行：252 `0731_05` 首判 epoch 4；99 `0731_02`、
+197 `0731_04`、178 `0731_01` 继续各自的 epoch 8 持续性检查。

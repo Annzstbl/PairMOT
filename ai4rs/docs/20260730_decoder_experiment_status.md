@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 03:16 CST
+更新时间：2026-07-31 03:25 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
-| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `PREPARED`；等待单测、配置审计和真数据 smoke | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。 |
+| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；03:23 fresh 启动，03:25 到 epoch 1 iter 50 | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。79 项 decoder 单测、配置深拷贝、完整模型构建、双卡真数据 4-iter smoke 与组合结构审计通过；iter 50 为 `1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`，总/DN/encoder loss 有限。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，02:23 已进入 epoch 5 | cls HOTA/DetA/AssA `37.590/28.607/52.920`，det `40.313/33.923/49.759`；相对 `0727_01` 同点 HOTA `+1.381/+1.560`，两侧 DetA 和 AssA 也同时提高。pair mAP `0.173430`、both-independent AP50 `0.356102`，分别提高 `0.016177/0.032953`。6 组共享 attention 误差为零，18 组独立参数最大差异 `0.042917`；三层 antisymmetric-detail 权重范数 `0.024836/0.021828/0.023927`。结构与性能门槛完整通过，继续到 epoch 8 检查增益可持续性。 |
 | 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
 
@@ -237,3 +237,17 @@
   common-evidence bypass，而是组合 `0730_13` 的共享聚合几何与 `0731_02`
   的受包络帧细节。两者作用位置不同：前者约束 cross-attention 的权重预测，
   后者只调整逐帧 head 输入；recurrent query 与训练协议保持父配置。
+
+## 2026-07-31 03:25 CST 0731_05 正式启动
+
+- 79 项 decoder 单测全部通过；新增组合测试确认零起点时逐元素等于
+  shared-attention 父路径，并保持 6 组 attention 参数共享、18 组
+  sampling/value/output 参数独立。
+- 正式配置和 4-iter smoke 配置均通过深拷贝与完整模型构建。双卡真实数据 smoke
+  的四步总/DN/encoder loss 与 grad norm 均有限；checkpoint 中共享 attention
+  最大误差为零、独立参数最大差异 `0.000785`，三层 enveloped-detail 最大权重
+  `0.000396/0.000393/0.000394`。
+- 03:23 在 252 GPU 0/1 fresh 启动，03:25 达到 epoch 1 iter 50：
+  `1.1589 s/iter`、loss `21.4509`、grad norm `104.0930`，两卡约
+  `19.2 GiB` 且 100% 利用，无 Traceback、OOM、NaN、NCCL 或未使用参数错误。
+  五项正式启动门槛通过，首判 epoch 4。
