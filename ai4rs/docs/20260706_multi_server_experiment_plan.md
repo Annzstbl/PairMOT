@@ -1002,3 +1002,21 @@ NaN、NCCL、DDP reduction 或 unused-parameter 错误。首个性能判断点�
 分化。正式 fresh 训练于 22:45 CST 启动，22:46 到 epoch 1 iter 50，约
 `0.9575 s/iter`、loss `21.4104`、grad norm `100.1361`，双卡各约 `19.2 GiB`，
 无异常。首判 epoch 4，并与 `0730_09`、`0730_13` 的同点主效应共同解释。
+
+## 2026-07-30 0730_09 Epoch-8 Gate 与 0730_15
+
+`0730_09 motion-trust` 在 epoch 8 的 cls/det HOTA 为 `45.498/51.160`，相对父配置
+仅提高 `0.229/0.967`；cls/det DetA 却下降 `0.875/2.043`，pair mAP 从
+`0.237734` 降至 `0.230058`。其 AssA 提高但检测覆盖和 AP 保护失败，因此完成 checkpoint、
+检测、2/2 TrackEval 与结构审计后停止，不继续长跑。
+
+`0730_12 motion-trust + shared-evidence` epoch 4 则全面通过：cls HOTA/DetA/AssA
+`40.559/29.273/59.330`，det `46.017/34.057/64.397`，pair mAP/AP50
+`0.187248/0.342315`，both-independent mAP/AP50 `0.213887/0.366343`。
+这说明 shared-evidence 与 motion-trust 的交互在早期同时改善检测与关联，继续到 epoch 8。
+
+为分离这一交互是否必须依赖 motion-trust，197 接替运行 `0730_15`：
+shared-evidence 修正共享 query，shared-attention 仅共享 attention 权重并保持逐帧
+sampling offsets/value/output projection 独立。代码提交 `0782826`；63 项单测、配置/
+launcher 审计和双卡 4-iter 真数据 smoke 通过。正式 fresh 训练于 22:58 CST 启动，
+22:59 到 epoch 1 iter 50，约 `1.0668 s/iter`，关键 loss 与梯度有限，首判 epoch 4。
