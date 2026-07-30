@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-30 15:20 CST
+更新时间：2026-07-30 15:30 CST
 
 ## 当前研究原则
 
@@ -13,15 +13,15 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU 0,1 | `0730_05 ... decoder_commonmotion ... fresh` | `RUNNING`；epoch 1 iter 50，约 1.052 s/iter，loss 21.4343、grad_norm 130.5463 均有限，显存约 19.2 GB/rank | 以 `0727_01` 为严格父配置；共享 query/分类路径不变，用两帧 cross-attention 差分和周期角度 reference 位移预测零初始化的 5D 反对称运动修正。4-iter 真数据 DDP smoke 已通过，三层新权重均从 0 更新到约 `3.98e-4`。首个正式判断点为 epoch 4。 |
-| 252 GPU 0,1 | `0730_02 decoder_boxonly_gradisolated_reg0p25 ... fresh` | `RUNNING`；epoch 2 iter 150，约 1.120 s/iter，loss 11.7349、grad_norm 25.5711 均有限 | 仅作为短期结构基线，不展开 scale sweep。首个 TrackEval 点为 epoch 4；若 cls/det 同点轨迹没有优于 `0727_01` 的信号，则停止并释放资源。 |
-| 178 GPU 0 | `0730_06 ... decoder_sharedevidence ... fresh` | `RUNNING`；epoch 1 iter 50，约 0.942 s/iter，loss 21.1659、grad_norm 129.8303 均有限，MMEngine 峰值约 21.7 GB | 以 `0727_01` 为严格父配置；将两帧 cross-attention 的相对不一致度作为交换不变证据，零初始化地注入共享 query，直接服务 cls 与两帧框。4-iter 真数据 smoke 已通过，三层新权重均从 0 更新到约 `4.00e-4`。首个正式判断点为 epoch 4。 |
+| 99 GPU 0,1 | `0730_05 ... decoder_commonmotion ... fresh` | `RUNNING`；epoch 1 iter 1000，约 0.996 s/iter，loss 11.9415、grad_norm 34.3289 均有限，显存约 19.2 GB/rank | 以 `0727_01` 为严格父配置；共享 query/分类路径不变，用两帧 cross-attention 差分和周期角度 reference 位移预测零初始化的 5D 反对称运动修正。4-iter 真数据 DDP smoke 已通过，三层新权重均从 0 更新到约 `3.98e-4`。首个正式判断点为 epoch 4。 |
+| 252 GPU 0,1 | `0730_02 decoder_boxonly_gradisolated_reg0p25 ... fresh` | `RUNNING`；epoch 2 iter 1000，约 1.045 s/iter，loss 11.9464、grad_norm 32.6970 均有限 | 仅作为短期结构基线，不展开 scale sweep。首个 TrackEval 点为 epoch 4；若 cls/det 同点轨迹没有优于 `0727_01` 的信号，则停止并释放资源。 |
+| 178 GPU 0 | `0730_06 ... decoder_sharedevidence ... fresh` | `RUNNING`；epoch 1 iter 550，约 0.868 s/iter，loss 17.2908、grad_norm 126.6569 均有限，MMEngine 峰值约 21.7 GB | 以 `0727_01` 为严格父配置；将两帧 cross-attention 的相对不一致度作为交换不变证据，零初始化地注入共享 query，直接服务 cls 与两帧框。4-iter 真数据 smoke 已通过，三层新权重均从 0 更新到约 `4.00e-4`。首个正式判断点为 epoch 4。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| 178 GPU 0 | `0729_05 ... pairdn_easyhardpositive ... fresh` | `COMPLETED`，训练与 epoch 72 验证完成 | 终点 `both_independent_AP50=0.5781`；该实验说明 positive-only DN 能恢复较高 cls，但 det/AssA 仍不足以替代论文主线。GPU 0 已释放，下一项仅安排新的 decoder 结构，不恢复 scale 队列。 |
+| 178 GPU 0 | `0729_05 ... pairdn_easyhardpositive ... fresh` | `COMPLETED`，训练与 epoch 72 检测验证完成；当前保留 15/18 个 TrackEval 点 | 该轨迹在 epoch 12 后曾恢复训练，异步 TrackEval 计数器重置并覆盖了 epoch 4/8/12 的三个目录；现存 15 点的暂定最佳为 epoch 68：cls/det HOTA `55.319/61.515`、DetA `46.002/53.761`、AssA `68.268/72.846`，同点 pair mAP/AP50 `0.3264/0.5494`。epoch 72 的 `both_independent_AP50=0.5781`。结论仍是 positive-only DN 能恢复较高 cls，但 det/AssA 不足以替代论文主线；不得把 15 点汇总误写为完整 18/18。 |
 | 252 GPU 0,1 | `0730_01 legacy 0728_03 resume` | `STOPPED`，保留至 epoch 56 checkpoint | 旧 decoder 初始化轨迹，仅作历史诊断，不与修复后正式实验合并解释。 |
 | AutoDL | 所有实例 | `OFF` | 用户确认均已关机；没有后台训练。 |
 
