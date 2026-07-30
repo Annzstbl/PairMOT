@@ -1242,3 +1242,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 下一结构候选为 midpoint-preserving regression-only detail：新增帧细节在 5D
   box-logit residual 空间严格反对称且 pair midpoint 为零，分类路径保持共享。
   已通过零起点等价、梯度与中点守恒测试，等待下一空闲资源。
+
+## 2026-07-31 06:08 CST 0731_06 决策
+
+- `0731_06` epoch 8 的 cls/det HOTA 为 `44.398/48.552`，相对父配置同点
+  `45.269/50.193` 双双下降；即使放松 AP 门槛也必须淘汰。
+- 178 GPU 0 改跑 `0731_11 midpoint-preserving regression-only detail`。
+  该实验不是参数扫描：它把帧细节的反对称约束从特征域推进到最终 5D 框残差域，
+  精确消除两个独立回归头带来的 pair midpoint 漂移。

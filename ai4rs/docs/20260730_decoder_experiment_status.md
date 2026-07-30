@@ -369,3 +369,21 @@
   转换为 5D box-logit residual 空间的一对严格反对称修正，使新增细节的 pair
   midpoint 精确为零，分类路径继续共享。它是结构改动，不含 scale、loss 重权或
   类别重权；当前排队等待下一可用资源，不抢占上述四条 HOTA 主线。
+
+## 2026-07-31 06:08 CST 0731_06 epoch-8 淘汰与 0731_11 接替
+
+- 178 `0731_06 regression-only enveloped-detail` 的 epoch 8 完整结果为：
+  cls HOTA `44.398`，det HOTA `48.552`；相对 `0727_01` 同点
+  `45.269/50.193` 分别下降 `0.871/1.641`。pair mAP `0.221531`、
+  both-independent AP50 `0.430058`，也分别低于父配置
+  `0.237734/0.465951`。
+- checkpoint、检测 metrics、完整 TrackEval、原始 CSV 与结构审计均已完成。
+  6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060327`，三层
+  detail gate 最大权重 `0.087576/0.072578/0.059405`。结构确实学习但双 HOTA
+  同时下降，故淘汰；异步评估期间训练误入 epoch 9，06:08 精确停止，epoch 9
+  不参与任何结论。
+- 178 接替实验定为 `0731_11 shared-attention +
+  midpoint-regression-enveloped-detail`。它针对 0731_06 的关键缺陷：
+  两个独立非线性回归头会把特征域的 `-detail/+detail` 映射成不对称的框残差；
+  新结构在框 logit residual 空间显式构造 `-box_detail/+box_detail`，保证新增
+  细节不移动 pair midpoint。完成配置构建与真数据 smoke 后 fresh 启动。

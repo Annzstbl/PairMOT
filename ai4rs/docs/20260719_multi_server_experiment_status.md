@@ -548,3 +548,10 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 后续筛选以同 epoch cls HOTA 与 det HOTA 为一级标准，DetA/AssA解释来源，AP仅诊断
 明显检测崩塌。最终 decoder 只有同时超过 encoder `0727_01` 的
 cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
+
+## 2026-07-31 06:08 CST 178 epoch-8 结果与接替
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 178 GPU 0 | `0731_06_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_regressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 03:45 / 2026-07-31 06:08 | epoch 8 cls/det HOTA `44.398/48.552`，相对父配置同点下降 `0.871/1.641`；pair mAP `0.221531`、both-independent AP50 `0.430058`。完整 TrackEval、原始 CSV、检测 metrics 与结构审计齐全；双 HOTA 主门槛失败后停止。异步评估期间误入 epoch 9，其迭代不参与结论。 |
+| PREPARED | 178 GPU 0 | `0731_11_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_midpointregressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` |  /  | 分类保持共享；帧细节在 5D box-logit residual 空间严格反对称，新增修正的 pair midpoint 为零。等待配置构建与真实数据 smoke 后接替 GPU 0。 |
