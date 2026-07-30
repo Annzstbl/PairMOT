@@ -315,3 +315,12 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 | STOPPED | 252 GPU 0,1 | `0730_07 ... decoder_commonmotion_sharedevidence ... fresh` | 2026-07-30 / 2026-07-30 17:58 | epoch 4 cls/det HOTA `36.926/42.702`；相对 `0727_01` 同点 `+0.717/+3.949`，但 cls/det DetA 均约 `-1.0`，pair mAP/AP50 和 both-independent AP50 未形成一致提升，完成 checkpoint、检测及 2/2 TrackEval 后停止。 |
 
 当前可调度资源为 99 双卡、197 双卡、252 双卡、178 单卡；AutoDL 全部关机。197 新实验使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`，历史目录不作代码源。`0730_09` 代码提交为 `f231b01`；99 canonical 与 197 已精确同步，252/178 在状态文档提交后同步到同一提交。空闲卡只用于模型结构实验，不进行 class-specific/long-tail reweight 或 residual-scale 参数扫描。
+
+## 2026-07-30 18:46 CST decoder 资源与启动状态
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 /  | 197 两卡已正式纳入当前 decoder 资源池并由本实验占用。18:45 到 epoch 1 iter 900，约 `1.5280 s/iter`、loss `12.1506`、grad norm `21.8685`；总 loss、DN loss 与 encoder loss 均有限，无 Traceback、OOM、NaN、NCCL 或 unused-parameter 错误。GPU 4/5 各约 `19.2 GiB`。首个结构判断点为 epoch 4。 |
+| RUNNING | 252 GPU 0,1 | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41 /  | 严格继承 `0727_01`，decoder 两帧共享 deformable cross-attention 权重，并对 cross-frame feature fusion 与 pair-position fusion 显式平均正反两种帧序；不增加参数，不修改 encoder、proposal、PairDN、head、loss 或训练协议。52 项 decoder 单测、配置深拷贝、launcher shell 审计和双卡真实数据 4-iter smoke 通过；预训练权重中 24 组 attention 参数逐项相等，smoke checkpoint 中 4 个 fusion 矩阵的帧交换误差最大为 `8.45e-09`。正式训练五项启动门槛通过，18:45 到 epoch 1 iter 200，约 `1.0837 s/iter`、loss `18.9054`、grad norm `56.8993`，GPU 0/1 各约 `19.2 GiB`，无异常。首个结构判断点为 epoch 4。 |
+
+当前资源池确认为 99 双卡、197 双卡、252 双卡、178 单卡；其中 197 GPU 4/5 与 252 GPU 0/1 正在运行结构实验，99 GPU 0/1 与 178 GPU 0 保留给 epoch 4 诊断后有明确模型依据的下一候选，不以参数扫描填卡。代码提交 `5341c32` 已通过带 prerequisite 的 Git bundle 精确同步到 99、197、252 和 178；各服务器既有未跟踪文件未覆盖或删除。
