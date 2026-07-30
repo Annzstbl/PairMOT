@@ -241,6 +241,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  tristate_zero_init_coupling: bool = False,
                  dual_output_adapter: bool = False,
                  dual_output_cls_scale: float = 1.0,
+                 dual_output_reg_scale: float = 1.0,
+                 dual_output_detach_adapter_input: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -249,8 +251,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.tristate_zero_init_coupling = bool(tristate_zero_init_coupling)
         self.dual_output_adapter = bool(dual_output_adapter)
         self.dual_output_cls_scale = float(dual_output_cls_scale)
+        self.dual_output_reg_scale = float(dual_output_reg_scale)
+        self.dual_output_detach_adapter_input = bool(
+            dual_output_detach_adapter_input)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
+        if self.dual_output_reg_scale < 0:
+            raise ValueError('dual_output_reg_scale must be non-negative')
         if self.tristate_decoder and self.dual_output_adapter:
             raise ValueError(
                 'tristate_decoder and dual_output_adapter are mutually '
@@ -558,15 +565,21 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
 
                 layer_output = self.norm(query)
                 if self.dual_output_adapter:
+                    adapter_input = (
+                        layer_output.detach()
+                        if self.dual_output_detach_adapter_input
+                        else layer_output)
                     adapter_prev = self.dual_output_prev_adapters[lid](
-                        layer_output)
+                        adapter_input)
                     adapter_curr = self.dual_output_curr_adapters[lid](
-                        layer_output)
-                    # Keep the learned scale-1 residual for reference-box
-                    # refinement, while allowing classification features to
-                    # use a separately calibrated residual magnitude.
-                    reg_output_prev = layer_output + adapter_prev
-                    reg_output_curr = layer_output + adapter_curr
+                        adapter_input)
+                    # The frame-specific box residual can be kept out of the
+                    # classification path and, optionally, prevented from
+                    # adding a second gradient path into the shared decoder.
+                    reg_output_prev = layer_output + (
+                        self.dual_output_reg_scale * adapter_prev)
+                    reg_output_curr = layer_output + (
+                        self.dual_output_reg_scale * adapter_curr)
                     layer_output_prev = layer_output + (
                         self.dual_output_cls_scale * adapter_prev)
                     layer_output_curr = layer_output + (

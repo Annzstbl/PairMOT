@@ -74,7 +74,10 @@ def _build_decoder(num_layers: int = 2,
                    tristate_decoder: bool = False,
                    tristate_separate_ffn: bool = False,
                    tristate_zero_init_coupling: bool = False,
-                   dual_output_adapter: bool = False):
+                   dual_output_adapter: bool = False,
+                   dual_output_cls_scale: float = 1.0,
+                   dual_output_reg_scale: float = 1.0,
+                   dual_output_detach_adapter_input: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -102,6 +105,9 @@ def _build_decoder(num_layers: int = 2,
         tristate_separate_ffn=tristate_separate_ffn,
         tristate_zero_init_coupling=tristate_zero_init_coupling,
         dual_output_adapter=dual_output_adapter,
+        dual_output_cls_scale=dual_output_cls_scale,
+        dual_output_reg_scale=dual_output_reg_scale,
+        dual_output_detach_adapter_input=dual_output_detach_adapter_input,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -338,6 +344,43 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 + list(decoder.dual_output_curr_adapters)):
             self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
             self.assertEqual(adapter.bias.abs().sum().item(), 0.0)
+
+    def test_box_only_adapter_keeps_classification_features_shared(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device,
+            dual_output_adapter=True,
+            dual_output_cls_scale=0.0,
+            dual_output_reg_scale=0.5,
+            dual_output_detach_adapter_input=True)
+        decoder.init_weights()
+        with torch.no_grad():
+            for adapter in decoder.dual_output_prev_adapters:
+                adapter.weight.copy_(torch.eye(decoder.embed_dims))
+            for adapter in decoder.dual_output_curr_adapters:
+                adapter.weight.copy_(-torch.eye(decoder.embed_dims))
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        hidden, refs_prev, refs_curr, hidden_prev, hidden_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for shared, prev, curr in zip(hidden, hidden_prev, hidden_curr):
+            self.assertTrue(torch.equal(prev, shared))
+            self.assertTrue(torch.equal(curr, shared))
+        self.assertGreater(
+            (refs_prev[-1] - refs_curr[-1]).abs().max().item(), 1e-6)
+
+    def test_dual_output_adapter_rejects_negative_reg_scale(self):
+        with self.assertRaisesRegex(ValueError, 'reg_scale'):
+            _build_decoder(
+                device=self.device,
+                dual_output_adapter=True,
+                dual_output_reg_scale=-0.1)
 
     def test_detector_init_preserves_dual_output_zero_start(self):
         decoder, _, _ = _build_decoder(
