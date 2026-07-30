@@ -1208,3 +1208,21 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 `31.4 GiB`，无异常。首判 epoch 4；固定门槛不变，仍要求 cls/det HOTA
 不低于父配置、任一 DetA 下降不超过 `0.5`、pair mAP 与 both-independent AP50
 下降不超过 `0.003`。
+
+## 2026-07-31 04:35 CST 分类/回归作用路径正交拆分
+
+- `0731_02` epoch 8 因 cls HOTA `-0.141`、cls DetA `-0.546`、det DetA
+  `-2.398` 淘汰；`0731_04` 因 cls/det HOTA `-0.509/-0.461`、cls/det DetA
+  `-1.335/-2.878`、pair mAP `-0.011275` 淘汰。两者都显示全路径 frame detail
+  容易把检测覆盖搬运到 AssA，不能因 AssA 上升而继续。
+- 下一轮不做超参数扫描，而做严格结构拆分：
+  - 99 `0731_07`：原 attention 结构 + classification-only bounded detail；
+  - 197 `0731_08`：shared-attention + classification-only bounded detail；
+  - 252 `0731_05`：shared-attention + full-path bounded detail；
+  - 178 `0731_06`：shared-attention + regression-only bounded detail。
+- 新分类专用路径保证 regression heads 与 iterative references 不直接接收 frame
+  correction，只向两个分类头暴露零起点、交换变号且不超过原始帧差的细节。82 项单测、
+  两项完整模型构建和两组真数据 DDP smoke 已通过。
+- 99/197 正式实验基于提交 `7dee533`，分别在 GPU 0/1 与 GPU 4/5 fresh 启动并越过
+  iter 50；252/178 原实验不重启继续。四路统一在 epoch 4/8 使用既定 HOTA、DetA、
+  pair mAP 和 both-independent AP50 门槛，不因单独 AssA 上升保留。

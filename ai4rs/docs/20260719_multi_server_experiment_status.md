@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 03:47 CST。
+更新时间：2026-07-31 04:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；03:46 到 epoch 1 iter 50，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_07 classification-only enveloped-detail decoder` | RUNNING；04:34 到 epoch 1 iter 50，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_08 shared-attention + classification-only enveloped-detail decoder` | RUNNING；04:34 已越过 epoch 1 iter 100，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_05 shared-attention + enveloped-detail decoder` | RUNNING；继续向 epoch 4 首判点训练 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；继续向 epoch 4 首判点训练 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -492,3 +492,35 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 四路正式结构实验恢复并行：99 `0731_02`、197 `0731_04` 继续 epoch 8，
 252 `0731_05` 和 178 `0731_06` 首判 epoch 4。四台代码统一到 `62f1028`，
 同步没有重启任何在途训练。
+
+## 2026-07-31 04:35 CST epoch-8 淘汰与四机并行恢复
+
+- 99 `0731_02 enveloped-detail` 的 epoch 8 完整结果为：cls HOTA/DetA/AssA
+  `45.128/37.117/57.200`，det `50.223/44.663/58.189`，pair mAP/AP50
+  `0.236938/0.434026`，both-independent mAP/AP50 `0.275284/0.473473`。
+  相对 `0727_01` 同点，cls HOTA `-0.141`、cls DetA `-0.546`、det DetA
+  `-2.398`，仅 det AssA `+3.044`；HOTA/DetA 门槛失败，完成全部 artifacts 后停止。
+- 197 `0731_04 orthogonal-evidence` 的 epoch 8 完整结果为：cls HOTA/DetA/AssA
+  `44.760/36.328/57.530`，det `49.732/44.183/57.992`，pair mAP/AP50
+  `0.226459/0.424496`，both-independent mAP/AP50 `0.263142/0.463058`。
+  相对父配置 cls/det HOTA 为 `-0.509/-0.461`，cls/det DetA 为
+  `-1.335/-2.878`，pair mAP `-0.011275`；共同证据旁路进一步把检测覆盖搬运到
+  AssA，故淘汰。评估完成后旧 launcher 曾继续到 epoch 9 iter 400 左右，04:22
+  审计发现后精确停止；epoch 9 未形成新判断点，也不用于任何结论。
+- 两台暂时空闲不是资源不足，而是两个候选刚完成固定 epoch-8 淘汰。接替结构采用同一
+  `classification_enveloped_detail_decoder` 开关：框回归和迭代 reference 严格保持
+  共享 decoder 路径，仅分类状态接收零起点、swap-odd、逐元素受观测帧差包络约束的细节。
+  99 `0731_07` 不共享 attention，用于测量分类专用细节的主效应；197 `0731_08`
+  叠加 shared-attention，用于检验能否保留其 det 增益并补回 cls。它们与 252 的
+  full-path `0731_05`、178 的 regression-only `0731_06` 构成可归因的结构路径拆分，
+  不含 scale、loss 权重或类别重权扫描。
+- 82 项 decoder 单测全部通过；两个正式配置均通过深拷贝和完整模型构建。99/197
+  双卡真数据 4-iter smoke 均生成 `iter_4.pth`，总、DN、encoder loss 和 grad norm
+  有限。99 三层门控最大权重为 `0.000304/0.000270/0.000287`；197 的 6 组共享
+  attention 误差为零、18 组独立参数最大差异 `0.000794`，三层门控为
+  `0.000283/0.000295/0.000290`。
+- 正式 fresh 训练均基于提交 `7dee533`：99 GPU 0/1 的 `0731_07` 于 04:34 到
+  iter 50，`0.9703 s/iter`、loss `21.4241`、grad norm `112.0013`；197 仅使用
+  GPU 4/5 的 `0731_08` 已越过 iter 100，iter 100 为 `0.8708 s/iter`、loss
+  `20.5811`、grad norm `114.1662`。两项均无 Traceback、OOM、NaN、NCCL 或
+  unused-parameter 错误。99、197、252、178 四台现均为 RUNNING，首判 epoch 4。

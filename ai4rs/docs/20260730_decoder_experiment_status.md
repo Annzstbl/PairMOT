@@ -282,3 +282,26 @@
   `0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，显存约
   `31.4 GiB`，无 Traceback、OOM、NaN、NCCL 或未使用参数错误。五项正式启动门槛
   通过，四机结构实验重新并行，首判 epoch 4。
+
+## 2026-07-31 04:35 CST epoch-8 淘汰与分类专用细节
+
+- `0731_02` epoch 8：cls HOTA/DetA/AssA `45.128/37.117/57.200`，det
+  `50.223/44.663/58.189`，pair mAP/AP50 `0.236938/0.434026`，
+  both-independent mAP/AP50 `0.275284/0.473473`。cls HOTA、cls DetA 和
+  det DetA 均触发淘汰线，说明 full-path bounded detail 仍会伤害检测覆盖。
+- `0731_04` epoch 8：cls `44.760/36.328/57.530`，det
+  `49.732/44.183/57.992`，pair mAP/AP50 `0.226459/0.424496`，
+  both-independent `0.263142/0.463058`。共同证据旁路没有修复问题，反而使
+  pair mAP 相对父配置下降 `0.011275`。完整结果落盘后停止；误继续的 epoch 9
+  迭代不参与结论。
+- 新增 `classification_enveloped_detail_decoder`：frame correction 只作用于
+  `hidden_states_prev/curr` 的分类分支，regression heads 与 reference updates
+  均使用共享 `layer_output`。零起点时输出逐元素等于父路径；非零时 reference
+  仍与父路径一致；门控在首步即可获得分类梯度。
+- 82 项单测通过。99 `0731_07` 是无 shared-attention 的分类专用版本；197
+  `0731_08` 是 shared-attention + 分类专用版本。两者的真数据 DDP smoke、
+  checkpoint 门控审计和正式 iter-50 门槛全部通过，提交为 `7dee533`。
+- 现有四路形成同一问题的可归因结构矩阵：252 full-path、178 regression-only、
+  99 classification-only、197 shared-attention + classification-only。后续优先看
+  det DetA 是否由分类隔离得到保护，以及 197 是否在保留 shared-attention det
+  增益的同时把 cls HOTA 拉回父配置以上。
