@@ -78,7 +78,8 @@ def _build_decoder(num_layers: int = 2,
                    dual_output_cls_scale: float = 1.0,
                    dual_output_reg_scale: float = 1.0,
                    dual_output_detach_adapter_input: bool = False,
-                   common_motion_decoder: bool = False):
+                   common_motion_decoder: bool = False,
+                   shared_evidence_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -110,6 +111,7 @@ def _build_decoder(num_layers: int = 2,
         dual_output_reg_scale=dual_output_reg_scale,
         dual_output_detach_adapter_input=dual_output_detach_adapter_input,
         common_motion_decoder=common_motion_decoder,
+        shared_evidence_decoder=shared_evidence_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -549,6 +551,115 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 _build_decoder(
                     device=self.device,
                     common_motion_decoder=True,
+                    **other)
+
+    def test_shared_evidence_is_exact_baseline_at_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, shared_evidence_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        evidence_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.shared_evidence_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for evidence_group, baseline_group in zip(
+                evidence_output, baseline_output):
+            for evidence_tensor, baseline_tensor in zip(
+                    evidence_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    evidence_tensor, baseline_tensor))
+        for adapter in decoder.shared_evidence_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_shared_evidence_is_swap_invariant(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, shared_evidence_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(31)
+        with torch.no_grad():
+            torch.nn.init.normal_(
+                decoder.shared_evidence_adapters[0].weight, std=0.02)
+        out_prev = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device)
+        out_curr = torch.randn_like(out_prev)
+        correction = decoder._shared_evidence_correction(
+            0, out_prev, out_curr)
+        swapped = decoder._shared_evidence_correction(
+            0, out_curr, out_prev)
+        self.assertTrue(torch.equal(correction, swapped))
+
+    def test_shared_evidence_adapters_receive_first_step_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_evidence_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        hidden_states, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(37)
+        loss = sum(
+            (hidden * torch.randn_like(hidden)).mean()
+            for hidden in hidden_states)
+        loss = loss + sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in decoder.shared_evidence_adapters:
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
+
+    def test_detector_init_preserves_shared_evidence_zero_start(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, shared_evidence_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for adapter in decoder.shared_evidence_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_shared_evidence_rejects_incompatible_decoders(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    shared_evidence_decoder=True,
                     **other)
 
     def test_tristate_disables_structurally_unused_parameters(self):

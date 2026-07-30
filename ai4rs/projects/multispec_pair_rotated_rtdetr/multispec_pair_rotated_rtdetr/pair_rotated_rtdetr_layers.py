@@ -247,6 +247,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  dual_output_reg_scale: float = 1.0,
                  dual_output_detach_adapter_input: bool = False,
                  common_motion_decoder: bool = False,
+                 shared_evidence_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -259,6 +260,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.dual_output_detach_adapter_input = bool(
             dual_output_detach_adapter_input)
         self.common_motion_decoder = bool(common_motion_decoder)
+        self.shared_evidence_decoder = bool(shared_evidence_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -271,6 +273,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'tristate_decoder, dual_output_adapter, and '
                 'common_motion_decoder are mutually exclusive')
+        if self.shared_evidence_decoder and (
+                self.tristate_decoder or self.dual_output_adapter):
+            raise ValueError(
+                'shared_evidence_decoder is incompatible with tristate_decoder '
+                'and dual_output_adapter')
         super().__init__(*args, **kwargs)
 
     def _init_layers(self) -> None:
@@ -299,6 +306,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.common_motion_decoder:
             self.common_motion_adapters = ModuleList([
                 nn.Linear(self.embed_dims + 5, 5, bias=False)
+                for _ in range(self.num_layers)
+            ])
+        if self.shared_evidence_decoder:
+            self.shared_evidence_adapters = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
             ])
         if self.post_norm_cfg is not None:
@@ -412,6 +424,27 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             torch.cat([evidence, reference_motion], dim=-1))
 
     @staticmethod
+    def _normalized_shared_evidence(
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Return swap-invariant relative disagreement between two frames."""
+        difference = 0.5 * (out_curr - out_prev)
+        frame_rms = (
+            0.5 * (out_prev.square() + out_curr.square())
+        ).mean(dim=-1, keepdim=True).add(1e-6).sqrt()
+        return (difference.abs() / frame_rms).detach()
+
+    def _shared_evidence_correction(
+        self,
+        lid: int,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        return self.shared_evidence_adapters[lid](evidence)
+
+    @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
         nn.init.zeros_(linear.bias)
@@ -444,6 +477,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.init.zeros_(adapter.bias)
         if self.common_motion_decoder:
             for adapter in self.common_motion_adapters:
+                nn.init.zeros_(adapter.weight)
+        if self.shared_evidence_decoder:
+            for adapter in self.shared_evidence_adapters:
                 nn.init.zeros_(adapter.weight)
         if not self.tristate_decoder:
             return
@@ -603,6 +639,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 tmp_prev = reg_branches_prev[lid](layer_output_prev)
                 tmp_curr = reg_branches_curr[lid](layer_output_curr)
             else:
+                needs_frame_evidence = (
+                    self.common_motion_decoder
+                    or self.shared_evidence_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -617,13 +656,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     level_start_index=level_start_index,
                     reference_points_prev=ref_prev_input,
                     reference_points_curr=ref_curr_input,
-                    return_frame_evidence=self.common_motion_decoder,
+                    return_frame_evidence=needs_frame_evidence,
                     **kwargs)
-                if self.common_motion_decoder:
+                if needs_frame_evidence:
                     query, frame_evidence_prev, frame_evidence_curr = (
                         layer_result)
                 else:
                     query = layer_result
+                if self.shared_evidence_decoder:
+                    query = query + self._shared_evidence_correction(
+                        lid, frame_evidence_prev, frame_evidence_curr)
 
                 layer_output = self.norm(query)
                 if self.dual_output_adapter:
