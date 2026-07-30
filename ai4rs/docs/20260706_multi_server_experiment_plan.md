@@ -1261,3 +1261,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   AssA 提高 `5.672`。因此后续仍以双 HOTA 决策，同时单独记录“关联增益与检测覆盖”
   的分解，避免把 AssA 搬运解释成全面检测增强。
 - 最终成功条件不变：训练末期 cls/det HOTA 同时超过 `54.437/62.393`。
+
+## 2026-07-31 06:35 CST terminal-only detail 预案
+
+- `0731_02/04/06` 的共同失败模式是早期 HOTA 提升、到 epoch 8 后 DetA 下降并把
+  增益搬运到 AssA；`0731_05` 虽在 epoch 8 双 HOTA 通过，det DetA 仍低父配置
+  `1.885`。证据指向 frame detail 经逐层 reference 更新递归进入后续 decoder，
+  而不是 detail 本身完全无效。
+- 新的 `terminal_enveloped_detail_decoder` 仅在最后一层输出前加入受观测帧差包络的
+  `-detail/+detail`。此前所有 decoder 层、auxiliary outputs 和 iterative references
+  与 shared-attention 父路径逐元素一致，因而同时保留父模型的分类/定位迭代和最终帧区分。
+- 提交 `764ff7d` 已通过 86 项 decoder 单测、完整配置构建、模型初始化零门控检查并同步
+  四台服务器。它当前只是经过代码验证的后备结构，不占实验编号和 GPU；197 释放时仍优先
+  做已准备的 `0731_10` midpoint 双卡复现，terminal-only 只在后续证据支持时进入 smoke。

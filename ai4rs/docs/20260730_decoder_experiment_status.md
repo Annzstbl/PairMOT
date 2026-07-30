@@ -411,3 +411,17 @@
 - 按 HOTA 主门槛保留继续训练。该结果只证明 epoch 8 的阶段性双提升，最终仍必须
   同时超过 `54.437/62.393`；后续重点观察 cls 微弱优势能否保持，以及 det DetA
   是否回升，不能把单独 AssA 搬运写成完整检测能力提升。
+
+## 2026-07-31 06:35 CST terminal-only decoder detail
+
+- 当前四路训练均稳定：99 `0731_09` epoch 2、197 `0731_08` epoch 7、252
+  `0731_05` epoch 10、178 `0731_11` epoch 2。同步前后日志连续，不存在重启或
+  checkpoint 轨迹改变。
+- 新候选只在最终 decoder 层把 bounded swap-odd detail 送入逐帧 cls/reg heads；
+  前两层分类输出、框更新和下一层 reference 均严格留在 shared-attention 父路径。
+  这直接检验“递归污染”而非缩小残差强度，因此不是 residual-scale 或超参数扫描。
+- 单测覆盖零起点全输出等价、非零时前两层 hidden/reference 逐元素不变、最终层确实
+  分化、首步梯度进入唯一 terminal gate，以及 detector 初始化后门控重新归零。
+  完整 86 项 decoder 测试、模型构建和初始化检查通过，代码提交为 `764ff7d`。
+- 该候选尚未创建正式配置、workdir 或实验编号；只有现有 midpoint/full-path
+  路径在完整 HOTA 证据下需要接替时才部署，避免把预案误报为正在运行的实验。

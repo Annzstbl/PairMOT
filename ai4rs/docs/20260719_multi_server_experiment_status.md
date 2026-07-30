@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 05:44 CST。
+更新时间：2026-07-31 06:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_07 classification-only enveloped-detail decoder` | RUNNING；04:34 到 epoch 1 iter 50，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无训练；`0731_08` 已停止 | GPU 4/5 已释放，等待99同点结果后选择结构性接替 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；06:34 到 epoch 2 iter 900，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_08 shared-attention + classification-only enveloped-detail decoder` | RUNNING；从 epoch 4 原位恢复，06:34 到 epoch 7 iter 200，下一判 epoch 8；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 8 双 HOTA 通过，06:34 到 epoch 10 iter 250，下一判 epoch 12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；06:34 到 epoch 2 iter 450，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -208,7 +208,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0728_01`，下一编号为`0728_02`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_11`，下一编号为`0731_12`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -561,3 +561,18 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 | Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
 | --- | --- | --- | --- | --- |
 | RUNNING | 252 GPU 0,1 | `0731_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 03:23 /  | epoch 8 cls HOTA/DetA/AssA `45.341/37.690/56.836`，det `51.589/45.176/60.817`；相对父配置双 HOTA `+0.072/+1.396`。pair mAP `0.2380`、both-independent AP50 `0.4738`。完整证据与结构审计通过，按 HOTA 主门槛保留；det 增益主要由 AssA 驱动、DetA 低 `1.885`，后续需持续观察。 |
+
+## 2026-07-31 06:35 CST 四路进度与 terminal-only 候选
+
+- 四路训练在代码同步前后均连续运行：99 `0731_09` 到 epoch 2 iter 900，197
+  `0731_08` 到 epoch 7 iter 200，252 `0731_05` 到 epoch 10 iter 250，178
+  `0731_11` 到 epoch 2 iter 450；总、DN、encoder loss 与 grad norm 均有限。
+- 下一决策点依次为 197 epoch 8、99/178 epoch 4、252 epoch 12。197 若双 HOTA
+  失败，优先使用已完成配置准备的 `0731_10 midpoint-regression` 双卡复现。
+- 新增 `terminal_enveloped_detail_decoder`：前两层 decoder、辅助输出及 iterative
+  references 保持共享父路径，只在最后一层的逐帧分类和回归输出前注入零起点、
+  swap-odd、受真实帧差包络约束的细节。该结构直接隔离全路径 detail 的逐层
+  reference 递归污染，不是 scale、loss 权重或类别重权扫描。
+- 86 项 decoder 单测、配置深拷贝、完整模型构建及 detector-level 初始化后的零门控
+  均已通过。此候选尚未分配实验编号、正式配置或 GPU，仅在现有评估提供支持且资源
+  释放后进入 smoke。四台代码已无重启地快进到提交 `764ff7d`，未跟踪文件均保留。
