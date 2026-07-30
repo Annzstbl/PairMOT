@@ -1036,5 +1036,9 @@ cross-attention 输出的归一化、detach 有符号证据，经共享零初始
 得到有界修正，仅在 cls/reg head 前对两帧特征施加 `-detail/+detail`。该设计使两帧
 head 特征中点严格等于父模型共享输出，帧交换时修正严格变号，避免 shared-evidence
 直接扰动 recurrent query，也避免 motion-trust 直接扰动框。69 项 decoder 单测、
-配置深拷贝、launcher 审计和代码差异检查已通过；178 GPU 0 用单卡 physical batch 8
-完成真实数据 4-iter smoke 与 checkpoint 结构检查后 fresh 启动，首判 epoch 4。
+配置深拷贝、launcher 审计和代码差异检查已通过。178 GPU 0 的单卡 physical batch 8
+真实数据 4-iter smoke 中总、DN、encoder loss 和 grad norm 均有限，checkpoint 三层
+adapter 均产生约 `4.0e-4` 非零更新并通过结构检查。正式 fresh 训练于 23:48 启动，
+23:49 到 epoch 1 iter 50，约 `0.9458 s/iter`、loss `21.1606`、grad norm
+`107.4478`，GPU 0 约 `31.4 GiB`，无异常；首判 epoch 4。至此 252 `0730_13`、
+99 `0730_14`、197 `0730_15`、178 `0730_16` 恢复四路结构实验并行。

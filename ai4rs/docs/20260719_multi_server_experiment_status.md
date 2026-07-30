@@ -18,7 +18,7 @@
 | 99 本机 | `0730_14 motion-trust + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_15 shared-evidence + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_13 shared-attention decoder` | 4-iter DDP smoke 和结构检查通过；正式 fresh 训练 epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0730_16 antisymmetric frame-detail decoder` | `0730_12` epoch 8 保护线失败后已停止；`0730_16` 完成代码、69 项单测和静态审计，正在同步及 smoke | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0730_16 antisymmetric frame-detail decoder` | 4-iter smoke 与结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -396,8 +396,8 @@ canonical 代码提交为 `0782826`；本次状态提交后四机统一快进，
 | Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
 | --- | --- | --- | --- | --- |
 | STOPPED | 178 GPU 0 | `0730_12_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_sharedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 21:10 / 2026-07-30 23:30 | epoch 8 checkpoint、检测、2/2 TrackEval 与结构审计完整。cls HOTA/DetA/AssA `44.387/33.262/61.885`，det `49.824/40.708/63.485`，pair mAP/AP50 `0.2144/0.3809`，both-independent mAP/AP50 `0.2457/0.4098`。相对父配置 cls/det HOTA `-0.882/-0.369`、DetA `-4.401/-6.353`，pair mAP `-0.02333`、both AP50 `-0.05615`；AssA 增益不足以抵消检测损失，按固定保护线停止并释放 GPU。 |
-| PREPARED | 178 GPU 0 | `0730_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_antisymmetric_detail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` |  /  | 接替结构只在逐帧 cls/reg head 前注入由真实双帧 cross-attention 证据生成的有界 `-detail/+detail`，保持 recurrent shared query、下一层路径和两帧特征中点严格等于父模型；不直接改框或共享 query。69 项 decoder 单测、配置深拷贝、launcher 审计和代码差异检查通过，待同步至 178 后执行真实数据 smoke 和正式启动五项门槛。 |
+| RUNNING | 178 GPU 0 | `0730_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 23:48 /  | 接替结构只在逐帧 cls/reg head 前注入由真实双帧 cross-attention 证据生成的有界 `-detail/+detail`，保持 recurrent shared query、下一层路径和两帧特征中点严格等于父模型；不直接改框或共享 query。69 项 decoder 单测、配置深拷贝、launcher 审计和代码差异检查通过；真实数据 4-iter smoke 的总、DN、encoder loss 和 grad norm 均有限，checkpoint 三层 adapter 均非零且结构检查通过。正式训练五项门槛通过，23:49 到 epoch 1 iter 50，约 `0.9458 s/iter`、loss `21.1606`、grad norm `107.4478`，GPU 0 约 `31.4 GiB`，无异常。首判 epoch 4。 |
 
-实时资源状态为三路正式训练：252 `0730_13`、99 `0730_14`、197 `0730_15`；
-178 在 `0730_12` 停止后处于结构接替窗口。该空窗不是资源限制，完成 `0730_16` smoke
-和启动门槛后立即恢复四机并行；AutoDL 继续保持全部关机。
+实时资源状态已恢复四路正式训练：252 `0730_13`、99 `0730_14`、197 `0730_15`、
+178 `0730_16`。四台服务器代码统一为 `1112a56`，各服务器既有未跟踪文件均保留，
+活动训练未因同步重启；AutoDL 继续保持全部关机。
