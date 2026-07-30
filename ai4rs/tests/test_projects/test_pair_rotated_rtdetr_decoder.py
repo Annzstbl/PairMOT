@@ -88,6 +88,7 @@ def _build_decoder(num_layers: int = 2,
                    antisymmetric_detail_decoder: bool = False,
                    enveloped_detail_decoder: bool = False,
                    regression_enveloped_detail_decoder: bool = False,
+                   classification_enveloped_detail_decoder: bool = False,
                    common_evidence_bypass_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
@@ -130,6 +131,8 @@ def _build_decoder(num_layers: int = 2,
         enveloped_detail_decoder=enveloped_detail_decoder,
         regression_enveloped_detail_decoder=(
             regression_enveloped_detail_decoder),
+        classification_enveloped_detail_decoder=(
+            classification_enveloped_detail_decoder),
         common_evidence_bypass_decoder=common_evidence_bypass_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
@@ -1794,6 +1797,102 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             self.assertIsNotNone(gate.weight.grad)
             self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_classification_enveloped_detail_preserves_box_path(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device,
+            classification_enveloped_detail_decoder=True)
+        decoder.init_weights()
+        for gate in decoder.enveloped_detail_gates:
+            self.assertEqual(gate.weight.abs().sum().item(), 0.0)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        zero_start_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        self.assertEqual(len(zero_start_output), 5)
+        torch.manual_seed(103)
+        cls_path_loss = sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(
+                zero_start_output[3], zero_start_output[4]))
+        cls_path_loss.backward()
+        for gate in decoder.enveloped_detail_gates:
+            self.assertIsNotNone(gate.weight.grad)
+            self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
+        decoder.classification_enveloped_detail_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for detail_group, baseline_group in zip(
+                zero_start_output[:3], baseline_output):
+            for detail_tensor, baseline_tensor in zip(
+                    detail_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    detail_tensor, baseline_tensor))
+        for detail_group in zero_start_output[3:]:
+            for detail_tensor, shared_tensor in zip(
+                    detail_group, baseline_output[0]):
+                self.assertTrue(torch.equal(detail_tensor, shared_tensor))
+
+        decoder.classification_enveloped_detail_decoder = True
+        with torch.no_grad():
+            for gate in decoder.enveloped_detail_gates:
+                torch.nn.init.normal_(gate.weight, std=0.05)
+        detail_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.classification_enveloped_detail_decoder = False
+        nonzero_baseline = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for detail_refs, baseline_refs in zip(
+                detail_output[1:3], nonzero_baseline[1:3]):
+            for detail_tensor, baseline_tensor in zip(
+                    detail_refs, baseline_refs):
+                self.assertTrue(torch.equal(
+                    detail_tensor, baseline_tensor))
+        self.assertTrue(any(
+            not torch.equal(detail_tensor, shared_tensor)
+            for detail_group in detail_output[3:]
+            for detail_tensor, shared_tensor in zip(
+                detail_group, nonzero_baseline[0])))
+
+    def test_classification_enveloped_detail_composes_with_shared_attention(
+            self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            shared_attention_decoder=True,
+            classification_enveloped_detail_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            self.assertIs(
+                layer.cross_attn_prev.attention_weights,
+                layer.cross_attn_curr.attention_weights)
+            self.assertIsNot(
+                layer.cross_attn_prev.sampling_offsets,
+                layer.cross_attn_curr.sampling_offsets)
+
     def test_enveloped_detail_gates_receive_first_step_gradients(self):
         decoder, reg_prev, reg_curr = _build_decoder(
             num_layers=3,
@@ -1980,6 +2079,8 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         for flag, attribute in (
                 ('enveloped_detail_decoder', 'enveloped_detail_gates'),
                 ('regression_enveloped_detail_decoder',
+                 'enveloped_detail_gates'),
+                ('classification_enveloped_detail_decoder',
                  'enveloped_detail_gates'),
                 ('common_evidence_bypass_decoder',
                  'common_evidence_bypass_gates')):
