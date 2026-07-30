@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 05:44 CST
+更新时间：2026-07-31 07:25 CST
 
 ## 当前研究原则
 
@@ -13,15 +13,16 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `36.593/27.412/52.831`，det `43.208/34.366/55.990`；相对父配置 HOTA `+0.384/+4.455`、DetA `+0.344/+1.912`。pair mAP `0.1617`、both-independent AP50 `0.3450`，分别提高约 `0.0044/0.0219`。6 组共享 attention 最大误差为零、18 组独立参数最大差异 `0.036059`，三层 enveloped-detail 最大权重 `0.063013/0.045573/0.054088`；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
-| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.693/27.731/54.370`，det `40.205/32.703/50.871`；相对父配置 HOTA `+1.484/+1.452`、DetA `+0.663/+0.249`。pair mAP `0.1700`、both-independent AP50 `0.3494`，分别提高约 `0.0127/0.0263`。共享 attention 最大误差为零、独立参数最大差异 `0.039377`，三层回归门控均有限非零；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
-| 99 GPU 0,1 | `0731_07 ... decoder_classificationenvelopeddetail ... fresh` | `RUNNING`；04:33 fresh 启动，epoch 1 正常 | 无 shared-attention 的分类专用 enveloped-detail；回归与 reference 更新保持父路径。真数据 DDP smoke、checkpoint 门控审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
+| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；epoch 8 双 HOTA 通过，正在 epoch 12 决策点 | epoch 8 cls HOTA/DetA/AssA `45.341/37.690/56.836`，det `51.589/45.176/60.817`；相对父配置双 HOTA `+0.072/+1.396`。pair mAP `0.2380`、both-independent AP50 `0.4738`。这是当前唯一在 epoch 8 双 HOTA 通过的候选，但 det 增益主要由 AssA 驱动。 |
+| 178 GPU 0 | `0731_11 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `38.668/30.574/53.235`，det `43.586/38.232/51.254`；相对父配置 HOTA `+2.459/+4.833`，cls DetA/AssA `+3.506/+1.141`，det DetA/AssA `+5.778/+3.788`。pair mAP `0.184185`、both-independent AP50 `0.391559`；完整证据与结构检查通过。 |
+| 99 GPU 0,1 | `0731_09 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.813/27.802/55.047`，det `44.030/33.349/59.176`；相对父配置 HOTA `+1.604/+5.277`、DetA `+0.734/+0.895`。pair mAP `0.170013`、both-independent AP50 `0.353940`；完整证据与结构检查通过。 |
+| 197 GPU 4,5 | `0731_10 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `RUNNING`；07:18 fresh 启动，iter 100 五项门槛通过 | 178 `0731_11` 的严格 2xb4 复现。真数据双卡 smoke、结构 checkpoint 检查、配置与完整模型构建均通过；正式 iter 100 为 `0.8707 s/iter`、loss `20.5465`、grad norm `101.3330`，总/DN/encoder loss 有限。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
-| 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `STOPPED`；epoch 4 全部 artifacts 和结构审计完成后于 05:44 精确停止 | cls HOTA/DetA/AssA `36.312/27.192/52.399`，det `42.336/33.389/54.669`；相对父配置 HOTA `+0.103/+3.583`、DetA `+0.124/+0.935`。但 pair mAP `0.153285`，较父配置下降 `0.003968`，超过固定保护线 `0.000968`；both-independent AP50 `0.343821`。共享 attention 最大误差为零、独立分支已分化，三层分类门控均有限非零，故结论为分类专用细节导致轻微 pair AP 搬运而非结构未生效。 |
+| 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `STOPPED`；epoch 4 后按 HOTA 优先规则恢复，epoch 8 完整评估后于 07:14 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.801/35.436/56.745`，det `49.318/43.792/57.563`；相对父配置 HOTA `-1.468/-0.875`、DetA `-2.227/-3.269`。pair mAP `0.213045`、both-independent AP50 `0.436989` 也明显下降。共享 attention 误差为零，独立参数和三层分类门控均充分学习，结论是分类专用细节引起中期检测覆盖退化。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `STOPPED`；epoch 8 全部 artifacts 和两项结构审计完成后精确停止 | cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，cls/det DetA `-0.052/-0.316`。pair mAP `0.246292`、both-independent AP50 `0.479887`，分别提高 `0.008558/0.013936`。结构确已学习：6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060115`，三层 detail 权重有限非零。因 cls HOTA 唯一低于父配置，未将关联/AP 增益误判为全门槛通过。 |
 | 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后于 01:35 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.386/34.314/57.656`，det `49.340/42.544/59.013`；pair mAP/AP50 `0.207499/0.401020`，both-independent mAP/AP50 `0.241319/0.431198`。早期优势未保持，明显低于 `0727_01` 同点；6 组共享 attention 误差为零、两类结构参数均已学习，故结论是结构方向失败而非未生效。 |
@@ -41,7 +42,7 @@
 
 ## 代码一致性
 
-- 四台服务器当前代码已统一至 `3d65dc4`；同步未重启 99、252、178 的在途训练。
+- 四台服务器当前代码已统一至 `c481c3e`；同步未重启任何在途训练。
 - 99 原有实验提交 `c104193` 在共同历史中完整保留；各服务器未跟踪目录未覆盖或删除。
 - 当前 decoder 测试集共 78 项通过。`0731_02/03/04` 均在零初始化时精确等于父模型，第一步反向中目标门控非零；所有正式运行均在配置展开、完整模型构建、路径检查和真数据 smoke 后启动。
 - 197 使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`。历史目录 `/data/users/litianhao/PairMOT` 保持原状，不作为新实验代码源。
@@ -428,3 +429,18 @@
   正向验收通过。正式 smoke 仍必须用真实 `iter_4.pth` 再执行同一验收器。
 - 该候选尚未创建正式配置、workdir 或实验编号；只有现有 midpoint/full-path
   路径在完整 HOTA 证据下需要接替时才部署，避免把预案误报为正在运行的实验。
+
+## 2026-07-31 07:25 CST classification-only 淘汰与 midpoint 主线
+
+- `0731_08` epoch 8 的 cls/det HOTA 为 `43.801/49.318`，相对 encoder 同点
+  下降 `1.468/0.875`；双 DetA 和 AP 同向明显下降。分类专用细节只隔离了
+  reference 直接污染，却仍通过分类分数改变匹配与筛选，因此无法保护检测覆盖。
+- 197 已切换到 `0731_10 midpoint-regression` 双卡复现。该结构把反对称约束放到
+  最终框 residual 空间，不靠 residual scale、loss 重权或类别重权。真实数据 smoke
+  和正式 iter 100 的全部门槛通过。
+- 99 `0731_09 regression-only` 与 178 `0731_11 midpoint-regression` 的 epoch 4
+  都在 HOTA、DetA、AssA 和 AP 上同步提高；其中 midpoint 的 cls/det HOTA 为
+  `38.668/43.586`，早期覆盖增益最完整。两者均继续到 epoch 8。
+- 当前结构判断是：直接分类细节不可取；回归细节必须进一步约束 pair midpoint。
+  252 full-path 仍是 epoch 8 阶段最强，midpoint 路径是更有希望避免中期
+  reference/覆盖退化的接替主线。

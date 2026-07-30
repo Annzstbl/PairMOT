@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 06:35 CST。
+更新时间：2026-07-31 07:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；06:34 到 epoch 2 iter 900，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_08 shared-attention + classification-only enveloped-detail decoder` | RUNNING；从 epoch 4 原位恢复，06:34 到 epoch 7 iter 200，下一判 epoch 8；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 8 双 HOTA 通过，06:34 到 epoch 10 iter 250，下一判 epoch 12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；06:34 到 epoch 2 iter 450，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:21 到 epoch 5 iter 350，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；07:18 fresh 启动，07:20 已越过 iter 100；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 8 双 HOTA 通过，07:21 到 epoch 12 iter 750，下一判 epoch 12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:21 到 epoch 5 iter 100，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -576,3 +576,39 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 86 项 decoder 单测、配置深拷贝、完整模型构建及 detector-level 初始化后的零门控
   均已通过。此候选尚未分配实验编号、正式配置或 GPU，仅在现有评估提供支持且资源
   释放后进入 smoke。四台代码已无重启地快进到提交 `764ff7d`，未跟踪文件均保留。
+
+## 2026-07-31 07:25 CST 197 淘汰与 midpoint 双卡接替
+
+- 197 `0731_08 shared-attention + classification-only enveloped-detail` 的 epoch 8
+  checkpoint、检测 metrics、完整 TrackEval、原始 CSV 和结构审计均已完成。
+  cls HOTA/DetA/AssA 为 `43.801/35.436/56.745`，det 为
+  `49.318/43.792/57.563`；相对 `0727_01` 同点的双 HOTA 分别下降
+  `1.468/0.875`，cls/det DetA 分别下降 `2.227/3.269`。pair mAP
+  `0.213045`、both-independent AP50 `0.436989` 也明显低于父配置。
+- checkpoint 中 6 组共享 attention 最大误差为零，18 组独立参数最大差异
+  `0.067752`，三层分类细节门最大权重
+  `0.075650/0.106004/0.114755`。结构已充分学习，失败原因是分类专用细节使
+  检测覆盖下降，而不是模块未生效。07:14 精确停止，GPU 4/5 释放。
+- 接替实验 `0731_10` 将帧细节放在 5D box-logit residual 空间形成严格
+  `-detail/+detail` 修正，使新增回归细节不移动 pair midpoint；分类路径继续共享。
+  正式配置深拷贝、完整模型构建、launcher 语法和目标资源均通过复核。
+- 197 双卡真实数据 4-iter smoke 的四步总、DN、encoder loss 与 grad norm
+  均有限；6 组 attention 误差为零、18 组独立参数最大差异 `0.000788`，
+  三层 midpoint 细节门最大权重 `0.000394/0.000391/0.000394`。07:18 fresh
+  启动正式训练，07:20 达到 epoch 1 iter 100：`0.8707 s/iter`、loss
+  `20.5465`、grad norm `101.3330`，GPU 4/5 正常，无训练异常。
+
+## 2026-07-31 07:25 CST 99/178 epoch-4 双 HOTA 通过
+
+- 99 `0731_09 regression-only` 的 epoch 4 cls HOTA/DetA/AssA 为
+  `37.813/27.802/55.047`，det 为 `44.030/33.349/59.176`；相对父配置
+  HOTA 提高 `1.604/5.277`、DetA 提高 `0.734/0.895`。pair mAP
+  `0.170013`、both-independent AP50 `0.353940`，完整检测、TrackEval、原始
+  CSV 和结构检查均通过，保留到 epoch 8。
+- 178 `0731_11 midpoint-regression` 的 epoch 4 cls HOTA/DetA/AssA 为
+  `38.668/30.574/53.235`，det 为 `43.586/38.232/51.254`；相对父配置
+  HOTA 提高 `2.459/4.833`，cls DetA/AssA 提高 `3.506/1.141`，
+  det DetA/AssA 提高 `5.778/3.788`。pair mAP `0.184185`、
+  both-independent AP50 `0.391559`，结构审计通过，保留到 epoch 8。
+- 99 回归分支与 178 midpoint 分支均在 HOTA、DetA、AssA 和 AP 上同步提高；
+  当前不做参数扫描，继续用 epoch 8 判断早期覆盖增益能否保持。

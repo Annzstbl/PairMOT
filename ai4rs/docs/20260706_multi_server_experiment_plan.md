@@ -1274,3 +1274,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 提交 `764ff7d` 已通过 86 项 decoder 单测、完整配置构建、模型初始化零门控检查并同步
   四台服务器。它当前只是经过代码验证的后备结构，不占实验编号和 GPU；197 释放时仍优先
   做已准备的 `0731_10` midpoint 双卡复现，terminal-only 只在后续证据支持时进入 smoke。
+
+## 2026-07-31 07:25 CST classification-only 决策与 midpoint 并行验证
+
+- `0731_08` epoch 8 的 cls/det HOTA `43.801/49.318` 双双低于父配置；cls/det
+  DetA 分别下降 `2.227/3.269`，pair mAP 与 both-independent AP50 也明显下降。
+  完整结构检查证明分类门控已学习，因此停止 classification-only 路径。
+- 197 GPU 4/5 接替为 `0731_10 midpoint-regression` 2xb4 复现。配置、完整模型、
+  双卡真数据 smoke、checkpoint 结构审计和正式 iter 100 五项门槛均通过。
+- 99 `0731_09 regression-only` epoch 4 的 cls/det HOTA 为 `37.813/44.030`；
+  178 `0731_11 midpoint-regression` 为 `38.668/43.586`。两者相对父配置双 HOTA、
+  双 DetA 与 AP 均提高，继续到 epoch 8。
+- 下一轮决策顺序：252 `0731_05` epoch 12 → 99/178 epoch 8 → 197 epoch 4。
+  若 full-path 或 midpoint 在中期出现 DetA/双 HOTA 系统性退化，再启用仅最终层
+  注入细节的 terminal-only 结构；不回到 scale 或权重扫描。
