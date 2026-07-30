@@ -249,6 +249,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  common_motion_decoder: bool = False,
                  shared_evidence_decoder: bool = False,
                  competitive_evidence_decoder: bool = False,
+                 motion_trust_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -264,6 +265,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.shared_evidence_decoder = bool(shared_evidence_decoder)
         self.competitive_evidence_decoder = bool(
             competitive_evidence_decoder)
+        self.motion_trust_decoder = bool(motion_trust_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -289,6 +291,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'competitive_evidence_decoder is incompatible with '
                 'tristate_decoder, dual_output_adapter, and '
                 'shared_evidence_decoder')
+        if self.motion_trust_decoder and any((
+                self.tristate_decoder,
+                self.dual_output_adapter,
+                self.common_motion_decoder,
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+        )):
+            raise ValueError(
+                'motion_trust_decoder is incompatible with all other '
+                'decoder variants')
         super().__init__(*args, **kwargs)
 
     def _init_layers(self) -> None:
@@ -327,6 +339,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.competitive_evidence_decoder:
             self.competitive_evidence_adapters = ModuleList([
                 nn.Linear(self.embed_dims, self.embed_dims, bias=False)
+                for _ in range(self.num_layers)
+            ])
+        if self.motion_trust_decoder:
+            self.motion_trust_adapters = ModuleList([
+                nn.Linear(self.embed_dims + 5, 5, bias=False)
                 for _ in range(self.num_layers)
             ])
         if self.post_norm_cfg is not None:
@@ -480,6 +497,42 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         gate = self.competitive_evidence_adapters[lid](evidence).tanh()
         return gate * detail
 
+    def _motion_trust_correction(
+        self,
+        lid: int,
+        out_prev: Tensor,
+        out_curr: Tensor,
+        reference_prev: Tensor,
+        reference_curr: Tensor,
+        layer_output: Tensor,
+        cls_branch_prev: nn.Module,
+        cls_branch_curr: nn.Module,
+    ) -> Tensor:
+        """Return a bounded, detection-confident antisymmetric box update.
+
+        The previous common-motion decoder could emit an unbounded logit-space
+        box residual for every query.  Here the learned direction is bounded
+        by ``tanh`` and its elementwise envelope is half of the already
+        observed inter-frame reference displacement.  Applying ``-delta`` to
+        prev and ``+delta`` to curr therefore preserves the pair midpoint and
+        cannot change their separation by more than the current separation.
+        A detached geometric mean of the two frame confidences suppresses
+        motion hallucination for unilateral or background queries.
+        """
+        evidence = self._normalized_motion_evidence(out_prev, out_curr)
+        reference_motion = self._reference_motion(
+            reference_prev, reference_curr)
+        score_prev = cls_branch_prev(layer_output).detach().sigmoid().amax(
+            dim=-1, keepdim=True)
+        score_curr = cls_branch_curr(layer_output).detach().sigmoid().amax(
+            dim=-1, keepdim=True)
+        bilateral_confidence = (
+            score_prev * score_curr).clamp_min(0.0).sqrt()
+        direction = self.motion_trust_adapters[lid](
+            torch.cat([evidence, reference_motion], dim=-1)).tanh()
+        envelope = 0.5 * reference_motion.abs()
+        return bilateral_confidence * envelope * direction
+
     @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
@@ -519,6 +572,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.init.zeros_(adapter.weight)
         if self.competitive_evidence_decoder:
             for adapter in self.competitive_evidence_adapters:
+                nn.init.zeros_(adapter.weight)
+        if self.motion_trust_decoder:
+            for adapter in self.motion_trust_adapters:
                 nn.init.zeros_(adapter.weight)
         if not self.tristate_decoder:
             return
@@ -589,7 +645,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         assert reg_branches_curr is not None
         assert len(reg_branches_prev) == self.num_layers
         assert len(reg_branches_curr) == self.num_layers
-        if self.tristate_decoder:
+        if self.tristate_decoder or self.motion_trust_decoder:
             assert cls_branches_prev is not None
             assert cls_branches_curr is not None
             assert len(cls_branches_prev) >= self.num_layers
@@ -681,7 +737,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 needs_frame_evidence = (
                     self.common_motion_decoder
                     or self.shared_evidence_decoder
-                    or self.competitive_evidence_decoder)
+                    or self.competitive_evidence_decoder
+                    or self.motion_trust_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -744,6 +801,20 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         reference_curr)
                     tmp_prev = tmp_prev - common_motion
                     tmp_curr = tmp_curr + common_motion
+                elif self.motion_trust_decoder:
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
+                    trusted_motion = self._motion_trust_correction(
+                        lid,
+                        frame_evidence_prev,
+                        frame_evidence_curr,
+                        reference_prev,
+                        reference_curr,
+                        layer_output,
+                        cls_branches_prev[lid],
+                        cls_branches_curr[lid])
+                    tmp_prev = tmp_prev - trusted_motion
+                    tmp_curr = tmp_curr + trusted_motion
                 else:
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)

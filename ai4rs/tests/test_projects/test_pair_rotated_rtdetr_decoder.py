@@ -80,7 +80,8 @@ def _build_decoder(num_layers: int = 2,
                    dual_output_detach_adapter_input: bool = False,
                    common_motion_decoder: bool = False,
                    shared_evidence_decoder: bool = False,
-                   competitive_evidence_decoder: bool = False):
+                   competitive_evidence_decoder: bool = False,
+                   motion_trust_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -114,6 +115,7 @@ def _build_decoder(num_layers: int = 2,
         common_motion_decoder=common_motion_decoder,
         shared_evidence_decoder=shared_evidence_decoder,
         competitive_evidence_decoder=competitive_evidence_decoder,
+        motion_trust_decoder=motion_trust_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -835,6 +837,177 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 _build_decoder(
                     device=self.device,
                     competitive_evidence_decoder=True,
+                    **other)
+
+    def test_motion_trust_is_exact_baseline_at_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, motion_trust_decoder=True)
+        decoder.init_weights()
+        cls_prev = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=2)
+        cls_curr = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=3)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        trusted_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr)
+        decoder.motion_trust_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for trusted_group, baseline_group in zip(
+                trusted_output, baseline_output):
+            for trusted_tensor, baseline_tensor in zip(
+                    trusted_group, baseline_group):
+                self.assertTrue(torch.equal(trusted_tensor, baseline_tensor))
+        for adapter in decoder.motion_trust_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_motion_trust_is_swap_antisymmetric_and_bounded(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, motion_trust_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(53)
+        with torch.no_grad():
+            torch.nn.init.normal_(
+                decoder.motion_trust_adapters[0].weight, std=0.2)
+        out_prev = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device)
+        out_curr = torch.randn_like(out_prev)
+        reference_prev = torch.rand(
+            2, 7, 5, device=self.device).mul(0.3).add(0.1)
+        reference_curr = torch.rand(
+            2, 7, 5, device=self.device).mul(0.3).add(0.6)
+        layer_output = torch.randn_like(out_prev)
+        cls_prev = _build_cls_branches(
+            1, decoder.embed_dims, 8, self.device, seed=4)[0]
+        cls_curr = _build_cls_branches(
+            1, decoder.embed_dims, 8, self.device, seed=5)[0]
+        correction = decoder._motion_trust_correction(
+            0, out_prev, out_curr, reference_prev, reference_curr,
+            layer_output, cls_prev, cls_curr)
+        swapped = decoder._motion_trust_correction(
+            0, out_curr, out_prev, reference_curr, reference_prev,
+            layer_output, cls_curr, cls_prev)
+        self.assertTrue(torch.allclose(
+            correction, -swapped, atol=1e-6, rtol=1e-5))
+        envelope = 0.5 * decoder._reference_motion(
+            reference_prev, reference_curr).abs()
+        self.assertTrue(torch.all(correction.abs() <= envelope + 1e-7))
+
+    def test_motion_trust_suppresses_unilateral_confidence(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, motion_trust_decoder=True)
+        decoder.init_weights()
+        with torch.no_grad():
+            decoder.motion_trust_adapters[0].weight.fill_(0.05)
+        out_prev = torch.randn(
+            1, 5, decoder.embed_dims, device=self.device)
+        out_curr = torch.randn_like(out_prev)
+        reference_prev = out_prev.new_full((1, 5, 5), 0.25)
+        reference_curr = out_prev.new_full((1, 5, 5), 0.75)
+        layer_output = torch.zeros_like(out_prev)
+        high_prev = torch.nn.Linear(decoder.embed_dims, 8).to(self.device)
+        high_curr = torch.nn.Linear(decoder.embed_dims, 8).to(self.device)
+        low_curr = torch.nn.Linear(decoder.embed_dims, 8).to(self.device)
+        with torch.no_grad():
+            for branch in (high_prev, high_curr, low_curr):
+                branch.weight.zero_()
+            high_prev.bias.fill_(8.0)
+            high_curr.bias.fill_(8.0)
+            low_curr.bias.fill_(-8.0)
+        high = decoder._motion_trust_correction(
+            0, out_prev, out_curr, reference_prev, reference_curr,
+            layer_output, high_prev, high_curr)
+        unilateral = decoder._motion_trust_correction(
+            0, out_prev, out_curr, reference_prev, reference_curr,
+            layer_output, high_prev, low_curr)
+        self.assertLess(
+            unilateral.abs().max().item(), 0.03 * high.abs().max().item())
+
+    def test_motion_trust_adapters_receive_first_step_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            motion_trust_decoder=True)
+        decoder.init_weights()
+        cls_prev = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=6)
+        cls_curr = _build_cls_branches(
+            decoder.num_layers, decoder.embed_dims, 8, self.device, seed=7)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        reference_prev = torch.rand(
+            1, decoder.num_queries, 5, device=self.device).mul(0.2).add(0.2)
+        reference_curr = torch.rand(
+            1, decoder.num_queries, 5, device=self.device).mul(0.2).add(0.6)
+        _, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr,
+            cls_branches_prev=cls_prev,
+            cls_branches_curr=cls_curr,
+            reference_prev=reference_prev,
+            reference_curr=reference_curr)
+        torch.manual_seed(59)
+        loss = sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in decoder.motion_trust_adapters:
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
+
+    def test_detector_init_preserves_motion_trust_zero_start(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, motion_trust_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for adapter in decoder.motion_trust_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_motion_trust_rejects_incompatible_decoders(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+                dict(common_motion_decoder=True),
+                dict(shared_evidence_decoder=True),
+                dict(competitive_evidence_decoder=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    motion_trust_decoder=True,
                     **other)
 
     def test_tristate_disables_structurally_unused_parameters(self):
