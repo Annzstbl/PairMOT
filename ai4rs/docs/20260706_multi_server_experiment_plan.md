@@ -1042,3 +1042,25 @@ adapter 均产生约 `4.0e-4` 非零更新并通过结构检查。正式 fresh �
 23:49 到 epoch 1 iter 50，约 `0.9458 s/iter`、loss `21.1606`、grad norm
 `107.4478`，GPU 0 约 `31.4 GiB`，无异常；首判 epoch 4。至此 252 `0730_13`、
 99 `0730_14`、197 `0730_15`、178 `0730_16` 恢复四路结构实验并行。
+
+## 2026-07-31 0730_13 Epoch-4 Gate
+
+`0730_13 shared-attention decoder` 的 epoch 4 cls HOTA/DetA/AssA 为
+`37.559/27.119/55.846`，det 为 `43.257/33.530/56.895`；相对父配置同点，
+cls/det HOTA 提高 `1.350/4.504`，DetA 提高 `0.051/1.076`。pair mAP/AP50
+为 `0.1547/0.3182`，both-independent mAP/AP50 为 `0.1839/0.3467`；
+pair mAP 仅下降约 `0.00255`，未超过 `0.003` 保护线，both AP50 提高约
+`0.0235`。checkpoint 中 6 组共享 attention 权重误差为零，18 组应独立参数最大
+差异 `0.03846`。完整 TrackEval 与结构审计通过，因此继续到 epoch 8，检验
+detection-preserving 的早期共同优势能否保持。
+
+## 2026-07-31 0730_14 Epoch-4 Gate
+
+`0730_14 motion-trust + shared-attention` 的 epoch 4 cls HOTA/DetA/AssA 为
+`37.075/27.355/53.989`，det 为 `42.159/32.966/55.263`；相对父配置同点，
+cls/det HOTA 提高 `0.866/3.406`，DetA 提高 `0.287/0.512`。pair mAP/AP50
+为 `0.1625/0.3105`，both-independent mAP/AP50 为 `0.1887/0.3369`，
+全部固定门槛通过并继续到 epoch 8。联合结构审计确认 motion adapter 非零、共享
+attention 权重严格相等、独立参数已分化。但其 cls/det HOTA 同点低于 `0730_13`
+`0.484/1.098`，说明目前 shared-attention 主效应强于与 motion-trust 的组合，
+尚无正交互补证据。

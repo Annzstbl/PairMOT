@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-30 23:45 CST。
+更新时间：2026-07-31 00:02 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,9 +15,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0730_14 motion-trust + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0730_14 motion-trust + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_15 shared-evidence + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0730_13 shared-attention decoder` | 4-iter DDP smoke 和结构检查通过；正式 fresh 训练 epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0730_13 shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0730_16 antisymmetric frame-detail decoder` | 4-iter smoke 与结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -399,5 +399,18 @@ canonical 代码提交为 `0782826`；本次状态提交后四机统一快进，
 | RUNNING | 178 GPU 0 | `0730_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 23:48 /  | 接替结构只在逐帧 cls/reg head 前注入由真实双帧 cross-attention 证据生成的有界 `-detail/+detail`，保持 recurrent shared query、下一层路径和两帧特征中点严格等于父模型；不直接改框或共享 query。69 项 decoder 单测、配置深拷贝、launcher 审计和代码差异检查通过；真实数据 4-iter smoke 的总、DN、encoder loss 和 grad norm 均有限，checkpoint 三层 adapter 均非零且结构检查通过。正式训练五项门槛通过，23:49 到 epoch 1 iter 50，约 `0.9458 s/iter`、loss `21.1606`、grad norm `107.4478`，GPU 0 约 `31.4 GiB`，无异常。首判 epoch 4。 |
 
 实时资源状态已恢复四路正式训练：252 `0730_13`、99 `0730_14`、197 `0730_15`、
-178 `0730_16`。四台服务器代码统一为 `1112a56`，各服务器既有未跟踪文件均保留，
-活动训练未因同步重启；AutoDL 继续保持全部关机。
+178 `0730_16`。四台服务器结构基线为 `1112a56`，状态记录已同步至 `770eae7`；
+各服务器既有未跟踪文件均保留，活动训练未因同步重启；AutoDL 继续保持全部关机。
+
+## 2026-07-31 00:02 CST 252 epoch-4 门控
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 252 GPU 0,1 | `0730_13_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:32 /  | epoch 4 checkpoint、检测、完整 TrackEval 与结构审计通过。cls HOTA/DetA/AssA `37.559/27.119/55.846`，det `43.257/33.530/56.895`；pair mAP/AP50 `0.1547/0.3182`，both-independent mAP/AP50 `0.1839/0.3467`。相对父配置 cls/det HOTA `+1.350/+4.504`、DetA `+0.051/+1.076`；pair mAP 仅下降约 `0.00255`，未超过 `0.003` 保护线，both AP50 提高约 `0.0235`。6 组共享 attention 权重误差为零，18 组独立参数最大差异 `0.03846`。全部固定门槛通过，继续到 epoch 8。 |
+
+99 `0730_14` 的 epoch 4 完整 TrackEval 与结构审计也已通过：cls
+HOTA/DetA/AssA `37.075/27.355/53.989`，det `42.159/32.966/55.263`，
+pair mAP/AP50 `0.1625/0.3105`，both-independent mAP/AP50 `0.1887/0.3369`；
+全部保护线通过，继续到 epoch 8。但其 cls/det HOTA 同点低于 `0730_13`
+`0.484/1.098`，motion-trust 组合暂未形成正交增益。197 `0730_15` 正在 epoch 4，
+178 `0730_16` 正常训练。
