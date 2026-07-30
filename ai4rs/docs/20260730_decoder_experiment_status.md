@@ -423,5 +423,8 @@
 - 单测覆盖零起点全输出等价、非零时前两层 hidden/reference 逐元素不变、最终层确实
   分化、首步梯度进入唯一 terminal gate，以及 detector 初始化后门控重新归零。
   完整 86 项 decoder 测试、模型构建和初始化检查通过，代码提交为 `764ff7d`。
+- 独立 checkpoint 验收器同时要求 6 组 attention 权重严格共享、18 组
+  sampling/value/output 参数已分化、唯一 terminal gate 有限非零；合成 checkpoint
+  正向验收通过。正式 smoke 仍必须用真实 `iter_4.pth` 再执行同一验收器。
 - 该候选尚未创建正式配置、workdir 或实验编号；只有现有 midpoint/full-path
   路径在完整 HOTA 证据下需要接替时才部署，避免把预案误报为正在运行的实验。
