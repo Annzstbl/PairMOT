@@ -77,7 +77,8 @@ def _build_decoder(num_layers: int = 2,
                    dual_output_adapter: bool = False,
                    dual_output_cls_scale: float = 1.0,
                    dual_output_reg_scale: float = 1.0,
-                   dual_output_detach_adapter_input: bool = False):
+                   dual_output_detach_adapter_input: bool = False,
+                   common_motion_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -108,6 +109,7 @@ def _build_decoder(num_layers: int = 2,
         dual_output_cls_scale=dual_output_cls_scale,
         dual_output_reg_scale=dual_output_reg_scale,
         dual_output_detach_adapter_input=dual_output_detach_adapter_input,
+        common_motion_decoder=common_motion_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -439,6 +441,115 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 device=self.device,
                 tristate_decoder=True,
                 dual_output_adapter=True)
+
+    def test_common_motion_is_exact_baseline_at_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, common_motion_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        common_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.common_motion_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for common_group, baseline_group in zip(
+                common_output, baseline_output):
+            for common_tensor, baseline_tensor in zip(
+                    common_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    common_tensor, baseline_tensor))
+        for adapter in decoder.common_motion_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_common_motion_correction_is_swap_antisymmetric(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, common_motion_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(23)
+        with torch.no_grad():
+            torch.nn.init.normal_(
+                decoder.common_motion_adapters[0].weight, std=0.02)
+        out_prev = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device)
+        out_curr = torch.randn_like(out_prev)
+        reference_prev = torch.rand(2, 7, 5, device=self.device)
+        reference_curr = torch.rand(2, 7, 5, device=self.device)
+        correction = decoder._common_motion_correction(
+            0, out_prev, out_curr, reference_prev, reference_curr)
+        swapped = decoder._common_motion_correction(
+            0, out_curr, out_prev, reference_curr, reference_prev)
+        self.assertTrue(torch.allclose(
+            correction, -swapped, atol=1e-6, rtol=1e-5))
+
+    def test_common_motion_adapters_receive_first_step_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            common_motion_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        _, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(29)
+        loss = sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in decoder.common_motion_adapters:
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
+
+    def test_detector_init_preserves_common_motion_zero_start(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, common_motion_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for adapter in decoder.common_motion_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_common_motion_rejects_other_decoder_variants(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+                _build_decoder(
+                    device=self.device,
+                    common_motion_decoder=True,
+                    **other)
 
     def test_tristate_disables_structurally_unused_parameters(self):
         decoder, _, _ = _build_decoder(
