@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 03:40 CST。
+更新时间：2026-07-31 03:47 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_05 shared-attention + enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | PREPARED；待服务器级验证及 formal 启动 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；03:46 到 epoch 1 iter 50，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -482,3 +482,13 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 
 当前 99、197、252 三路正式训练不受影响；178 GPU 0 已释放并用于上述结构性接替，
 不是 residual-scale、loss 权重或类别 reweight 调参。
+
+## 2026-07-31 03:47 CST 178 接替实验正式启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 178 GPU 0 | `0731_06_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_regressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 03:45 /  | 80 项单测、完整模型构建、单卡真数据 4-iter smoke 与组合结构审计通过；smoke 三层门控均获非零更新。03:46 到 epoch 1 iter 50：`0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，总/DN/encoder loss 有限，无训练异常，五项启动门槛通过。 |
+
+四路正式结构实验恢复并行：99 `0731_02`、197 `0731_04` 继续 epoch 8，
+252 `0731_05` 和 178 `0731_06` 首判 epoch 4。四台代码统一到 `62f1028`，
+同步没有重启任何在途训练。

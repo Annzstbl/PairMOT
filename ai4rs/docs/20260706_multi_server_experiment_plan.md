@@ -1195,3 +1195,16 @@ enveloped-detail`。分类 head 继续读取共享 decoder hidden states；零�
 swap-odd 且受真实 cross-attention 帧差逐元素约束的 correction 仅作用于两帧
 regression heads 和 reference 更新。该结构从计算路径上解耦分类与几何细节，
 直接针对 `0731_01` 的唯一失败项，不使用参数 scale、loss 重权或类别重权。
+
+## 2026-07-31 03:47 CST 0731_06 Formal Start
+
+`0731_06` 已通过 80 项 decoder 单测、配置深拷贝、完整模型构建和 178 单卡
+真数据 4-iter smoke。smoke 的总/DN/encoder loss 与 grad norm 均有限；
+checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/output
+参数保持逐帧独立，三层 regression-only detail 门控均产生非零更新。
+
+正式 fresh 训练于 03:45 启动，03:46 到 epoch 1 iter 50：
+`0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，GPU 0 约
+`31.4 GiB`，无异常。首判 epoch 4；固定门槛不变，仍要求 cls/det HOTA
+不低于父配置、任一 DetA 下降不超过 `0.5`、pair mAP 与 both-independent AP50
+下降不超过 `0.003`。

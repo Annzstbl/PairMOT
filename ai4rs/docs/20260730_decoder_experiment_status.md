@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 03:40 CST
+更新时间：2026-07-31 03:47 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；03:23 fresh 启动，03:25 到 epoch 1 iter 50 | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。79 项 decoder 单测、配置深拷贝、完整模型构建、双卡真数据 4-iter smoke 与组合结构审计通过；iter 50 为 `1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`，总/DN/encoder loss 有限。 |
-| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `PREPARED`；代码与配置待服务器级验证 | 分类特征保持 shared-attention 的共享 decoder 路径；受真实帧差包络约束、交换反对称的细节只进入两帧迭代框回归及 reference 更新。该结构针对 `0731_01` epoch 8 中 det/AP 上升但 cls HOTA 低父配置 `0.117` 的唯一失败项，不改 loss、类别权重或 recurrent query。 |
+| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；03:45 fresh 启动，03:46 到 epoch 1 iter 50 | 分类特征保持 shared-attention 的共享 decoder 路径；受真实帧差包络约束、交换反对称的细节只进入两帧迭代框回归及 reference 更新。80 项单测、完整模型构建、真数据 4-iter smoke 和结构审计通过；iter 50 为 `0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，总/DN/encoder loss 有限，五项启动门槛通过。 |
 | 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
 
 ## 已完成或释放
@@ -269,3 +269,16 @@
 - 接替候选 `0731_06` 保留 shared-attention 的分类共享特征，只把零起点、
   受观测帧差逐元素包络约束的 swap-odd correction 注入两帧框回归及 reference
   更新。它是分类/几何作用路径的结构性解耦，不是 scale、loss 权重或类别重权调整。
+
+## 2026-07-31 03:47 CST 0731_06 正式启动
+
+- 80 项 decoder 单测、正式/烟测配置深拷贝、完整模型构建和 launcher 审计通过。
+  178 单卡真数据 4-iter smoke 的四步 loss 为
+  `21.3239/20.1028/20.0323/20.0772`，总、DN、encoder loss 与 grad norm 均有限。
+- smoke checkpoint 中 6 组共享 attention 最大误差为零，18 组逐帧独立参数最大差异
+  `0.000779`；三层 regression-only enveloped-detail 门控最大权重
+  `0.000389/0.000389/0.000390`，确认新回归路径获得真实梯度。
+- 03:45 在 178 GPU 0 fresh 启动；03:46 到 epoch 1 iter 50：
+  `0.9610 s/iter`、loss `20.9556`、grad norm `111.7257`，显存约
+  `31.4 GiB`，无 Traceback、OOM、NaN、NCCL 或未使用参数错误。五项正式启动门槛
+  通过，四机结构实验重新并行，首判 epoch 4。
