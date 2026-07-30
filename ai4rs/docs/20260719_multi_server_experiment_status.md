@@ -305,3 +305,13 @@ epoch 68为`53.609/61.680`，阶段唯一最佳仍是epoch 64的`53.571/61.726`�
 pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke并于06:42双卡fresh启动，
 正式iter 200及全部五项启动门槛通过。同期`0723_06`epoch 8达到`44.661/50.551`，相对父
 配置同epoch双提升`+0.349/+0.714`，det DetA/AssA提高`0.441/1.150`，是当前最积极趋势。
+
+## 2026-07-30 18:25 CST decoder 调度覆盖
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 /  | 严格继承 `0727_01`，新增检测置信度门控、位移包络约束的反对称 motion-trust decoder。配置深拷贝、47 项单测和双卡真实数据 4-iter smoke 通过；18:24 到 epoch 1 iter 50，`0.9085 s/iter`、loss `21.3915`、grad norm `120.0892`，正式启动五项门槛全部通过。 |
+| STOPPED | 197 GPU 4,5 | `0730_08 ... decoder_competitiveevidence ... fresh` | 2026-07-30 / 2026-07-30 17:58 | epoch 4 cls/det HOTA `36.277/43.729`；相对 `0727_01` 同点 `+0.068/+4.976`，但增益集中于 det AssA `+9.441`，pair mAP `-0.0041`，完成 checkpoint、检测及 2/2 TrackEval 后按门槛停止。 |
+| STOPPED | 252 GPU 0,1 | `0730_07 ... decoder_commonmotion_sharedevidence ... fresh` | 2026-07-30 / 2026-07-30 17:58 | epoch 4 cls/det HOTA `36.926/42.702`；相对 `0727_01` 同点 `+0.717/+3.949`，但 cls/det DetA 均约 `-1.0`，pair mAP/AP50 和 both-independent AP50 未形成一致提升，完成 checkpoint、检测及 2/2 TrackEval 后停止。 |
+
+当前可调度资源为 99 双卡、197 双卡、252 双卡、178 单卡；AutoDL 全部关机。197 新实验使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`，历史目录不作代码源。`0730_09` 代码提交为 `f231b01`；99 canonical 与 197 已精确同步，252/178 在状态文档提交后同步到同一提交。空闲卡只用于模型结构实验，不进行 class-specific/long-tail reweight 或 residual-scale 参数扫描。
