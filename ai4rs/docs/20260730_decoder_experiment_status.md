@@ -393,3 +393,21 @@
   `0.000389/0.000390/0.000390`。06:11 fresh 启动，06:12 达到 epoch 1
   iter 50：`0.9405 s/iter`、loss `20.9608`、grad norm `109.0985`，
   GPU0 约 `31.4 GiB`，无 Traceback/OOM/NaN/NCCL。
+
+## 2026-07-31 06:17 CST 0731_05 epoch-8 双 HOTA 通过
+
+- 252 `0731_05 shared-attention + full-path enveloped-detail` 的 epoch 8
+  checkpoint、检测 metrics、完整 2/2 TrackEval、原始 CSV 与结构审计均已完成。
+  cls HOTA/DetA/AssA 为 `45.341/37.690/56.836`，det 为
+  `51.589/45.176/60.817`。
+- 相对 `0727_01` epoch 8，cls HOTA `+0.072`、det HOTA `+1.396`，
+  因而这是当前首个在 epoch 8 同时超过父 encoder 两项 HOTA 的 decoder 候选。
+  但 cls 优势很窄；cls DetA `+0.027`、AssA `-0.465`，det DetA
+  `-1.885`、AssA `+5.672`，说明 det HOTA 增益主要来自关联，而非检测覆盖全面增强。
+- pair mAP `0.2380`、both-independent AP50 `0.4738`，相对父配置约
+  `+0.0003/+0.0078`，没有 AP 崩塌。checkpoint 中 6 组共享 attention 误差为零，
+  18 组独立参数最大差异 `0.059736`，三层 detail gate 最大权重
+  `0.099468/0.084183/0.087388`，结构确已学习。
+- 按 HOTA 主门槛保留继续训练。该结果只证明 epoch 8 的阶段性双提升，最终仍必须
+  同时超过 `54.437/62.393`；后续重点观察 cls 微弱优势能否保持，以及 det DetA
+  是否回升，不能把单独 AssA 搬运写成完整检测能力提升。

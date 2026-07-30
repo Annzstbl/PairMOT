@@ -1252,3 +1252,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   精确消除两个独立回归头带来的 pair midpoint 漂移。
 - `0731_11` 已通过构建、测试、真实数据 smoke、结构 checkpoint 检查与正式
   iter 50 门槛，06:11 fresh 启动；首个决策点为 epoch 4 的双 HOTA。
+
+## 2026-07-31 06:17 CST 0731_05 epoch-8 决策
+
+- `0731_05` epoch 8 的 cls/det HOTA 为 `45.341/51.589`，相对父配置同点
+  `45.269/50.193` 提高 `0.072/1.396`，按 HOTA 主门槛继续。
+- 该候选目前是阶段性最强 decoder，但 cls 裕量极小；det DetA 下降 `1.885`、
+  AssA 提高 `5.672`。因此后续仍以双 HOTA 决策，同时单独记录“关联增益与检测覆盖”
+  的分解，避免把 AssA 搬运解释成全面检测增强。
+- 最终成功条件不变：训练末期 cls/det HOTA 同时超过 `54.437/62.393`。
