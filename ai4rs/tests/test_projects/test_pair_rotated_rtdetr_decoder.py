@@ -84,7 +84,8 @@ def _build_decoder(num_layers: int = 2,
                    motion_trust_decoder: bool = False,
                    symmetric_pair_decoder: bool = False,
                    shared_routing_decoder: bool = False,
-                   shared_attention_decoder: bool = False):
+                   shared_attention_decoder: bool = False,
+                   antisymmetric_detail_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -122,6 +123,7 @@ def _build_decoder(num_layers: int = 2,
         symmetric_pair_decoder=symmetric_pair_decoder,
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
+        antisymmetric_detail_decoder=antisymmetric_detail_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -1473,6 +1475,160 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 layer.cross_attn_prev.sampling_offsets,
                 layer.cross_attn_curr.sampling_offsets)
         for adapter in decoder.shared_evidence_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_antisymmetric_detail_is_exact_baseline_at_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, antisymmetric_detail_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        detail_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        hidden, _, _, hidden_prev, hidden_curr = detail_output
+        for shared, prev, curr in zip(hidden, hidden_prev, hidden_curr):
+            self.assertTrue(torch.equal(prev, shared))
+            self.assertTrue(torch.equal(curr, shared))
+
+        decoder.antisymmetric_detail_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for detail_group, baseline_group in zip(
+                detail_output[:3], baseline_output):
+            for detail_tensor, baseline_tensor in zip(
+                    detail_group, baseline_group):
+                self.assertTrue(torch.equal(detail_tensor, baseline_tensor))
+        for adapter in decoder.antisymmetric_detail_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_antisymmetric_detail_is_swap_odd_bounded_and_midpoint_preserving(
+            self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, antisymmetric_detail_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(71)
+        with torch.no_grad():
+            for adapter in decoder.antisymmetric_detail_adapters:
+                torch.nn.init.normal_(adapter.weight, std=0.05)
+        out_prev = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device)
+        out_curr = torch.randn_like(out_prev)
+        correction = decoder._antisymmetric_detail_correction(
+            0, out_prev, out_curr)
+        swapped = decoder._antisymmetric_detail_correction(
+            0, out_curr, out_prev)
+        self.assertTrue(torch.allclose(correction, -swapped, atol=1e-6))
+        self.assertLessEqual(correction.abs().max().item(), 1.0)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        hidden, _, _, hidden_prev, hidden_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for shared, prev, curr in zip(hidden, hidden_prev, hidden_curr):
+            self.assertTrue(torch.allclose(
+                0.5 * (prev + curr), shared, atol=1e-6))
+
+    def test_antisymmetric_detail_adapters_receive_first_step_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            antisymmetric_detail_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        _, references_prev, references_curr, hidden_prev, hidden_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(73)
+        loss = sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(hidden_prev, hidden_curr))
+        loss = loss + sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for adapter in decoder.antisymmetric_detail_adapters:
+            self.assertIsNotNone(adapter.weight.grad)
+            self.assertGreater(adapter.weight.grad.abs().max().item(), 0.0)
+
+    def test_detector_init_preserves_antisymmetric_detail_zero_start(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, antisymmetric_detail_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for adapter in decoder.antisymmetric_detail_adapters:
+            self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
+
+    def test_antisymmetric_detail_rejects_competing_decoder_variants(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+                dict(common_motion_decoder=True),
+                dict(shared_evidence_decoder=True),
+                dict(competitive_evidence_decoder=True),
+                dict(motion_trust_decoder=True),
+                dict(symmetric_pair_decoder=True),
+                dict(shared_routing_decoder=True),
+        ):
+            with self.assertRaisesRegex(
+                    ValueError, 'mutually exclusive|incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    antisymmetric_detail_decoder=True,
+                    **other)
+
+    def test_antisymmetric_detail_and_shared_attention_compose(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            antisymmetric_detail_decoder=True,
+            shared_attention_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            self.assertIs(
+                layer.cross_attn_prev.attention_weights,
+                layer.cross_attn_curr.attention_weights)
+            self.assertIsNot(
+                layer.cross_attn_prev.sampling_offsets,
+                layer.cross_attn_curr.sampling_offsets)
+        for adapter in decoder.antisymmetric_detail_adapters:
             self.assertEqual(adapter.weight.abs().sum().item(), 0.0)
 
     def test_tristate_disables_structurally_unused_parameters(self):

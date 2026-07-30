@@ -1020,3 +1020,21 @@ shared-evidence 修正共享 query，shared-attention 仅共享 attention 权重
 sampling offsets/value/output projection 独立。代码提交 `0782826`；63 项单测、配置/
 launcher 审计和双卡 4-iter 真数据 smoke 通过。正式 fresh 训练于 22:58 CST 启动，
 22:59 到 epoch 1 iter 50，约 `1.0668 s/iter`，关键 loss 与梯度有限，首判 epoch 4。
+
+## 2026-07-30 0730_12 Epoch-8 Gate 与 0730_16
+
+`0730_12 motion-trust + shared-evidence` 的 epoch 8 cls/det HOTA 为
+`44.387/49.824`，相对父配置同点 `-0.882/-0.369`；cls/det DetA 分别下降
+`4.401/6.353`，pair mAP 下降 `0.02333`，both-independent AP50 下降
+`0.05615`。其 AssA 虽提高 `4.584/8.340`，但属于明显的检测覆盖向关联搬运，
+epoch 4 优势没有保持。完整保存 checkpoint、检测、2/2 TrackEval 与结构审计结果后
+停止，不再扩大该组合。
+
+接替实验 `0730_16 antisymmetric frame-detail decoder` 转向 detection-preserving
+结构：保留 `0727_01` 的 shared recurrent query 和层间 decoder 状态，使用本层两帧
+cross-attention 输出的归一化、detach 有符号证据，经共享零初始化线性层与 `tanh`
+得到有界修正，仅在 cls/reg head 前对两帧特征施加 `-detail/+detail`。该设计使两帧
+head 特征中点严格等于父模型共享输出，帧交换时修正严格变号，避免 shared-evidence
+直接扰动 recurrent query，也避免 motion-trust 直接扰动框。69 项 decoder 单测、
+配置深拷贝、launcher 审计和代码差异检查已通过；178 GPU 0 用单卡 physical batch 8
+完成真实数据 4-iter smoke 与 checkpoint 结构检查后 fresh 启动，首判 epoch 4。

@@ -266,6 +266,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_pair_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
+                 antisymmetric_detail_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -285,6 +286,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
+        self.antisymmetric_detail_decoder = bool(
+            antisymmetric_detail_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -293,19 +296,24 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
+                self.antisymmetric_detail_decoder,
         )) > 1:
             raise ValueError(
                 'tristate_decoder, dual_output_adapter, and '
-                'common_motion_decoder are mutually exclusive')
+                'common_motion_decoder, and antisymmetric_detail_decoder '
+                'are mutually exclusive')
         if self.shared_evidence_decoder and (
-                self.tristate_decoder or self.dual_output_adapter):
+                self.tristate_decoder
+                or self.dual_output_adapter
+                or self.antisymmetric_detail_decoder):
             raise ValueError(
                 'shared_evidence_decoder is incompatible with tristate_decoder '
-                'and dual_output_adapter')
+                'dual_output_adapter, and antisymmetric_detail_decoder')
         if self.competitive_evidence_decoder and (
                 self.tristate_decoder
                 or self.dual_output_adapter
-                or self.shared_evidence_decoder):
+                or self.shared_evidence_decoder
+                or self.antisymmetric_detail_decoder):
             raise ValueError(
                 'competitive_evidence_decoder is incompatible with '
                 'tristate_decoder, dual_output_adapter, and '
@@ -315,6 +323,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.dual_output_adapter,
                 self.common_motion_decoder,
                 self.competitive_evidence_decoder,
+                self.antisymmetric_detail_decoder,
         )):
             raise ValueError(
                 'motion_trust_decoder is incompatible with tristate, '
@@ -329,6 +338,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.motion_trust_decoder,
                 self.shared_routing_decoder,
                 self.shared_attention_decoder,
+                self.antisymmetric_detail_decoder,
         )):
             raise ValueError(
                 'symmetric_pair_decoder is incompatible with all other '
@@ -342,6 +352,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.motion_trust_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_attention_decoder,
+                self.antisymmetric_detail_decoder,
         )):
             raise ValueError(
                 'shared_routing_decoder is incompatible with all other '
@@ -359,6 +370,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'dual-output, common-motion, competitive-evidence, '
                 'symmetric-pair, and shared-routing '
                 'decoder variants')
+        if self.antisymmetric_detail_decoder and any((
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.symmetric_pair_decoder,
+                self.shared_routing_decoder,
+        )):
+            raise ValueError(
+                'antisymmetric_detail_decoder is incompatible with '
+                'shared-evidence, competitive-evidence, motion-trust, '
+                'symmetric-pair, and shared-routing decoder variants')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
             for layer in self.layers:
@@ -428,6 +450,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.motion_trust_decoder:
             self.motion_trust_adapters = ModuleList([
                 nn.Linear(self.embed_dims + 5, 5, bias=False)
+                for _ in range(self.num_layers)
+            ])
+        if self.antisymmetric_detail_decoder:
+            self.antisymmetric_detail_adapters = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
             ])
         if self.post_norm_cfg is not None:
@@ -617,6 +644,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         envelope = 0.5 * reference_motion.abs()
         return bilateral_confidence * envelope * direction
 
+    def _antisymmetric_detail_correction(
+        self,
+        lid: int,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Return a bounded, swap-odd frame-detail head correction.
+
+        The common decoder query remains the sole recurrent state. Only the
+        two frame heads receive ``-detail`` and ``+detail`` corrections, so
+        their midpoint is exactly the common representation. The evidence is
+        detached to prevent a second gradient path into cross-attention, while
+        one shared adapter makes a frame swap an exact sign reversal.
+        """
+        evidence = self._normalized_motion_evidence(out_prev, out_curr)
+        return self.antisymmetric_detail_adapters[lid](evidence).tanh()
+
     @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
@@ -659,6 +703,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.init.zeros_(adapter.weight)
         if self.motion_trust_decoder:
             for adapter in self.motion_trust_adapters:
+                nn.init.zeros_(adapter.weight)
+        if self.antisymmetric_detail_decoder:
+            for adapter in self.antisymmetric_detail_adapters:
                 nn.init.zeros_(adapter.weight)
         if not self.tristate_decoder:
             return
@@ -831,7 +878,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self.common_motion_decoder
                     or self.shared_evidence_decoder
                     or self.competitive_evidence_decoder
-                    or self.motion_trust_decoder)
+                    or self.motion_trust_decoder
+                    or self.antisymmetric_detail_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -883,6 +931,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         self.dual_output_cls_scale * adapter_curr)
                     tmp_prev = reg_branches_prev[lid](reg_output_prev)
                     tmp_curr = reg_branches_curr[lid](reg_output_curr)
+                elif self.antisymmetric_detail_decoder:
+                    frame_detail = self._antisymmetric_detail_correction(
+                        lid, frame_evidence_prev, frame_evidence_curr)
+                    layer_output_prev = layer_output - frame_detail
+                    layer_output_curr = layer_output + frame_detail
+                    tmp_prev = reg_branches_prev[lid](layer_output_prev)
+                    tmp_curr = reg_branches_curr[lid](layer_output_curr)
                 elif self.common_motion_decoder:
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
@@ -944,13 +999,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 hidden_states_curr.append(layer_output_curr)
             else:
                 hidden_states.append(layer_output)
-                if self.dual_output_adapter:
+                if (self.dual_output_adapter
+                        or self.antisymmetric_detail_decoder):
                     hidden_states_prev.append(layer_output_prev)
                     hidden_states_curr.append(layer_output_curr)
             references_prev.append(new_reference_prev)
             references_curr.append(new_reference_curr)
 
-        if self.tristate_decoder or self.dual_output_adapter:
+        if (self.tristate_decoder
+                or self.dual_output_adapter
+                or self.antisymmetric_detail_decoder):
             return (hidden_states, references_prev, references_curr,
                     hidden_states_prev, hidden_states_curr)
         return hidden_states, references_prev, references_curr
