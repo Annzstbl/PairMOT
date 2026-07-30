@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 07:45 CST。
+更新时间：2026-07-31 07:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:36 到 epoch 6 iter 200，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；07:18 fresh 启动，07:38 到 epoch 2 iter 250；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 12 cls HOTA `+0.491`、det HOTA `-0.111`，保留到 epoch 16 再判 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 12 cls HOTA `+0.491`、det HOTA `-0.111`，保留到 epoch 16 再判 | `0731_12 terminal-only` PREPARED，未排队、未建 workdir | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:38 到 epoch 6 iter 150，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -628,3 +628,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 鉴于 det HOTA 仅低 `0.111`、检测覆盖差距正在收窄，且这是当前最成熟候选，
   保留到 epoch 16 作最后一次中期确认；若仍不能双超越父 encoder，则完成全量
   评估后停止并释放 252 给 terminal-only 结构。
+
+## 2026-07-31 07:58 CST 0731_12 terminal-only 静态就绪
+
+- 已为 252 预留 `0731_12 shared-attention + terminal-only enveloped-detail`
+  的正式 2xb4 配置、4-iter 真数据 smoke 配置、正式 launcher 与 smoke launcher。
+  它只在最终 decoder 输出前注入帧细节；前两层、辅助输出与 iterative references
+  均保持 shared-attention 父路径。
+- 两份配置均通过 `copy.deepcopy`；正式配置完整构建为
+  `MultispecPairRotatedRTDETR`，且仅启用 `shared_attention_decoder=True` 与
+  `terminal_enveloped_detail_decoder=True`。调用 detector `init_weights()` 后唯一
+  terminal gate 的参数最大绝对值为零。
+- 两份 launcher 均通过 `bash -n`，目标正式与 smoke workdir 在 252 上均确认不存在。
+  当前状态仅为 `PREPARED`：未运行 smoke、未创建目录、未占 GPU，也未进入队列。
+  只有 `0731_05` epoch 16 或其他完整 HOTA 证据触发接替时，才执行真实 DDP smoke。

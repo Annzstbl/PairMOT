@@ -459,3 +459,13 @@
 - 最终标准保持不变：必须同时超过 encoder 最终 `54.437/62.393`。若 epoch 16
   仍未双超越同点，则停止 full-path 路径，252 转入已验证代码的 terminal-only
   结构；99/178/197 的 regression-only 与 midpoint 实验继续独立判定。
+
+## 2026-07-31 07:58 CST terminal-only 配置准备
+
+- `0731_12` 已补齐面向 252 的正式 2xb4 配置、4-iter 真数据 smoke 配置及两套
+  launcher。配置显式关闭 full-path、classification-only、regression-only 与
+  midpoint detail，只保留 shared attention 和唯一 terminal detail。
+- 配置深拷贝、完整模型构建、launcher 语法和 detector 初始化后的零门控均通过；
+  252 上两个目标目录均不存在。该状态不代表实验已启动，当前不占用任何 GPU。
+- 预先准备只缩短失败接替时间，不改变决策顺序：继续等待 99/178 epoch 8、
+  197 epoch 4 和 252 epoch 16 的完整 HOTA；只有证据支持且资源释放后才运行 smoke。

@@ -1299,3 +1299,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - epoch 16 仍使用同点双 HOTA 作主门槛；失败则在完整产物落盘后停止 0731_05，
   释放 252 部署 terminal-only。其他三台不受影响，继续完成 99/178 epoch 8
   和 197 epoch 4 的结构判定。
+
+## 2026-07-31 07:58 CST 0731_12 PREPARED
+
+- terminal-only 后备实验正式编号预留为 `0731_12`，目标资源为 252 GPU0/1。
+  正式/烟测配置和 launcher 已通过深拷贝、完整构建、`bash -n` 与 detector
+  初始化零门控检查；目标 workdir 均保持不存在。
+- 当前不运行 smoke、不排队、不占 GPU。触发条件保持为：现有 full-path/midpoint
+  候选在完整同点 HOTA 下失败且对应资源释放。触发后仍须先通过真数据 4-iter DDP
+  smoke、有限 loss/grad 与 checkpoint 结构验收，再允许正式 fresh 训练。
