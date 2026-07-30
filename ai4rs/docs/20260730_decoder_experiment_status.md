@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 04:58 CST
+更新时间：2026-07-31 05:44 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,6 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `RUNNING`；04:32 fresh 启动，epoch 1 正常 | shared-attention 与分类专用 enveloped-detail 的组合；回归及 reference 更新保持共享父路径。真数据 DDP smoke、checkpoint 审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `36.593/27.412/52.831`，det `43.208/34.366/55.990`；相对父配置 HOTA `+0.384/+4.455`、DetA `+0.344/+1.912`。pair mAP `0.1617`、both-independent AP50 `0.3450`，分别提高约 `0.0044/0.0219`。6 组共享 attention 最大误差为零、18 组独立参数最大差异 `0.036059`，三层 enveloped-detail 最大权重 `0.063013/0.045573/0.054088`；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
 | 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.693/27.731/54.370`，det `40.205/32.703/50.871`；相对父配置 HOTA `+1.484/+1.452`、DetA `+0.663/+0.249`。pair mAP `0.1700`、both-independent AP50 `0.3494`，分别提高约 `0.0127/0.0263`。共享 attention 最大误差为零、独立参数最大差异 `0.039377`，三层回归门控均有限非零；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
 | 99 GPU 0,1 | `0731_07 ... decoder_classificationenvelopeddetail ... fresh` | `RUNNING`；04:33 fresh 启动，epoch 1 正常 | 无 shared-attention 的分类专用 enveloped-detail；回归与 reference 更新保持父路径。真数据 DDP smoke、checkpoint 门控审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
@@ -22,6 +21,7 @@
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `STOPPED`；epoch 4 全部 artifacts 和结构审计完成后于 05:44 精确停止 | cls HOTA/DetA/AssA `36.312/27.192/52.399`，det `42.336/33.389/54.669`；相对父配置 HOTA `+0.103/+3.583`、DetA `+0.124/+0.935`。但 pair mAP `0.153285`，较父配置下降 `0.003968`，超过固定保护线 `0.000968`；both-independent AP50 `0.343821`。共享 attention 最大误差为零、独立分支已分化，三层分类门控均有限非零，故结论为分类专用细节导致轻微 pair AP 搬运而非结构未生效。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `STOPPED`；epoch 8 全部 artifacts 和两项结构审计完成后精确停止 | cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，cls/det DetA `-0.052/-0.316`。pair mAP `0.246292`、both-independent AP50 `0.479887`，分别提高 `0.008558/0.013936`。结构确已学习：6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060115`，三层 detail 权重有限非零。因 cls HOTA 唯一低于父配置，未将关联/AP 增益误判为全门槛通过。 |
 | 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后于 01:35 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.386/34.314/57.656`，det `49.340/42.544/59.013`；pair mAP/AP50 `0.207499/0.401020`，both-independent mAP/AP50 `0.241319/0.431198`。早期优势未保持，明显低于 `0727_01` 同点；6 组共享 attention 误差为零、两类结构参数均已学习，故结论是结构方向失败而非未生效。 |
@@ -326,3 +326,18 @@
   DetA `+0.663/+0.249`、AssA `+2.276/+3.405`。pair mAP `0.1700`、
   both-independent AP50 `0.3494`，检测代理同步上升。结构检查、完整 TrackEval
   和原始 CSV 均通过，因此同样保留到 epoch 8。
+
+## 2026-07-31 05:44 CST 0731_08 epoch-4 淘汰
+
+- 197 `0731_08 shared-attention + classification-only enveloped-detail` 的
+  epoch 4 checkpoint、检测、完整 TrackEval、原始 CSV 和组合结构检查均已收齐。
+  cls HOTA/DetA/AssA 为 `36.312/27.192/52.399`，det 为
+  `42.336/33.389/54.669`；双 HOTA 与双 DetA 均不低于父配置。
+- pair mAP/AP50 为 `0.153285/0.312909`，both-independent mAP/AP50 为
+  `0.182831/0.343821`。pair mAP 相对父配置下降 `0.003968`，超过固定
+  `0.003` 保护线 `0.000968`，因此不能因 HOTA/AssA 增益判为通过。
+- 6 组共享 attention 最大误差为零，18 组逐帧独立参数最大差异
+  `0.035560`；三层 classification-only 门控最大权重
+  `0.045196/0.065476/0.063087`。结构确已学习，结论是分类专用细节造成轻微
+  pair AP 搬运。05:44 精确停止，GPU 4/5 已释放；等待99 `0731_07`
+  同点结果后再选择有因果依据的替代结构。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 04:35 CST。
+更新时间：2026-07-31 05:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,9 +16,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_07 classification-only enveloped-detail decoder` | RUNNING；04:34 到 epoch 1 iter 50，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_08 shared-attention + classification-only enveloped-detail decoder` | RUNNING；04:34 已越过 epoch 1 iter 100，五项启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + enveloped-detail decoder` | RUNNING；继续向 epoch 4 首判点训练 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；继续向 epoch 4 首判点训练 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 197 | 无训练；`0731_08` 已停止 | GPU 4/5 已释放，等待99同点结果后选择结构性接替 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_05 shared-attention + enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -524,3 +524,13 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
   GPU 4/5 的 `0731_08` 已越过 iter 100，iter 100 为 `0.8708 s/iter`、loss
   `20.5811`、grad norm `114.1662`。两项均无 Traceback、OOM、NaN、NCCL 或
   unused-parameter 错误。99、197、252、178 四台现均为 RUNNING，首判 epoch 4。
+
+## 2026-07-31 05:44 CST 197 epoch-4 淘汰
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 197 GPU 4,5 | `0731_08_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_classificationenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 04:33 / 2026-07-31 05:44 | epoch 4 checkpoint、检测、完整 TrackEval、原始 CSV 和结构检查全部完成。cls HOTA/DetA/AssA `36.312/27.192/52.399`，det `42.336/33.389/54.669`；pair mAP/AP50 `0.153285/0.312909`，both-independent mAP/AP50 `0.182831/0.343821`。双HOTA与DetA通过，但pair mAP相对父配置下降 `0.003968`，超过固定保护线，故精确停止。共享attention误差为零、独立参数及三层分类门控均已学习。 |
+
+197 GPU 4/5 已释放。因99 `0731_07` 是同一分类专用细节的无 shared-attention
+主效应对照，先等待其完整epoch 4结果，再决定197接替结构，避免在因果证据缺失时
+启动新的参数或模块拼接实验。
