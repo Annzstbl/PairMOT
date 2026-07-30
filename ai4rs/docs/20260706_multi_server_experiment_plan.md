@@ -1064,3 +1064,17 @@ cls/det HOTA 提高 `0.866/3.406`，DetA 提高 `0.287/0.512`。pair mAP/AP50
 attention 权重严格相等、独立参数已分化。但其 cls/det HOTA 同点低于 `0730_13`
 `0.484/1.098`，说明目前 shared-attention 主效应强于与 motion-trust 的组合，
 尚无正交互补证据。
+
+## 2026-07-31 0730_15 Epoch-4 Gate
+
+`0730_15 shared-evidence + shared-attention` 的 epoch 4 cls HOTA/DetA/AssA 为
+`36.732/27.680/51.849`，det 为 `41.818/33.239/53.766`。相对父配置同点，
+cls/det HOTA 提高 `0.523/3.065`，DetA 提高 `0.612/0.785`。pair mAP/AP50
+为 `0.157715/0.320595`，both-independent mAP/AP50 为
+`0.186071/0.345886`，全部固定门槛通过。
+
+checkpoint 联合结构审计确认三层 shared-evidence adapter 均产生有限非零更新，
+6 组 attention 权重严格共享，18 组应独立参数已经分化。实验继续到 epoch 8。
+但它的 cls/det HOTA 同点低于 `0730_13 shared-attention` `0.827/1.439`，
+也略低于 `0730_14`；因此当前结构结论是 shared-attention 提供主要增益，
+shared-evidence 暂未形成正交互补，不据此扩展更多组合。

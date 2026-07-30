@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 00:02 CST。
+更新时间：2026-07-31 00:24 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0730_14 motion-trust + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_15 shared-evidence + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0730_15 shared-evidence + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_13 shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0730_16 antisymmetric frame-detail decoder` | 4-iter smoke 与结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -385,7 +385,7 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 | --- | --- | --- | --- | --- |
 | STOPPED | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 / 2026-07-30 22:52 | epoch 8 完整 artifacts 与结构审计后停止。cls HOTA/DetA/AssA `45.498/36.788/58.984`，det `51.160/45.018/60.159`，pair mAP/AP50 `0.230058/0.430536`，both-independent mAP/AP50 `0.265862/0.464984`。相对父配置 HOTA 小幅上升，但 cls/det DetA 下降 `0.875/2.043`、pair mAP 下降 `0.007676`，为 AssA 搬运而非共同改善。精确终止后 GPU 4/5 均为 `1 MiB/0%`。 |
 | RUNNING | 178 GPU 0 | `0730_12_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_sharedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 21:10 /  | epoch 4 cls HOTA/DetA/AssA `40.559/29.273/59.330`，det `46.017/34.057/64.397`，pair mAP/AP50 `0.187248/0.342315`，both-independent mAP/AP50 `0.213887/0.366343`；HOTA、DetA、pair mAP 与 both AP50 均高于父配置。motion-trust 与 shared-evidence 三层权重均有限非零，结构门控通过，继续到 epoch 8。 |
-| RUNNING | 197 GPU 4,5 | `0730_15_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedevidence_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:58 /  | 组合 shared-evidence 与 shared-attention，以区分 `0730_12` 强增益是否需要 motion-trust。63 项 decoder 单测、配置/launcher 审计和双卡真实数据 4-iter DDP smoke 通过；smoke checkpoint 三层 evidence adapter 均非零，6 组 attention 误差为零，18 组独立参数最大差异 `7.8762e-4`。正式训练五项门槛通过，22:59 到 epoch 1 iter 50，约 `1.0668 s/iter`、loss `21.4097`、grad norm `120.1933`，双卡各约 `19.2 GiB`，无异常。首判 epoch 4。 |
+| RUNNING | 197 GPU 4,5 | `0730_15_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedevidence_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:58 /  | epoch 4 checkpoint、检测、完整 TrackEval 与结构审计通过。cls HOTA/DetA/AssA `36.732/27.680/51.849`，det `41.818/33.239/53.766`；pair mAP/AP50 `0.157715/0.320595`，both-independent mAP/AP50 `0.186071/0.345886`。相对父配置 cls/det HOTA `+0.523/+3.065`、DetA `+0.612/+0.785`，全部固定保护线通过，继续到 epoch 8；但同点低于 `0730_13`，shared-evidence 暂未显示正交增益。 |
 
 当前四路正式训练为 99 `0730_14`、197 `0730_15`、252 `0730_13`、178 `0730_12`。
 canonical 代码提交为 `0782826`；本次状态提交后四机统一快进，保留所有既有 artifacts 和
@@ -412,5 +412,16 @@ canonical 代码提交为 `0782826`；本次状态提交后四机统一快进，
 HOTA/DetA/AssA `37.075/27.355/53.989`，det `42.159/32.966/55.263`，
 pair mAP/AP50 `0.1625/0.3105`，both-independent mAP/AP50 `0.1887/0.3369`；
 全部保护线通过，继续到 epoch 8。但其 cls/det HOTA 同点低于 `0730_13`
-`0.484/1.098`，motion-trust 组合暂未形成正交增益。197 `0730_15` 正在 epoch 4，
-178 `0730_16` 正常训练。
+`0.484/1.098`，motion-trust 组合暂未形成正交增益。197 `0730_15` 的 epoch 4
+完整门控随后也通过并继续到 epoch 8；178 `0730_16` 正常训练。
+
+## 2026-07-31 00:24 CST 197 epoch-4 门控
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_15_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedevidence_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:58 /  | epoch 4 checkpoint、检测、完整 TrackEval 与联合结构审计已完成。cls HOTA/DetA/AssA `36.732/27.680/51.849`，det `41.818/33.239/53.766`；pair mAP/AP50 `0.157715/0.320595`，both-independent mAP/AP50 `0.186071/0.345886`。相对父配置 HOTA、DetA 与 AP 保护线全部通过，继续到 epoch 8。三层 shared-evidence adapter 均非零，6 组共享 attention 误差为零，18 组独立参数最大差异 `0.036013`。同点 cls/det HOTA 低于 `0730_13` `0.827/1.439`，因此 shared-attention 仍是当前主要早期增益来源。 |
+
+当前四路并行保持：252 `0730_13`、99 `0730_14`、197 `0730_15` 均继续到
+epoch 8；178 `0730_16` 首判 epoch 4。178 的 warmup grad norm 曾短时升至约
+`543`，但到 epoch 2 iter 350/400 已回落至 `28.2/25.3`，loss 同步下降且无
+NaN/OOM/Traceback，确认不是持续性训练异常。
