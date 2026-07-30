@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 04:55 CST
+更新时间：2026-07-31 04:58 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `RUNNING`；04:32 fresh 启动，epoch 1 正常 | shared-attention 与分类专用 enveloped-detail 的组合；回归及 reference 更新保持共享父路径。真数据 DDP smoke、checkpoint 审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `36.593/27.412/52.831`，det `43.208/34.366/55.990`；相对父配置 HOTA `+0.384/+4.455`、DetA `+0.344/+1.912`。pair mAP `0.1617`、both-independent AP50 `0.3450`，分别提高约 `0.0044/0.0219`。6 组共享 attention 最大误差为零、18 组独立参数最大差异 `0.036059`，三层 enveloped-detail 最大权重 `0.063013/0.045573/0.054088`；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
-| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 检测完成，等待异步 TrackEval | 分类特征保持 shared-attention 的共享 decoder 路径；细节只进入两帧迭代框回归及 reference 更新。epoch 4 pair mAP `0.1700`、both-independent AP50 `0.3494`，检测代理已通过；结构审计确认共享 attention 误差为零、独立参数最大差异 `0.039377`，三层回归门控均有限非零。待完整 HOTA/DetA/AssA 决定是否继续至 epoch 8。 |
+| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.693/27.731/54.370`，det `40.205/32.703/50.871`；相对父配置 HOTA `+1.484/+1.452`、DetA `+0.663/+0.249`。pair mAP `0.1700`、both-independent AP50 `0.3494`，分别提高约 `0.0127/0.0263`。共享 attention 最大误差为零、独立参数最大差异 `0.039377`，三层回归门控均有限非零；完整检测、TrackEval、原始 CSV 和结构门槛均通过。 |
 | 99 GPU 0,1 | `0731_07 ... decoder_classificationenvelopeddetail ... fresh` | `RUNNING`；04:33 fresh 启动，epoch 1 正常 | 无 shared-attention 的分类专用 enveloped-detail；回归与 reference 更新保持父路径。真数据 DDP smoke、checkpoint 门控审计和正式 iter-50 五项门槛通过，首判 epoch 4。 |
 
 ## 已完成或释放
@@ -320,6 +320,9 @@
   `0.036059`；三层 enveloped-detail 门控最大权重
   `0.063013/0.045573/0.054088`。结构确已生效且所有固定门槛通过，
   因此保留训练继续到 epoch 8。
-- 178 `0731_06` 同点检测已完成：pair mAP `0.1700`、
-  both-independent AP50 `0.3494`，检测代理先通过；等待异步 TrackEval
-  的双 HOTA 与原始 DetA/AssA 后再作去留判断。
+- 178 `0731_06 shared-attention + regression-only enveloped-detail` 的 epoch 4
+  cls HOTA/DetA/AssA 为 `37.693/27.731/54.370`，det 为
+  `40.205/32.703/50.871`；相对父配置 HOTA `+1.484/+1.452`、
+  DetA `+0.663/+0.249`、AssA `+2.276/+3.405`。pair mAP `0.1700`、
+  both-independent AP50 `0.3494`，检测代理同步上升。结构检查、完整 TrackEval
+  和原始 CSV 均通过，因此同样保留到 epoch 8。
