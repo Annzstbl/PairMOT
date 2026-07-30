@@ -350,15 +350,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
-                self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
         )):
             raise ValueError(
                 'shared_attention_decoder is incompatible with tristate, '
-                'dual-output, common-motion, shared-evidence, '
-                'competitive-evidence, symmetric-pair, and shared-routing '
+                'dual-output, common-motion, competitive-evidence, '
+                'symmetric-pair, and shared-routing '
                 'decoder variants')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
