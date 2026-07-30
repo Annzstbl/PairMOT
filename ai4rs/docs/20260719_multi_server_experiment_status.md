@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-30 21:13 CST。
+更新时间：2026-07-30 22:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 PairMOT 训练 | 用户已将双卡额度重新纳入资源池；实时仅 GPU 1 空闲，GPU 0/2 被其他用户任务占用 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 6 iter 750 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0730_11 shared-routing decoder` | 正式 fresh 训练已通过五项启动门槛；epoch 1 iter 800 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0730_12 motion-trust + shared-evidence decoder` | 4-iter 真数据 smoke 与结构权重检查通过；正式 fresh 训练已通过五项启动门槛，epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | 无 PairMOT 训练 | 22:31 实时核验三张 GPU 均为空闲；预留两卡给下一项独立结构实验 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 8 checkpoint 已产生，epoch 9 iter 1000 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0730_13 shared-attention decoder` | 4-iter DDP smoke 和结构检查通过；正式 fresh 训练 epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0730_12 motion-trust + shared-evidence decoder` | epoch 4 checkpoint 已产生；epoch 6 iter 100，等待 epoch 4 完整门控 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -354,3 +354,17 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 空闲；不得终止或挤占外部任务，也不得将单张空闲卡误报为双卡 DDP 资源。四台服务器代码已
 同步到 `f1ffbd7`，其中 `c43635c` 引入组合结构，`f1ffbd7` 使可信本地 smoke checkpoint
 兼容 PyTorch 2.6+ 的显式非 weights-only 加载；各服务器既有未跟踪文件均保留。
+
+## 2026-07-30 22:35 CST shared-routing 门控与 shared-attention 接替
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 /  | epoch 8 checkpoint 已产生，训练到 epoch 9 iter 1000；总、DN、encoder loss 和梯度有限。等待 epoch 8 完整检测、2/2 TrackEval 与结构审计后按固定同点门槛决定继续或停止。 |
+| RUNNING | 178 GPU 0 | `0730_12_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_sharedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 21:10 /  | epoch 4 checkpoint 已产生，训练到 epoch 6 iter 100；等待 epoch 4 完整检测、2/2 TrackEval 与两组 adapter 结构审计。 |
+| STOPPED | 252 GPU 0,1 | `0730_11_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedrouting_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 20:49 / 2026-07-30 22:19 | epoch 4 完整 artifacts 后停止。cls HOTA/DetA/AssA `36.504/27.255/51.884`，det `42.163/33.695/53.992`，pair mAP/AP50 `0.149753/0.305401`，both-independent mAP/AP50 `0.178556/0.335452`。pair mAP 相对父配置下降 `0.007499`，未通过保护线；结构审计通过。 |
+| RUNNING | 252 GPU 0,1 | `0730_13_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:32 /  | 只共享每层两帧 cross-attention 的 `attention_weights`，保留独立 `sampling_offsets/value_proj/output_proj`。61 项 decoder 单测、配置/launcher 审计和双卡真实数据 4-iter DDP smoke 通过；smoke checkpoint 的 6 组 attention 误差为零，18 组应独立参数已分化。正式训练五项门槛通过，22:35 到 epoch 1 iter 100，约 `1.1160 s/iter`、loss `20.5979`、grad norm `103.9917`，GPU 0/1 各约 `19.2 GiB`，无异常。首判 epoch 4。 |
+
+99 在 22:31 的实时采样中三张 GPU 均为约 `10 MiB/0%`，此前“仅 GPU 1 空闲”的判断已失效。
+当前不复制已有实验或用参数扫描填卡；99 两卡仅分配给与 197/178/252 不重复且经过完整
+配置、单测和真数据 smoke 的新 decoder 结构。99 canonical 与 252 已位于 `091af97`；
+197/178 的当前进程保持启动时代码，完成门控后再快进同步。

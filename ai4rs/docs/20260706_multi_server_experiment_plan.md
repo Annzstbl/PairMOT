@@ -962,3 +962,28 @@ both-independent AP50 保护线。
 - 178 GPU 0：`0730_12 motion-trust + shared-evidence decoder`，首判 epoch 4；
 - 99：实时仅 GPU 1 空闲，GPU 0/2 属于其他用户的运行任务；在两张授权卡实际空闲且存在
   新的结构假设前不启动正式实验，不用参数扫描填卡。
+
+## 2026-07-30 0730_13 Frame-Localized Shared-Attention Decoder
+
+`0730_11 shared-routing` 在 epoch 4 提高 det HOTA 和 DetA，但 pair mAP 相对
+`0727_01` 同点下降 `0.007499`。这说明同时共享 `sampling_offsets` 和
+`attention_weights` 仍过度约束两帧的定位路径。`0730_13` 进一步拆分两种作用：只共享
+`attention_weights`，令两帧学习一致的关注权重；`sampling_offsets`、
+`value_proj` 和 `output_proj` 保持独立，使每帧仍可针对自身目标位置采样并保留表征容量。
+该实验不改 encoder、proposal、PairDN、head、loss、初始化、数据或训练协议，不属于参数
+扫描或重权。
+
+代码提交 `091af97`。61 项 decoder 单测、正式/短测配置深拷贝、launcher shell 审计、
+预训练权重结构检查和 252 GPU 0/1 的真实数据 4-iter DDP smoke 均通过。smoke 四次总
+loss、DN loss、encoder loss 与 grad norm 均有限；checkpoint 的 6 组共享 attention
+误差为零，18 组应独立参数的最大差异为 `7.8475e-4`。正式 fresh 训练于 22:32 CST 启动，
+22:35 到 epoch 1 iter 100，双卡约 `19.2 GiB`、利用率 100%，无 Traceback、OOM、
+NaN、NCCL、DDP reduction 或 unused-parameter 错误。首个性能判断点为 epoch 4。
+
+当前资源分配：
+
+- 197 GPU 4/5：`0730_09 motion-trust decoder`，epoch 8 完整门控待汇总；
+- 178 GPU 0：`0730_12 motion-trust + shared-evidence decoder`，epoch 4 完整门控待汇总；
+- 252 GPU 0/1：`0730_13 shared-attention decoder`，首判 epoch 4；
+- 99：22:31 实时核验三卡均空闲，预留两卡给不重复、具有独立诊断价值并通过真数据 smoke
+  的下一 decoder 结构；不复制已有实验，也不用参数扫描填卡。
