@@ -935,3 +935,30 @@ encoder、proposal、PairDN、head、loss、初始化、数据或训练协议。
 - 178 GPU 0：保留给下一项独立 decoder 结构，不做 loss scale 或类别 reweight 扫描；
 - 99：用户已恢复双卡额度，但实时只有 GPU 1 空闲，GPU 0/2 被其他用户任务占用；在形成
   两张实际空闲卡以前只承担代码、测试和轻量 smoke，不启动双卡正式训练。
+
+## 2026-07-30 0730_12 Motion-Trust + Shared-Evidence Decoder
+
+`0730_06 shared-evidence` 在 epoch 8 的 cls/det HOTA 相对父配置仅为
+`-0.051/+0.032`，但 pair mAP/AP50 提高 `+0.0036/+0.0196`、
+both-independent AP50 提高 `+0.0179`。其失败表现为 DetA/AssA 搬运，而不是 AP
+证据不足。`0730_09 motion-trust` 则在 epoch 4 同时改善 HOTA、DetA、AssA 和 AP，
+直接约束框几何。`0730_12` 因此组合两种互补结构：shared-evidence 只修正共享 decoder
+query，motion-trust 只对两帧框分支施加检测置信度门控、位移包络有界的反对称修正。
+这不是参数或 loss 扫描，且不改变 encoder、proposal、PairDN、head、loss、初始化、数据
+或训练协议。
+
+代码提交 `c43635c`，检查器兼容修复提交 `f1ffbd7`。57 项 decoder 单测、配置深拷贝、
+路径/GMC/预训练权重及 launcher 审计通过。178 GPU 0 的单卡 physical batch 8 真数据
+4-iter smoke 四次总、DN、encoder loss 和 grad norm 均有限，并产出 `iter_4.pth`；
+三层 motion-trust 与三层 shared-evidence adapter 均产生有限、非零更新。正式 fresh
+训练于 21:10 CST 启动，iter 50 和 iter 100 已通过五项启动门槛；首个性能门控点为
+epoch 4，沿用 `0730_09/0730_11` 的同 epoch HOTA、DetA、pair mAP 和
+both-independent AP50 保护线。
+
+当前三路并行分配：
+
+- 197 GPU 4/5：`0730_09 motion-trust decoder`，继续到 epoch 8；
+- 252 GPU 0/1：`0730_11 shared-routing decoder`，首判 epoch 4；
+- 178 GPU 0：`0730_12 motion-trust + shared-evidence decoder`，首判 epoch 4；
+- 99：实时仅 GPU 1 空闲，GPU 0/2 属于其他用户的运行任务；在两张授权卡实际空闲且存在
+  新的结构假设前不启动正式实验，不用参数扫描填卡。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-30 20:52 CST。
+更新时间：2026-07-30 21:13 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,9 +16,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 训练 | 用户已将双卡额度重新纳入资源池；实时仅 GPU 1 空闲，GPU 0/2 被其他用户任务占用 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 6 iter 250 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0730_11 shared-routing decoder` | 正式 fresh 训练已通过五项启动门槛；epoch 1 iter 150 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无 PairMOT 训练 | GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 6 iter 750 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0730_11 shared-routing decoder` | 正式 fresh 训练已通过五项启动门槛；epoch 1 iter 800 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0730_12 motion-trust + shared-evidence decoder` | 4-iter 真数据 smoke 与结构权重检查通过；正式 fresh 训练已通过五项启动门槛，epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -342,3 +342,15 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 | RUNNING | 252 GPU 0,1 | `0730_11_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedrouting_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 20:49 /  | 严格继承 `0727_01`，只在每层 decoder 两帧 deformable cross-attention 之间共享 `sampling_offsets` 与 `attention_weights`；`value_proj` 和 `output_proj` 保持独立，避免 `0730_10` 全共享导致的 pair mAP 损失。56 项 decoder 单测、配置深拷贝、权重/GMC/路径审计及双卡真实数据 4-iter smoke 通过；smoke checkpoint 的 12 组 routing 最大误差为 `0`，12 组独立 projection 最大差异为 `7.7571e-4`。正式 fresh 训练五项启动门槛通过，20:52 到 epoch 1 iter 150，约 `1.1223 s/iter`、loss `19.6946`、grad norm `122.9360`，总、DN、encoder loss 均有限，无 Traceback、OOM、NaN、NCCL、DDP reduction 或 unused-parameter 错误。首个判断点为 epoch 4。 |
 
 `0730_11` 代码提交为 `9049422`，通过带 prerequisite 的 Git bundle 精确同步至 99、197、252 和 178；各服务器原有未跟踪文件均保留。当前形成两路正式并行：197 的 motion-trust 与 252 的 shared-routing。178 GPU 0 仍空闲，等待另一项有独立模型依据的 decoder 结构；99 的双卡额度已恢复，但实时 GPU 0 和 GPU 2 被其他用户的 UNet 任务占用，仅 GPU 1 空闲，未将其错误计作可立即使用的双卡 DDP 资源。
+
+## 2026-07-30 21:13 CST 第三路结构实验启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 178 GPU 0 | `0730_12_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_sharedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 21:10 /  | 组合 `0730_09` 的 detection-confident bounded motion-trust 与 `0730_06` 的 swap-invariant shared-evidence。两者分别作用于反对称框更新和共享 query，保持 `0727_01` 的 encoder、proposal、PairDN、head、loss、数据与训练协议不变。57 项 decoder 单测、配置深拷贝、路径/权重/GMC/launcher 审计通过。单卡 physical batch 8 的真实数据 4-iter smoke 中总、DN、encoder loss 与 grad norm 均有限；checkpoint 三层 motion-trust 最大绝对权重为 `3.7246e-4/3.6952e-4/3.6620e-4`，三层 shared-evidence 为 `3.9646e-4/3.9722e-4/3.9787e-4`，均有限且非零。正式 fresh 训练五项启动门槛通过，21:12 到 epoch 1 iter 100，约 `0.8798 s/iter`、loss `20.1321`、grad norm `90.7448`；GPU 0 设备占用约 31.4 GiB，无 Traceback、OOM、NaN、DDP reduction 或 unused-parameter 错误。首判 epoch 4。 |
+
+当前形成三路正式并行：197 `0730_09`、252 `0730_11`、178 `0730_12`。99 没有漏排：
+虽然双卡额度已恢复，但实时 GPU 0/2 被其他用户的 UNet 任务各占约 21 GiB，仅 GPU 1
+空闲；不得终止或挤占外部任务，也不得将单张空闲卡误报为双卡 DDP 资源。四台服务器代码已
+同步到 `f1ffbd7`，其中 `c43635c` 引入组合结构，`f1ffbd7` 使可信本地 smoke checkpoint
+兼容 PyTorch 2.6+ 的显式非 weights-only 加载；各服务器既有未跟踪文件均保留。
