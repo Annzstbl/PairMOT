@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-30 15:12 CST
+更新时间：2026-07-30 15:20 CST
 
 ## 当前研究原则
 
@@ -15,6 +15,7 @@
 | --- | --- | --- | --- |
 | 99 GPU 0,1 | `0730_05 ... decoder_commonmotion ... fresh` | `RUNNING`；epoch 1 iter 50，约 1.052 s/iter，loss 21.4343、grad_norm 130.5463 均有限，显存约 19.2 GB/rank | 以 `0727_01` 为严格父配置；共享 query/分类路径不变，用两帧 cross-attention 差分和周期角度 reference 位移预测零初始化的 5D 反对称运动修正。4-iter 真数据 DDP smoke 已通过，三层新权重均从 0 更新到约 `3.98e-4`。首个正式判断点为 epoch 4。 |
 | 252 GPU 0,1 | `0730_02 decoder_boxonly_gradisolated_reg0p25 ... fresh` | `RUNNING`；epoch 2 iter 150，约 1.120 s/iter，loss 11.7349、grad_norm 25.5711 均有限 | 仅作为短期结构基线，不展开 scale sweep。首个 TrackEval 点为 epoch 4；若 cls/det 同点轨迹没有优于 `0727_01` 的信号，则停止并释放资源。 |
+| 178 GPU 0 | `0730_06 ... decoder_sharedevidence ... fresh` | `RUNNING`；epoch 1 iter 50，约 0.942 s/iter，loss 21.1659、grad_norm 129.8303 均有限，MMEngine 峰值约 21.7 GB | 以 `0727_01` 为严格父配置；将两帧 cross-attention 的相对不一致度作为交换不变证据，零初始化地注入共享 query，直接服务 cls 与两帧框。4-iter 真数据 smoke 已通过，三层新权重均从 0 更新到约 `4.00e-4`。首个正式判断点为 epoch 4。 |
 
 ## 已完成或释放
 
@@ -26,12 +27,12 @@
 
 ## 代码一致性
 
-- 178、252、99 当前均包含提交 `eb9c440`（`Add antisymmetric common-motion decoder`）。
+- 178、252、99 当前均包含提交 `25fe052`；其中 `eb9c440` 为公共运动 decoder，`25fe052` 为共享证据 decoder。
 - 99 原有实验提交 `c104193` 在共同历史中被完整保留；未跟踪目录未覆盖或删除。
-- `0730_05` 通过 30 项 decoder 单元测试、配置展开、路径检查和双卡真数据 smoke 后启动。
+- 两项新结构合计通过 35 项 decoder 单元测试；各自均在配置展开、路径检查和真数据 smoke 后启动。
 
 ## 下一步
 
 1. 在 epoch 4 获取 `0730_05` 与 `0730_02` 的 cls/det HOTA、DetA、AssA 和 `both_independent_AP50`。
-2. 178 GPU 0 用于互补的共享证据 decoder 结构短测，不做参数 scale 重复实验。
+2. 对 `0730_06` 同样在 epoch 4 做首轮 TrackEval，与 `0727_01` 的同点结果比较。
 3. 仅当独立结构分别显示 cls 或 det 的可靠改善时，才构建组合模型；否则保留论文现有三段递进主线。
