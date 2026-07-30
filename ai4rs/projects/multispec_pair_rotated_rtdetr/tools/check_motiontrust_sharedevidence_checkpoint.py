@@ -6,7 +6,9 @@ import sys
 import torch
 
 
-checkpoint = torch.load(sys.argv[1], map_location='cpu')
+# The checkpoint is produced locally by the smoke run and includes MMEngine
+# hook state, which PyTorch 2.6's weights-only loader intentionally rejects.
+checkpoint = torch.load(sys.argv[1], map_location='cpu', weights_only=False)
 state = checkpoint.get('state_dict', checkpoint)
 groups = {}
 for name in ('motion_trust_adapters', 'shared_evidence_adapters'):
