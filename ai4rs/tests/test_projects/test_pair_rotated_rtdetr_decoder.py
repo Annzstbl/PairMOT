@@ -83,7 +83,8 @@ def _build_decoder(num_layers: int = 2,
                    competitive_evidence_decoder: bool = False,
                    motion_trust_decoder: bool = False,
                    symmetric_pair_decoder: bool = False,
-                   shared_routing_decoder: bool = False):
+                   shared_routing_decoder: bool = False,
+                   shared_attention_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -120,6 +121,7 @@ def _build_decoder(num_layers: int = 2,
         motion_trust_decoder=motion_trust_decoder,
         symmetric_pair_decoder=symmetric_pair_decoder,
         shared_routing_decoder=shared_routing_decoder,
+        shared_attention_decoder=shared_attention_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -1225,6 +1227,7 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 dict(competitive_evidence_decoder=True),
                 dict(motion_trust_decoder=True),
                 dict(shared_routing_decoder=True),
+                dict(shared_attention_decoder=True),
         ):
             with self.assertRaisesRegex(ValueError, 'incompatible'):
                 _build_decoder(
@@ -1332,11 +1335,114 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 dict(competitive_evidence_decoder=True),
                 dict(motion_trust_decoder=True),
                 dict(symmetric_pair_decoder=True),
+                dict(shared_attention_decoder=True),
         ):
             with self.assertRaisesRegex(ValueError, 'incompatible'):
                 _build_decoder(
                     device=self.device,
                     shared_routing_decoder=True,
+                    **other)
+
+    def test_shared_attention_ties_only_attention_weights(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, shared_attention_decoder=True)
+        for layer in decoder.layers:
+            prev = layer.cross_attn_prev
+            curr = layer.cross_attn_curr
+            self.assertIsNot(prev.sampling_offsets, curr.sampling_offsets)
+            self.assertIs(prev.attention_weights, curr.attention_weights)
+            self.assertIsNot(prev.value_proj, curr.value_proj)
+            self.assertIsNot(prev.output_proj, curr.output_proj)
+            self.assertTrue(prev.sampling_offsets.weight.requires_grad)
+            self.assertTrue(curr.sampling_offsets.weight.requires_grad)
+
+    def test_shared_attention_matches_equal_attention_baseline(self):
+        torch.manual_seed(68)
+        baseline, reg_prev, reg_curr = _build_decoder(device=self.device)
+        baseline.init_weights()
+        for layer in baseline.layers:
+            layer.cross_attn_curr.attention_weights.load_state_dict(
+                layer.cross_attn_prev.attention_weights.state_dict())
+        shared = copy.deepcopy(baseline)
+        shared.shared_attention_decoder = True
+        for layer in shared.layers:
+            layer.cross_attn_curr.attention_weights = (
+                layer.cross_attn_prev.attention_weights)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, baseline.embed_dims, self.device)
+        reference_prev = torch.rand(
+            1, baseline.num_queries, 5, device=self.device).clamp(
+                1e-3, 1 - 1e-3)
+        reference_curr = torch.rand_like(reference_prev).clamp(
+                1e-3, 1 - 1e-3)
+        with torch.no_grad():
+            baseline_output = baseline(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr,
+                reference_prev=reference_prev,
+                reference_curr=reference_curr)
+            shared_output = shared(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr,
+                reference_prev=reference_prev,
+                reference_curr=reference_curr)
+        for baseline_group, shared_group in zip(
+                baseline_output, shared_output):
+            for baseline_tensor, shared_tensor in zip(
+                    baseline_group, shared_group):
+                self.assertTrue(torch.equal(
+                    baseline_tensor, shared_tensor))
+
+    def test_detector_init_preserves_shared_attention_structure(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, shared_attention_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for layer in decoder.layers:
+            prev = layer.cross_attn_prev
+            curr = layer.cross_attn_curr
+            self.assertIsNot(prev.sampling_offsets, curr.sampling_offsets)
+            self.assertIs(prev.attention_weights, curr.attention_weights)
+            self.assertIsNot(prev.value_proj, curr.value_proj)
+            self.assertIsNot(prev.output_proj, curr.output_proj)
+
+    def test_shared_attention_rejects_other_variants(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+                dict(common_motion_decoder=True),
+                dict(shared_evidence_decoder=True),
+                dict(competitive_evidence_decoder=True),
+                dict(motion_trust_decoder=True),
+                dict(symmetric_pair_decoder=True),
+                dict(shared_routing_decoder=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    shared_attention_decoder=True,
                     **other)
 
     def test_tristate_disables_structurally_unused_parameters(self):

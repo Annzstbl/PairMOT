@@ -265,6 +265,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  motion_trust_decoder: bool = False,
                  symmetric_pair_decoder: bool = False,
                  shared_routing_decoder: bool = False,
+                 shared_attention_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -283,6 +284,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.motion_trust_decoder = bool(motion_trust_decoder)
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
+        self.shared_attention_decoder = bool(shared_attention_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -326,6 +328,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.competitive_evidence_decoder,
                 self.motion_trust_decoder,
                 self.shared_routing_decoder,
+                self.shared_attention_decoder,
         )):
             raise ValueError(
                 'symmetric_pair_decoder is incompatible with all other '
@@ -338,9 +341,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.competitive_evidence_decoder,
                 self.motion_trust_decoder,
                 self.symmetric_pair_decoder,
+                self.shared_attention_decoder,
         )):
             raise ValueError(
                 'shared_routing_decoder is incompatible with all other '
+                'decoder variants')
+        if self.shared_attention_decoder and any((
+                self.tristate_decoder,
+                self.dual_output_adapter,
+                self.common_motion_decoder,
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.symmetric_pair_decoder,
+                self.shared_routing_decoder,
+        )):
+            raise ValueError(
+                'shared_attention_decoder is incompatible with all other '
                 'decoder variants')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
@@ -351,6 +368,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 # direction-dependent appearance changes.
                 layer.cross_attn_curr.sampling_offsets = (
                     layer.cross_attn_prev.sampling_offsets)
+                layer.cross_attn_curr.attention_weights = (
+                    layer.cross_attn_prev.attention_weights)
+        if self.shared_attention_decoder:
+            for layer in self.layers:
+                # Share only how sampled points are aggregated.  Each frame
+                # keeps independent sampling offsets and value/output
+                # projections, preserving the localization freedom removed
+                # by the hard shared-routing decoder.
                 layer.cross_attn_curr.attention_weights = (
                     layer.cross_attn_prev.attention_weights)
         if self.symmetric_pair_decoder:
