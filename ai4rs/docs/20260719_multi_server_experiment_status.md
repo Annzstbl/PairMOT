@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 03:25 CST。
+更新时间：2026-07-31 03:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_02 enveloped-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_04 orthogonal-evidence decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_05 shared-attention + enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_06 shared-attention + regression-only enveloped-detail decoder` | PREPARED；待服务器级验证及 formal 启动 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -472,3 +472,13 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 
 四路正式结构实验再次并行：252 `0731_05` 首判 epoch 4；99 `0731_02`、
 197 `0731_04`、178 `0731_01` 继续各自的 epoch 8 持续性检查。
+
+## 2026-07-31 03:40 CST 178 Epoch-8 Gate 与结构接替
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 178 GPU 0 | `0731_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 01:11 / 2026-07-31 03:37 | epoch 8 完整 artifacts 与结构审计完成。cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，pair mAP `+0.008558`、both-independent AP50 `+0.013936`。因 cls HOTA 唯一低于父配置，按固定门槛精确停止。 |
+| PREPARED | 178 GPU 0 | `0731_06_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_regressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` |  /  | 保留 shared-attention 分类共享路径，将零起点、受观测帧差包络约束的 swap-odd 细节只注入框回归/reference 更新；待单测、完整模型构建与真数据 4-iter smoke 后启动。 |
+
+当前 99、197、252 三路正式训练不受影响；178 GPU 0 已释放并用于上述结构性接替，
+不是 residual-scale、loss 权重或类别 reweight 调参。

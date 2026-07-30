@@ -1179,3 +1179,19 @@ loss 和 grad norm 全部有限，checkpoint 同时证明 6 组 attention 权重
 `1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`；GPU0/1 各约
 `19.2 GiB` 且满载，无训练异常。首个决策点仍为 epoch 4，并使用与其余候选
 相同的 HOTA、DetA/AssA、pair mAP 与 both-independent AP50 保护门槛。
+
+## 2026-07-31 03:40 CST 0731_01 Epoch-8 Gate 与 0731_06
+
+`0731_01` 的 epoch 8 完整结果为：cls HOTA/DetA/AssA
+`45.152/37.611/57.666`，det `50.817/46.745/57.206`，pair mAP/AP50
+`0.246292/0.441537`，both-independent mAP/AP50 `0.284940/0.479887`。
+相对 `0727_01` 同点，det HOTA、pair mAP 和 both AP50 分别提高
+`0.624/0.008558/0.013936`，但 cls HOTA 下降 `0.117`。两项结构审计确认
+共享 attention 与逐帧 detail 都已学习，故按“双 HOTA 不低于父配置”的固定门槛
+停止，而不是把 AP/AssA 增益误判为目标完成。
+
+178 的接替实验预留为 `0731_06 shared-attention + regression-only
+enveloped-detail`。分类 head 继续读取共享 decoder hidden states；零起点、
+swap-odd 且受真实 cross-attention 帧差逐元素约束的 correction 仅作用于两帧
+regression heads 和 reference 更新。该结构从计算路径上解耦分类与几何细节，
+直接针对 `0731_01` 的唯一失败项，不使用参数 scale、loss 重权或类别重权。

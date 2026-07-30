@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 03:25 CST
+更新时间：2026-07-31 03:40 CST
 
 ## 当前研究原则
 
@@ -15,13 +15,14 @@
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0731_04 ... decoder_orthogonalevidence ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | 将公共证据旁路与受包络约束的反对称帧差作为两个正交、零起点的 head-only 分量；不改变 recurrent query。epoch 4 cls HOTA/DetA/AssA `36.831/27.861/52.246`，det `43.581/34.573/56.147`；相对父配置 HOTA `+0.622/+4.828`、DetA `+0.793/+2.119`。pair mAP `0.161207`、both-independent AP50 `0.346363`，分别提高 `0.003954/0.023214`。两组三层门控均有限非零，结构和性能门槛完整通过。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `RUNNING`；03:23 fresh 启动，03:25 到 epoch 1 iter 50 | 组合当前最明确的两项早期主效应：共享两帧 attention-weight predictor，但保留逐帧 sampling/value/output 自由度；同时只向 heads 注入受真实 cross-attention 帧差逐元素包络约束的 swap-odd 细节。不改变 recurrent query、loss、类别权重或训练协议。79 项 decoder 单测、配置深拷贝、完整模型构建、双卡真数据 4-iter smoke 与组合结构审计通过；iter 50 为 `1.1589 s/iter`，loss `21.4509`、grad norm `104.0930`，总/DN/encoder loss 有限。 |
-| 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，02:23 已进入 epoch 5 | cls HOTA/DetA/AssA `37.590/28.607/52.920`，det `40.313/33.923/49.759`；相对 `0727_01` 同点 HOTA `+1.381/+1.560`，两侧 DetA 和 AssA 也同时提高。pair mAP `0.173430`、both-independent AP50 `0.356102`，分别提高 `0.016177/0.032953`。6 组共享 attention 误差为零，18 组独立参数最大差异 `0.042917`；三层 antisymmetric-detail 权重范数 `0.024836/0.021828/0.023927`。结构与性能门槛完整通过，继续到 epoch 8 检查增益可持续性。 |
+| 178 GPU 0 | `0731_06 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `PREPARED`；代码与配置待服务器级验证 | 分类特征保持 shared-attention 的共享 decoder 路径；受真实帧差包络约束、交换反对称的细节只进入两帧迭代框回归及 reference 更新。该结构针对 `0731_01` epoch 8 中 det/AP 上升但 cls HOTA 低父配置 `0.117` 的唯一失败项，不改 loss、类别权重或 recurrent query。 |
 | 99 GPU 0,1 | `0731_02 ... decoder_envelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | recurrent query 保持父模型；逐帧 heads 只接收存在于真实双帧 cross-attention 差异内的交换反对称校正，幅值逐元素受观测帧差包络约束。epoch 4 cls HOTA/DetA/AssA `37.859/28.112/54.688`，det `42.873/34.173/55.071`；相对父配置 HOTA `+1.650/+4.120`、DetA `+1.044/+1.719`。pair mAP `0.167896`、both-independent AP50 `0.349436`，分别提高 `0.010643/0.026287`。三层 enveloped-detail 权重均有限非零，结构和性能门槛完整通过。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `STOPPED`；epoch 8 全部 artifacts 和两项结构审计完成后精确停止 | cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，cls/det DetA `-0.052/-0.316`。pair mAP `0.246292`、both-independent AP50 `0.479887`，分别提高 `0.008558/0.013936`。结构确已学习：6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060115`，三层 detail 权重有限非零。因 cls HOTA 唯一低于父配置，未将关联/AP 增益误判为全门槛通过。 |
 | 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后于 01:35 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.386/34.314/57.656`，det `49.340/42.544/59.013`；pair mAP/AP50 `0.207499/0.401020`，both-independent mAP/AP50 `0.241319/0.431198`。早期优势未保持，明显低于 `0727_01` 同点；6 组共享 attention 误差为零、两类结构参数均已学习，故结论是结构方向失败而非未生效。 |
 | 99 GPU 0,1 | `0730_14 ... decoder_motiontrust_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `44.366/35.594/57.867`，det `50.647/44.289/60.035`；pair mAP/AP50 `0.221063/0.416210`，both-independent mAP/AP50 `0.255138/0.449079`。相对父配置 HOTA `-0.903/+0.454`、DetA `-2.069/-2.772`，检测覆盖损失明显。 |
@@ -47,8 +48,8 @@
 
 ## 下一步
 
-1. `0731_01` 已通过 epoch 4 的 HOTA、DetA、AssA 与 AP 全门槛，继续到 epoch 8，检验增益能否避免既有 shared-attention 的中期退化。
-2. `0731_02/03/04` 先做 epoch 4 同点诊断；分别判断帧差、公共证据及二者正交组合的主效应与交互。
+1. `0731_06` 在 178 完成单测、完整模型构建和真数据 4-iter smoke 后 fresh 启动，首判 epoch 4。
+2. `0731_02/04` 继续到 epoch 8；`0731_05` 首判 epoch 4，分别判断受包络帧差、公共证据交互与 shared-attention 组合的可持续性。
 3. 四台服务器维持四路结构实验并行；不以参数扫描、loss scale 或类别 reweight 填充资源。
 4. 论文主线暂不改变；只有 decoder 候选在中后期同时超过 `0727_01` 的 cls/det HOTA，才进入论文递进表。
 
@@ -251,3 +252,20 @@
   `1.1589 s/iter`、loss `21.4509`、grad norm `104.0930`，两卡约
   `19.2 GiB` 且 100% 利用，无 Traceback、OOM、NaN、NCCL 或未使用参数错误。
   五项正式启动门槛通过，首判 epoch 4。
+
+## 2026-07-31 03:40 CST 0731_01 epoch-8 门控与 0731_06
+
+- `0731_01 shared-attention + antisymmetric-detail` 的 epoch 8 checkpoint、检测、
+  完整 TrackEval、原始 CSV 和结构审计均已完成。cls HOTA/DetA/AssA 为
+  `45.152/37.611/57.666`，det 为 `50.817/46.745/57.206`；pair mAP/AP50
+  `0.246292/0.441537`，both-independent mAP/AP50 `0.284940/0.479887`。
+- 相对 `0727_01` 同点，det HOTA 提高 `0.624`，pair mAP 与 both AP50 分别提高
+  `0.008558/0.013936`，但 cls HOTA 下降 `0.117`。cls/det DetA 只下降
+  `0.052/0.316`，均在保护线内；因此结论不是检测崩坏，而是分类与逐帧 detail
+  耦合造成的轻微 cls 退化。按预先固定的“双 HOTA 不低于父配置”门槛精确停止。
+- checkpoint 中 6 组共享 attention 最大误差为零，18 组独立参数最大差异
+  `0.060115`；三层 antisymmetric-detail 权重范数
+  `0.033877/0.031303/0.031082`，排除结构未生效。
+- 接替候选 `0731_06` 保留 shared-attention 的分类共享特征，只把零起点、
+  受观测帧差逐元素包络约束的 swap-odd correction 注入两帧框回归及 reference
+  更新。它是分类/几何作用路径的结构性解耦，不是 scale、loss 权重或类别重权调整。
