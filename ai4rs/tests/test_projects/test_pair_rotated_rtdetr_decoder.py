@@ -81,7 +81,8 @@ def _build_decoder(num_layers: int = 2,
                    common_motion_decoder: bool = False,
                    shared_evidence_decoder: bool = False,
                    competitive_evidence_decoder: bool = False,
-                   motion_trust_decoder: bool = False):
+                   motion_trust_decoder: bool = False,
+                   symmetric_pair_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -116,6 +117,7 @@ def _build_decoder(num_layers: int = 2,
         shared_evidence_decoder=shared_evidence_decoder,
         competitive_evidence_decoder=competitive_evidence_decoder,
         motion_trust_decoder=motion_trust_decoder,
+        symmetric_pair_decoder=symmetric_pair_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -1008,6 +1010,145 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 _build_decoder(
                     device=self.device,
                     motion_trust_decoder=True,
+                    **other)
+
+    def test_symmetric_pair_decoder_shares_cross_attention(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, symmetric_pair_decoder=True)
+        for layer in decoder.layers:
+            self.assertIs(layer.cross_attn_prev, layer.cross_attn_curr)
+            self.assertTrue(layer.symmetric_pair_decoder)
+
+    def test_symmetric_pair_decoder_matches_equal_weight_baseline(self):
+        torch.manual_seed(61)
+        baseline, reg_prev, reg_curr = _build_decoder(device=self.device)
+        baseline.init_weights()
+        for layer in baseline.layers:
+            layer.cross_attn_curr.load_state_dict(
+                layer.cross_attn_prev.state_dict())
+        symmetric = copy.deepcopy(baseline)
+        symmetric.symmetric_pair_decoder = True
+        for layer in symmetric.layers:
+            layer.symmetric_pair_decoder = True
+            layer.cross_attn_curr = layer.cross_attn_prev
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, baseline.embed_dims, self.device)
+        reference_prev = torch.rand(
+            1, baseline.num_queries, 5, device=self.device).clamp(
+                1e-3, 1 - 1e-3)
+        reference_curr = torch.rand_like(reference_prev).clamp(
+            1e-3, 1 - 1e-3)
+        with torch.no_grad():
+            baseline_output = baseline(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr,
+                reference_prev=reference_prev,
+                reference_curr=reference_curr)
+            symmetric_output = symmetric(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr,
+                reference_prev=reference_prev,
+                reference_curr=reference_curr)
+        for baseline_group, symmetric_group in zip(
+                baseline_output, symmetric_output):
+            for baseline_tensor, symmetric_tensor in zip(
+                    baseline_group, symmetric_group):
+                self.assertTrue(torch.equal(
+                    baseline_tensor, symmetric_tensor))
+
+    def test_symmetric_pair_decoder_is_frame_swap_equivariant(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device, symmetric_pair_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        reference_prev = torch.rand(
+            1, decoder.num_queries, 5, device=self.device).clamp(
+                1e-3, 1 - 1e-3)
+        reference_curr = torch.rand_like(reference_prev).clamp(
+            1e-3, 1 - 1e-3)
+        with torch.no_grad():
+            hidden, refs_prev, refs_curr = decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr,
+                reference_prev=reference_prev,
+                reference_curr=reference_curr)
+            swapped_hidden, swapped_prev, swapped_curr = decoder(
+                memory_prev=memory_curr,
+                memory_curr=memory_prev,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_curr,
+                reg_branches_curr=reg_prev,
+                reference_prev=reference_curr,
+                reference_curr=reference_prev)
+        for original, swapped in zip(hidden, swapped_hidden):
+            self.assertTrue(torch.allclose(
+                original, swapped, atol=1e-6, rtol=1e-5))
+        for original, swapped in zip(refs_prev, swapped_curr):
+            self.assertTrue(torch.allclose(
+                original, swapped, atol=1e-6, rtol=1e-5))
+        for original, swapped in zip(refs_curr, swapped_prev):
+            self.assertTrue(torch.allclose(
+                original, swapped, atol=1e-6, rtol=1e-5))
+
+    def test_detector_init_preserves_symmetric_pair_structure(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, symmetric_pair_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        pair_weight = decoder.pair_pos_fusion.weight
+        self.assertTrue(torch.equal(
+            pair_weight[:, :decoder.embed_dims],
+            pair_weight[:, decoder.embed_dims:]))
+        for layer in decoder.layers:
+            self.assertIs(layer.cross_attn_prev, layer.cross_attn_curr)
+            fusion_weight = layer.cross_fusion.weight
+            self.assertTrue(torch.equal(
+                fusion_weight[:, :decoder.embed_dims],
+                fusion_weight[:, decoder.embed_dims:]))
+
+    def test_symmetric_pair_decoder_rejects_other_variants(self):
+        for other in (
+                dict(tristate_decoder=True),
+                dict(dual_output_adapter=True),
+                dict(common_motion_decoder=True),
+                dict(shared_evidence_decoder=True),
+                dict(competitive_evidence_decoder=True),
+                dict(motion_trust_decoder=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    symmetric_pair_decoder=True,
                     **other)
 
     def test_tristate_disables_structurally_unused_parameters(self):

@@ -39,9 +39,11 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
                  *args,
                  tristate: bool = False,
                  tristate_separate_ffn: bool = False,
+                 symmetric_pair_decoder: bool = False,
                  **kwargs) -> None:
         self.tristate = bool(tristate)
         self.tristate_separate_ffn = bool(tristate_separate_ffn)
+        self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -152,7 +154,18 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             level_start_index=level_start_index,
             **kwargs)
         # cat on embed dim: (bs, num_queries, 2*D) -> (bs, num_queries, D)
-        query = self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
+        if self.symmetric_pair_decoder:
+            # The common query should not depend on the concatenation order at
+            # this fusion site.  Averaging both orders enforces that invariant
+            # while retaining the existing Linear parameterization and its
+            # pair-average initialization.
+            query = 0.5 * (
+                self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
+                + self.cross_fusion(
+                    torch.cat([out_curr, out_prev], dim=-1)))
+        else:
+            query = self.cross_fusion(
+                torch.cat([out_prev, out_curr], dim=-1))
         query = self.norms[1](query)
         query = self.ffn(query)
         query = self.norms[2](query)
@@ -250,6 +263,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  shared_evidence_decoder: bool = False,
                  competitive_evidence_decoder: bool = False,
                  motion_trust_decoder: bool = False,
+                 symmetric_pair_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -266,6 +280,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.competitive_evidence_decoder = bool(
             competitive_evidence_decoder)
         self.motion_trust_decoder = bool(motion_trust_decoder)
+        self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -301,7 +316,26 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'motion_trust_decoder is incompatible with all other '
                 'decoder variants')
+        if self.symmetric_pair_decoder and any((
+                self.tristate_decoder,
+                self.dual_output_adapter,
+                self.common_motion_decoder,
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+        )):
+            raise ValueError(
+                'symmetric_pair_decoder is incompatible with all other '
+                'decoder variants')
         super().__init__(*args, **kwargs)
+        if self.symmetric_pair_decoder:
+            for layer in self.layers:
+                layer.symmetric_pair_decoder = True
+                # Adjacent frames share the same modality and encoder.  A
+                # single cross-attention module removes ordered-frame
+                # parameter bias and makes a frame swap an exact reordering
+                # rather than a change of function.
+                layer.cross_attn_curr = layer.cross_attn_prev
 
     def _init_layers(self) -> None:
         self.layers = ModuleList([
@@ -707,8 +741,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 reference_curr, num_levels, self.angle_factor)
             query_pos_prev = self.ref_point_head(reference_prev)
             query_pos_curr = self.ref_point_head(reference_curr)
-            query_pos = self.pair_pos_fusion(
-                torch.cat([query_pos_prev, query_pos_curr], dim=-1))
+            if self.symmetric_pair_decoder:
+                query_pos = 0.5 * (
+                    self.pair_pos_fusion(
+                        torch.cat(
+                            [query_pos_prev, query_pos_curr], dim=-1))
+                    + self.pair_pos_fusion(
+                        torch.cat(
+                            [query_pos_curr, query_pos_prev], dim=-1)))
+            else:
+                query_pos = self.pair_pos_fusion(
+                    torch.cat([query_pos_prev, query_pos_curr], dim=-1))
 
             if self.tristate_decoder:
                 pointer, query_prev, query_curr = layer.forward_tristate(
