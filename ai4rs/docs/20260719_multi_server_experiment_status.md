@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 07:25 CST。
+更新时间：2026-07-31 07:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:21 到 epoch 5 iter 350，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；07:18 fresh 启动，07:20 已越过 iter 100；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 8 双 HOTA 通过，07:21 到 epoch 12 iter 750，下一判 epoch 12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:21 到 epoch 5 iter 100，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:36 到 epoch 6 iter 200，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；07:18 fresh 启动，07:38 到 epoch 2 iter 250；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 12 cls HOTA `+0.491`、det HOTA `-0.111`，保留到 epoch 16 再判 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:38 到 epoch 6 iter 150，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -612,3 +612,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   both-independent AP50 `0.391559`，结构审计通过，保留到 epoch 8。
 - 99 回归分支与 178 midpoint 分支均在 HOTA、DetA、AssA 和 AP 上同步提高；
   当前不做参数扫描，继续用 epoch 8 判断早期覆盖增益能否保持。
+
+## 2026-07-31 07:45 CST 0731_05 epoch-12 决策
+
+- 252 `0731_05 shared-attention + full-path enveloped-detail` 的 epoch 12
+  checkpoint、检测 metrics、完整 TrackEval、原始 CSV 与结构审计均已完成。
+  cls HOTA/DetA/AssA 为 `50.171/42.372/61.238`，det 为
+  `56.430/49.540/66.445`。
+- 相对 `0727_01` 同点 `49.680/56.541`，cls HOTA 提高 `0.491`，det HOTA
+  低 `0.111`，因此该点不构成严格双 HOTA 通过。分解上 cls DetA/AssA 为
+  `+1.012/-0.572`，det DetA/AssA 为 `-0.805/+0.866`。
+- det DetA 差距已由 epoch 8 的 `-1.885` 收窄至 `-0.805`，且 pair mAP
+  `0.276140`、both-independent AP50 `0.534695` 分别高于父配置同点
+  `0.273170/0.511752`。AP 只作覆盖诊断，不用于改写 HOTA 结论。
+- 鉴于 det HOTA 仅低 `0.111`、检测覆盖差距正在收窄，且这是当前最成熟候选，
+  保留到 epoch 16 作最后一次中期确认；若仍不能双超越父 encoder，则完成全量
+  评估后停止并释放 252 给 terminal-only 结构。

@@ -1288,3 +1288,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 下一轮决策顺序：252 `0731_05` epoch 12 → 99/178 epoch 8 → 197 epoch 4。
   若 full-path 或 midpoint 在中期出现 DetA/双 HOTA 系统性退化，再启用仅最终层
   注入细节的 terminal-only 结构；不回到 scale 或权重扫描。
+
+## 2026-07-31 07:45 CST 0731_05 epoch-12 决策
+
+- epoch 12 的 cls/det HOTA 为 `50.171/56.430`；相对 `0727_01` 同点
+  `49.680/56.541` 为 `+0.491/-0.111`，不记为双提升。
+- det DetA/AssA 相对父配置为 `-0.805/+0.866`，但 DetA 差距较 epoch 8
+  的 `-1.885` 明显收窄，检测 AP 也没有崩塌。因此允许该最成熟候选继续到
+  epoch 16，不因小幅单点落后过早截断轨迹。
+- epoch 16 仍使用同点双 HOTA 作主门槛；失败则在完整产物落盘后停止 0731_05，
+  释放 252 部署 terminal-only。其他三台不受影响，继续完成 99/178 epoch 8
+  和 197 epoch 4 的结构判定。
