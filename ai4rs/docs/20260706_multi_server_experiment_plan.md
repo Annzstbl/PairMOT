@@ -911,3 +911,27 @@ P5双向temporal MHA、Dual-Evidence post-FPN encoder、proposal、PairDN、loss
 排除训练后，18项单测及双卡4-iter真实数据smoke通过。正式训练于09:30 CST在197 GPU 4、5
 fresh启动；09:31确认epoch 1 iter 50为`0.9245 s/iter`，关键loss和梯度有限，无DDP、NaN、
 OOM或NCCL错误。
+
+## 2026-07-30 0730_11 Shared-Routing Decoder
+
+`0730_10` 的全对称 decoder 在 epoch 4 提高 det HOTA/DetA 和 AP50，但 pair mAP 相对
+`0727_01` 下降 `0.00765`，说明完全共享两帧 cross-attention 和显式序平均会损失方向相关
+表征。`0730_11` 因此只共享每层 deformable cross-attention 的几何路由模块
+`sampling_offsets` 与 `attention_weights`，同时保留两帧独立的 `value_proj` 和
+`output_proj`。该改动约束两帧采用一致的采样策略，但不强迫其特征值与输出表示相同；不改
+encoder、proposal、PairDN、head、loss、初始化、数据或训练协议。
+
+代码提交 `9049422` 已精确同步至四台服务器。56 项 decoder 单测、配置深拷贝、launcher
+审计以及 252 GPU 0/1 的真实数据 4-iter DDP smoke 通过；smoke 中总、DN、encoder loss
+和 grad norm 均有限，checkpoint 的 shared routing 误差为 `0`，独立 projection 已分化
+`7.7571e-4`。正式 fresh 训练于 20:49 CST 在 252 GPU 0/1 启动，iter 50 与 iter 100
+均通过五项启动门槛，20:52 已到 epoch 1 iter 150。首个性能判断点为 epoch 4，使用与
+`0730_09` 相同的 HOTA、DetA、pair mAP 和 both-independent AP 保护门槛。
+
+当前并行分配：
+
+- 197 GPU 4/5：继续 `0730_09 motion-trust decoder` 到 epoch 8；
+- 252 GPU 0/1：运行 `0730_11 shared-routing decoder`，首判 epoch 4；
+- 178 GPU 0：保留给下一项独立 decoder 结构，不做 loss scale 或类别 reweight 扫描；
+- 99：用户已恢复双卡额度，但实时只有 GPU 1 空闲，GPU 0/2 被其他用户任务占用；在形成
+  两张实际空闲卡以前只承担代码、测试和轻量 smoke，不启动双卡正式训练。

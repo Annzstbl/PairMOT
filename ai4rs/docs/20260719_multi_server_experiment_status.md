@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-30 20:29 CST。
+更新时间：2026-07-30 20:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,9 +15,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 PairMOT 训练 | GPU 0/1 空闲；GPU 2 为其他任务占用，不纳入调度 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 5 iter 350 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无 PairMOT 训练 | `0730_10` 已在 epoch 4 门控后停止；GPU 0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 本机 | 无 PairMOT 训练 | 用户已将双卡额度重新纳入资源池；实时仅 GPU 1 空闲，GPU 0/2 被其他用户任务占用 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 6 iter 250 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0730_11 shared-routing decoder` | 正式 fresh 训练已通过五项启动门槛；epoch 1 iter 150 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | 无 PairMOT 训练 | GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -333,3 +333,12 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 | STOPPED | 252 GPU 0,1 | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41 / 2026-07-30 20:12 | epoch 4 完成 checkpoint、检测和 2/2 TrackEval。cls HOTA/DetA/AssA `36.750/26.756/54.632`，det `42.604/33.160/55.890`；pair mAP/AP50 `0.1496/0.3108`，both-independent mAP/AP50 `0.1786/0.3400`。虽 det HOTA/DetA 与 AP50 提高，但 pair mAP 相对父配置下降 `0.00765`，未通过 `0.003` 保护线，因此停止并释放 GPU。共享 attention 结构保持，fusion 半矩阵 `1.788e-7` 差异属于 FP32 漂移，不是前向交换等变失效。 |
 
 当前可调度资源仍为 99 GPU 0/1、197 GPU 4/5、252 GPU 0/1、178 GPU 0，共 7 张；197 GPU 4/5 正由 `0730_09` 占用，99 GPU 0/1、252 GPU 0/1 与 178 GPU 0 空闲。99 GPU 2 和 197 其他 GPU 不属于本实验调度范围。AutoDL 全部关机。四台服务器的目标代码提交均为 `fbbf137`，已有未跟踪文件继续保留。
+
+## 2026-07-30 20:52 CST decoder 并行启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0730_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:23 /  | epoch 4 已通过固定门槛并继续到 epoch 8。20:52 到 epoch 6 iter 250，约 `1.5907 s/iter`、loss `11.0446`、grad norm `40.5960`；总、DN、encoder loss 均有限，GPU 4/5 正常占用。 |
+| RUNNING | 252 GPU 0,1 | `0730_11_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedrouting_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 20:49 /  | 严格继承 `0727_01`，只在每层 decoder 两帧 deformable cross-attention 之间共享 `sampling_offsets` 与 `attention_weights`；`value_proj` 和 `output_proj` 保持独立，避免 `0730_10` 全共享导致的 pair mAP 损失。56 项 decoder 单测、配置深拷贝、权重/GMC/路径审计及双卡真实数据 4-iter smoke 通过；smoke checkpoint 的 12 组 routing 最大误差为 `0`，12 组独立 projection 最大差异为 `7.7571e-4`。正式 fresh 训练五项启动门槛通过，20:52 到 epoch 1 iter 150，约 `1.1223 s/iter`、loss `19.6946`、grad norm `122.9360`，总、DN、encoder loss 均有限，无 Traceback、OOM、NaN、NCCL、DDP reduction 或 unused-parameter 错误。首个判断点为 epoch 4。 |
+
+`0730_11` 代码提交为 `9049422`，通过带 prerequisite 的 Git bundle 精确同步至 99、197、252 和 178；各服务器原有未跟踪文件均保留。当前形成两路正式并行：197 的 motion-trust 与 252 的 shared-routing。178 GPU 0 仍空闲，等待另一项有独立模型依据的 decoder 结构；99 的双卡额度已恢复，但实时 GPU 0 和 GPU 2 被其他用户的 UNet 任务占用，仅 GPU 1 空闲，未将其错误计作可立即使用的双卡 DDP 资源。
