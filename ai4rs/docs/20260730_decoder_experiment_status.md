@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 00:24 CST
+更新时间：2026-07-31 01:13 CST
 
 ## 当前研究原则
 
@@ -15,13 +15,14 @@
 | --- | --- | --- | --- |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `RUNNING`；epoch 4 checkpoint、检测、完整 TrackEval 与联合结构审计通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `36.732/27.680/51.849`，det `41.818/33.239/53.766`；pair mAP/AP50 `0.157715/0.320595`，both-independent mAP/AP50 `0.186071/0.345886`。相对父配置 cls/det HOTA `+0.523/+3.065`、DetA `+0.612/+0.785`，AP 保护线也通过；但同点低于仅 shared-attention 的 `0730_13`，shared-evidence 暂未形成正交增益。 |
 | 252 GPU 0,1 | `0730_13 ... decoder_sharedattention ... fresh` | `RUNNING`；epoch 4 checkpoint、检测、完整 TrackEval 与结构审计通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.559/27.119/55.846`，det `43.257/33.530/56.895`；pair mAP/AP50 `0.1547/0.3182`，both-independent mAP/AP50 `0.1839/0.3467`。相对父配置 cls/det HOTA `+1.350/+4.504`、DetA `+0.051/+1.076`；pair mAP 仅下降约 `0.00255`，仍在 `0.003` 保护线内。6 组共享权重误差为零，18 组独立参数已分化。 |
-| 178 GPU 0 | `0730_16 ... decoder_antisymmetricdetail ... fresh` | `RUNNING`；23:48 fresh 启动，23:49 到 epoch 1 iter 50，约 `0.9458 s/iter`，loss `21.1606`、grad_norm `107.4478` 均有限 | 共享 recurrent query 与下一层路径保持父配置不变，只把真实双帧 cross-attention 证据生成的有界 `-detail/+detail` 注入逐帧分类/回归 head 特征。69 项 decoder 单测、配置/launcher 审计、单卡真实数据 4-iter smoke 与 checkpoint 结构检查通过；首判 epoch 4。 |
+| 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `RUNNING`；01:11 fresh 启动，01:12 到 epoch 1 iter 50，约 `0.9344 s/iter`，loss `20.9701`、grad_norm `96.9294` 均有限 | 组合当前最强早期主效应 shared-attention 与只作用于逐帧 head 的中点守恒 `-detail/+detail`。真实数据 4-iter smoke 的总、DN、encoder loss 与梯度均有限；checkpoint 同时通过 `SHARED_ATTENTION_CHECKPOINT_OK` 和 `ANTISYMMETRIC_DETAIL_CHECKPOINT_OK`；首判 epoch 4。 |
 | 99 GPU 0,1 | `0730_14 ... decoder_motiontrust_sharedattention ... fresh` | `RUNNING`；epoch 4 checkpoint、检测、完整 TrackEval 与结构审计通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `37.075/27.355/53.989`，det `42.159/32.966/55.263`；pair mAP/AP50 `0.1625/0.3105`，both-independent mAP/AP50 `0.1887/0.3369`。相对父配置 cls/det HOTA `+0.866/+3.406`、DetA `+0.287/+0.512`，AP 也提高；但同点低于仅 shared-attention 的 `0730_13`，motion-trust 组合暂未形成正交增益。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 178 GPU 0 | `0730_16 ... decoder_antisymmetricdetail ... fresh` | `STOPPED`；epoch 4 checkpoint、检测、完整 TrackEval 与结构审计后按固定门槛停止 | epoch 4 cls HOTA/DetA/AssA `36.684/27.590/52.398`，det `39.221/31.788/49.436`；pair mAP/AP50 `0.1700/0.3110`，both-independent mAP/AP50 `0.1992/0.3428`。相对父配置 HOTA 和 AP 均提高，但 det DetA 下降 `0.666`，超过允许的 `0.5`；仅超限 `0.166`，因此保留其细节分支并与 shared-attention 组合验证。 |
 | 178 GPU 0 | `0730_12 ... decoder_motiontrust_sharedevidence ... fresh` | `STOPPED`；epoch 8 checkpoint、检测、结构审计及 2/2 TrackEval 完成后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `44.387/33.262/61.885`，det `49.824/40.708/63.485`；pair mAP/AP50 `0.2144/0.3809`，both-independent mAP/AP50 `0.2457/0.4098`。相对父配置 cls/det HOTA `-0.882/-0.369`，cls/det DetA `-4.401/-6.353`，pair mAP `-0.02333`、both-independent AP50 `-0.05615`；epoch 4 的共同增益未保持，属于以检测覆盖换 AssA，23:30 前精确停止并释放 GPU 0。 |
 | 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... fresh` | `STOPPED`；epoch 8 checkpoint、检测、结构审计及 2/2 TrackEval 完成后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `45.498/36.788/58.984`，det `51.160/45.018/60.159`；pair mAP/AP50 `0.230058/0.430536`，both-independent mAP/AP50 `0.265862/0.464984`。相对父配置 HOTA 仅 `+0.229/+0.967`，但 cls/det DetA 下降 `0.875/2.043`、pair mAP 下降 `0.007676`；属于 AssA 搬运，结构虽有效但保护线失败。23:00 前已精确停止并释放 GPU 4/5。 |
 | 252 GPU 0,1 | `0730_11 ... decoder_sharedrouting ... fresh` | `STOPPED`；epoch 4 checkpoint、检测、结构审计及 2/2 TrackEval 完成后按固定门槛停止 | cls HOTA/DetA/AssA `36.504/27.255/51.884`，det `42.163/33.695/53.992`；pair mAP/AP50 `0.149753/0.305401`，both-independent mAP/AP50 `0.178556/0.335452`。虽然 det HOTA 与 DetA 提升，但 pair mAP 相对父配置下降 `0.007499`，超过 `0.003` 保护线。共享 routing 结构审计通过，停止后 GPU 0/1 已释放。 |
@@ -35,18 +36,17 @@
 
 ## 代码一致性
 
-- 四台服务器的结构代码基线为 `1112a56`，运行状态记录已同步至 `770eae7`；本次门控记录提交后继续统一快进。既有训练进程保持启动时已加载结构，没有自动重启。
+- 四台服务器当前代码已统一至 `5c556e4`；该提交只增加 `0731_01` 配置与 launcher，252、99、197 的既有训练未重启。
 - 99 原有实验提交 `c104193` 在共同历史中完整保留；各服务器未跟踪目录未覆盖或删除。
 - common-motion、shared-evidence、competitive-evidence 及组合结构共通过 41 项 decoder 单元测试；零初始化时精确等于父模型，第一步反向中 adapter 均有非零梯度。所有正式运行均在配置展开、路径检查和真数据 smoke 后启动。
 - 197 使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`。历史目录 `/data/users/litianhao/PairMOT` 保持原状，不作为新实验代码源。
 
 ## 下一步
 
-1. `0730_16` 继续到 epoch 4，验证只在 head 前施加中点守恒的反对称帧细节能否避免 0730_12 的 DetA/AP 损失。
-2. `0730_13` 继续到 epoch 8，验证 epoch 4 的 HOTA、DetA 与 AP 共同优势能否保持。
-3. `0730_14` 继续到 epoch 8；epoch 4 虽通过保护线，但低于 `0730_13`，中期判断 motion-trust 组合差距是否扩大。
-4. `0730_15` 继续到 epoch 8；epoch 4 虽通过全部保护线，但低于 `0730_13`，中期验证 shared-evidence 组合差距是否进一步扩大。
-5. 论文主线暂不改变；只有 decoder 候选在中后期同时超过 `0727_01` 的 cls/det HOTA，才进入论文递进表。
+1. `0731_01` 继续到 epoch 4，检验 shared-attention 能否补回 `0730_16` 仅差 `0.166` 的 det DetA 门槛，同时保留其 AP/HOTA 增益。
+2. `0730_13`、`0730_14`、`0730_15` 完成 epoch 8 全量评估后按同一固定门槛比较，不因资源已占用而默认续跑。
+3. 四台服务器维持四路结构实验并行；不以参数扫描、loss scale 或类别 reweight 填充资源。
+4. 论文主线暂不改变；只有 decoder 候选在中后期同时超过 `0727_01` 的 cls/det HOTA，才进入论文递进表。
 
 ## 2026-07-30 18:25 CST 状态覆盖
 
@@ -156,3 +156,20 @@
   参数最大差异 `0.036013`。但相对 `0730_13 shared-attention` 同点，cls/det HOTA
   分别低 `0.827/1.439`；相对 `0730_14` 也低 `0.343/0.341`。现有证据支持
   shared-attention 是主要早期增益来源，尚不支持 shared-evidence 与其形成正交互补。
+
+## 2026-07-31 01:13 CST 0730_16 门控与 0731_01 接替
+
+- `0730_16 antisymmetric frame-detail decoder` 的 epoch 4 已完成 checkpoint、检测、
+  完整 TrackEval 与结构审计。cls HOTA/DetA/AssA 为 `36.684/27.590/52.398`，
+  det 为 `39.221/31.788/49.436`；pair mAP/AP50 为 `0.1700/0.3110`，
+  both-independent mAP/AP50 为 `0.1992/0.3428`。
+- 相对 `0727_01` 同点，cls/det HOTA 提高 `0.475/0.468`，AP 也共同提高；
+  唯一失败项是 det DetA 下降 `0.666`，超过固定上限 `0.5` 共 `0.166`。
+  因此 00:59 精确停止，不把 AssA 增益误写成完整通过。
+- 接替实验 `0731_01` 将 `0730_13` 的 shared-attention 与该中点守恒帧细节组合。
+  两者位于不同作用位置：前者约束双帧 cross-attention 的定位权重，后者只在逐帧
+  cls/reg head 前注入反对称细节；不含 loss、类别权重或 residual-scale 调参。
+- 四台服务器已统一到提交 `5c556e4`。178 单卡真实数据 4-iter smoke 生成
+  `iter_4.pth`，全部关键训练数值有限，同时通过两项 checkpoint 结构检查。
+  正式 fresh 训练于 01:11 启动，01:12 到 epoch 1 iter 50；GPU0 使用约
+  `31.4 GiB`，日志持续更新且无 Traceback、OOM、NaN 或 NCCL 错误。

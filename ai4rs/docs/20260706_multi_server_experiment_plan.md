@@ -1078,3 +1078,24 @@ checkpoint 联合结构审计确认三层 shared-evidence adapter 均产生有�
 但它的 cls/det HOTA 同点低于 `0730_13 shared-attention` `0.827/1.439`，
 也略低于 `0730_14`；因此当前结构结论是 shared-attention 提供主要增益，
 shared-evidence 暂未形成正交互补，不据此扩展更多组合。
+
+## 2026-07-31 0730_16 Epoch-4 Gate 与 0731_01
+
+`0730_16 antisymmetric frame-detail decoder` 的 epoch 4 cls HOTA/DetA/AssA 为
+`36.684/27.590/52.398`，det 为 `39.221/31.788/49.436`；pair mAP/AP50
+`0.1700/0.3110`，both-independent mAP/AP50 `0.1992/0.3428`。相对父配置，
+cls/det HOTA 与 AP 均提高，但 det DetA 下降 `0.666`，超过固定 `0.5` 上限
+`0.166`，所以完成全量评估和结构审计后停止。
+
+下一项 `0731_01` 组合当前最强早期主效应 `0730_13 shared-attention` 与
+`0730_16` 的 head-only antisymmetric detail。前者共享双帧 deformable cross-attention
+的定位权重但保留帧特异 value，后者保持 head 特征中点并在帧交换时严格变号；两者作用
+位置正交，不涉及 loss、类别重权或 residual-scale 调参。配置提交 `5c556e4` 已精确同步
+至 99、197、252、178。
+
+178 GPU0 的 physical batch 8 真数据 4-iter smoke 生成 `iter_4.pth`，总、DN、
+encoder loss 与 grad norm 全部有限；checkpoint 同时通过 shared-attention 和
+antisymmetric-detail 结构检查。正式 fresh 训练于 01:11 启动，01:12 到 epoch 1
+iter 50，约 `0.9344 s/iter`、loss `20.9701`、grad norm `96.9294`，GPU0 约
+`31.4 GiB`，无异常。当前 252 `0730_13`、99 `0730_14`、197 `0730_15` 已进入
+epoch 8，178 `0731_01` 首判 epoch 4，四路结构实验并行恢复。

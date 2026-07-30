@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 00:24 CST。
+更新时间：2026-07-31 01:13 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0730_14 motion-trust + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_15 shared-evidence + shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_13 shared-attention decoder` | epoch 4 完整门控通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0730_16 antisymmetric frame-detail decoder` | 4-iter smoke 与结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | 4-iter smoke 与两项结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -425,3 +425,14 @@ pair mAP/AP50 `0.1625/0.3105`，both-independent mAP/AP50 `0.1887/0.3369`；
 epoch 8；178 `0730_16` 首判 epoch 4。178 的 warmup grad norm 曾短时升至约
 `543`，但到 epoch 2 iter 350/400 已回落至 `28.2/25.3`，loss 同步下降且无
 NaN/OOM/Traceback，确认不是持续性训练异常。
+
+## 2026-07-31 01:13 CST 178 接替与四路并行恢复
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 178 GPU 0 | `0730_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 23:48 / 2026-07-31 00:59 | epoch 4 cls HOTA/DetA/AssA `36.684/27.590/52.398`，det `39.221/31.788/49.436`；pair mAP/AP50 `0.1700/0.3110`，both-independent mAP/AP50 `0.1992/0.3428`。HOTA/AP 提高，但 det DetA 相对父配置下降 `0.666`，超过 `0.5` 门槛 `0.166`，因此精确停止。 |
+| RUNNING | 178 GPU 0 | `0731_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 01:11 /  | 组合 shared-attention 与 head-only antisymmetric detail。4-iter 真数据 smoke 数值有限并生成 checkpoint，两项结构检查均通过；正式训练 01:12 到 epoch 1 iter 50，约 `0.9344 s/iter`、loss `20.9701`、grad norm `96.9294`，无训练异常。 |
+
+当前并非缺少并行：252 `0730_13`、99 `0730_14`、197 `0730_15` 均已进入
+epoch 8；178 在 `0730_16` 门控失败后的短暂空档现由 `0731_01` 接替，四路结构实验
+并行恢复。代码统一为 `5c556e4`，已有三项训练未因同步重启。
