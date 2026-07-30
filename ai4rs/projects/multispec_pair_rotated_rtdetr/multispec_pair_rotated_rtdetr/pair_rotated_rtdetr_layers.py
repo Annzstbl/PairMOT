@@ -302,14 +302,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.dual_output_adapter,
                 self.common_motion_decoder,
                 self.antisymmetric_detail_decoder,
-                self.enveloped_detail_decoder,
-                self.common_evidence_bypass_decoder,
+                (self.enveloped_detail_decoder
+                 or self.common_evidence_bypass_decoder),
         )) > 1:
             raise ValueError(
                 'tristate_decoder, dual_output_adapter, and '
                 'common_motion_decoder, antisymmetric_detail_decoder, '
-                'enveloped_detail_decoder, and '
-                'common_evidence_bypass_decoder are mutually exclusive')
+                'and the bounded evidence decoder family are mutually '
+                'exclusive')
         if self.shared_evidence_decoder and (
                 self.tristate_decoder
                 or self.dual_output_adapter
@@ -410,7 +410,6 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
                 self.shared_attention_decoder,
-                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'enveloped_detail_decoder is incompatible with other '
@@ -423,7 +422,6 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.shared_routing_decoder,
                 self.shared_attention_decoder,
                 self.antisymmetric_detail_decoder,
-                self.enveloped_detail_decoder,
         )):
             raise ValueError(
                 'common_evidence_bypass_decoder is incompatible with other '
@@ -1042,6 +1040,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     tmp_prev = reg_branches_prev[lid](layer_output_prev)
                     tmp_curr = reg_branches_curr[lid](layer_output_curr)
                 elif self.enveloped_detail_decoder:
+                    if self.common_evidence_bypass_decoder:
+                        layer_output = layer_output + (
+                            self._common_evidence_bypass_correction(
+                                lid,
+                                layer_output,
+                                frame_evidence_prev,
+                                frame_evidence_curr))
                     frame_detail = self._enveloped_detail_correction(
                         lid, frame_evidence_prev, frame_evidence_curr)
                     layer_output_prev = layer_output - frame_detail

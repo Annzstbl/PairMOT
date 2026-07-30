@@ -1794,6 +1794,82 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             self.assertIsNotNone(gate.weight.grad)
             self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_orthogonal_evidence_decomposition_is_exact_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            device=self.device,
+            enveloped_detail_decoder=True,
+            common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        decomposed_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        hidden, _, _, hidden_prev, hidden_curr = decomposed_output
+        for shared, prev, curr in zip(hidden, hidden_prev, hidden_curr):
+            self.assertTrue(torch.equal(prev, shared))
+            self.assertTrue(torch.equal(curr, shared))
+
+        decoder.enveloped_detail_decoder = False
+        decoder.common_evidence_bypass_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for decomposed_group, baseline_group in zip(
+                decomposed_output[:3], baseline_output):
+            for decomposed_tensor, baseline_tensor in zip(
+                    decomposed_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    decomposed_tensor, baseline_tensor))
+
+    def test_orthogonal_evidence_decomposition_gates_receive_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            enveloped_detail_decoder=True,
+            common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        hidden, references_prev, references_curr, hidden_prev, hidden_curr = (
+            decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr))
+        torch.manual_seed(101)
+        loss = sum(
+            (shared * torch.randn_like(shared)).mean()
+            + (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for shared, prev, curr in zip(
+                hidden, hidden_prev, hidden_curr))
+        loss = loss + sum(
+            (prev * torch.randn_like(prev)).mean()
+            + (curr * torch.randn_like(curr)).mean()
+            for prev, curr in zip(references_prev, references_curr))
+        loss.backward()
+        for gates in (
+                decoder.enveloped_detail_gates,
+                decoder.common_evidence_bypass_gates):
+            for gate in gates:
+                self.assertIsNotNone(gate.weight.grad)
+                self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
     def test_new_detection_preserving_gates_survive_detector_init(self):
         for flag, attribute in (
                 ('enveloped_detail_decoder', 'enveloped_detail_gates'),
