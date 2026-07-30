@@ -267,6 +267,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
+                 enveloped_detail_decoder: bool = False,
+                 common_evidence_bypass_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -288,6 +290,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
             antisymmetric_detail_decoder)
+        self.enveloped_detail_decoder = bool(enveloped_detail_decoder)
+        self.common_evidence_bypass_decoder = bool(
+            common_evidence_bypass_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -297,15 +302,20 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.dual_output_adapter,
                 self.common_motion_decoder,
                 self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )) > 1:
             raise ValueError(
                 'tristate_decoder, dual_output_adapter, and '
-                'common_motion_decoder, and antisymmetric_detail_decoder '
-                'are mutually exclusive')
+                'common_motion_decoder, antisymmetric_detail_decoder, '
+                'enveloped_detail_decoder, and '
+                'common_evidence_bypass_decoder are mutually exclusive')
         if self.shared_evidence_decoder and (
                 self.tristate_decoder
                 or self.dual_output_adapter
-                or self.antisymmetric_detail_decoder):
+                or self.antisymmetric_detail_decoder
+                or self.enveloped_detail_decoder
+                or self.common_evidence_bypass_decoder):
             raise ValueError(
                 'shared_evidence_decoder is incompatible with tristate_decoder '
                 'dual_output_adapter, and antisymmetric_detail_decoder')
@@ -313,7 +323,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.tristate_decoder
                 or self.dual_output_adapter
                 or self.shared_evidence_decoder
-                or self.antisymmetric_detail_decoder):
+                or self.antisymmetric_detail_decoder
+                or self.enveloped_detail_decoder
+                or self.common_evidence_bypass_decoder):
             raise ValueError(
                 'competitive_evidence_decoder is incompatible with '
                 'tristate_decoder, dual_output_adapter, and '
@@ -324,6 +336,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.common_motion_decoder,
                 self.competitive_evidence_decoder,
                 self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'motion_trust_decoder is incompatible with tristate, '
@@ -339,6 +353,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.shared_routing_decoder,
                 self.shared_attention_decoder,
                 self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'symmetric_pair_decoder is incompatible with all other '
@@ -353,6 +369,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.symmetric_pair_decoder,
                 self.shared_attention_decoder,
                 self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'shared_routing_decoder is incompatible with all other '
@@ -364,6 +382,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.competitive_evidence_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'shared_attention_decoder is incompatible with tristate, '
@@ -376,11 +396,38 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.motion_trust_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
+                self.enveloped_detail_decoder,
+                self.common_evidence_bypass_decoder,
         )):
             raise ValueError(
                 'antisymmetric_detail_decoder is incompatible with '
                 'shared-evidence, competitive-evidence, motion-trust, '
                 'symmetric-pair, and shared-routing decoder variants')
+        if self.enveloped_detail_decoder and any((
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.symmetric_pair_decoder,
+                self.shared_routing_decoder,
+                self.shared_attention_decoder,
+                self.common_evidence_bypass_decoder,
+        )):
+            raise ValueError(
+                'enveloped_detail_decoder is incompatible with other '
+                'decoder variants')
+        if self.common_evidence_bypass_decoder and any((
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.symmetric_pair_decoder,
+                self.shared_routing_decoder,
+                self.shared_attention_decoder,
+                self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+        )):
+            raise ValueError(
+                'common_evidence_bypass_decoder is incompatible with other '
+                'decoder variants')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
             for layer in self.layers:
@@ -454,6 +501,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             ])
         if self.antisymmetric_detail_decoder:
             self.antisymmetric_detail_adapters = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims, bias=False)
+                for _ in range(self.num_layers)
+            ])
+        if self.enveloped_detail_decoder:
+            self.enveloped_detail_gates = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims, bias=False)
+                for _ in range(self.num_layers)
+            ])
+        if self.common_evidence_bypass_decoder:
+            self.common_evidence_bypass_gates = ModuleList([
                 nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
             ])
@@ -661,6 +718,44 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         evidence = self._normalized_motion_evidence(out_prev, out_curr)
         return self.antisymmetric_detail_adapters[lid](evidence).tanh()
 
+    def _enveloped_detail_correction(
+        self,
+        lid: int,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Return swap-odd head detail bounded by observed frame evidence.
+
+        This branch can only reveal detail already present between the two
+        cross-attention outputs. A swap-invariant learned gate multiplies the
+        detached signed detail, making the correction exactly swap odd,
+        midpoint preserving, and elementwise bounded by the observed detail.
+        """
+        evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        gate = self.enveloped_detail_gates[lid](evidence).tanh()
+        detail = (0.5 * (out_curr - out_prev)).detach()
+        return gate * detail
+
+    def _common_evidence_bypass_correction(
+        self,
+        lid: int,
+        layer_output: Tensor,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Recover common detection evidence bypassed by fusion and FFN.
+
+        The recurrent query is untouched. Heads receive a gated residual
+        toward detached raw two-frame common evidence. The gate depends only
+        on swap-invariant disagreement, starts at zero, and bounds every
+        correction by the existing common-to-head residual.
+        """
+        evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        gate = self.common_evidence_bypass_gates[lid](evidence).tanh()
+        common = (0.5 * (out_prev + out_curr)).detach()
+        residual = common - layer_output.detach()
+        return gate * residual
+
     @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
@@ -707,6 +802,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.antisymmetric_detail_decoder:
             for adapter in self.antisymmetric_detail_adapters:
                 nn.init.zeros_(adapter.weight)
+        if self.enveloped_detail_decoder:
+            for gate in self.enveloped_detail_gates:
+                nn.init.zeros_(gate.weight)
+        if self.common_evidence_bypass_decoder:
+            for gate in self.common_evidence_bypass_gates:
+                nn.init.zeros_(gate.weight)
         if not self.tristate_decoder:
             return
         self._init_identity_linear(self.query_to_prev)
@@ -879,7 +980,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     or self.shared_evidence_decoder
                     or self.competitive_evidence_decoder
                     or self.motion_trust_decoder
-                    or self.antisymmetric_detail_decoder)
+                    or self.antisymmetric_detail_decoder
+                    or self.enveloped_detail_decoder
+                    or self.common_evidence_bypass_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -938,6 +1041,22 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     layer_output_curr = layer_output + frame_detail
                     tmp_prev = reg_branches_prev[lid](layer_output_prev)
                     tmp_curr = reg_branches_curr[lid](layer_output_curr)
+                elif self.enveloped_detail_decoder:
+                    frame_detail = self._enveloped_detail_correction(
+                        lid, frame_evidence_prev, frame_evidence_curr)
+                    layer_output_prev = layer_output - frame_detail
+                    layer_output_curr = layer_output + frame_detail
+                    tmp_prev = reg_branches_prev[lid](layer_output_prev)
+                    tmp_curr = reg_branches_curr[lid](layer_output_curr)
+                elif self.common_evidence_bypass_decoder:
+                    layer_output = layer_output + (
+                        self._common_evidence_bypass_correction(
+                            lid,
+                            layer_output,
+                            frame_evidence_prev,
+                            frame_evidence_curr))
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
                 elif self.common_motion_decoder:
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
@@ -1000,7 +1119,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             else:
                 hidden_states.append(layer_output)
                 if (self.dual_output_adapter
-                        or self.antisymmetric_detail_decoder):
+                        or self.antisymmetric_detail_decoder
+                        or self.enveloped_detail_decoder):
                     hidden_states_prev.append(layer_output_prev)
                     hidden_states_curr.append(layer_output_curr)
             references_prev.append(new_reference_prev)
@@ -1008,7 +1128,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
 
         if (self.tristate_decoder
                 or self.dual_output_adapter
-                or self.antisymmetric_detail_decoder):
+                or self.antisymmetric_detail_decoder
+                or self.enveloped_detail_decoder):
             return (hidden_states, references_prev, references_curr,
                     hidden_states_prev, hidden_states_curr)
         return hidden_states, references_prev, references_curr
