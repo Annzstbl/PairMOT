@@ -341,3 +341,31 @@
   `0.045196/0.065476/0.063087`。结构确已学习，结论是分类专用细节造成轻微
   pair AP 搬运。05:44 精确停止，GPU 4/5 已释放；等待99 `0731_07`
   同点结果后再选择有因果依据的替代结构。
+
+## 2026-07-31 06:02 CST HOTA 主门槛与四机并行恢复
+
+- 99 `0731_07 classification-only enveloped-detail` 的 epoch 4 完整结果为：
+  cls HOTA/DetA/AssA `35.533/26.341/51.534`，det
+  `42.384/33.122/55.289`，pair mAP/AP50 `0.151026/0.309108`，
+  both-independent mAP/AP50 `0.180451/0.338591`。相对父配置，cls HOTA
+  与 cls DetA 分别下降 `0.676/0.727`，pair mAP 下降 `0.006227`；
+  虽然 det HOTA 提高 `3.631`，但未满足双 HOTA 主目标，完成全部 artifacts
+  后于 05:50 精确停止。
+- 决策门槛调整为：cls HOTA 与 det HOTA 是一级目标，DetA/AssA 用于解释增益；
+  pair mAP 与 both-independent AP50 降为诊断项。小于约 `0.005` 的单点 AP
+  波动不再单独淘汰；只有 AP 明显、持续下降并与 HOTA/DetA 同向恶化时才参与停止。
+  最终论文目标仍是 decoder 的 cls HOTA 与 det HOTA 同时超过 encoder
+  `0727_01` 的 `54.437/62.393`。
+- 按新门槛重新审视，197 `0731_08` 在 epoch 4 的双 HOTA 与双 DetA 均高于父配置，
+  pair mAP 仅下降 `0.003968`，不应淘汰。06:00 已从原
+  `epoch_4.pth` 原位恢复；日志确认 resumed epoch 4、iter 4152，并已到 epoch 5
+  iter 100，GPU 4/5 正常。
+- 99 接替为 `0731_09`，即 178 `0731_06 regression-only` 的双卡 2xb4
+  复现。84 项 decoder 单测、完整模型构建、双卡真数据 4-iter smoke 与 checkpoint
+  结构检查全部通过；smoke 的三层门控均获得非零更新。06:02 在 GPU 0/1 fresh
+  启动。此时 252 `0731_05`、178 `0731_06`、197 `0731_08`、99 `0731_09`
+  四路正式结构实验恢复并行。
+- 新的 `midpoint_regression_enveloped_detail_decoder` 已完成实现与测试：把帧细节
+  转换为 5D box-logit residual 空间的一对严格反对称修正，使新增细节的 pair
+  midpoint 精确为零，分类路径继续共享。它是结构改动，不含 scale、loss 重权或
+  类别重权；当前排队等待下一可用资源，不抢占上述四条 HOTA 主线。

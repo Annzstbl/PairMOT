@@ -534,3 +534,17 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 197 GPU 4/5 已释放。因99 `0731_07` 是同一分类专用细节的无 shared-attention
 主效应对照，先等待其完整epoch 4结果，再决定197接替结构，避免在因果证据缺失时
 启动新的参数或模块拼接实验。
+
+## 2026-07-31 06:02 CST HOTA 优先门槛与四机并行恢复
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 252 GPU 0,1 | `0731_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_envelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 03:23 /  | epoch 4 双 HOTA 通过，继续到 epoch 8。 |
+| RUNNING | 178 GPU 0 | `0731_06_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_regressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 03:45 /  | epoch 4 双 HOTA 通过，继续到 epoch 8。 |
+| RUNNING | 197 GPU 4,5 | `0731_08_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_classificationenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 04:33；06:00 resumed /  | 将 AP 降为诊断项后，从原 epoch 4 checkpoint 原位恢复；已确认 epoch 5 iter 100，GPU 4/5 正常。 |
+| RUNNING | 99 GPU 0,1 | `0731_09_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_regressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 06:02 /  | 178 `0731_06` 的 2xb4 复现；84 项单测、模型构建、真实数据 smoke 与结构 checkpoint 检查通过，正式 fresh 启动。 |
+| STOPPED | 99 GPU 0,1 | `0731_07_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_classificationenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 04:33 / 2026-07-31 05:50 | epoch 4 cls HOTA/DetA `35.533/26.341` 均低于父配置，pair mAP 下降 `0.006227`；即使 det HOTA 提高，仍不满足双 HOTA 目标，完成全部 artifacts 后停止。 |
+
+后续筛选以同 epoch cls HOTA 与 det HOTA 为一级标准，DetA/AssA解释来源，AP仅诊断
+明显检测崩塌。最终 decoder 只有同时超过 encoder `0727_01` 的
+cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。

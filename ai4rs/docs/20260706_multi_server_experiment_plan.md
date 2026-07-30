@@ -1226,3 +1226,19 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 99/197 正式实验基于提交 `7dee533`，分别在 GPU 0/1 与 GPU 4/5 fresh 启动并越过
   iter 50；252/178 原实验不重启继续。四路统一在 epoch 4/8 使用既定 HOTA、DetA、
   pair mAP 和 both-independent AP50 门槛，不因单独 AssA 上升保留。
+
+## 2026-07-31 06:02 CST 门槛修订与资源调度
+
+- 主要目标明确为 decoder 最终 cls HOTA 和 det HOTA 同时超过 encoder
+  `0727_01` 的 `54.437/62.393`；任一项未超过都不改写论文主线。
+- 阶段决策优先级调整为：同 epoch cls/det HOTA > DetA/AssA 归因 >
+  pair mAP 与 both-independent AP50 诊断。AP 的轻微单点波动不再作为硬停止条件；
+  明显、持续且与 HOTA/DetA 同向的 AP 下降仍视为检测崩塌信号。
+- 因此 197 `0731_08` 从 epoch 4 原位恢复到 epoch 8；99 的 `0731_07`
+  因 cls HOTA/DetA 与 pair mAP 同时明显下降保持淘汰。
+- 当前四路并行：252 `0731_05 full-path`、178 `0731_06 regression-only`、
+  197 `0731_08 shared-attention + classification-only`、99 `0731_09`
+  regression-only 双卡复现。优先在 epoch 8 判断哪种作用路径能同时保护 cls 与 det。
+- 下一结构候选为 midpoint-preserving regression-only detail：新增帧细节在 5D
+  box-logit residual 空间严格反对称且 pair midpoint 为零，分类路径保持共享。
+  已通过零起点等价、梯度与中点守恒测试，等待下一空闲资源。
