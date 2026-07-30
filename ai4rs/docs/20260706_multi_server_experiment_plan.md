@@ -987,3 +987,18 @@ NaN、NCCL、DDP reduction 或 unused-parameter 错误。首个性能判断点�
 - 252 GPU 0/1：`0730_13 shared-attention decoder`，首判 epoch 4；
 - 99：22:31 实时核验三卡均空闲，预留两卡给不重复、具有独立诊断价值并通过真数据 smoke
   的下一 decoder 结构；不复制已有实验，也不用参数扫描填卡。
+
+## 2026-07-30 0730_14 Motion-Trust + Shared-Attention Decoder
+
+为形成可解释的主效应与交互项，99 双卡运行 `0730_14`：组合 197 的 motion-trust 与
+252 的 shared-attention。motion-trust 只产生检测置信度门控、位移包络有界的反对称框
+修正；shared-attention 只绑定两帧的 attention-weight predictor，保持
+`sampling_offsets/value_proj/output_proj` 独立。两者分别约束几何更新与特征聚合，
+不改 encoder、proposal、PairDN、head、loss、初始化、数据或训练协议。
+
+代码提交 `b829704`。62 项 decoder 单测、配置深拷贝、launcher shell 审计和 99 GPU 0/1
+真实数据 4-iter DDP smoke 通过。smoke 总、DN、encoder loss 和 grad norm 均有限；
+三层 motion-trust adapter 均非零，6 组共享 attention 参数误差为零，18 组独立参数已
+分化。正式 fresh 训练于 22:45 CST 启动，22:46 到 epoch 1 iter 50，约
+`0.9575 s/iter`、loss `21.4104`、grad norm `100.1361`，双卡各约 `19.2 GiB`，
+无异常。首判 epoch 4，并与 `0730_09`、`0730_13` 的同点主效应共同解释。

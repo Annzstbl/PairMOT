@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-30 22:35 CST
+更新时间：2026-07-30 22:46 CST
 
 ## 当前研究原则
 
@@ -16,6 +16,7 @@
 | 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... fresh` | `RUNNING`；epoch 4 完整门控通过，epoch 8 checkpoint 已产生，22:35 到 epoch 9 iter 1000；等待 epoch 8 完整检测与 TrackEval 门控结论 | 严格继承 `0727_01`。以双帧检测置信度门控有界反对称运动修正，并将修正限制在现有帧间位移包络内。epoch 4 结构审计通过；cls HOTA/DetA/AssA `37.878/27.722/55.486`，det `44.102/34.288/58.241`，pair mAP/AP50 `0.16257/0.31578`，both-independent mAP/AP50 `0.18872/0.34231`，全部通过固定门槛。 |
 | 252 GPU 0,1 | `0730_13 ... decoder_sharedattention ... fresh` | `RUNNING`；22:32 fresh 启动，22:35 到 epoch 1 iter 100，约 `1.1160 s/iter`，loss `20.5979`、grad_norm `103.9917` 均有限 | 每层两帧 deformable cross-attention 只共享 `attention_weights`，保留独立 `sampling_offsets/value_proj/output_proj`，用于保留逐帧定位自由度。61 项 decoder 单测、配置/launcher 审计、双卡真实数据 4-iter smoke 与 checkpoint 结构检查通过；首判 epoch 4。 |
 | 178 GPU 0 | `0730_12 ... decoder_motiontrust_sharedevidence ... fresh` | `RUNNING`；epoch 4 checkpoint 已产生，22:35 到 epoch 6 iter 100；等待 epoch 4 完整检测与 TrackEval 门控结论 | 将 `0730_09` 的检测保护框修正与 `0730_06` 的共享 query 证据组合；两条路径正交且均为零起点。smoke checkpoint 中两组三层 adapter 均有限、非零。 |
+| 99 GPU 0,1 | `0730_14 ... decoder_motiontrust_sharedattention ... fresh` | `RUNNING`；22:45 fresh 启动，22:46 到 epoch 1 iter 50，约 `0.9575 s/iter`，loss `21.4104`、grad_norm `100.1361` 均有限 | 组合 197 的 detection-protected motion-trust 与 252 的 frame-localized shared attention，形成主效应/交互项实验；62 项 decoder 单测、配置/launcher 审计、双卡真实数据 4-iter smoke 与联合 checkpoint 审计通过；首判 epoch 4。 |
 
 ## 已完成或释放
 
@@ -32,7 +33,7 @@
 
 ## 代码一致性
 
-- 99 canonical 与 252 位于提交 `091af97`；该提交新增只共享 `attention_weights`、保留逐帧采样偏移和投影容量的 shared-attention decoder。197/178 的已加载训练仍使用其启动时提交，待评估门控完成后再快进同步，不影响当前进程。
+- 99 canonical 位于提交 `b829704`；该提交允许 detection-protected motion-trust 与 shared-attention 正交组合并加入 0730_14。其父提交 `091af97` 已同步四台服务器；252/197/178 在本次状态提交后再快进到统一提交，既有训练进程保持启动时已加载结构。
 - 99 原有实验提交 `c104193` 在共同历史中完整保留；各服务器未跟踪目录未覆盖或删除。
 - common-motion、shared-evidence、competitive-evidence 及组合结构共通过 41 项 decoder 单元测试；零初始化时精确等于父模型，第一步反向中 adapter 均有非零梯度。所有正式运行均在配置展开、路径检查和真数据 smoke 后启动。
 - 197 使用干净副本 `/data/users/litianhao/PairMOT_sync_3cb888d`。历史目录 `/data/users/litianhao/PairMOT` 保持原状，不作为新实验代码源。
@@ -41,7 +42,7 @@
 
 1. 立即完成 `0730_09` epoch 8 与 `0730_12` epoch 4 的完整评估和结构门控；只有通过才继续下一判断点。
 2. `0730_13` 继续到 epoch 4，验证只共享 attention 权重能否保留 `0730_11` 的关联/DetA 收益，同时恢复 pair mAP。
-3. 99 于 22:31 实时核验三张卡均空闲；预留两卡给与上述三路不重复、具有独立诊断价值并通过真数据 smoke 的下一结构，不用重复实验或参数扫描填卡。
+3. `0730_14` 继续到 epoch 4，与 197 的 motion-trust 和 252 的 shared-attention 主效应同点比较，判断组合是否形成真实互补而非 AssA 搬运。
 4. 论文主线暂不改变；只有 decoder 候选在中后期同时超过 `0727_01` 的 cls/det HOTA，才进入论文递进表。
 
 ## 2026-07-30 18:25 CST 状态覆盖

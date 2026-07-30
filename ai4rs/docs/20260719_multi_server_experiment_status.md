@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-30 22:35 CST。
+更新时间：2026-07-30 22:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 PairMOT 训练 | 22:31 实时核验三张 GPU 均为空闲；预留两卡给下一项独立结构实验 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0730_14 motion-trust + shared-attention decoder` | 4-iter DDP smoke 与联合结构检查通过；正式 fresh 训练 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_09 motion-trust decoder` | epoch 4 完整门控通过；epoch 8 checkpoint 已产生，epoch 9 iter 1000 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_13 shared-attention decoder` | 4-iter DDP smoke 和结构检查通过；正式 fresh 训练 epoch 1 iter 100 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0730_12 motion-trust + shared-evidence decoder` | epoch 4 checkpoint 已产生；epoch 6 iter 100，等待 epoch 4 完整门控 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -368,3 +368,13 @@ pair噪声主要损害检测精度。`0723_07 PECG`随后完成远端精确smoke
 当前不复制已有实验或用参数扫描填卡；99 两卡仅分配给与 197/178/252 不重复且经过完整
 配置、单测和真数据 smoke 的新 decoder 结构。99 canonical 与 252 已位于 `091af97`；
 197/178 的当前进程保持启动时代码，完成门控后再快进同步。
+
+## 2026-07-30 22:46 CST 第四路结构实验启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 99 GPU 0,1 | `0730_14_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_motiontrust_sharedattention_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 22:45 /  | 组合 `0730_09` 的 detection-confident bounded motion-trust 与 `0730_13` 的 frame-localized shared attention。前者作用于有界反对称框修正，后者只共享 attention 权重并保留逐帧 sampling offsets/value/output projection；构成主效应与交互项，不改 encoder、proposal、PairDN、head、loss、数据或训练协议。62 项 decoder 单测、正式/短测配置深拷贝、launcher 审计与双卡真实数据 4-iter DDP smoke 通过。smoke checkpoint 的三层 motion adapter 均非零，6 组 attention 误差为零，18 组独立参数最大差异 `7.9339e-4`。正式训练五项门槛通过，22:46 到 epoch 1 iter 50，约 `0.9575 s/iter`、loss `21.4104`、grad norm `100.1361`，GPU 0/1 各约 `19.2 GiB`，无异常。首判 epoch 4。 |
+
+至此四台服务器均有独立 decoder 结构实验：197 `0730_09`、178 `0730_12`、
+252 `0730_13`、99 `0730_14`。当前 canonical 代码提交为 `b829704`；完成本状态提交后
+以 Git bundle 快进同步到 252/197/178，保留各服务器未跟踪文件且不重启已有训练。
