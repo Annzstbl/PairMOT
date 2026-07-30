@@ -1114,3 +1114,18 @@ epoch 8，178 `0731_01` 首判 epoch 4，四路结构实验并行恢复。
   有限的总/DN/encoder loss，99、252、197 均达到 iter 50，178 已到 epoch 3。
 - 首个统一决策点为 epoch 4；固定比较 cls/det HOTA、DetA/AssA、pair mAP/AP50 与
   both-independent AP50。仅在检测覆盖和 AP 不被搬运的前提下保留 HOTA 增益。
+
+## 2026-07-31 02:24 CST 0731_01 Epoch-4 Gate
+
+`0731_01 shared-attention + antisymmetric detail` 已完成 epoch 4 checkpoint、
+检测、TrackEval 与两项结构审计。cls HOTA/DetA/AssA 为
+`37.590/28.607/52.920`，det 为 `40.313/33.923/49.759`；相对 `0727_01`
+同点，cls 三项为 `+1.381/+1.539/+0.826`，det 三项为
+`+1.560/+1.469/+2.293`。pair mAP `0.173430`、both-independent AP50
+`0.356102`，分别提高 `0.016177/0.032953`，因此所有固定保护门槛均通过。
+
+checkpoint 中 6 组共享 attention 权重误差为零，18 组应独立参数最大差异
+`0.042917`；三层 antisymmetric-detail 权重范数为
+`0.024836/0.021828/0.023927`，排除结构未生效。该实验继续到 epoch 8，重点验证
+早期增益能否避免 `0730_13` 的中期退化。99 `0731_02` 已到 epoch 3，252
+`0731_03` 和 197 `0731_04` 均接近 epoch 3，四路结构实验继续并行。

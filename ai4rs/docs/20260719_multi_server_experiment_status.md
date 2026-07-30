@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 01:54 CST。
+更新时间：2026-07-31 02:24 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_02 enveloped-detail decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_04 orthogonal-evidence decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_03 common-evidence-bypass decoder` | 正式 fresh 训练已通过 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | 正式 fresh 训练到 epoch 3 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_01 shared-attention + antisymmetric frame-detail decoder` | epoch 4 全门槛通过，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -431,8 +431,8 @@ NaN/OOM/Traceback，确认不是持续性训练异常。
 | Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
 | --- | --- | --- | --- | --- |
 | STOPPED | 178 GPU 0 | `0730_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-30 23:48 / 2026-07-31 00:59 | epoch 4 cls HOTA/DetA/AssA `36.684/27.590/52.398`，det `39.221/31.788/49.436`；pair mAP/AP50 `0.1700/0.3110`，both-independent mAP/AP50 `0.1992/0.3428`。HOTA/AP 提高，但 det DetA 相对父配置下降 `0.666`，超过 `0.5` 门槛 `0.166`，因此精确停止。 |
-| RUNNING | 178 GPU 0 | `0731_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 01:11 /  | 组合 shared-attention 与 head-only antisymmetric detail。4-iter 真数据 smoke 数值有限并生成 checkpoint，两项结构检查均通过；正式训练 01:12 到 epoch 1 iter 50，约 `0.9344 s/iter`、loss `20.9701`、grad norm `96.9294`，无训练异常。 |
+| RUNNING | 178 GPU 0 | `0731_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_antisymmetricdetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 01:11 /  | epoch 4 checkpoint、检测、完整 TrackEval 与两项结构审计均完成。cls HOTA/DetA/AssA `37.590/28.607/52.920`，det `40.313/33.923/49.759`；相对 `0727_01` 同点 HOTA `+1.381/+1.560`、DetA `+1.539/+1.469`。pair mAP `0.173430`、both-independent AP50 `0.356102`，分别提高 `0.016177/0.032953`；全门槛通过，继续到 epoch 8。 |
 
-当前并非缺少并行：252 `0730_13`、99 `0730_14`、197 `0730_15` 均已进入
-epoch 8；178 在 `0730_16` 门控失败后的短暂空档现由 `0731_01` 接替，四路结构实验
-并行恢复。代码统一为 `5c556e4`，已有三项训练未因同步重启。
+四路结构实验保持并行：99 `0731_02` 已到 epoch 3，252 `0731_03` 与 197
+`0731_04` 均接近 epoch 3，178 `0731_01` 已通过 epoch 4 全门槛并进入 epoch 5。
+四台代码和记录统一到 `7e184b1`，同步未重启任何在途训练。
