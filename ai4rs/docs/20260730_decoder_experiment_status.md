@@ -795,3 +795,36 @@
   更干净，表明在独立 attention 下仅给分类恢复共同证据，可能比同时向 boxes 注入
   反对称 detail 更能保护 DetA；该判断仍需 `0731_20/21` 的另两个因子单元和四项
   epoch-8 结果共同确认。
+
+## 2026-07-31 16:38 CST 2×2 epoch-4 因子分析完成
+
+- 197 `0731_20 shared attention + classification common only` 的 cls
+  HOTA/DetA/AssA 为 `37.345/28.037/52.923`，det 为
+  `43.627/34.822/56.234`。相对 `0727_01` 同点，双 HOTA
+  `+1.136/+4.874`、DetA `+0.969/+2.368`。pair mAP/AP50
+  `0.156468/0.318016`，both-independent mAP/AP50
+  `0.185581/0.346145`。checkpoint 中 common gate `0.033425`，
+  6 组 attention 严格共享，18 组其余逐帧参数最大差异 `0.027972`。
+- 178 `0731_21 independent attention + classification common +
+  antisymmetric box detail` 的 cls HOTA/DetA/AssA 为
+  `38.031/29.960/52.258`，det 为 `41.072/36.731/47.129`。相对父配置
+  双 HOTA `+1.822/+2.319`、DetA `+2.892/+4.277`；pair mAP/AP50
+  `0.174049/0.350164`，both-independent mAP/AP50
+  `0.205622/0.379277`，均为四个单元中最强的检测覆盖改善。独立 attention
+  最大差异 `0.036236`，common/detail gate `0.033932/0.054266`，
+  严格结构审计通过。
+- 四单元 epoch-4 排列为：
+  - independent + classification common only（`0731_19`）：
+    HOTA `36.810/43.194`；
+  - shared + classification common only（`0731_20`）：
+    HOTA `37.345/43.627`；
+  - independent + common/detail factorized（`0731_21`）：
+    HOTA `38.031/41.072`；
+  - shared + common/detail factorized（`0731_18`）：
+    HOTA `37.315/41.743`。
+- 因子不是简单可加。classification-only 条件下，共享 attention 带来
+  cls/det HOTA `+0.535/+0.433` 与 DetA `+0.938/+1.289`；factorized
+  条件下，共享 attention 却使 cls/det DetA `-3.006/-4.905`。独立 attention
+  下加入 antisymmetric detail 虽使 cls/det DetA `+2.861/+3.198`，却使
+  det AssA `-9.761`、det HOTA `-2.122`。因此当前不扩展更多组合，四项继续到
+  epoch 8，以双 HOTA 是否保持和 DetA/AssA 是否发生中期搬运决定方向。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 15:50 CST。
+更新时间：2026-07-31 16:38 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -887,3 +887,35 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 197 `0731_20` 于 15:50 到 epoch 3 iter 1000，178 `0731_21` 到
   epoch 3 iter 450；两项均继续等待各自 epoch 4 完整评估。四项训练总、DN、
   encoder loss 有限，无 Traceback/OOM/NaN/NCCL。
+
+## 2026-07-31 16:38 CST 0731_20/21 epoch-4 决策
+
+- 197 `0731_20 shared attention + classification common only` 的 epoch 4
+  checkpoint、检测 metrics、完整 TrackEval、54 个原始结果文件和结构审计均已
+  完成。cls HOTA/DetA/AssA 为 `37.345/28.037/52.923`，det 为
+  `43.627/34.822/56.234`；相对 `0727_01` 同点，cls/det HOTA 提高
+  `1.136/4.874`，DetA 提高 `0.969/2.368`，AssA 提高
+  `0.829/8.768`。pair mAP/AP50 为 `0.156468/0.318016`，
+  both-independent mAP/AP50 为 `0.185581/0.346145`。
+- `0731_20` 的唯一 terminal common gate 最大权重为 `0.033425`；6 组
+  shared attention 最大误差为零，18 组其余逐帧参数最大差异 `0.027972`。
+  结构已学习且满足预期，继续到 epoch 8。
+- 178 `0731_21 independent attention + classification common +
+  antisymmetric box detail` 的 epoch 4 cls HOTA/DetA/AssA 为
+  `38.031/29.960/52.258`，det 为 `41.072/36.731/47.129`；相对父配置
+  双 HOTA 提高 `1.822/2.319`，DetA 提高 `2.892/4.277`。pair mAP/AP50
+  `0.174049/0.350164`、both-independent mAP/AP50
+  `0.205622/0.379277`，四项检测诊断分别提高
+  `0.016797/0.054029/0.021157/0.056128`，是当前四个单元中检测覆盖改善最强、
+  最少依赖 AssA 搬运的候选。
+- `0731_21` 的 6 组独立 attention-weight 最大差异为 `0.036236`，
+  common/detail gate 最大权重为 `0.033932/0.054266`；严格正交结构审计通过。
+  它继续到 epoch 8。
+- epoch-4 的 `shared attention × antisymmetric box detail` 2×2 对照显示明显
+  交互：不加 box detail 时，共享 attention 使 `0731_20` 相对 `0731_19`
+  cls/det HOTA 提高 `0.535/0.433`，DetA 提高 `0.938/1.289`；而加入 detail
+  后，共享 attention 使 `0731_18` 相对 `0731_21` 的 cls DetA 下降 `3.006`、
+  det DetA 下降 `4.905`。独立 attention 下加入 detail 可显著提高 DetA，
+  但 det AssA 降低 `9.761`，因而 det HOTA 相对 classification-only 单元下降
+  `2.122`。所以不能把 shared attention 与 antisymmetric detail 当作可直接相加
+  的独立增益；四项均保留到 epoch 8 检验中期稳定性。
