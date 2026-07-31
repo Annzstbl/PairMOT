@@ -10,10 +10,13 @@ height, angle, auxiliary outputs, and recurrent references are unchanged.
 from mmengine.config import read_base
 
 with read_base():
-    from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0731_28_terminal_center_motion_factorized_evidence_decoder_99 import *  # noqa: F401,F403
+    from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0731_29_terminal_diagonal_center_motion_factorized_evidence_decoder_252 import *  # noqa: F401,F403
 
 
-model['decoder'].update(terminal_factorized_detail_only=True)
+model['decoder'].update(
+    terminal_factorized_diagonal_gates=False,
+    terminal_factorized_coupled_gate=False,
+    terminal_factorized_detail_only=True)
 
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_252/'
