@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 09:50 CST
+更新时间：2026-07-31 10:04 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；09:18 fresh 启动，09:19 正式 iter 50 五项门槛通过；09:41 到 epoch 2 iter 150 | 只在末层分类输出注入帧细节；末层框残差在 5D logit 空间严格反对称，前两层及递归 reference 与父路径逐元素一致。下一完整决策点为 epoch 4。 |
 | 178 GPU 0 | `0730_16 ... decoder_antisymmetricdetail ... resume epoch 4` | `RUNNING`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 该结构 epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；旧停止原因是 det DetA 保护线，而非双 HOTA 失败。当前仅以 cls/det HOTA 为主重新验证到 epoch 8。 |
-| 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `RUNNING`；08:46 fresh 启动，正式 iter 50 五项门槛通过；09:41 到 epoch 4 iter 200 | 前两层、辅助输出和 iterative references 保持父路径，只在最后一层分类/回归特征注入 bounded swap-odd detail；下一完整决策点为 epoch 4。 |
+| 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `37.799/43.483`，相对父配置 `+1.590/+4.730`，继续到 epoch 8 | Cls/Det 的 DetA、AssA 四项全部提高；checkpoint、检测、完整 TrackEval、原始 CSV 与结构验收通过。10:03 已进入 epoch 5。 |
 | 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... resume epoch 8` | `RUNNING`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过 | 该结构 epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；旧停止原因是 DetA/mAP 保护线，而非双 HOTA 失败。当前继续到 epoch 12。 |
 
 ## 已完成或释放
@@ -519,3 +519,17 @@
 - 当前四路结构互补：99/252 验证 terminal 隔离是否避免递归污染，178 验证纯
   antisymmetric detail，197 验证 motion-trust。下一决策点依次为 99 epoch 4、
   178 epoch 8、252 epoch 4、197 epoch 12；仍以同点 cls/det HOTA 双过为准。
+
+## 2026-07-31 10:04 CST 0731_12 epoch-4 决策
+
+- 99 `0731_12 terminal-only` epoch 4 的 checkpoint、检测 metrics、完整
+  TrackEval、原始 CSV 与结构检查均已完成。cls HOTA/DetA/AssA 为
+  `37.799/28.644/53.288`，det 为 `43.483/34.398/56.345`。
+- 相对 encoder 同点，cls HOTA/DetA/AssA 为 `+1.590/+1.576/+1.194`，
+  det 为 `+4.730/+1.944/+8.879`；两种 HOTA 及四个组成量全部提高，
+  不属于以检测覆盖换关联的搬运。
+- pair mAP `0.165773`，相对父配置同点约 `+0.008520`；
+  both-independent AP50 为 `0.355169`。AP 仅作诊断，但这里也没有显示覆盖崩塌。
+- checkpoint 结构检查确认 6 组 shared attention 最大误差为零、18 组独立参数
+  最大差异 `0.038689`，唯一 terminal gate 最大权重 `0.080521`，模块确已学习。
+  该结构明确继续到 epoch 8；10:03 已进入 epoch 5。

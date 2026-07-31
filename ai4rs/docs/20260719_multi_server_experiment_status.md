@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 09:50 CST。
+更新时间：2026-07-31 10:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；09:41 到 epoch 4 iter 200；正式 iter 50 五项门槛通过，下一决策点 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `37.799/43.483`，相对父配置 `+1.590/+4.730`，DetA/AssA 四项也全部提高；10:03 进入 epoch 5，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_09 motion-trust decoder` 从 epoch 8 恢复 | RUNNING；epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；09:41 到 epoch 2 iter 150；正式 iter 50 五项门槛通过，下一决策点 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0730_16 antisymmetric-detail decoder` 从 epoch 4 恢复 | RUNNING；epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -690,3 +690,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   恢复脚本中设置 `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`，未修改模型、loss 或配置。
   两项正式 iter 50 的总/DN/encoder loss 与 grad norm 均有限，无
   Traceback/OOM/NaN；197 仍严格只使用 GPU 4/5。
+
+## 2026-07-31 10:04 CST 99 terminal-only epoch-4 结果
+
+- `0731_12` epoch 4 cls HOTA/DetA/AssA 为 `37.799/28.644/53.288`，
+  det 为 `43.483/34.398/56.345`；相对 encoder 同点 HOTA
+  `+1.590/+4.730`，且 cls/det 的 DetA、AssA 四项全部提高。
+- pair mAP `0.165773`、both-independent AP50 `0.355169`，未显示检测覆盖崩塌。
+  结构检查确认 6 组 shared attention 严格相同、18 组独立参数已分化、唯一
+  terminal gate 有限非零。checkpoint、检测、TrackEval 与原始 CSV 均完整，
+  因而继续到 epoch 8；10:03 已进入 epoch 5。
