@@ -281,6 +281,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_classification_common_evidence_decoder:
                  bool = False,
                  terminal_factorized_evidence_decoder: bool = False,
+                 terminal_factorized_confidence: str = 'none',
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -325,6 +326,18 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_classification_common_evidence_decoder)
         self.terminal_factorized_evidence_decoder = bool(
             terminal_factorized_evidence_decoder)
+        self.terminal_factorized_confidence = str(
+            terminal_factorized_confidence)
+        if self.terminal_factorized_confidence not in {
+                'none', 'common', 'detail', 'both'}:
+            raise ValueError(
+                'terminal_factorized_confidence must be one of '
+                "'none', 'common', 'detail', or 'both'")
+        if (self.terminal_factorized_confidence != 'none'
+                and not self.terminal_factorized_evidence_decoder):
+            raise ValueError(
+                'terminal_factorized_confidence requires '
+                'terminal_factorized_evidence_decoder')
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -989,6 +1002,24 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         return gate * residual
 
     @staticmethod
+    def _terminal_bilateral_confidence(
+        layer_output: Tensor,
+        cls_branch_prev: nn.Module,
+        cls_branch_curr: nn.Module,
+    ) -> Tensor:
+        """Return detached object reliability shared by both frame routes.
+
+        The geometric mean is high only when both parent-path classifiers
+        support an object query.  It adds no threshold or learned scale and
+        cannot create a shortcut into either classifier or decoder feature.
+        """
+        score_prev = cls_branch_prev(layer_output).detach().sigmoid().amax(
+            dim=-1, keepdim=True)
+        score_curr = cls_branch_curr(layer_output).detach().sigmoid().amax(
+            dim=-1, keepdim=True)
+        return (score_prev * score_curr).clamp_min(0.0).sqrt()
+
+    @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
         nn.init.zeros_(linear.bias)
@@ -1120,7 +1151,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         assert reg_branches_curr is not None
         assert len(reg_branches_prev) == self.num_layers
         assert len(reg_branches_curr) == self.num_layers
-        if self.tristate_decoder or self.motion_trust_decoder:
+        if (self.tristate_decoder or self.motion_trust_decoder
+                or self.terminal_factorized_confidence != 'none'):
             assert cls_branches_prev is not None
             assert cls_branches_curr is not None
             assert len(cls_branches_prev) >= self.num_layers
@@ -1468,18 +1500,30 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     layer_output_prev = layer_output
                     layer_output_curr = layer_output
                     if lid == self.num_layers - 1:
-                        common_output = layer_output + (
-                            self.
-                            _terminal_common_evidence_bypass_correction(
+                        confidence = None
+                        if self.terminal_factorized_confidence != 'none':
+                            confidence = self._terminal_bilateral_confidence(
+                                layer_output,
+                                cls_branches_prev[lid],
+                                cls_branches_curr[lid])
+                        common_correction = (
+                            self._terminal_common_evidence_bypass_correction(
                                 layer_output,
                                 frame_evidence_prev,
                                 frame_evidence_curr))
+                        if self.terminal_factorized_confidence in {
+                                'common', 'both'}:
+                            common_correction = confidence * common_correction
+                        common_output = layer_output + common_correction
                         layer_output_prev = common_output
                         layer_output_curr = common_output
                         frame_detail = (
                             self._terminal_enveloped_detail_correction(
                                 frame_evidence_prev,
                                 frame_evidence_curr))
+                        if self.terminal_factorized_confidence in {
+                                'detail', 'both'}:
+                            frame_detail = confidence * frame_detail
                         # Keep the box midpoint on the unmodified parent
                         # representation.  Common evidence is classification
                         # only; otherwise it can improve association while

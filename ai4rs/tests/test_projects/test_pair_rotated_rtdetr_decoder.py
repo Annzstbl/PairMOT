@@ -99,7 +99,8 @@ def _build_decoder(num_layers: int = 2,
                    terminal_common_evidence_bypass_decoder: bool = False,
                    terminal_classification_common_evidence_decoder:
                    bool = False,
-                   terminal_factorized_evidence_decoder: bool = False):
+                   terminal_factorized_evidence_decoder: bool = False,
+                   terminal_factorized_confidence: str = 'none'):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -160,6 +161,7 @@ def _build_decoder(num_layers: int = 2,
             terminal_classification_common_evidence_decoder),
         terminal_factorized_evidence_decoder=(
             terminal_factorized_evidence_decoder),
+        terminal_factorized_confidence=terminal_factorized_confidence,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -2878,6 +2880,42 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 decoder.terminal_enveloped_detail_gates[0]):
             self.assertIsNotNone(gate.weight.grad)
             self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
+    def test_terminal_factorized_confidence_validation(self):
+        with self.assertRaisesRegex(ValueError, 'must be one of'):
+            _build_decoder(
+                device=self.device,
+                terminal_factorized_evidence_decoder=True,
+                terminal_factorized_confidence='invalid')
+        with self.assertRaisesRegex(
+                ValueError, 'requires terminal_factorized_evidence_decoder'):
+            _build_decoder(
+                device=self.device,
+                terminal_factorized_confidence='common')
+
+    def test_terminal_bilateral_confidence_is_exact_and_detached(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            terminal_factorized_evidence_decoder=True,
+            terminal_factorized_confidence='both')
+        layer_output = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device,
+            requires_grad=True)
+        cls_prev = torch.nn.Linear(decoder.embed_dims, 3).to(self.device)
+        cls_curr = torch.nn.Linear(decoder.embed_dims, 3).to(self.device)
+        with torch.no_grad():
+            cls_prev.weight.zero_()
+            cls_curr.weight.zero_()
+            cls_prev.bias.fill_(torch.logit(torch.tensor(0.25)))
+            cls_curr.bias.fill_(torch.logit(torch.tensor(0.81)))
+        confidence = decoder._terminal_bilateral_confidence(
+            layer_output, cls_prev, cls_curr)
+        self.assertTrue(torch.allclose(
+            confidence,
+            torch.full_like(confidence, 0.45),
+            atol=1e-6,
+            rtol=1e-6))
+        self.assertFalse(confidence.requires_grad)
 
     def test_orthogonal_evidence_decomposition_is_exact_zero_start(self):
         decoder, reg_prev, reg_curr = _build_decoder(
