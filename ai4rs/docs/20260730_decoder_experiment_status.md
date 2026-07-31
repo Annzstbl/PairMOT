@@ -772,3 +772,26 @@
   `3.97146e-4/3.92367e-4` 的非零更新。15:13 fresh 正式启动，15:14 到
   epoch 1 iter 50，loss `20.9349`，总、DN、encoder loss 有限，GPU0 正常，
   无训练异常；GPU1 未触碰。
+
+## 2026-07-31 15:50 CST 严格因子对照首批 epoch-4 结果
+
+- 252 `0731_18 shared attention + classification common + antisymmetric box
+  detail` 的 cls HOTA/DetA/AssA 为 `37.315/26.954/55.487`，det 为
+  `41.743/31.826/56.276`。相对 `0727_01` 同点，双 HOTA 为
+  `+1.106/+2.990`，DetA 为 `-0.114/-0.628`，AssA 为
+  `+3.393/+8.810`。pair mAP/AP50 `0.158907/0.304586`，
+  both-independent mAP/AP50 `0.185215/0.329253`，检测诊断均提高。
+- checkpoint 审计确认 6 组 shared attention 严格相同、18 组独立参数最大差异
+  `0.033962`，common/detail gate 最大权重 `0.031387/0.090002`。因此双 HOTA
+  增益并非模块未学习造成的偶然等价；但 box detail 当前主要表现为 AssA 增益并伴随
+  轻度 DetA 损失，继续到 epoch 8 检查是否重现历史中期搬运。
+- 99 `0731_19 independent attention + classification common only` 的 cls
+  HOTA/DetA/AssA 为 `36.810/27.099/53.921`，det 为
+  `43.194/33.533/56.890`；相对父配置双 HOTA `+0.601/+4.441`，DetA
+  `+0.031/+1.079`，AssA `+1.827/+9.424`。pair mAP/AP50
+  `0.156129/0.309147`，both-independent mAP/AP50
+  `0.183573/0.334282`。唯一 common gate 已学到 `0.034268`。
+- 两项均通过当前双 HOTA 主门槛并继续到 epoch 8。现阶段 `0731_19` 的检测组成量
+  更干净，表明在独立 attention 下仅给分类恢复共同证据，可能比同时向 boxes 注入
+  反对称 detail 更能保护 DetA；该判断仍需 `0731_20/21` 的另两个因子单元和四项
+  epoch-8 结果共同确认。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 15:14 CST。
+更新时间：2026-07-31 15:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -857,3 +857,33 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `2.5488e-6`、time `0.9401 s/iter`、loss `20.9349`、grad norm
   `90.7400`；GPU0 约 31.4 GiB，总、DN、encoder loss 有限，无
   Traceback/OOM/NaN/NCCL。GPU1 未触碰，首判 epoch 4。
+
+## 2026-07-31 15:50 CST 0731_18/19 epoch-4 决策
+
+- 252 `0731_18 shared-attention + terminal orthogonal factorized evidence`
+  的 epoch 4 checkpoint、检测 metrics、完整 TrackEval、54 个原始结果文件和
+  checkpoint 结构审计均已完成。cls HOTA/DetA/AssA 为
+  `37.315/26.954/55.487`，det 为 `41.743/31.826/56.276`；相对
+  `0727_01` 同点，cls/det HOTA 提高 `1.106/2.990`，但 DetA 分别变化
+  `-0.114/-0.628`、AssA 提高 `3.393/8.810`。pair mAP/AP50 为
+  `0.158907/0.304586`，both-independent mAP/AP50 为
+  `0.185215/0.329253`，四项检测诊断均高于父配置。
+- 该 checkpoint 中 6 组 shared attention 最大误差为零、18 组独立参数最大差异
+  `0.033962`；terminal common/detail gate 最大权重分别为
+  `0.031387/0.090002`。结构确已学习，且严格正交检查通过。它按双 HOTA 主门槛
+  继续到 epoch 8；中期重点检查当前轻度 DetA→AssA 搬运是否扩大。
+- 99 `0731_19 independent-attention + terminal classification common
+  evidence` 的 epoch 4 同样完成全部产物与结构审计。cls
+  HOTA/DetA/AssA 为 `36.810/27.099/53.921`，det 为
+  `43.194/33.533/56.890`；相对父配置双 HOTA 提高 `0.601/4.441`，
+  cls/det DetA 也提高 `0.031/1.079`。pair mAP/AP50 为
+  `0.156129/0.309147`，both-independent mAP/AP50 为
+  `0.183573/0.334282`；mAP 的小幅波动不改变 HOTA 主判断，AP50 与 DetA
+  未显示检测覆盖崩塌。
+- `0731_19` 唯一 terminal common gate 最大权重为 `0.034268`，排除模块未学习。
+  该实验继续到 epoch 8。现阶段它比 `0731_18` 更少依赖 AssA 搬运，是两个已完成
+  epoch-4 单元中更干净的候选；最终成功标准仍为同一 checkpoint 的 cls/det HOTA
+  同时超过 `54.437/62.393`。
+- 197 `0731_20` 于 15:50 到 epoch 3 iter 1000，178 `0731_21` 到
+  epoch 3 iter 450；两项均继续等待各自 epoch 4 完整评估。四项训练总、DN、
+  encoder loss 有限，无 Traceback/OOM/NaN/NCCL。
