@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 10:49 CST。
+更新时间：2026-07-31 11:33 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `37.799/43.483`，相对父配置 `+1.590/+4.730`，DetA/AssA 四项也全部提高；10:03 进入 epoch 5，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0730_09 motion-trust decoder` 从 epoch 8 恢复 | RUNNING；epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；cls 极窄落后而 det 明显提高，继续到 epoch 8 验证中期稳定性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0730_16 antisymmetric-detail decoder` 从 epoch 4 恢复 | RUNNING；epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | 无训练 | `0731_12 terminal-only` epoch 8 cls/det HOTA `43.178/50.010`，相对父配置 `-2.091/-0.183`；完整评估与结构审计后停止，GPU 0/1 空闲 | `0731_14 terminal regression-only` 完成代码级验证，待真实 smoke | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | 无训练 | `0730_09 motion-trust` 恢复至 epoch 12 后双 HOTA 相对父配置 `-0.803/-0.722`，完整评估与结构审计后停止；GPU 4/5 空闲 | 等待 99 epoch 8 决策 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；11:11 在 epoch 6，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | 无训练 | `0730_16 antisymmetric-detail` 恢复至 epoch 8 后双 HOTA 相对父配置 `-0.678/-0.508`，完整评估与结构审计后停止；GPU 0 空闲 | 等待 99 epoch 8 决策 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -717,3 +717,50 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   约束尚未形成早期正交增益；但其 cls 仅低父配置 `0.061`，且该结构的核心假设是避免
   中期递归污染，因此允许继续到 epoch 8 做一次稳定性判定。epoch 8 若仍非双 HOTA
   通过，则停止，不再延长。
+
+## 2026-07-31 11:12 CST 178/197 恢复实验收口
+
+- 197 `0730_09 motion-trust` 恢复后的 epoch 12 完整结果为：cls
+  HOTA/DetA/AssA `48.877/40.354/61.309`，det
+  `55.819/48.907/65.923`。相对 encoder 同点 HOTA `-0.803/-0.722`，
+  DetA `-1.006/-1.438`，仅 det AssA `+0.344`。pair mAP/AP50
+  `0.263196/0.479269`，both-independent mAP/AP50
+  `0.300922/0.513250`。三层 motion-trust 权重最大值
+  `0.453352/0.294524/0.256910`，结构已充分学习但双 HOTA 失败，已停止并释放
+  GPU 4/5。
+- 178 `0730_16 antisymmetric-detail` 恢复后的 epoch 8 完整结果为：cls
+  HOTA/DetA/AssA `44.591/37.157/56.398`，det
+  `49.685/46.466/54.883`。相对 encoder 同点 HOTA `-0.678/-0.508`，
+  DetA `-0.506/-0.595`，AssA `-0.903/-0.262`。pair mAP/AP50
+  `0.241645/0.435966`，both-independent mAP/AP50
+  `0.279185/0.474553`。三层结构权重最大值
+  `0.035530/0.036084/0.034844`，同样是方向失败而非结构未学习，已停止并释放
+  GPU 0。
+- 两项恢复评估复用了旧 `val_track_0001` 目录，已分别复制保留为
+  `val_track_epoch12_resume_20260731` 与
+  `val_track_epoch08_resume_20260731`。共享存储元数据时钟与登录节点约有 25 分钟
+  偏移，结果通过 checkpoint、检测 metrics、TrackEval metrics 与原始 CSV 的
+  写入顺序和内容交叉确认。99 `0731_12` 的 epoch 8 训练已完成并等待完整评估；
+  252 `0731_13` 在 epoch 6 稳定运行。178/197 暂时保留，待 99 同点结果后部署
+  下一项有因果依据的结构实验。
+
+## 2026-07-31 11:33 CST 99 epoch-8 决策与新结构准备
+
+- 99 `0731_12 terminal-only` epoch 8 的完整结果为 cls
+  HOTA/DetA/AssA `43.178/35.246/55.355`，det
+  `50.010/43.700/59.276`。相对 encoder 同点 HOTA `-2.091/-0.183`，
+  DetA `-2.417/-3.361`，cls AssA `-1.946`，仅 det AssA `+4.131`。
+  pair mAP/AP50 `0.217536/0.410164`，both-independent AP50 `0.448156`，
+  也未显示检测覆盖保护。完整 checkpoint、检测、TrackEval、原始 CSV 与结构审计
+  后停止，GPU 0/1 释放。
+- checkpoint 中 6 组 shared attention 误差为零、18 组独立参数最大差异
+  `0.063149`、唯一 terminal gate 最大权重 `0.117809`，排除模块未学习。
+  结论是：去除递归污染仍不够，最终分类分数专门化本身会改变匹配与筛选并损伤
+  DetA；不能继续用缩小 residual scale 掩盖该结构问题。
+- 新增两项因果对照。`0731_14` 只在最终框输出使用 bounded frame detail，分类
+  hidden state 在所有层严格等于 shared parent；`0731_15` 进一步把最终新增框
+  residual 构造成严格反对称，使 pair midpoint 不变。两项均不改 encoder、
+  proposal、PairDN、head、loss 或训练协议。
+- 89 项 decoder 单测、两份正式和两份 smoke 配置深拷贝、两个完整模型构建及四个
+  launcher 语法检查通过。下一步在 99/197 各执行真实双卡 4-iter smoke；只有
+  checkpoint 结构、有限 loss 与正式 iter 50 五项门槛全部通过才记为 `RUNNING`。

@@ -92,6 +92,9 @@ def _build_decoder(num_layers: int = 2,
                    classification_enveloped_detail_decoder: bool = False,
                    terminal_enveloped_detail_decoder: bool = False,
                    terminal_midpoint_enveloped_detail_decoder: bool = False,
+                   terminal_regression_enveloped_detail_decoder: bool = False,
+                   terminal_midpoint_regression_enveloped_detail_decoder:
+                   bool = False,
                    common_evidence_bypass_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
@@ -142,6 +145,10 @@ def _build_decoder(num_layers: int = 2,
             terminal_enveloped_detail_decoder),
         terminal_midpoint_enveloped_detail_decoder=(
             terminal_midpoint_enveloped_detail_decoder),
+        terminal_regression_enveloped_detail_decoder=(
+            terminal_regression_enveloped_detail_decoder),
+        terminal_midpoint_regression_enveloped_detail_decoder=(
+            terminal_midpoint_regression_enveloped_detail_decoder),
         common_evidence_bypass_decoder=common_evidence_bypass_decoder,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
@@ -2208,6 +2215,107 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 baseline_output[0][final_lid]),
         )))
 
+    def test_terminal_regression_detail_keeps_classification_shared(self):
+        for flag in (
+                'terminal_regression_enveloped_detail_decoder',
+                'terminal_midpoint_regression_enveloped_detail_decoder'):
+            with self.subTest(flag=flag):
+                decoder, reg_prev, reg_curr = _build_decoder(
+                    num_layers=3,
+                    device=self.device,
+                    shared_attention_decoder=True,
+                    **{flag: True})
+                decoder.init_weights()
+                terminal_gate = decoder.terminal_enveloped_detail_gates[0]
+                with torch.no_grad():
+                    torch.manual_seed(149)
+                    torch.nn.init.normal_(terminal_gate.weight, std=0.05)
+
+                spatial_shapes, level_start_index, num_value = _spatial_meta(
+                    self.device)
+                memory_prev, memory_curr = _random_memories(
+                    1, num_value, decoder.embed_dims, self.device)
+                detail_output = decoder(
+                    memory_prev=memory_prev,
+                    memory_curr=memory_curr,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
+                    reg_branches_prev=reg_prev,
+                    reg_branches_curr=reg_curr)
+                setattr(decoder, flag, False)
+                baseline_output = decoder(
+                    memory_prev=memory_prev,
+                    memory_curr=memory_curr,
+                    spatial_shapes=spatial_shapes,
+                    level_start_index=level_start_index,
+                    reg_branches_prev=reg_prev,
+                    reg_branches_curr=reg_curr)
+
+                for hidden_group in detail_output[3:]:
+                    for hidden_tensor, baseline_tensor in zip(
+                            hidden_group, baseline_output[0]):
+                        self.assertTrue(torch.equal(
+                            hidden_tensor, baseline_tensor))
+                for lid in range(decoder.num_layers - 1):
+                    self.assertTrue(torch.equal(
+                        detail_output[1][lid], baseline_output[1][lid]))
+                    self.assertTrue(torch.equal(
+                        detail_output[2][lid], baseline_output[2][lid]))
+                self.assertTrue(any((
+                    not torch.equal(
+                        detail_output[1][-1], baseline_output[1][-1]),
+                    not torch.equal(
+                        detail_output[2][-1], baseline_output[2][-1]),
+                )))
+
+    def test_terminal_midpoint_regression_preserves_added_box_midpoint(
+            self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_attention_decoder=True,
+            terminal_midpoint_regression_enveloped_detail_decoder=True)
+        decoder.init_weights()
+        with torch.no_grad():
+            torch.manual_seed(151)
+            torch.nn.init.normal_(
+                decoder.terminal_enveloped_detail_gates[0].weight, std=0.05)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        detail_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_midpoint_regression_enveloped_detail_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        detail_prev = torch.logit(
+            detail_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        detail_curr = torch.logit(
+            detail_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        baseline_prev = torch.logit(
+            baseline_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        baseline_curr = torch.logit(
+            baseline_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        midpoint_error = (
+            detail_prev - baseline_prev + detail_curr - baseline_curr)
+        self.assertTrue(torch.allclose(
+            midpoint_error,
+            torch.zeros_like(midpoint_error),
+            atol=5e-5,
+            rtol=5e-5),
+            msg=float(midpoint_error.abs().max()))
+
     def test_enveloped_detail_gates_receive_first_step_gradients(self):
         decoder, reg_prev, reg_curr = _build_decoder(
             num_layers=3,
@@ -2402,6 +2510,10 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 ('terminal_enveloped_detail_decoder',
                  'terminal_enveloped_detail_gates'),
                 ('terminal_midpoint_enveloped_detail_decoder',
+                 'terminal_enveloped_detail_gates'),
+                ('terminal_regression_enveloped_detail_decoder',
+                 'terminal_enveloped_detail_gates'),
+                ('terminal_midpoint_regression_enveloped_detail_decoder',
                  'terminal_enveloped_detail_gates'),
                 ('common_evidence_bypass_decoder',
                  'common_evidence_bypass_gates')):

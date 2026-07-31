@@ -273,6 +273,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  classification_enveloped_detail_decoder: bool = False,
                  terminal_enveloped_detail_decoder: bool = False,
                  terminal_midpoint_enveloped_detail_decoder: bool = False,
+                 terminal_regression_enveloped_detail_decoder: bool = False,
+                 terminal_midpoint_regression_enveloped_detail_decoder:
+                 bool = False,
                  common_evidence_bypass_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
@@ -306,6 +309,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_enveloped_detail_decoder)
         self.terminal_midpoint_enveloped_detail_decoder = bool(
             terminal_midpoint_enveloped_detail_decoder)
+        self.terminal_regression_enveloped_detail_decoder = bool(
+            terminal_regression_enveloped_detail_decoder)
+        self.terminal_midpoint_regression_enveloped_detail_decoder = bool(
+            terminal_midpoint_regression_enveloped_detail_decoder)
         self.common_evidence_bypass_decoder = bool(
             common_evidence_bypass_decoder)
         if self.dual_output_cls_scale < 0:
@@ -524,12 +531,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'classification_enveloped_detail_decoder is incompatible '
                 'with decoder variants other than shared_attention_decoder')
-        if (self.terminal_enveloped_detail_decoder
-                and self.terminal_midpoint_enveloped_detail_decoder):
+        terminal_detail_modes = (
+            self.terminal_enveloped_detail_decoder,
+            self.terminal_midpoint_enveloped_detail_decoder,
+            self.terminal_regression_enveloped_detail_decoder,
+            self.terminal_midpoint_regression_enveloped_detail_decoder,
+        )
+        if sum(bool(mode) for mode in terminal_detail_modes) > 1:
             raise ValueError(
-                'terminal_enveloped_detail_decoder and '
-                'terminal_midpoint_enveloped_detail_decoder are mutually '
-                'exclusive')
+                'terminal detail decoder modes are mutually exclusive')
         if self._terminal_enveloped_detail_enabled and any((
                 self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,
@@ -578,7 +588,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
     def _terminal_enveloped_detail_enabled(self) -> bool:
         return bool(
             self.terminal_enveloped_detail_decoder
-            or self.terminal_midpoint_enveloped_detail_decoder)
+            or self.terminal_midpoint_enveloped_detail_decoder
+            or self.terminal_regression_enveloped_detail_decoder
+            or self.terminal_midpoint_regression_enveloped_detail_decoder)
 
     def _init_layers(self) -> None:
         self.layers = ModuleList([
@@ -1300,6 +1312,52 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         # exactly on the shared-attention parent path.
                         layer_output_prev = layer_output
                         layer_output_curr = layer_output
+                        tmp_prev = reg_branches_prev[lid](layer_output)
+                        tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.terminal_regression_enveloped_detail_decoder:
+                    # Keep all classification features on the shared path.
+                    # Only the final box prediction receives frame detail,
+                    # and no corrected reference is fed into another layer.
+                    layer_output_prev = layer_output
+                    layer_output_curr = layer_output
+                    if lid == self.num_layers - 1:
+                        frame_detail = (
+                            self._terminal_enveloped_detail_correction(
+                                frame_evidence_prev,
+                                frame_evidence_curr))
+                        tmp_prev = reg_branches_prev[lid](
+                            layer_output - frame_detail)
+                        tmp_curr = reg_branches_curr[lid](
+                            layer_output + frame_detail)
+                    else:
+                        tmp_prev = reg_branches_prev[lid](layer_output)
+                        tmp_curr = reg_branches_curr[lid](layer_output)
+                elif (
+                        self.
+                        terminal_midpoint_regression_enveloped_detail_decoder):
+                    # Classification and all recurrent references remain
+                    # exactly shared.  At the terminal layer, convert the
+                    # frame evidence into a strictly antisymmetric 5D
+                    # box-logit residual so the added pair midpoint is zero.
+                    layer_output_prev = layer_output
+                    layer_output_curr = layer_output
+                    if lid == self.num_layers - 1:
+                        frame_detail = (
+                            self._terminal_enveloped_detail_correction(
+                                frame_evidence_prev,
+                                frame_evidence_curr))
+                        base_prev = reg_branches_prev[lid](layer_output)
+                        base_curr = reg_branches_curr[lid](layer_output)
+                        detailed_prev = reg_branches_prev[lid](
+                            layer_output - frame_detail)
+                        detailed_curr = reg_branches_curr[lid](
+                            layer_output + frame_detail)
+                        box_detail = 0.5 * (
+                            (detailed_curr - base_curr)
+                            - (detailed_prev - base_prev))
+                        tmp_prev = base_prev - box_detail
+                        tmp_curr = base_curr + box_detail
+                    else:
                         tmp_prev = reg_branches_prev[lid](layer_output)
                         tmp_curr = reg_branches_curr[lid](layer_output)
                 elif self.common_evidence_bypass_decoder:
