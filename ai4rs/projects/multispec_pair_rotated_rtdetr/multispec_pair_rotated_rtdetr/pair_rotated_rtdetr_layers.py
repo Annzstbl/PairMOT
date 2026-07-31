@@ -283,6 +283,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_factorized_evidence_decoder: bool = False,
                  terminal_factorized_confidence: str = 'none',
                  terminal_factorized_diagonal_gates: bool = False,
+                 terminal_factorized_center_motion_only: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -331,6 +332,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_factorized_confidence)
         self.terminal_factorized_diagonal_gates = bool(
             terminal_factorized_diagonal_gates)
+        self.terminal_factorized_center_motion_only = bool(
+            terminal_factorized_center_motion_only)
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
             raise ValueError(
@@ -345,6 +348,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 and not self.terminal_factorized_evidence_decoder):
             raise ValueError(
                 'terminal_factorized_diagonal_gates requires '
+                'terminal_factorized_evidence_decoder')
+        if (self.terminal_factorized_center_motion_only
+                and not self.terminal_factorized_evidence_decoder):
+            raise ValueError(
+                'terminal_factorized_center_motion_only requires '
                 'terminal_factorized_evidence_decoder')
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
@@ -1575,6 +1583,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         box_detail = 0.5 * (
                             (detailed_curr - base_curr)
                             - (detailed_prev - base_prev))
+                        if self.terminal_factorized_center_motion_only:
+                            # Adjacent-frame detail represents motion. Keep
+                            # its antisymmetric correction on center x/y and
+                            # leave width, height, and angle on the parent
+                            # geometry. This preserves the exact pair
+                            # midpoint while preventing temporal appearance
+                            # detail from perturbing shared object shape.
+                            box_detail = torch.cat((
+                                box_detail[..., :2],
+                                torch.zeros_like(box_detail[..., 2:])),
+                                dim=-1)
                         tmp_prev = base_prev - box_detail
                         tmp_curr = base_curr + box_detail
                     else:
