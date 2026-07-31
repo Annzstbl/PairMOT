@@ -2639,9 +2639,28 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             level_start_index=level_start_index,
             reg_branches_prev=reg_prev,
             reg_branches_curr=reg_curr)
+        common_weight = common_gate.weight.detach().clone()
         with torch.no_grad():
+            common_gate.weight.zero_()
+        parent_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        with torch.no_grad():
+            common_gate.weight.copy_(common_weight)
             detail_gate.weight.copy_(detail_weight)
 
+        for group in (1, 2):
+            for common_tensor, parent_tensor in zip(
+                    common_only_output[group], parent_output[group]):
+                self.assertTrue(torch.equal(common_tensor, parent_tensor))
+        self.assertTrue(any(
+            not torch.equal(
+                common_only_output[group][-1], parent_output[group][-1])
+            for group in (3, 4)))
         for lid in range(decoder.num_layers - 1):
             for group in range(1, 5):
                 self.assertTrue(torch.equal(

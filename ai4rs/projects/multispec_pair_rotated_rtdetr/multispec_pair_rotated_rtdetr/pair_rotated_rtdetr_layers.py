@@ -1439,12 +1439,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                             self._terminal_enveloped_detail_correction(
                                 frame_evidence_prev,
                                 frame_evidence_curr))
-                        base_prev = reg_branches_prev[lid](common_output)
-                        base_curr = reg_branches_curr[lid](common_output)
+                        # Keep the box midpoint on the unmodified parent
+                        # representation.  Common evidence is classification
+                        # only; otherwise it can improve association while
+                        # silently degrading DetA through both box heads.
+                        base_prev = reg_branches_prev[lid](layer_output)
+                        base_curr = reg_branches_curr[lid](layer_output)
                         detailed_prev = reg_branches_prev[lid](
-                            common_output - frame_detail)
+                            layer_output - frame_detail)
                         detailed_curr = reg_branches_curr[lid](
-                            common_output + frame_detail)
+                            layer_output + frame_detail)
                         box_detail = 0.5 * (
                             (detailed_curr - base_curr)
                             - (detailed_prev - base_prev))
