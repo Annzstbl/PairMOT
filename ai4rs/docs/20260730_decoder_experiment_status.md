@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 09:20 CST
+更新时间：2026-07-31 09:50 CST
 
 ## 当前研究原则
 
@@ -13,10 +13,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；09:18 fresh 启动，09:19 正式 iter 50 五项门槛通过 | 只在末层分类输出注入帧细节；末层框残差在 5D logit 空间严格反对称，前两层及递归 reference 与父路径逐元素一致。单测、完整构建、真数据双卡 smoke 和结构 checkpoint 验收通过；iter 50 loss `22.1957`、grad norm `115.9534`，总/DN/encoder loss 有限。 |
-| 178 GPU 0 | `0731_11 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `RUNNING`；epoch 8 cls 仅低父配置 `0.096`、det 高 `1.070`，继续到 epoch 12 | epoch 8 cls HOTA/DetA/AssA `45.173/37.266/58.712`，det `51.263/47.345/57.313`；尚未严格双过，但差距窄且 det 增益明确，09:05 到 epoch 11 iter 350。 |
-| 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `RUNNING`；08:46 fresh 启动，正式 iter 50 五项门槛通过 | 前两层、辅助输出和 iterative references 保持父路径，只在最后一层分类/回归特征注入 bounded swap-odd detail；09:20 已进入 epoch 2。 |
-| 197 GPU 4,5 | `0731_10 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `RUNNING`；epoch 4 全门槛通过，继续到 epoch 8 | epoch 4 cls HOTA/DetA/AssA `38.794/28.354/56.504`，det `44.142/33.529/59.294`；相对父配置 HOTA `+2.585/+5.389`，DetA/AssA 也全部提高。09:06 到 epoch 7 iter 650。 |
+| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；09:18 fresh 启动，09:19 正式 iter 50 五项门槛通过；09:41 到 epoch 2 iter 150 | 只在末层分类输出注入帧细节；末层框残差在 5D logit 空间严格反对称，前两层及递归 reference 与父路径逐元素一致。下一完整决策点为 epoch 4。 |
+| 178 GPU 0 | `0730_16 ... decoder_antisymmetricdetail ... resume epoch 4` | `RUNNING`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 该结构 epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；旧停止原因是 det DetA 保护线，而非双 HOTA 失败。当前仅以 cls/det HOTA 为主重新验证到 epoch 8。 |
+| 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `RUNNING`；08:46 fresh 启动，正式 iter 50 五项门槛通过；09:41 到 epoch 4 iter 200 | 前两层、辅助输出和 iterative references 保持父路径，只在最后一层分类/回归特征注入 bounded swap-odd detail；下一完整决策点为 epoch 4。 |
+| 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... resume epoch 8` | `RUNNING`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过 | 该结构 epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；旧停止原因是 DetA/mAP 保护线，而非双 HOTA 失败。当前继续到 epoch 12。 |
 
 ## 已完成或释放
 
@@ -24,6 +24,8 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `STOPPED`；epoch 16 全量评估后于 09:07 精确停止 | epoch 16 cls HOTA/DetA/AssA `51.007/42.964/62.130`，det `57.940/50.762/68.403`；相对父 encoder 同点 HOTA `-0.084/-0.380`。虽然 pair mAP 和 both-independent AP50 提高，但双 HOTA 未通过预设门槛，故不再消耗 epoch 17 以后资源。checkpoint、检测、TrackEval、原始 CSV 与结构检查均保留。 |
 | 99 GPU 0,1 | `0731_09 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估后停止 | epoch 8 cls/det HOTA `44.043/49.271`，相对父 encoder 同点 `-1.226/-0.922`，双 HOTA 同时失败；结构 checkpoint 验收通过，说明是方向失败而非模块未学习。 |
+| 197 GPU 4,5 | `0731_10 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估后于 09:47 精确停止 | epoch 8 cls HOTA/DetA/AssA `45.254/36.908/58.207`，det `50.846/44.718/59.651`；相对父 encoder 同点 HOTA `-0.015/+0.653`。结合 178 同结构 epoch 12 双降，不再重复消耗；checkpoint、检测、完整 TrackEval 与原始 CSV 保留。 |
+| 178 GPU 0 | `0731_11 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `STOPPED`；epoch 12 全量评估后于 09:47 精确停止 | epoch 12 cls HOTA/DetA/AssA `49.478/40.961/62.396`，det `56.451/50.351/65.494`；相对父 encoder 同点 HOTA `-0.202/-0.090`。epoch 8 的 det 优势未延续，midpoint-regression 方向未形成稳定双提升。 |
 | 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `STOPPED`；epoch 4 后按 HOTA 优先规则恢复，epoch 8 完整评估后于 07:14 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.801/35.436/56.745`，det `49.318/43.792/57.563`；相对父配置 HOTA `-1.468/-0.875`、DetA `-2.227/-3.269`。pair mAP `0.213045`、both-independent AP50 `0.436989` 也明显下降。共享 attention 误差为零，独立参数和三层分类门控均充分学习，结论是分类专用细节引起中期检测覆盖退化。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `STOPPED`；epoch 8 全部 artifacts 和两项结构审计完成后精确停止 | cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，cls/det DetA `-0.052/-0.316`。pair mAP `0.246292`、both-independent AP50 `0.479887`，分别提高 `0.008558/0.013936`。结构确已学习：6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060115`，三层 detail 权重有限非零。因 cls HOTA 唯一低于父配置，未将关联/AP 增益误判为全门槛通过。 |
 | 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
@@ -494,3 +496,26 @@
   6 组 attention 严格共享、18 组采样/投影参数保持独立、唯一 terminal gate
   有限非零。09:18 fresh 启动，09:19 正式 iter 50 的 loss `22.1957`、
   grad norm `115.9534`，总/DN/encoder loss 全部有限，正式状态为 `RUNNING`。
+
+## 2026-07-31 09:50 CST midpoint 淘汰与 HOTA 优先恢复
+
+- `0731_10 midpoint-regression` epoch 8 已形成 checkpoint、检测 metrics、
+  完整 TrackEval 和原始 CSV。cls HOTA/DetA/AssA 为
+  `45.254/36.908/58.207`，det 为 `50.846/44.718/59.651`；相对 encoder
+  同点 HOTA 为 `-0.015/+0.653`。cls 的极窄差距不足以单独判死，但也不是双过。
+- `0731_11` 的同结构单卡轨迹继续到 epoch 12 后，cls HOTA/DetA/AssA 为
+  `49.478/40.961/62.396`，det 为 `56.451/50.351/65.494`；相对 encoder
+  同点 HOTA `-0.202/-0.090`。epoch 8 的 det 优势消失，且 cls 差距扩大，
+  因而不再把 197 的重复轨迹继续到 epoch 12；两项在 09:47 精确停止。
+- 用户已明确将 cls/det HOTA 作为推进主指标，并放松 mAP。按这一新规则重新审视
+  历史结构，`0730_09 motion-trust` epoch 8 曾相对 encoder 双升
+  `+0.229/+0.967`，`0730_16 antisymmetric-detail` epoch 4 曾双升
+  `+0.475/+0.468`；它们此前均因次要 DetA/mAP 保护线停止，不是 HOTA 失败。
+- 197 于 09:48 从 `0730_09 epoch_8.pth` 恢复，09:49 到 epoch 9 iter 50；
+  loss `10.0724`、grad norm `40.8031`，总/DN/encoder loss 均有限。178 于
+  09:49 从 `0730_16 epoch_4.pth` 恢复，PyTorch 2.6 仅在可信旧 checkpoint
+  恢复脚本中显式关闭 weights-only 默认值；09:50 到 epoch 5 iter 50，loss
+  `10.3146`、grad norm `40.9181`，无 Traceback/OOM/NaN。
+- 当前四路结构互补：99/252 验证 terminal 隔离是否避免递归污染，178 验证纯
+  antisymmetric detail，197 验证 motion-trust。下一决策点依次为 99 epoch 4、
+  178 epoch 8、252 epoch 4、197 epoch 12；仍以同点 cls/det HOTA 双过为准。

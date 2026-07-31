@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 09:20 CST。
+更新时间：2026-07-31 09:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；08:46 fresh 启动，09:20 已进入 epoch 2；正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `38.794/44.142`，相对父配置 `+2.585/+5.389`；09:06 到 epoch 7 iter 650，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；09:18 fresh 启动，09:19 达到 iter 50，五项正式启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 8 cls/det HOTA `45.173/51.263`，相对父配置 `-0.096/+1.070`；因 cls 仅窄幅落后而保留到 epoch 12，09:05 到 epoch 11 iter 350 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；09:41 到 epoch 4 iter 200；正式 iter 50 五项门槛通过，下一决策点 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0730_09 motion-trust decoder` 从 epoch 8 恢复 | RUNNING；epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；09:41 到 epoch 2 iter 150；正式 iter 50 五项门槛通过，下一决策点 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0730_16 antisymmetric-detail decoder` 从 epoch 4 恢复 | RUNNING；epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -671,3 +671,22 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `0.000393`。09:18 fresh 启动正式训练，09:19 达到 iter 50：
   loss `22.1957`、grad norm `115.9534`，GPU 0/1 各约 `19.2 GiB`，无
   Traceback/OOM/NaN/NCCL。代码提交为 `d9c97e0`。
+
+## 2026-07-31 09:50 CST midpoint 决策与 HOTA 优先恢复
+
+- 197 `0731_10 midpoint-regression` epoch 8 的 cls/det HOTA 为
+  `45.254/50.846`，相对 encoder 同点 `-0.015/+0.653`；178 同结构
+  `0731_11` epoch 12 为 `49.478/56.451`，相对同点 `-0.202/-0.090`。
+  两项 checkpoint、检测、完整 TrackEval 与原始 CSV 均已落盘，09:47 精确停止，
+  GPU 释放后未残留目标训练进程。
+- 按用户最新的 cls/det HOTA 主指标规则，重新恢复此前因 DetA/mAP 次要保护线
+  提前停止、但 HOTA 当时双过的两个结构方向。197 从 `0730_09 motion-trust`
+  epoch 8 恢复；该点相对父配置 HOTA `+0.229/+0.967`，09:49 已到 epoch 9
+  iter 50，继续到 epoch 12。178 从 `0730_16 antisymmetric-detail` epoch 4
+  恢复；该点相对父配置 HOTA `+0.475/+0.468`，09:50 已到 epoch 5 iter 50，
+  继续到 epoch 8。
+- 两个恢复均加载原 optimizer、EMA、epoch 与 iter，不是 fresh 重跑。178 当前
+  PyTorch 2.6 对旧可信 MMEngine checkpoint 的 weights-only 默认值不兼容，只在
+  恢复脚本中设置 `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`，未修改模型、loss 或配置。
+  两项正式 iter 50 的总/DN/encoder loss 与 grad norm 均有限，无
+  Traceback/OOM/NaN；197 仍严格只使用 GPU 4/5。
