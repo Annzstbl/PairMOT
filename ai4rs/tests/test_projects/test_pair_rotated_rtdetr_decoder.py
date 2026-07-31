@@ -3234,6 +3234,31 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 terminal_factorized_coupled_gate=True,
                 terminal_factorized_detail_only=True)
 
+    def test_terminal_diagonal_detail_only_is_minimal_and_trainable(self):
+        decoder, _, _ = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_factorized_evidence_decoder=True,
+            terminal_factorized_diagonal_gates=True,
+            terminal_factorized_center_motion_only=True,
+            terminal_factorized_detail_only=True)
+        decoder.init_weights()
+        self.assertFalse(hasattr(
+            decoder, 'terminal_common_evidence_bypass_gates'))
+        self.assertEqual(len(decoder.terminal_enveloped_detail_gates), 1)
+        detail_gate = decoder.terminal_enveloped_detail_gates[0]
+        self.assertIsInstance(detail_gate, torch.nn.Parameter)
+        self.assertEqual(detail_gate.numel(), decoder.embed_dims)
+        self.assertEqual(detail_gate.abs().max().item(), 0.0)
+
+        evidence = torch.randn(
+            2, 5, decoder.embed_dims, device=self.device)
+        detail = torch.randn_like(evidence)
+        correction = (evidence * detail_gate).tanh() * detail
+        correction.sum().backward()
+        self.assertIsNotNone(detail_gate.grad)
+        self.assertGreater(detail_gate.grad.abs().max().item(), 0.0)
+
     def test_terminal_bilateral_confidence_is_exact_and_detached(self):
         decoder, _, _ = _build_decoder(
             device=self.device,
