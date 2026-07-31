@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 20:35 CST。
+更新时间：2026-07-31 21:02 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_24 terminal object-confident common` | RUNNING；epoch 4 为 `36.689/42.562`，相对 `0727_01` 同点 `+0.480/+3.809`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_25 terminal object-confident detail` | RUNNING；epoch 4 为 `35.824/41.591`，相对 `0727_01` 同点 `-0.385/+2.838`；DetA/AP 偏弱，按非早停规则继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_26 terminal object-confident common+detail` | RUNNING；epoch 4 为 `36.958/41.792`，相对 `0727_01` 同点 `+0.749/+3.039`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 16 为 `50.273/58.085`，相对 `0727_01` 同点 `-0.818/-0.235`；按修订后的非早停规则继续到 epoch 20 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 20 为 `51.475/58.956`，相对 `0727_01` 同点 `-0.039/+0.034`，四项 AP 均提升；继续到 epoch 24 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1021,3 +1021,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `0731_24/26` 至少观察 epoch 8/12，`0731_25` 先观察 epoch 8；只有连续节点出现
   HOTA、DetA 与 AP 的系统性恶化才停止。三种路由均不增加可学习参数、decoder 深度、
   attention 或 loss；若形成候选主线，必须补做同卡同温训练与推理速度比较。
+
+## 2026-07-31 21:02 CST 0731_21 epoch-20 恢复至近同点
+
+- epoch 20 checkpoint、`val_det/epoch_19`、第五次完整 TrackEval 与 54 个原始结果文件
+  均已落盘。cls HOTA/DetA/AssA 为 `51.475/43.145/63.273`，det 为
+  `58.956/51.645/69.703`。
+- 相对 `0727_01` 同点，cls/det HOTA 为 `-0.039/+0.034`，cls/det DetA 为
+  `+0.154/-0.554`，AssA 为 `-0.476/+0.974`。严格双 HOTA 门槛仍未通过，但已经从
+  epoch 16 的 `-0.818/-0.235` 明显恢复到近似持平。
+- pair mAP/AP50 分别提高 `0.003474/0.007421`，both-independent mAP/AP50 分别
+  提高 `0.004285/0.008951`。因此该恢复不是整体检测 AP 崩塌造成的虚假关联增益。
+- 该结构简单、无额外 decoder 深度或 attention，并且 e20 出现恢复趋势；训练已自然进入
+  epoch 21，故不在 e20 停止，继续观察 epoch 24。若 e24 双 HOTA 转为同点正增益，继续
+  验证持续性；若再次出现明确双降，再结合 e8-e24 全轨迹决定是否释放 178。

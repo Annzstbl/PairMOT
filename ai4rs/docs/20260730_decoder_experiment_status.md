@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 20:35 CST
+更新时间：2026-07-31 21:02 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | 99 GPU 0,1 | `0731_24 ... decoder_terminalconfidentcommonfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.689/42.562`，相对父配置 `+0.480/+3.809` | 无新增参数的 object-confidence common 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
 | 197 GPU 4,5 | `0731_25 ... decoder_terminalconfidentdetailfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `35.824/41.591`，相对父配置 `-0.385/+2.838` | 无新增参数的 object-confidence detail 路由；DetA/AP 偏弱，但 epoch 4 不作性能淘汰，继续到 epoch 8。 |
 | 252 GPU 0,1 | `0731_26 ... decoder_terminalconfidentbothfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.958/41.792`，相对父配置 `+0.749/+3.039` | common 与 detail 同时采用无参数 confidence 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
-| 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；epoch 16 `50.273/58.085`，相对父配置 `-0.818/-0.235` | 独立 attention + 正交 common/detail；没有 AP 全面恶化，按非早停规则继续到 epoch 20。 |
+| 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；epoch 20 `51.475/58.956`，相对父配置 `-0.039/+0.034` | 独立 attention + 正交 common/detail；e20 恢复到近同点且四项 AP 均提升，继续到 epoch 24。 |
 
 ## 已完成或释放
 
@@ -915,3 +915,13 @@
   满足复杂度约束。epoch 4 只用于排除灾难性退化，不作性能淘汰；24/26 继续到
   epoch 8/12，25 先到 epoch 8。任何论文主线候选还必须通过同卡同温速度实测，不能
   以跨服务器的训练日志估算效率。
+
+## 2026-07-31 21:02 CST 0731_21 epoch-20 结果
+
+- 完整结果为 cls HOTA/DetA/AssA `51.475/43.145/63.273`，det
+  `58.956/51.645/69.703`；相对 Encoder 同点 HOTA `-0.039/+0.034`。
+- pair mAP/AP50 提高 `0.003474/0.007421`，both-independent mAP/AP50 提高
+  `0.004285/0.008951`，并未出现 AP 搬运式崩塌。与 epoch 16 的双 HOTA
+  `-0.818/-0.235` 相比已经明显恢复。
+- 严格双提升尚未成立，但该零额外层级的简单结构正在恢复且训练已进入 epoch 21，继续到
+  epoch 24 是比 e20 停止更合理的判定；e24 将检验近同点是否转为稳定双增益。
