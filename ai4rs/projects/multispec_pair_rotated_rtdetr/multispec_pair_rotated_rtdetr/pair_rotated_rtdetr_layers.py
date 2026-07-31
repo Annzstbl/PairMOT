@@ -283,6 +283,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_factorized_evidence_decoder: bool = False,
                  terminal_factorized_confidence: str = 'none',
                  terminal_factorized_diagonal_gates: bool = False,
+                 terminal_factorized_coupled_gate: bool = False,
                  terminal_factorized_center_motion_only: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
@@ -332,6 +333,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_factorized_confidence)
         self.terminal_factorized_diagonal_gates = bool(
             terminal_factorized_diagonal_gates)
+        self.terminal_factorized_coupled_gate = bool(
+            terminal_factorized_coupled_gate)
         self.terminal_factorized_center_motion_only = bool(
             terminal_factorized_center_motion_only)
         if self.terminal_factorized_confidence not in {
@@ -349,6 +352,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'terminal_factorized_diagonal_gates requires '
                 'terminal_factorized_evidence_decoder')
+        if (self.terminal_factorized_coupled_gate
+                and not self.terminal_factorized_diagonal_gates):
+            raise ValueError(
+                'terminal_factorized_coupled_gate requires '
+                'terminal_factorized_diagonal_gates')
         if (self.terminal_factorized_center_motion_only
                 and not self.terminal_factorized_evidence_decoder):
             raise ValueError(
@@ -723,9 +731,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             # parameters and obscure the structural invariant.
             if (self.terminal_factorized_evidence_decoder
                     and self.terminal_factorized_diagonal_gates):
-                self.terminal_enveloped_detail_gates = nn.ParameterList([
-                    nn.Parameter(torch.zeros(self.embed_dims))
-                ])
+                if self.terminal_factorized_coupled_gate:
+                    self.terminal_enveloped_detail_gates = nn.ParameterList()
+                else:
+                    self.terminal_enveloped_detail_gates = nn.ParameterList([
+                        nn.Parameter(torch.zeros(self.embed_dims))
+                    ])
             else:
                 self.terminal_enveloped_detail_gates = ModuleList([
                     nn.Linear(self.embed_dims, self.embed_dims, bias=False)
@@ -743,14 +754,25 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             # parameters on the auxiliary decoder layers.
             if (self.terminal_factorized_evidence_decoder
                     and self.terminal_factorized_diagonal_gates):
-                self.terminal_common_evidence_bypass_gates = (
-                    nn.ParameterList([
-                        nn.Parameter(torch.zeros(self.embed_dims))
-                    ]))
+                if self.terminal_factorized_coupled_gate:
+                    self.terminal_common_evidence_bypass_gates = (
+                        nn.ParameterList())
+                else:
+                    self.terminal_common_evidence_bypass_gates = (
+                        nn.ParameterList([
+                            nn.Parameter(torch.zeros(self.embed_dims))
+                        ]))
             else:
                 self.terminal_common_evidence_bypass_gates = ModuleList([
                     nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 ])
+        if self.terminal_factorized_coupled_gate:
+            # One channel-wise gate jointly regulates common recovery and
+            # frame detail. This prevents either route from independently
+            # increasing its learned gain while adding only embed_dims
+            # parameters and no extra matrix multiplication.
+            self.terminal_coupled_evidence_gate = nn.Parameter(
+                torch.zeros(self.embed_dims))
         if self.post_norm_cfg is not None:
             raise ValueError(f'There is not post_norm in {self._get_name()}')
         # O2-RTDETR: MLP(5 -> D) on sigmoid 5D refs (not sine encoding)
@@ -986,7 +1008,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         positions or classification features.
         """
         evidence = self._normalized_shared_evidence(out_prev, out_curr)
-        if (self.terminal_factorized_evidence_decoder
+        if self.terminal_factorized_coupled_gate:
+            gate = (evidence * self.terminal_coupled_evidence_gate).tanh()
+        elif (self.terminal_factorized_evidence_decoder
                 and self.terminal_factorized_diagonal_gates):
             gate = (
                 evidence * self.terminal_enveloped_detail_gates[0]).tanh()
@@ -1029,7 +1053,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         on the parent path.
         """
         evidence = self._normalized_shared_evidence(out_prev, out_curr)
-        if (self.terminal_factorized_evidence_decoder
+        if self.terminal_factorized_coupled_gate:
+            gate = (evidence * self.terminal_coupled_evidence_gate).tanh()
+        elif (self.terminal_factorized_evidence_decoder
                 and self.terminal_factorized_diagonal_gates):
             gate = (
                 evidence
@@ -1128,6 +1154,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     nn.init.zeros_(gate)
                 else:
                     nn.init.zeros_(gate.weight)
+        if self.terminal_factorized_coupled_gate:
+            nn.init.zeros_(self.terminal_coupled_evidence_gate)
         if not self.tristate_decoder:
             return
         self._init_identity_linear(self.query_to_prev)
