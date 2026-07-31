@@ -277,6 +277,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_midpoint_regression_enveloped_detail_decoder:
                  bool = False,
                  common_evidence_bypass_decoder: bool = False,
+                 terminal_common_evidence_bypass_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -315,6 +316,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_midpoint_regression_enveloped_detail_decoder)
         self.common_evidence_bypass_decoder = bool(
             common_evidence_bypass_decoder)
+        self.terminal_common_evidence_bypass_decoder = bool(
+            terminal_common_evidence_bypass_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -329,7 +332,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  or self.midpoint_regression_enveloped_detail_decoder
                  or self.classification_enveloped_detail_decoder
                  or self._terminal_enveloped_detail_enabled
-                 or self.common_evidence_bypass_decoder),
+                 or self._common_evidence_bypass_enabled),
         )) > 1:
             raise ValueError(
                 'tristate_decoder, dual_output_adapter, and '
@@ -345,7 +348,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 or self.midpoint_regression_enveloped_detail_decoder
                 or self.classification_enveloped_detail_decoder
                 or self._terminal_enveloped_detail_enabled
-                or self.common_evidence_bypass_decoder):
+                or self._common_evidence_bypass_enabled):
             raise ValueError(
                 'shared_evidence_decoder is incompatible with tristate_decoder '
                 'dual_output_adapter, and antisymmetric_detail_decoder')
@@ -359,7 +362,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 or self.midpoint_regression_enveloped_detail_decoder
                 or self.classification_enveloped_detail_decoder
                 or self._terminal_enveloped_detail_enabled
-                or self.common_evidence_bypass_decoder):
+                or self._common_evidence_bypass_enabled):
             raise ValueError(
                 'competitive_evidence_decoder is incompatible with '
                 'tristate_decoder, dual_output_adapter, and '
@@ -375,7 +378,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'motion_trust_decoder is incompatible with tristate, '
@@ -396,7 +399,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'symmetric_pair_decoder is incompatible with all other '
@@ -416,7 +419,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'shared_routing_decoder is incompatible with all other '
@@ -428,7 +431,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.competitive_evidence_decoder,
                 self.symmetric_pair_decoder,
                 self.shared_routing_decoder,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'shared_attention_decoder is incompatible with tristate, '
@@ -446,7 +449,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'antisymmetric_detail_decoder is incompatible with '
@@ -466,7 +469,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'enveloped_detail_decoder is incompatible with decoder '
                 'variants other than shared_attention_decoder')
-        if self.common_evidence_bypass_decoder and any((
+        if self._common_evidence_bypass_enabled and any((
                 self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,
                 self.motion_trust_decoder,
@@ -480,8 +483,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self._terminal_enveloped_detail_enabled,
         )):
             raise ValueError(
-                'common_evidence_bypass_decoder is incompatible with other '
+                'common evidence bypass decoder is incompatible with other '
                 'decoder variants')
+        if (self.common_evidence_bypass_decoder
+                and self.terminal_common_evidence_bypass_decoder):
+            raise ValueError(
+                'common_evidence_bypass_decoder and '
+                'terminal_common_evidence_bypass_decoder are mutually '
+                'exclusive')
         if self.regression_enveloped_detail_decoder and any((
                 self.shared_evidence_decoder,
                 self.competitive_evidence_decoder,
@@ -493,7 +502,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'regression_enveloped_detail_decoder is incompatible with '
@@ -509,7 +518,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'midpoint_regression_enveloped_detail_decoder is '
@@ -526,7 +535,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.regression_enveloped_detail_decoder,
                 self.midpoint_regression_enveloped_detail_decoder,
                 self._terminal_enveloped_detail_enabled,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'classification_enveloped_detail_decoder is incompatible '
@@ -551,7 +560,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.regression_enveloped_detail_decoder,
                 self.midpoint_regression_enveloped_detail_decoder,
                 self.classification_enveloped_detail_decoder,
-                self.common_evidence_bypass_decoder,
+                self._common_evidence_bypass_enabled,
         )):
             raise ValueError(
                 'terminal detail decoder is incompatible with '
@@ -591,6 +600,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             or self.terminal_midpoint_enveloped_detail_decoder
             or self.terminal_regression_enveloped_detail_decoder
             or self.terminal_midpoint_regression_enveloped_detail_decoder)
+
+    @property
+    def _common_evidence_bypass_enabled(self) -> bool:
+        return bool(
+            self.common_evidence_bypass_decoder
+            or self.terminal_common_evidence_bypass_decoder)
 
     def _init_layers(self) -> None:
         self.layers = ModuleList([
@@ -659,6 +674,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.common_evidence_bypass_gates = ModuleList([
                 nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
+            ])
+        if self.terminal_common_evidence_bypass_decoder:
+            # A terminal-only bypass cannot perturb recurrent references.
+            # Allocate exactly one gate so DDP sees no intentionally unused
+            # parameters on the auxiliary decoder layers.
+            self.terminal_common_evidence_bypass_gates = ModuleList([
+                nn.Linear(self.embed_dims, self.embed_dims, bias=False)
             ])
         if self.post_norm_cfg is not None:
             raise ValueError(f'There is not post_norm in {self._get_name()}')
@@ -919,6 +941,26 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         residual = common - layer_output.detach()
         return gate * residual
 
+    def _terminal_common_evidence_bypass_correction(
+        self,
+        layer_output: Tensor,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Recover common evidence only for the terminal predictions.
+
+        The correction is identical for both frame heads and is applied
+        after the final recurrent decoder update. Therefore all auxiliary
+        outputs and every reference consumed by a later layer remain exactly
+        on the parent path.
+        """
+        evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        gate = self.terminal_common_evidence_bypass_gates[0](
+            evidence).tanh()
+        common = (0.5 * (out_prev + out_curr)).detach()
+        residual = common - layer_output.detach()
+        return gate * residual
+
     @staticmethod
     def _init_identity_linear(linear: nn.Linear) -> None:
         nn.init.zeros_(linear.weight)
@@ -976,6 +1018,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.init.zeros_(gate.weight)
         if self.common_evidence_bypass_decoder:
             for gate in self.common_evidence_bypass_gates:
+                nn.init.zeros_(gate.weight)
+        if self.terminal_common_evidence_bypass_decoder:
+            for gate in self.terminal_common_evidence_bypass_gates:
                 nn.init.zeros_(gate.weight)
         if not self.tristate_decoder:
             return
@@ -1155,7 +1200,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     or self.midpoint_regression_enveloped_detail_decoder
                     or self.classification_enveloped_detail_decoder
                     or self._terminal_enveloped_detail_enabled
-                    or self.common_evidence_bypass_decoder)
+                    or self._common_evidence_bypass_enabled)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -1367,6 +1412,16 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                             layer_output,
                             frame_evidence_prev,
                             frame_evidence_curr))
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.terminal_common_evidence_bypass_decoder:
+                    if lid == self.num_layers - 1:
+                        layer_output = layer_output + (
+                            self.
+                            _terminal_common_evidence_bypass_correction(
+                                layer_output,
+                                frame_evidence_prev,
+                                frame_evidence_curr))
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
                 elif self.common_motion_decoder:

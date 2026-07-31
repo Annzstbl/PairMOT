@@ -95,7 +95,8 @@ def _build_decoder(num_layers: int = 2,
                    terminal_regression_enveloped_detail_decoder: bool = False,
                    terminal_midpoint_regression_enveloped_detail_decoder:
                    bool = False,
-                   common_evidence_bypass_decoder: bool = False):
+                   common_evidence_bypass_decoder: bool = False,
+                   terminal_common_evidence_bypass_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -150,6 +151,8 @@ def _build_decoder(num_layers: int = 2,
         terminal_midpoint_regression_enveloped_detail_decoder=(
             terminal_midpoint_regression_enveloped_detail_decoder),
         common_evidence_bypass_decoder=common_evidence_bypass_decoder,
+        terminal_common_evidence_bypass_decoder=(
+            terminal_common_evidence_bypass_decoder),
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -2422,6 +2425,129 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             self.assertIsNotNone(gate.weight.grad)
             self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_terminal_common_evidence_bypass_is_exact_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        terminal_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_common_evidence_bypass_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for terminal_group, baseline_group in zip(
+                terminal_output, baseline_output):
+            for terminal_tensor, baseline_tensor in zip(
+                    terminal_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    terminal_tensor, baseline_tensor))
+
+    def test_terminal_common_evidence_bypass_changes_only_final_output(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(103)
+        with torch.no_grad():
+            torch.nn.init.normal_(
+                decoder.terminal_common_evidence_bypass_gates[0].weight,
+                std=0.05)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        terminal_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_common_evidence_bypass_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for terminal_group, baseline_group in zip(
+                terminal_output, baseline_output):
+            for terminal_tensor, baseline_tensor in zip(
+                    terminal_group[:-1], baseline_group[:-1]):
+                self.assertTrue(torch.equal(
+                    terminal_tensor, baseline_tensor))
+        self.assertFalse(torch.equal(
+            terminal_output[0][-1], baseline_output[0][-1]))
+        self.assertFalse(torch.equal(
+            terminal_output[1][-1], baseline_output[1][-1]))
+        self.assertFalse(torch.equal(
+            terminal_output[2][-1], baseline_output[2][-1]))
+
+    def test_terminal_common_evidence_bypass_is_invariant_and_bounded(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            terminal_common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        torch.manual_seed(107)
+        with torch.no_grad():
+            torch.nn.init.normal_(
+                decoder.terminal_common_evidence_bypass_gates[0].weight,
+                std=0.05)
+        layer_output = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device)
+        out_prev = torch.randn_like(layer_output)
+        out_curr = torch.randn_like(layer_output)
+        correction = decoder._terminal_common_evidence_bypass_correction(
+            layer_output, out_prev, out_curr)
+        swapped = decoder._terminal_common_evidence_bypass_correction(
+            layer_output, out_curr, out_prev)
+        residual = 0.5 * (out_prev + out_curr) - layer_output
+        self.assertTrue(torch.allclose(correction, swapped, atol=1e-6))
+        self.assertTrue(torch.all(correction.abs() <= residual.abs() + 1e-7))
+
+    def test_terminal_common_evidence_bypass_gate_receives_gradient(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_common_evidence_bypass_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        hidden, references_prev, references_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(109)
+        loss = sum(
+            (value * torch.randn_like(value)).mean()
+            for value in hidden + references_prev + references_curr)
+        loss.backward()
+        gate = decoder.terminal_common_evidence_bypass_gates[0]
+        self.assertIsNotNone(gate.weight.grad)
+        self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
     def test_orthogonal_evidence_decomposition_is_exact_zero_start(self):
         decoder, reg_prev, reg_curr = _build_decoder(
             device=self.device,
@@ -2516,7 +2642,9 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 ('terminal_midpoint_regression_enveloped_detail_decoder',
                  'terminal_enveloped_detail_gates'),
                 ('common_evidence_bypass_decoder',
-                 'common_evidence_bypass_gates')):
+                 'common_evidence_bypass_gates'),
+                ('terminal_common_evidence_bypass_decoder',
+                 'terminal_common_evidence_bypass_gates')):
             decoder, _, _ = _build_decoder(
                 device=self.device, **{flag: True})
             model = MultispecPairRotatedRTDETR.__new__(
