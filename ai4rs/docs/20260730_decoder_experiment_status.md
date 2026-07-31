@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 12:26 CST
+更新时间：2026-07-31 14:38 CST
 
 ## 当前研究原则
 
@@ -13,9 +13,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... resume epoch 4` | `RUNNING`；12:24 从可信 `epoch_4.pth` 恢复，12:25 到 epoch 5 iter 50，五项正式恢复门槛通过 | recurrent decoder query 不变，仅让检测头经零起点、交换不变门控恢复两帧共享原始 cross-attention 证据。epoch 4 相对父 encoder 同点双 HOTA `+0.355/+4.526`；因现规则以 HOTA 为主，恢复至 epoch 8 验证可持续性。 |
-| 197 GPU 4,5 | `0731_15 ... decoder_sharedattention_terminalmidpointregressionenvelopeddetail ... fresh` | `RUNNING`；12:12 到 epoch 2 iter 950，loss/grad norm `12.2897/30.3471` | 仅最终 5D box-logit residual 接收严格反对称细节，新增 pair midpoint 为零；分类 hidden state、所有前层 reference 与共享父路径一致。首判 epoch 4 双 HOTA。 |
-| 99 GPU 0,1 | `0731_14 ... decoder_sharedattention_terminalregressionenvelopeddetail ... fresh` | `RUNNING`；12:13 到 epoch 2 iter 800，loss/grad norm `11.2420/26.9715` | 分类 hidden state 全层共享，仅最终框输出接收 bounded frame detail，不产生 reference 递归污染。首判 epoch 4 双 HOTA。 |
+| 178 GPU 0 | `0731_16 ... decoder_terminalcommonevidencebypass ... fresh` | `RUNNING`；epoch 4 双 HOTA 通过，14:38 到 epoch 8 iter 100，等待完整 epoch 8 评估 | 仅在末层同时给分类和框注入共同证据。epoch 4 cls/det HOTA `37.750/43.723`，相对父配置 `+1.541/+4.970`，但 DetA 分别 `-0.565/-0.841`，epoch 8 是检验是否继续发生 DetA→AssA 搬运的关键点。 |
+| 252 GPU 0,1 | `0731_18 ... decoder_sharedattention_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045` | 分类只接收末层共同证据，框只接收严格反对称 detail；共同证据不再改变任何 box reference，detail 的 pair midpoint 严格为零。首判 epoch 4 双 HOTA。 |
+| 197 GPU 4,5 | `0731_20 ... decoder_sharedattention_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948` | 共享 decoder attention，仅分类接收末层共同证据；boxes、auxiliary output 和 recurrent references 与父模型严格一致。首判 epoch 4 双 HOTA。 |
+| 99 GPU 0,1 | `0731_19 ... decoder_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189` | 不共享 decoder attention，仅分类接收末层共同证据；与 `0731_20` 构成 attention sharing 的严格结构对照。首判 epoch 4 双 HOTA。 |
 
 ## 已完成或释放
 
@@ -694,3 +695,49 @@
   继续到 epoch 8。197 当前 HOTA 更强，99 当前 DetA 保持更强；后续以是否出现
   DetA 向 AssA 搬运作为中期定性分界，而最终成功标准仍是
   cls/det HOTA 同时超过 `54.437/62.393`。
+
+## 2026-07-31 14:08 CST 三条旧路径的 epoch-8 收口
+
+- 252 `0731_03 all-layer common-evidence bypass` 的 epoch 8 cls/det HOTA 为
+  `44.798/50.415`，相对 `0727_01` 同点为 `-0.471/+0.222`。cls
+  DetA/AssA 分别变化 `-1.030/-0.209`，det 分别变化 `-2.602/+3.680`。
+  虽然 det HOTA 仍略高，但 cls 未通过，而且 det 已明显依靠 AssA 补偿 DetA；
+  checkpoint、检测、完整 TrackEval、原始 CSV 与结构检查齐全后停止，GPU 0/1
+  释放。
+- 99 `0731_14 terminal regression-only` 的 epoch 8 cls/det HOTA 为
+  `44.321/49.059`，相对父配置 `-0.948/-1.134`；cls DetA/AssA 变化
+  `-1.901/+0.232`，det 变化 `-3.480/+1.981`。197 `0731_15 terminal
+  midpoint-regression` 的 epoch 8 为 `43.918/49.071`，相对父配置
+  `-1.351/-1.122`；cls DetA/AssA 变化 `-2.925/+0.607`，det 变化
+  `-4.146/+2.977`。
+- 两个独立 terminal regression 对照都从 epoch 4 的双 HOTA、双 DetA 增益退化为
+  epoch 8 的 DetA 系统性下降，且检测 AP 诊断也同步下降。两项结构检查均确认模块
+  已学习，因此不是初始化未生效或随机小波动；均已停止并保留 epoch 4/8 全部产物。
+  定性结论是：只消除 recurrent reference 污染仍不够，末层 box 专门化本身就会在
+  中期破坏检测覆盖。
+
+## 2026-07-31 14:38 CST 严格正交结构接替
+
+- 178 `0731_16 terminal common-evidence bypass` 的 epoch 4 cls
+  HOTA/DetA/AssA 为 `37.750/26.503/57.185`，det 为
+  `43.723/31.613/62.366`。相对父配置 HOTA `+1.541/+4.970`，但 DetA
+  `-0.565/-0.841`，AssA `+5.091/+14.900`。它通过 HOTA 主门槛但已经显示明显
+  关联搬运，故只继续到 epoch 8 做持续性判定；14:38 已进入 epoch 8 iter 100，
+  尚未形成 epoch 8 checkpoint 或评估。
+- `0731_17` 最初把分类共同证据与反对称框细节分离，并通过 98 项单测、完整构建和
+  2 卡真实数据 smoke；正式训练到 epoch 1 iter 300 时复核 forward，发现框预测仍以
+  `common_output` 为基底，因此共同证据仍能改变 boxes，不满足“严格正交”定义。该
+  run 在首个正式 epoch 完成前停止，只保留为实现审计记录，不进入科学结果。
+- 提交 `ad99b0d` 修正为：分类只使用 `common_output`，框以原始
+  `layer_output` 为基底且只接收反对称 detail；单测证明任意非零 common gate 下所有
+  box references 与父模型逐位相等，detail midpoint 为零。252 `0731_18` 已通过
+  98 项单测、配置深拷贝、完整构建、2 卡 4-iter smoke 和正式训练五项门槛；
+  14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045`。
+- 提交 `ac9d629` 新增更纯的 classification-only common-evidence 模式：只改变末层
+  classification，boxes、auxiliary output 与 recurrent references 全部严格等于父模型；
+  同时覆盖 shared/non-shared attention。100 项单测、两份配置深拷贝、完整构建和两台
+  2 卡真实数据 smoke 全部通过。99 `0731_19` 使用独立 attention，14:38 到 epoch 1
+  iter 400；197 `0731_20` 使用 shared attention，14:38 到 epoch 1 iter 250。
+- 四项当前正式训练均无 Traceback/OOM/NaN/NCCL，总、DN、encoder loss 与 grad norm
+  有限。四台仓库 tracked HEAD 均为干净的 `ac9d629`；已启动进程仍按各自启动时载入的
+  代码运行，178 为 `d78500d`、252 为 `ad99b0d`，后续仓库快进不改变运行时语义。

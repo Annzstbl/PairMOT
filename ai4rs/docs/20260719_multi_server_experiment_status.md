@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 12:59 CST。
+更新时间：2026-07-31 14:38 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；epoch 4 cls/det HOTA `37.209/43.646`，相对 encoder 同点 `+1.000/+4.893`，DetA 也双升；已继续到 epoch 5，等待 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；epoch 4 cls/det HOTA `38.153/44.506`，相对 encoder 同点 `+1.944/+5.753`，DetA 也双升；已继续到 epoch 5，等待 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`；12:24 从 `epoch_4.pth` 恢复，12:56 到 epoch 6 iter 600，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；真实数据 smoke 和 terminal-gate checkpoint 检查通过；12:56 到 epoch 1 iter 900，总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_19 terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_18 shared-attention + terminal orthogonal factorized evidence` | RUNNING；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；epoch 4 cls/det HOTA `37.750/43.723`，相对 encoder 同点 `+1.541/+4.970`，但 DetA `-0.565/-0.841`；14:38 已进入 epoch 8，等待完整 epoch 8 评估 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -209,7 +209,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_16`，下一编号为`0731_17`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_20`，下一编号为`0731_21`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -802,3 +802,21 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 两者均通过 HOTA 主门槛并继续到 epoch 8。197 的早期 HOTA 更高，但更依赖
   AssA；99 的 det DetA 更高、AssA 搬运较少，因此 epoch 8 重点检查哪条路径能
   避免历史上的 DetA→AssA 中期退化。
+
+## 2026-07-31 14:38 CST epoch-8 淘汰与严格正交结构接替
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| STOPPED | 252 GPU 0,1 | `0731_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_commonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 01:44 / 2026-07-31 14:08 前 | epoch 8 cls/det HOTA `44.798/50.415`，相对 encoder 同点 `-0.471/+0.222`；cls DetA/AssA `-1.030/-0.209`，det `-2.602/+3.680`。完整产物和结构审计齐全后停止。 |
+| STOPPED | 99 GPU 0,1 | `0731_14_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalregressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 11:43 / 2026-07-31 14:08 前 | epoch 8 cls/det HOTA `44.321/49.059`，相对父配置 `-0.948/-1.134`；DetA 分别下降 `1.901/3.480`。模块已学习，停止并保留 epoch 4/8 全部产物。 |
+| STOPPED | 197 GPU 4,5 | `0731_15_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalmidpointregressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 11:43 / 2026-07-31 14:08 前 | epoch 8 cls/det HOTA `43.918/49.071`，相对父配置 `-1.351/-1.122`；DetA 分别下降 `2.925/4.146`。与`0731_14`形成独立重复，排除偶然波动。 |
+| STOPPED_INVALID | 252 GPU 0,1 | `0731_17_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 14:05 / 2026-07-31 14:14 前 | 正式 epoch 1 iter 300 前后审计发现 boxes 仍以`common_output`为基底，不满足严格正交设计；首个正式 epoch 前停止，不进入实验结果。 |
+| RUNNING | 252 GPU 0,1 | `0731_18_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 14:15 /  | 分类只接收共同证据，boxes 只接收严格反对称 detail；共同证据不改变任一 box reference，detail midpoint 为零。98 项单测、完整构建、真实 2 卡 smoke 和正式五项门槛通过；14:38 到 epoch 2 iter 50。 |
+| RUNNING | 99 GPU 0,1 | `0731_19_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalclassificationcommonevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 14:30 /  | 不共享 decoder attention，只有末层 classification 接收共同证据；boxes、aux 与 recurrent references 严格保持父模型。100 项单测、完整构建、真实 2 卡 smoke 和正式五项门槛通过；14:38 到 epoch 1 iter 400。 |
+| RUNNING | 197 GPU 4,5 | `0731_20_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalclassificationcommonevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 14:33 /  | 与`0731_19`唯一核心结构差异是共享 decoder attention；同样只改变末层 classification。100 项单测、完整构建、真实 2 卡 smoke 和正式五项门槛通过；14:38 到 epoch 1 iter 250。 |
+
+- 178 `0731_16` epoch 4 为 cls/det HOTA `37.750/43.723`，相对父配置
+  `+1.541/+4.970`，但 DetA `-0.565/-0.841`、AssA `+5.091/+14.900`，
+  显示明显 DetA→AssA 搬运；14:38 已进入 epoch 8，等待完整结果后再决定是否停止。
+- 当前四台服务器 tracked HEAD 均为干净的 `ac9d629`。178 运行时由
+  `d78500d` 启动，252 运行时由 `ad99b0d` 启动；仓库后续快进不改变已加载进程。
