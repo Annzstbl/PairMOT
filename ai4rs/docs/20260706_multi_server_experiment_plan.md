@@ -1406,3 +1406,22 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `last_checkpoint` 精确指向该文件。准备在相同 178、相同 workdir 原位 exact resume 到 e40，
   不新建重复实验；e40 再按双 HOTA 与 DetA/AP 持续性决定。该末层结构虽比 512 参数版本大，
   但新增参数不足总模型 1%，没有新增 decoder 层或 attention，仍可进入后续同卡效率审计。
+
+## 2026-08-01 01:10 CST 0731_21 恢复与 0801_01 共用门控
+
+- `0731_21` 的 epoch-32 停止按放宽后的持续性规则复核为过严：Cls 基本持平、四项 AP
+  全升，不满足 HOTA/DetA/AP 同向恶化的强停止条件。完整 checkpoint 含 optimizer、
+  scheduler、EMA 与 message hub，已在相同 178、相同 workdir 原位 exact resume。
+- 首次 resume 仅在 checkpoint 加载阶段触发 PyTorch 2.6 的 `weights_only=True` 兼容错误，
+  未执行训练更新；launcher 对本项目自产可信 checkpoint 显式恢复旧加载语义后，于 00:52
+  正确恢复 epoch 32/iter 33216。epoch 33 iter 100 后五项运行证据持续正常，继续到 e36/e40。
+- `0731_27` checkpoint 机制审计显示其 detail 逐通道 gate 的平均/RMS 幅值约为 common gate
+  的三倍，且两者相关性很低；两类 gate 从 e4 到 e8 均约翻倍，但双 HOTA、双 DetA 与
+  四项 AP 在 e8 同向退化。下一候选因此不扫描 scale，而从结构上取消两条路线独立放大。
+- `0801_01` 使用一个 common/detail 共用的 256 维逐通道 terminal gate；相对 Encoder
+  只新增 256 参数，不增加 decoder 层、attention、分支、loss 或矩阵乘法。零起点等价、
+  common 与 detail 同时生效、box midpoint 守恒和共享 gate 非零梯度均由单测覆盖。
+- 105 项 decoder 单测、配置深拷贝、完整模型构建、197 双卡真实 4-iter smoke 与 checkpoint
+  结构检查全部通过；正式 fresh 训练于 01:07 使用 GPU4/5 启动，iter 100 的总/DN/encoder
+  loss 与 grad norm 均有限，五项启动验收通过。先看 e4 结构信号，e8/e12 判断持续性；若有
+  潜力至少训练到 e16/e20。论文候选仍须补做同卡同温速度审计，吞吐下降原则上不超过 5%。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 00:47 CST。
+更新时间：2026-08-01 01:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,9 +16,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e4 `35.714/42.426`，相对 Encoder 同点 `-0.495/+3.673`；Det 增益强但 Cls/DetA 与 mAP 有取舍，不以单个早期点停止，继续到 e8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无训练 | `0731_27` e8 `43.344/49.456`，相对同点 `-1.925/-0.737`；双 DetA 与四项 AP 同向下降，完整留档后停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；只增加一个由 common/detail 共用的 256 维逐通道 gate；105 项单测、完整构建、双卡真实 smoke 和正式 iter 100 五项验收通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_29 terminal diagonal center-motion factorized evidence` | RUNNING；e4 `36.687/42.411`，相对同点 `+0.478/+3.658`；双 DetA 提升且仅 512 参数，继续到决定性的 e8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无训练 | `0731_21` e32 `52.235/59.813`；按放宽门槛复核后不应在 AP 全升时过严终止，exact resume launcher 已准备 | 从 epoch 32 原位续训到 e40 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_21 terminal orthogonal factorized evidence` | RUNNING；从完整 epoch-32 状态 exact resume，已稳定进入 epoch 33；继续到 e36/e40 复核 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -71,6 +71,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| RUNNING | `0801_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcoupleddiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 01:07 |  | 针对 `0731_27` detail gate 长期约为 common gate 三倍的实测失衡，把两条末层路线的独立 gate 合并为一个共用逐通道 gate；仅 256 参数，无新增 decoder 层、attention、分支、loss 或矩阵乘法 | 105 项 decoder 单测、配置深拷贝、完整模型构建通过；总参数 `22,759,031`。双卡真实 4-iter smoke 的总/DN/encoder loss 和 grad norm 有限，checkpoint 中 6 组 attention 独立且 gate 已非零更新。正式训练 commit `081ba4e`，iter 100 为 `0.8662 s/iter`、loss `20.5756`、grad norm `112.6305`，GPU4/5 各约 `19.2 GiB`，无异常，五项启动验收通过 |
 | STOPPED | `0731_27_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:16 | 2026-08-01 00:42 | 保留独立 attention 与末层 common/detail 语义，把两个 `256×256` 稠密门简化为两个逐通道向量 | e8 cls/det HOTA `43.344/49.456`，相对 Encoder 同点 `-1.925/-0.737`；cls DetA/AssA `-2.641/-1.160`，det `-3.760/+3.246`；pair mAP/AP50 下降 `0.024681/0.022977`，both-independent 下降 `0.027357/0.024470`。e4 的强早期增益没有保持；epoch 8 checkpoint、检测、TrackEval 与 54 个原始文件完整后精确停止，GPU4/5 已释放 |
 | STOPPED | `0731_25_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentdetailfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:11 | 仅以 detached 双帧分类置信度约束 detail 修正，无新增参数 | e8 `43.629/50.129`，相对 Encoder 同点 `-1.640/-0.064`；DetA 与四项 AP 系统性下降，checkpoint、metrics 和 54 个 TrackEval 原始文件验证后停止 |
 | STOPPED | `0728_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder0708_03` | 2026-07-28 09:30 | 2026-07-29 01:29 | 严格以`0727_01`为父配置，冻结Base、Liquid、P5 temporal、Dual-Evidence encoder、proposal、PairDN和loss；仅加入`0708_03`的`pointer/query_prev/query_curr` tri-state decoder，并启用零初始化frame-pointer循环耦合，不使用separate FFN | 完整评估到epoch 48，共12个评测点；最后也是已评测最佳为 `52.587/60.682`，pair mAP/AP50 `0.305359/0.528296`。训练在epoch 52 iter 250收到外部SIGTERM，与随后“全部停止”调度一致，并非模型异常；不resume，已被当前轻量terminal方向取代 |
@@ -168,7 +169,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| STOPPED | `0731_21_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 15:13 | 2026-08-01 00:29 | 独立双帧 attention + 末层分类 common 与严格反对称 box detail 分解；零初始化 | e32 cls/det HOTA `52.235/59.813`，相对 Encoder 同点 `-0.119/-0.517`；cls DetA/AssA `-0.026/-0.113`，det 为 `-0.958/+0.122`，但四项 AP 全升。完整产物验证后曾停止；按“不因单侧小幅 HOTA/DetA 且 AP 改善而过严早停”的固定规则复核，决定使用完整 optimizer/scheduler/EMA 状态从 epoch 32 原位续训到 e40。resume 启动前仍记 STOPPED |
+| RUNNING | `0731_21_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 15:13；2026-08-01 00:52 resume |  | 独立双帧 attention + 末层分类 common 与严格反对称 box detail 分解；零初始化 | e32 cls/det HOTA `52.235/59.813`，相对 Encoder 同点 `-0.119/-0.517`；四项 AP 全升，按放宽规则使用完整 optimizer/scheduler/EMA 状态原位续训。首次 resume 因 PyTorch 2.6 对可信旧 checkpoint 默认 `weights_only=True` 而在加载阶段失败，未改变训练状态；launcher 显式允许本项目可信 checkpoint 后于 00:52 成功恢复 epoch 32/iter 33216，epoch 33 iter 100 及后续日志总/DN/encoder loss 与 grad norm 均有限，GPU0 约 `31.4 GiB`，继续至 e36/e40 |
 | STOPPED | `0731_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcommonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 12:42 | 2026-07-31 15:03 | 继承`0727_01`及其共享 decoder 路径，只在最后一层最终双帧预测头前注入 swap-invariant、零起点且有界的共同 cross-attention 证据；不改 recurrent query、所有 auxiliary output 及任何供后续层消费的 reference | e8 `43.972/49.378`，相对Encoder同点 `-1.297/-0.815`；两次完整评估后停止并由 `0731_21` 的common/detail正交分解替代。无训练故障，不resume |
 | STOPPED | `0727_08_paper_base_liquid_encoder_p5temporal_dualbranchtrust` | 2026-07-27 20:51 | 2026-07-27 21:37 | 完整保留`0727_01`的P5 MHA与common/detail双残差，不使用空间门；仅分别限制shared-common和signed-detail更新RMS不超过其对应输入证据RMS，未超限更新不变 | 前序完成18/18评测且GPU连续空闲后，严格队列完成真实数据smoke并fresh启动；按用户指令主动停在epoch 3 iter 750。未生成正式epoch checkpoint，不resume、不进入论文结果；训练、launcher及队列进程均已退出，GPU 0释放，GPU 1上的其他任务未受影响 |
 | STOPPED | `0727_06_paper_base_liquid_encoder_p5temporal_sharedscalar` | 2026-07-27 02:43 | 2026-07-27 03:47 | 保留P5 MHA和signed-detail，但以两帧共享的逐位置标量增益替代channel-mixing common残差 | 只进入等待队列，未创建smoke、正式目录或训练进程。`0727_01` epoch 12的det AssA已恢复到相对Base `+0.006`，同时det DetA `+1.449`，证明原common分支可实现无关联代价的检测增益；移除其通道表达能力的设计依据消失，因此队列撤销并由`0727_08`替代 |
@@ -216,7 +217,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_27`，下一编号为`0731_28`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0801_01`，下一编号为`0801_02`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
