@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 22:24 CST。
+更新时间：2026-07-31 22:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；epoch 12 checkpoint 已落盘、完整评估待完成；e8 为 `44.103/50.795`，DetA/AP 明显下降 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | 无 | `0731_24` e12 完整结果 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；产物验证后已停止，GPU 0,1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_27 terminal diagonal factorized evidence` | RUNNING；正式 iter 50 五项门槛通过，当前 epoch 1；仅新增 512 参数，首个判定点为 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_26 terminal object-confident common+detail` | RUNNING；当前 epoch 11；e8 为 `44.283/50.390`，DetA/AP 明显下降，仅观察 e12 持续性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 24 为 `52.141/59.381`，相对同点 `+0.427/-0.138`，四项 AP 提升；继续到 epoch 28 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -28,7 +28,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0731_24_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentcommonfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 |  | `0731_21` 因子结构的 common 路由乘 detached 双帧分类置信度；不新增参数 | e8 `44.103/50.795`，相对 Encoder 同点 `-1.166/+0.602`，DetA 与四项 AP 明显下降；e12 checkpoint 已落盘，等待检测和完整 TrackEval 后收口 |
+| STOPPED | `0731_24_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentcommonfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:35 | `0731_21` 因子结构的 common 路由乘 detached 双帧分类置信度；不新增参数 | e12 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；DetA `-1.834/-1.524`，四项 AP 下降 `0.014159/0.007145/0.014924/0.007281`。checkpoint、metrics 与 54 个 TrackEval 原始文件验证后停止 |
 | RUNNING | `0727_12_paper_base_liquid_encoder_p5temporal_crossscalebudget` | 2026-07-27 20:18 |  | 严格继承`0727_01`的Base+Liquid、P5 temporal MHA及common/detail Dual-Evidence；用每层`[common mean, abs(detail) mean]`生成三尺度token，并结合三尺度均值上下文预测逐通道common/detail尺度预算。预算在P3/P4/P5维softmax后乘3，每个分支/通道总预算严格为3，仅重分配尺度贡献，不改变平均残差强度；描述侧停止梯度，输出层零初始化，无额外loss或高分辨率卷积 | 新增37,696参数，完整模型`22,796,471`，相对父配置`+0.166%`。32项功能/梯度/帧交换等变测试、配置深拷贝、完整构建和精确2卡真实数据4-iter DDP smoke全部通过；正式GPU 0、1 fresh训练已到epoch 7，约`0.972 s/iter`、MMEngine峰值约11.25 GB/rank，总/DN/encoder loss及grad norm有限；尚未产生首个正式评测点 |
 | COMPLETED | `0723_05_pairdn_paircoherent_le180_cpdse_local` | 2026-07-24 03:56 | 2026-07-25 03:56 | `0723_01` + consistency-preserving DSE local：保留`x.mean`主路径，以归一化通道离散度生成零初始化、最大绝对值0.5的逐像素SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`；相对Paper Base为`+0.222/-0.363`，不满足双提升。PairMOT训练及评测进程已退出，99不排新任务；不对其他用户当前GPU占用做清理或调度 |
 | COMPLETED | `0723_01_paper_liquid_independent_diffproduct_pairdn_paircoherent_le180` | 2026-07-23 03:21 | 2026-07-24 03:25 | accuracy-fixed `0718_01` + PairDN重构：pair两侧共享相对噪声，正负比2:1，正样本加难，负样本按旋转IoU筛选；DN padding隔离；保持`width_longer=True,start_angle=0`并使用等价框一致、固定角度权重的L1 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 64为`53.955/62.032`，同epoch pair mAP/AP50为`0.3114/0.5268`；相对Paper Base双提升`+0.641/+0.050` |
@@ -1076,3 +1076,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 当前并行任务：99 `0731_24` 与 252 `0731_26` 观察 epoch 12 后收口，178 `0731_21`
   观察 epoch 28，197 `0731_27` 首看 epoch 4。最终仍以同一 checkpoint 的 cls/det HOTA
   同时超过 `54.437/62.393` 为成功标准，并补做同卡同温效率验证。
+
+## 2026-07-31 22:35 CST 0731_24 epoch-12 收口
+
+- 99 `0731_24 confident-common` e12 的 cls HOTA/DetA/AssA 为
+  `48.271/39.526/61.431`，det 为 `56.179/48.821/66.894`。相对 Encoder 同点，
+  cls/det HOTA `-1.409/-0.362`，DetA `-1.834/-1.524`，AssA `-0.379/+1.315`。
+- pair mAP/AP50 相对同点下降 `0.014159/0.007145`，both-independent mAP/AP50
+  下降 `0.014924/0.007281`。因此 e8 的 DetA/AP 损失没有在 e12 恢复，属于连续系统性退化。
+- epoch 12 checkpoint、检测 metrics、TrackEval metrics 与 54 个原始评估文件全部验证完整。
+  22:35 精确终止唯一目标进程组，screen 与 worker 均退出，99 GPU 0,1 已释放。
+- confidence-common、confidence-detail 和 confidence-common+detail 已形成一致否定证据；不再
+  扩展 confidence 或 residual-scale 组合。99 后续只接收作用机制独立、结构轻量且不明显增加
+  计算量的 decoder 实验。

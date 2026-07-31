@@ -960,3 +960,15 @@
 - 后续候选采用联合门槛：先看同点 cls/det HOTA，再核对 DetA/AssA；论文候选还必须在同卡
   同温下证明训练与推理吞吐没有大幅下降。依赖堆叠深度、额外 attention、高分辨率分支或
   新增 loss 才取得的小幅收益不进入主线。
+
+## 2026-07-31 22:35 CST 0731_24 epoch-12 最终结论
+
+- `0731_24 confident-common` e12 为 cls HOTA/DetA/AssA
+  `48.271/39.526/61.431`，det `56.179/48.821/66.894`；相对 Encoder 同点 HOTA
+  `-1.409/-0.362`，DetA `-1.834/-1.524`。
+- pair mAP/AP50 下降 `0.014159/0.007145`，both-independent mAP/AP50 下降
+  `0.014924/0.007281`。这与 e8 的 DetA/AP 退化方向一致，排除单点随机波动或仅 AssA
+  指标搬运的解释。
+- 完整 e12 checkpoint、检测评估、TrackEval metrics 和 54 个原始文件验证后，99 上该实验
+  已精确停止并释放 GPU 0,1。三种 confidence 路由均不再扩展；下一步只考虑轻量、结构性且
+  与 confidence/scale 调参不同的 decoder 改进。
