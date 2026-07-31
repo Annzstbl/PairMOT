@@ -1544,3 +1544,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - epoch 12 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列结果与 108 个评估
   文件完整后，于 06:46 精确终止 PGID `1703376`；screen 与训练 worker 已退出，GPU4/5
   均为 `0%/1 MiB`。该共享门分支不再 resume 或派生，197 暂时空闲，等待 `0801_03` e4/e8。
+
+## 2026-08-01 07:26 CST 0801_03 e4 结构 Gate
+
+- e4 cls HOTA/DetA/AssA `36.944/27.076/54.129`，det `42.493/33.391/55.143`；
+  相对 Encoder 同点 HOTA `+0.735/+3.740`、DetA `+0.008/+0.937`、AssA
+  `+2.035/+7.677`。逐通道 detail-only 没有牺牲早期检测覆盖。
+- pair mAP/AP50 `0.1493/0.3078`，both-independent `0.1789/0.3365`；相对 Encoder
+  mAP 略降 `0.0079/0.0056`，AP50 提高 `0.0117/0.0134`，不是 HOTA/DetA/AP 全面恶化。
+- 相比稠密 `0801_02` e4，cls HOTA 高 `0.187`，det HOTA 低 `0.481`；det DetA 均为
+  `33.391`，说明移除矩阵乘法没有损伤检测覆盖，但关联增益略弱。完整 checkpoint、检测、
+  TrackEval、50 序列与 108 个评估文件齐全。
+- e4 只通过结构 gate，不宣称最终胜出；继续 e8/e12 检查是否避免 `0801_02` 的中期 DetA/AP
+  退化。当前不使用 99/178/197 派生新模型，保持单变量、低复杂度证据链。
