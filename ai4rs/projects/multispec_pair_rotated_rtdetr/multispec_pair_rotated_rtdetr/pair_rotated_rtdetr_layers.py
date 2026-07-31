@@ -589,11 +589,6 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'terminal detail decoder is incompatible with '
                 'decoder variants other than shared_attention_decoder')
-        if self.terminal_factorized_evidence_decoder and (
-                not self.shared_attention_decoder):
-            raise ValueError(
-                'terminal_factorized_evidence_decoder requires '
-                'shared_attention_decoder')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
             for layer in self.layers:
@@ -1461,8 +1456,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
                 elif self.terminal_factorized_evidence_decoder:
-                    # Factor the terminal evidence into a swap-invariant
-                    # common component and a swap-odd frame component.
+                    # Factor the terminal evidence tensors into a symmetric
+                    # common component and an antisymmetric frame component.
+                    # This algebra remains exact whether the two cross-
+                    # attention branches are independent or share their
+                    # attention-weight projection.
                     # Classification sees only the common correction. Box
                     # specialization receives an antisymmetric 5D residual,
                     # so its added pair midpoint is exactly zero. Auxiliary

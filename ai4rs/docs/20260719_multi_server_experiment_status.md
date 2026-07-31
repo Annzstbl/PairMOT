@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 14:38 CST。
+更新时间：2026-07-31 15:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_19 terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_18 shared-attention + terminal orthogonal factorized evidence` | RUNNING；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；epoch 4 cls/det HOTA `37.750/43.723`，相对 encoder 同点 `+1.541/+4.970`，但 DetA `-0.565/-0.841`；14:38 已进入 epoch 8，等待完整 epoch 8 评估 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | 无训练 | `0731_16` epoch 8 完整评估后于 15:03 停止；GPU0 已释放，GPU1 未触碰 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -820,3 +820,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   显示明显 DetA→AssA 搬运；14:38 已进入 epoch 8，等待完整结果后再决定是否停止。
 - 当前四台服务器 tracked HEAD 均为干净的 `ac9d629`。178 运行时由
   `d78500d` 启动，252 运行时由 `ad99b0d` 启动；仓库后续快进不改变已加载进程。
+
+## 2026-07-31 15:03 CST 0731_16 epoch-8 淘汰
+
+- 178 `0731_16 terminal common-evidence bypass` 的 epoch 8 checkpoint、检测
+  metrics、完整 TrackEval、54 个原始输出文件和结构审计均已形成。cls
+  HOTA/DetA/AssA 为 `43.972/32.412/62.419`，det 为
+  `49.378/39.704/63.985`。
+- 相对 `0727_01` 同点，cls HOTA/DetA/AssA 为
+  `-1.297/-5.251/+5.118`，det 为 `-0.815/-7.357/+8.840`。epoch 4 的
+  早期双 HOTA 增益完全没有保持，且两路都出现强烈的 DetA→AssA 搬运。
+- pair mAP/AP50 为 `0.205329/0.366688`，相对父配置下降
+  `0.032405/0.064222`；both-independent mAP/AP50 为
+  `0.236540/0.395712`，下降 `0.039642/0.070239`。检测诊断与 DetA 结论一致。
+- checkpoint 中唯一 terminal-common gate 最大权重为 `0.032061`，epoch/iter
+  为 `8/8304`，排除结构未学习。15:03 精确关闭唯一 screen，训练进程退出，
+  GPU0 为 `0%/1 MiB`；epoch 4/8 全部产物保留，GPU1 未触碰。

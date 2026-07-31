@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 14:38 CST
+更新时间：2026-07-31 15:03 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,6 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 GPU 0 | `0731_16 ... decoder_terminalcommonevidencebypass ... fresh` | `RUNNING`；epoch 4 双 HOTA 通过，14:38 到 epoch 8 iter 100，等待完整 epoch 8 评估 | 仅在末层同时给分类和框注入共同证据。epoch 4 cls/det HOTA `37.750/43.723`，相对父配置 `+1.541/+4.970`，但 DetA 分别 `-0.565/-0.841`，epoch 8 是检验是否继续发生 DetA→AssA 搬运的关键点。 |
 | 252 GPU 0,1 | `0731_18 ... decoder_sharedattention_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045` | 分类只接收末层共同证据，框只接收严格反对称 detail；共同证据不再改变任何 box reference，detail 的 pair midpoint 严格为零。首判 epoch 4 双 HOTA。 |
 | 197 GPU 4,5 | `0731_20 ... decoder_sharedattention_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948` | 共享 decoder attention，仅分类接收末层共同证据；boxes、auxiliary output 和 recurrent references 与父模型严格一致。首判 epoch 4 双 HOTA。 |
 | 99 GPU 0,1 | `0731_19 ... decoder_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189` | 不共享 decoder attention，仅分类接收末层共同证据；与 `0731_20` 构成 attention sharing 的严格结构对照。首判 epoch 4 双 HOTA。 |
@@ -22,6 +21,7 @@
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 178 GPU 0 | `0731_16 ... decoder_terminalcommonevidencebypass ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 15:03 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.972/32.412/62.419`，det `49.378/39.704/63.985`；相对父模型 HOTA `-1.297/-0.815`、DetA `-5.251/-7.357`，而 AssA `+5.118/+8.840`，属于强烈的 DetA→AssA 搬运。pair mAP/AP50 下降 `0.032405/0.064222`，both-independent mAP/AP50 下降 `0.039642/0.070239`；terminal gate 最大权重 `0.032061`。完整产物保留，GPU0 已释放。 |
 | 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 12:11 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.170/34.514/57.338`，det `48.484/42.910/56.678`；相对父 encoder 同点 HOTA `-2.099/-1.709`、DetA `-3.149/-4.151`，而 AssA `+0.037/+1.533`，属于检测覆盖下降而非双提升。pair mAP/AP50 `0.212921/0.391949`，both-independent mAP/AP50 `0.248771/0.430138`，诊断指标同样下降。结构检查通过：6 组共享 attention 误差为零、18 组独立参数最大差异 `0.058077`、terminal-midpoint gate 从 smoke 的约 `3.9e-4` 学到 `0.119707`，排除模块未学习。epoch 8 checkpoint、检测和完整 TrackEval 均保留；GPU 0/1 已释放。 |
 | 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后停止 | epoch 8 cls HOTA/DetA/AssA `43.178/35.246/55.355`，det `50.010/43.700/59.276`；相对父 encoder 同点 HOTA `-2.091/-0.183`，DetA `-2.417/-3.361`，cls AssA `-1.946`，仅 det AssA `+4.131`。pair mAP/AP50 `0.217536/0.410164`，both-independent AP50 `0.448156`，检测诊断也下降。结构检查通过，证明末层分类与回归同时专门化仍会损伤覆盖；GPU 0/1 已释放。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `STOPPED`；epoch 16 全量评估后于 09:07 精确停止 | epoch 16 cls HOTA/DetA/AssA `51.007/42.964/62.130`，det `57.940/50.762/68.403`；相对父 encoder 同点 HOTA `-0.084/-0.380`。虽然 pair mAP 和 both-independent AP50 提高，但双 HOTA 未通过预设门槛，故不再消耗 epoch 17 以后资源。checkpoint、检测、TrackEval、原始 CSV 与结构检查均保留。 |
@@ -741,3 +741,17 @@
 - 四项当前正式训练均无 Traceback/OOM/NaN/NCCL，总、DN、encoder loss 与 grad norm
   有限。四台仓库 tracked HEAD 均为干净的 `ac9d629`；已启动进程仍按各自启动时载入的
   代码运行，178 为 `d78500d`、252 为 `ad99b0d`，后续仓库快进不改变运行时语义。
+
+## 2026-07-31 15:03 CST 0731_16 epoch-8 决策
+
+- epoch 8 完整对比为：cls HOTA/DetA/AssA
+  `43.972/32.412/62.419`，det `49.378/39.704/63.985`；相对
+  `0727_01` 同点 HOTA `-1.297/-0.815`，DetA `-5.251/-7.357`，
+  AssA `+5.118/+8.840`。
+- pair mAP/AP50 `0.205329/0.366688`，both-independent mAP/AP50
+  `0.236540/0.395712`，四项分别低于父配置
+  `0.032405/0.064222/0.039642/0.070239`。54 个 TrackEval 原始文件、
+  checkpoint、检测与 TrackEval metrics 均完整。
+- terminal-common gate 已学到 `0.032061`，所以失败不是模块未更新。该结构把共同
+  证据同时送入分类和框，即使隔离到末层仍会造成严重 DetA→AssA 搬运；15:03 已精确
+  停止并释放 178 GPU0。后续不再派生“共同证据直接改框”的 decoder。

@@ -2628,11 +2628,83 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertIsNotNone(gate.weight.grad)
         self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
-    def test_terminal_factorized_evidence_requires_shared_attention(self):
-        with self.assertRaisesRegex(ValueError, 'requires'):
-            _build_decoder(
-                device=self.device,
-                terminal_factorized_evidence_decoder=True)
+    def test_terminal_factorized_evidence_supports_independent_attention(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_attention_decoder=False,
+            terminal_factorized_evidence_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            self.assertIsNot(
+                layer.cross_attn_prev.attention_weights,
+                layer.cross_attn_curr.attention_weights)
+
+        common_gate = decoder.terminal_common_evidence_bypass_gates[0]
+        detail_gate = decoder.terminal_enveloped_detail_gates[0]
+        torch.manual_seed(167)
+        with torch.no_grad():
+            torch.nn.init.normal_(common_gate.weight, std=0.05)
+            torch.nn.init.normal_(detail_gate.weight, std=0.05)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        factorized = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+
+        detail_weight = detail_gate.weight.detach().clone()
+        with torch.no_grad():
+            detail_gate.weight.zero_()
+        common_only = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+
+        common_weight = common_gate.weight.detach().clone()
+        with torch.no_grad():
+            common_gate.weight.zero_()
+        parent = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        with torch.no_grad():
+            common_gate.weight.copy_(common_weight)
+            detail_gate.weight.copy_(detail_weight)
+
+        for group in (1, 2):
+            for common_tensor, parent_tensor in zip(
+                    common_only[group], parent[group]):
+                self.assertTrue(torch.equal(common_tensor, parent_tensor))
+        factorized_prev = torch.logit(
+            factorized[1][-1].clamp(1e-6, 1 - 1e-6))
+        factorized_curr = torch.logit(
+            factorized[2][-1].clamp(1e-6, 1 - 1e-6))
+        common_prev = torch.logit(
+            common_only[1][-1].clamp(1e-6, 1 - 1e-6))
+        common_curr = torch.logit(
+            common_only[2][-1].clamp(1e-6, 1 - 1e-6))
+        midpoint_error = (
+            factorized_prev - common_prev
+            + factorized_curr - common_curr)
+        self.assertTrue(torch.allclose(
+            midpoint_error,
+            torch.zeros_like(midpoint_error),
+            atol=5e-5,
+            rtol=5e-5),
+            msg=float(midpoint_error.abs().max()))
 
     def test_terminal_factorized_evidence_is_exact_zero_start(self):
         decoder, reg_prev, reg_curr = _build_decoder(
