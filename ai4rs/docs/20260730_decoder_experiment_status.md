@@ -984,3 +984,12 @@
   仍共 `131,072` 参数；仅对已有 5D detail 固定屏蔽后三维。
 - 提交 `8a24666`；104 项单测、配置与完整构建、双卡真实 4-iter smoke、checkpoint gate/
   attention 审计以及正式 iter 50 五项门槛均通过。99 `0731_28` 已 RUNNING，首看 e4。
+
+## 2026-08-01 03:47 CST 0731_28 e16 final
+
+- e16 cls HOTA/DetA/AssA 为 `48.845/39.751/62.295`，det 为
+  `57.176/48.934/69.124`；相对 Encoder 同点双 HOTA `-2.246/-1.144`、双 DetA
+  `-2.853/-2.780`。pair mAP/AP50 为 `0.2635/0.4778`，both-independent 为
+  `0.3017/0.5115`，四项相对父轨迹均下降 `0.0145–0.0206`。
+- e12/e16 的连续结果否定“稠密 classification common + 中心运动 detail”绑定结构。
+  epoch 16 checkpoint、检测与完整 TrackEval 核验后停止，99 GPU0/1 已释放；该分支不再 resume。
