@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 23:42 CST。
+更新时间：2026-08-01 00:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；正式 epoch 1 iter 50 五项门槛通过；相对 `0731_21` 无额外可学习参数，仅增加固定 5D 掩码，首看 e4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e4 `35.714/42.426`，相对 Encoder 同点 `-0.495/+3.673`；Det 增益强但 Cls/DetA 与 mAP 有取舍，不以单个早期点停止，继续到 e8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_27 terminal diagonal factorized evidence` | RUNNING；e4 `36.753/42.551`，相对同点 `+0.544/+3.798`；det DetA/AssA 双升，正式门控已学习，继续到 e8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_29 terminal diagonal center-motion factorized evidence` | RUNNING；仅新增 512 个逐通道门控参数，中心运动只作用于 `x/y`；真实双卡 smoke、checkpoint 审计与正式 iter 50 五项门槛通过，首看 e4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 28 为 `52.135/59.522`，相对同点 `+0.395/-0.308`；Cls 与四项 AP 提升但 Det 未双提升，保留到 e32 判断 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -28,7 +28,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0731_28_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:48 |  | 在 `0731_21` 上把反对称 box detail 限定为旋转框中心 `x/y`；`w/h/angle` 保持父模型几何，classification common 不变 | 相对 `0731_21` 不新增参数、decoder 层、attention、分支或 loss；104 项单测、完整构建、双卡真实 smoke 与 checkpoint 审计通过。正式 e1 iter 50 五项门槛通过，无致命异常，首看 e4 |
+| RUNNING | `0731_28_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:48 |  | 在 `0731_21` 上把反对称 box detail 限定为旋转框中心 `x/y`；`w/h/angle` 保持父模型几何，classification common 不变 | e4 cls/det HOTA `35.714/42.426`，相对 Encoder 同点 `-0.495/+3.673`；cls DetA/AssA `25.915/53.044`，det 为 `32.743/56.325`；pair mAP/AP50 `0.150254/0.299865`，both-independent `0.177156/0.325512`。检测和关联增益很强，但分类 DetA 与两项 mAP 偏低；正式 checkpoint 的独立 attention 最大分化 `0.048394`，common/detail 门控最大值 `0.030225/0.074534`。不因单个早期点停止，继续到 e8 验证取舍是否持续 |
 | STOPPED | `0731_24_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentcommonfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:35 | `0731_21` 因子结构的 common 路由乘 detached 双帧分类置信度；不新增参数 | e12 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；DetA `-1.834/-1.524`，四项 AP 下降 `0.014159/0.007145/0.014924/0.007281`。checkpoint、metrics 与 54 个 TrackEval 原始文件验证后停止 |
 | COMPLETED | `0727_12_paper_base_liquid_encoder_p5temporal_crossscalebudget` | 2026-07-27 20:18 | 2026-07-28 18:20 | 严格继承`0727_01`的Base+Liquid、P5 temporal MHA及common/detail Dual-Evidence；用每层`[common mean, abs(detail) mean]`生成三尺度token，并结合三尺度均值上下文预测逐通道common/detail尺度预算。预算在P3/P4/P5维softmax后乘3，每个分支/通道总预算严格为3，仅重分配尺度贡献，不改变平均残差强度；描述侧停止梯度，输出层零初始化，无额外loss或高分辨率卷积 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 60为 `54.217/61.875`，同点 pair mAP/AP50 `0.316913/0.534141`，both-independent `0.353674/0.563208`。未超过 Encoder 最终 `54.437/62.393`，不进入decoder主线；进程已退出 |
 | COMPLETED | `0723_05_pairdn_paircoherent_le180_cpdse_local` | 2026-07-24 03:56 | 2026-07-25 03:56 | `0723_01` + consistency-preserving DSE local：保留`x.mean`主路径，以归一化通道离散度生成零初始化、最大绝对值0.5的逐像素SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`；相对Paper Base为`+0.222/-0.363`，不满足双提升。PairMOT训练及评测进程已退出，99不排新任务；不对其他用户当前GPU占用做清理或调度 |
