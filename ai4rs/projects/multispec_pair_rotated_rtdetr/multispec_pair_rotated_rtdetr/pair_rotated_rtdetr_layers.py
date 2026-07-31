@@ -278,6 +278,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  bool = False,
                  common_evidence_bypass_decoder: bool = False,
                  terminal_common_evidence_bypass_decoder: bool = False,
+                 terminal_factorized_evidence_decoder: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -318,6 +319,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             common_evidence_bypass_decoder)
         self.terminal_common_evidence_bypass_decoder = bool(
             terminal_common_evidence_bypass_decoder)
+        self.terminal_factorized_evidence_decoder = bool(
+            terminal_factorized_evidence_decoder)
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -545,6 +548,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.terminal_midpoint_enveloped_detail_decoder,
             self.terminal_regression_enveloped_detail_decoder,
             self.terminal_midpoint_regression_enveloped_detail_decoder,
+            self.terminal_factorized_evidence_decoder,
         )
         if sum(bool(mode) for mode in terminal_detail_modes) > 1:
             raise ValueError(
@@ -565,6 +569,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'terminal detail decoder is incompatible with '
                 'decoder variants other than shared_attention_decoder')
+        if self.terminal_factorized_evidence_decoder and (
+                not self.shared_attention_decoder):
+            raise ValueError(
+                'terminal_factorized_evidence_decoder requires '
+                'shared_attention_decoder')
         super().__init__(*args, **kwargs)
         if self.shared_routing_decoder:
             for layer in self.layers:
@@ -599,7 +608,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.terminal_enveloped_detail_decoder
             or self.terminal_midpoint_enveloped_detail_decoder
             or self.terminal_regression_enveloped_detail_decoder
-            or self.terminal_midpoint_regression_enveloped_detail_decoder)
+            or self.terminal_midpoint_regression_enveloped_detail_decoder
+            or self.terminal_factorized_evidence_decoder)
 
     @property
     def _common_evidence_bypass_enabled(self) -> bool:
@@ -675,7 +685,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
             ])
-        if self.terminal_common_evidence_bypass_decoder:
+        if (self.terminal_common_evidence_bypass_decoder
+                or self.terminal_factorized_evidence_decoder):
             # A terminal-only bypass cannot perturb recurrent references.
             # Allocate exactly one gate so DDP sees no intentionally unused
             # parameters on the auxiliary decoder layers.
@@ -1019,7 +1030,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.common_evidence_bypass_decoder:
             for gate in self.common_evidence_bypass_gates:
                 nn.init.zeros_(gate.weight)
-        if self.terminal_common_evidence_bypass_decoder:
+        if (self.terminal_common_evidence_bypass_decoder
+                or self.terminal_factorized_evidence_decoder):
             for gate in self.terminal_common_evidence_bypass_gates:
                 nn.init.zeros_(gate.weight)
         if not self.tristate_decoder:
@@ -1397,6 +1409,42 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                             layer_output - frame_detail)
                         detailed_curr = reg_branches_curr[lid](
                             layer_output + frame_detail)
+                        box_detail = 0.5 * (
+                            (detailed_curr - base_curr)
+                            - (detailed_prev - base_prev))
+                        tmp_prev = base_prev - box_detail
+                        tmp_curr = base_curr + box_detail
+                    else:
+                        tmp_prev = reg_branches_prev[lid](layer_output)
+                        tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.terminal_factorized_evidence_decoder:
+                    # Factor the terminal evidence into a swap-invariant
+                    # common component and a swap-odd frame component.
+                    # Classification sees only the common correction. Box
+                    # specialization receives an antisymmetric 5D residual,
+                    # so its added pair midpoint is exactly zero. Auxiliary
+                    # outputs and all recurrent references remain unchanged.
+                    layer_output_prev = layer_output
+                    layer_output_curr = layer_output
+                    if lid == self.num_layers - 1:
+                        common_output = layer_output + (
+                            self.
+                            _terminal_common_evidence_bypass_correction(
+                                layer_output,
+                                frame_evidence_prev,
+                                frame_evidence_curr))
+                        layer_output_prev = common_output
+                        layer_output_curr = common_output
+                        frame_detail = (
+                            self._terminal_enveloped_detail_correction(
+                                frame_evidence_prev,
+                                frame_evidence_curr))
+                        base_prev = reg_branches_prev[lid](common_output)
+                        base_curr = reg_branches_curr[lid](common_output)
+                        detailed_prev = reg_branches_prev[lid](
+                            common_output - frame_detail)
+                        detailed_curr = reg_branches_curr[lid](
+                            common_output + frame_detail)
                         box_detail = 0.5 * (
                             (detailed_curr - base_curr)
                             - (detailed_prev - base_prev))

@@ -96,7 +96,8 @@ def _build_decoder(num_layers: int = 2,
                    terminal_midpoint_regression_enveloped_detail_decoder:
                    bool = False,
                    common_evidence_bypass_decoder: bool = False,
-                   terminal_common_evidence_bypass_decoder: bool = False):
+                   terminal_common_evidence_bypass_decoder: bool = False,
+                   terminal_factorized_evidence_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -153,6 +154,8 @@ def _build_decoder(num_layers: int = 2,
         common_evidence_bypass_decoder=common_evidence_bypass_decoder,
         terminal_common_evidence_bypass_decoder=(
             terminal_common_evidence_bypass_decoder),
+        terminal_factorized_evidence_decoder=(
+            terminal_factorized_evidence_decoder),
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -2548,6 +2551,166 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertIsNotNone(gate.weight.grad)
         self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_terminal_factorized_evidence_requires_shared_attention(self):
+        with self.assertRaisesRegex(ValueError, 'requires'):
+            _build_decoder(
+                device=self.device,
+                terminal_factorized_evidence_decoder=True)
+
+    def test_terminal_factorized_evidence_is_exact_zero_start(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_attention_decoder=True,
+            terminal_factorized_evidence_decoder=True)
+        decoder.init_weights()
+        self.assertEqual(len(decoder.terminal_common_evidence_bypass_gates), 1)
+        self.assertEqual(len(decoder.terminal_enveloped_detail_gates), 1)
+        self.assertEqual(
+            decoder.terminal_common_evidence_bypass_gates[
+                0].weight.abs().sum().item(), 0.0)
+        self.assertEqual(
+            decoder.terminal_enveloped_detail_gates[
+                0].weight.abs().sum().item(), 0.0)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        factorized_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_factorized_evidence_decoder = False
+        baseline_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for factorized_group, baseline_group in zip(
+                factorized_output[:3], baseline_output):
+            for factorized_tensor, baseline_tensor in zip(
+                    factorized_group, baseline_group):
+                self.assertTrue(torch.equal(
+                    factorized_tensor, baseline_tensor))
+        for factorized_group in factorized_output[3:]:
+            for factorized_tensor, baseline_tensor in zip(
+                    factorized_group, baseline_output[0]):
+                self.assertTrue(torch.equal(
+                    factorized_tensor, baseline_tensor))
+
+    def test_terminal_factorized_evidence_is_final_only_and_orthogonal(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_attention_decoder=True,
+            terminal_factorized_evidence_decoder=True)
+        decoder.init_weights()
+        common_gate = decoder.terminal_common_evidence_bypass_gates[0]
+        detail_gate = decoder.terminal_enveloped_detail_gates[0]
+        torch.manual_seed(157)
+        with torch.no_grad():
+            torch.nn.init.normal_(common_gate.weight, std=0.05)
+            torch.nn.init.normal_(detail_gate.weight, std=0.05)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        factorized_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        detail_weight = detail_gate.weight.detach().clone()
+        with torch.no_grad():
+            detail_gate.weight.zero_()
+        common_only_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        with torch.no_grad():
+            detail_gate.weight.copy_(detail_weight)
+
+        for lid in range(decoder.num_layers - 1):
+            for group in range(1, 5):
+                self.assertTrue(torch.equal(
+                    factorized_output[group][lid],
+                    common_only_output[group][lid]))
+        self.assertTrue(torch.equal(
+            factorized_output[3][-1], factorized_output[4][-1]))
+        self.assertTrue(torch.equal(
+            factorized_output[3][-1], common_only_output[3][-1]))
+        self.assertTrue(torch.equal(
+            factorized_output[4][-1], common_only_output[4][-1]))
+
+        factorized_prev = torch.logit(
+            factorized_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        factorized_curr = torch.logit(
+            factorized_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        common_prev = torch.logit(
+            common_only_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        common_curr = torch.logit(
+            common_only_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        midpoint_error = (
+            factorized_prev - common_prev
+            + factorized_curr - common_curr)
+        self.assertTrue(torch.allclose(
+            midpoint_error,
+            torch.zeros_like(midpoint_error),
+            atol=5e-5,
+            rtol=5e-5),
+            msg=float(midpoint_error.abs().max()))
+        self.assertTrue(any((
+            not torch.equal(
+                factorized_output[1][-1], common_only_output[1][-1]),
+            not torch.equal(
+                factorized_output[2][-1], common_only_output[2][-1]),
+        )))
+
+    def test_terminal_factorized_evidence_gates_receive_gradients(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            shared_attention_decoder=True,
+            terminal_factorized_evidence_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        _, references_prev, references_curr, hidden_prev, hidden_curr = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(163)
+        loss = sum(
+            (value * torch.randn_like(value)).mean()
+            for value in (
+                hidden_prev[-1],
+                hidden_curr[-1],
+                references_prev[-1],
+                references_curr[-1]))
+        loss.backward()
+        for gate in (
+                decoder.terminal_common_evidence_bypass_gates[0],
+                decoder.terminal_enveloped_detail_gates[0]):
+            self.assertIsNotNone(gate.weight.grad)
+            self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
     def test_orthogonal_evidence_decomposition_is_exact_zero_start(self):
         decoder, reg_prev, reg_curr = _build_decoder(
             device=self.device,
@@ -2662,6 +2825,29 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 model.init_weights()
             for gate in getattr(decoder, attribute):
                 self.assertEqual(gate.weight.abs().sum().item(), 0.0)
+
+    def test_terminal_factorized_gates_survive_detector_init(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            shared_attention_decoder=True,
+            terminal_factorized_evidence_decoder=True)
+        model = MultispecPairRotatedRTDETR.__new__(
+            MultispecPairRotatedRTDETR)
+        torch.nn.Module.__init__(model)
+        model.decoder = decoder
+
+        def detector_level_xavier(model_self):
+            for param in model_self.decoder.parameters():
+                if param.dim() > 1:
+                    torch.nn.init.xavier_uniform_(param)
+
+        with mock.patch.object(
+                RotatedRTDETR, 'init_weights', detector_level_xavier):
+            model.init_weights()
+        for gate in (
+                decoder.terminal_common_evidence_bypass_gates[0],
+                decoder.terminal_enveloped_detail_gates[0]):
+            self.assertEqual(gate.weight.abs().sum().item(), 0.0)
 
     def test_tristate_disables_structurally_unused_parameters(self):
         decoder, _, _ = _build_decoder(
