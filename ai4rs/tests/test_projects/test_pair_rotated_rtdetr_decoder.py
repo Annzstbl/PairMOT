@@ -100,7 +100,8 @@ def _build_decoder(num_layers: int = 2,
                    terminal_classification_common_evidence_decoder:
                    bool = False,
                    terminal_factorized_evidence_decoder: bool = False,
-                   terminal_factorized_confidence: str = 'none'):
+                   terminal_factorized_confidence: str = 'none',
+                   terminal_factorized_diagonal_gates: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -162,6 +163,8 @@ def _build_decoder(num_layers: int = 2,
         terminal_factorized_evidence_decoder=(
             terminal_factorized_evidence_decoder),
         terminal_factorized_confidence=terminal_factorized_confidence,
+        terminal_factorized_diagonal_gates=(
+            terminal_factorized_diagonal_gates),
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -2892,6 +2895,89 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             _build_decoder(
                 device=self.device,
                 terminal_factorized_confidence='common')
+
+    def test_terminal_factorized_diagonal_gates_are_lightweight_and_exact(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_factorized_evidence_decoder=True,
+            terminal_factorized_diagonal_gates=True)
+        decoder.init_weights()
+        common_gate = decoder.terminal_common_evidence_bypass_gates[0]
+        detail_gate = decoder.terminal_enveloped_detail_gates[0]
+        self.assertEqual(tuple(common_gate.shape), (decoder.embed_dims,))
+        self.assertEqual(tuple(detail_gate.shape), (decoder.embed_dims,))
+        self.assertEqual(common_gate.numel() + detail_gate.numel(),
+                         2 * decoder.embed_dims)
+        self.assertEqual(common_gate.abs().sum().item(), 0.0)
+        self.assertEqual(detail_gate.abs().sum().item(), 0.0)
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        zero_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_factorized_evidence_decoder = False
+        parent_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        decoder.terminal_factorized_evidence_decoder = True
+        for zero_group, parent_group in zip(zero_output, parent_output):
+            for zero_tensor, parent_tensor in zip(zero_group, parent_group):
+                self.assertTrue(torch.equal(zero_tensor, parent_tensor))
+
+        with torch.no_grad():
+            common_gate.fill_(0.05)
+            detail_gate.fill_(0.05)
+        active_output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        active_prev = torch.logit(
+            active_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        active_curr = torch.logit(
+            active_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        parent_prev = torch.logit(
+            parent_output[1][-1].clamp(1e-6, 1 - 1e-6))
+        parent_curr = torch.logit(
+            parent_output[2][-1].clamp(1e-6, 1 - 1e-6))
+        midpoint_error = (
+            active_prev - parent_prev + active_curr - parent_curr)
+        self.assertTrue(torch.allclose(
+            midpoint_error,
+            torch.zeros_like(midpoint_error),
+            atol=5e-5,
+            rtol=5e-5),
+            msg=float(midpoint_error.abs().max()))
+
+        loss = sum(
+            value.square().mean()
+            for value in (
+                active_output[3][-1], active_output[4][-1],
+                active_output[1][-1], active_output[2][-1]))
+        loss.backward()
+        self.assertIsNotNone(common_gate.grad)
+        self.assertIsNotNone(detail_gate.grad)
+        self.assertGreater(common_gate.grad.abs().max().item(), 0.0)
+        self.assertGreater(detail_gate.grad.abs().max().item(), 0.0)
+
+        with self.assertRaisesRegex(ValueError, 'requires'):
+            _build_decoder(
+                device=self.device,
+                terminal_factorized_diagonal_gates=True)
 
     def test_terminal_bilateral_confidence_is_exact_and_detached(self):
         decoder, _, _ = _build_decoder(
