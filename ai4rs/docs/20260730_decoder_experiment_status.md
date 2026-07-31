@@ -654,3 +654,23 @@
   均有限，GPU 0/1 各约 `19.4 GiB`，无 Traceback/OOM/NaN/NCCL。
   该轨迹只继续到 epoch 8 做双 HOTA 可持续性判断，不把旧 epoch 5 的部分训练日志
   当作当前恢复轨迹。
+
+## 2026-07-31 12:44 CST 0731_16 terminal common-evidence 正式启动
+
+- 历史对照表明，`0731_03` 的共同证据旁路在 epoch 4 同时提高 cls/det HOTA 与
+  DetA，但逐层注入会改变后续 decoder reference。`0731_16` 因此不是调 scale，
+  而是把同一结构假设严格隔离到最终输出：保持 recurrent query、全部 auxiliary
+  output 和供后续层消费的 reference 与父路径一致，只在最后一层双帧预测头前加入
+  swap-invariant、零起点且有界的共同 cross-attention 证据。
+- 提交 `8a663bd` 已同步到 99、197、252、178。新增模式通过 93 项 decoder 单测，
+  包括零起点严格等价、仅最终输出变化、帧交换不变性/有界性和 gate 梯度；正式及
+  smoke 配置深拷贝、完整模型构建和 launcher 语法检查均通过。
+- 178 GPU 0 的真实数据 4-iter smoke 最终 loss/grad norm 为
+  `20.1619/63.3459`，总、DN、encoder loss 全部有限；`iter_4.pth` 中唯一 terminal
+  gate 最大绝对权重 `3.98724e-4`，结构确已获得更新，且没有训练异常。
+- 正式 fresh 训练于 12:42 启动，12:43 达到 epoch 1 iter 50：
+  `0.9353 s/iter`、loss `21.4237`、grad norm `94.8035`；GPU 0 约
+  `31.4 GiB`，总、DN、encoder loss 有限，无 Traceback/OOM/NaN/NCCL。
+- 当前四路并行为：99 `0731_14`、197 `0731_15`、252 恢复的 `0731_03`、
+  178 `0731_16`。前三者分别等待 epoch 4/4/8 完整结果；`0731_16` 首判
+  epoch 4。决策仍以同 checkpoint 的 cls/det HOTA 为主，mAP 只作检测退化诊断。

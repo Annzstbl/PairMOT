@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 12:26 CST。
+更新时间：2026-07-31 12:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；12:13 到 epoch 2 iter 800，loss/grad norm `11.2420/26.9715`；总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；12:12 到 epoch 2 iter 950，loss/grad norm `12.2897/30.3471`；总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；该实验 epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`，此前仅因已取消的 mAP 保护线停止；12:24 从 `epoch_4.pth` 恢复，12:25 到 epoch 5 iter 50，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无训练 | `0730_16 antisymmetric-detail` 恢复至 epoch 8 后双 HOTA 相对父配置 `-0.678/-0.508`，完整评估与结构审计后停止；GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；12:42 到 epoch 4 iter 600，loss/grad norm `11.2330/37.3656`；总、DN、encoder loss 有限，等待 epoch 4 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；12:43 到 epoch 4 iter 950，loss/grad norm `10.8398/39.4393`；总、DN、encoder loss 有限，等待 epoch 4 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`；12:24 从 `epoch_4.pth` 恢复，12:42 到 epoch 5 iter 950，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；真实数据 smoke 和 terminal-gate checkpoint 检查通过；12:42 fresh 启动，12:43 到 epoch 1 iter 50，loss/grad norm `21.4237/94.8035`，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -162,6 +162,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| RUNNING | `0731_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcommonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 12:42 |  | 继承`0727_01`及其共享 decoder 路径，只在最后一层最终双帧预测头前注入 swap-invariant、零起点且有界的共同 cross-attention 证据；不改 recurrent query、所有 auxiliary output 及任何供后续层消费的 reference，避免`0731_03`全层注入的递归污染 | 提交`8a663bd`已同步四机。4-iter真实数据smoke总、DN、encoder loss及grad norm有限，唯一 terminal gate 最大权重`3.98724e-4`且结构检查通过。正式训练12:43达到epoch 1 iter 50，`0.9353 s/iter`、loss`21.4237`、grad norm`94.8035`，GPU 0约31.4 GiB，无Traceback/OOM/NaN；首判epoch 4 |
 | STOPPED | `0727_08_paper_base_liquid_encoder_p5temporal_dualbranchtrust` | 2026-07-27 20:51 | 2026-07-27 21:37 | 完整保留`0727_01`的P5 MHA与common/detail双残差，不使用空间门；仅分别限制shared-common和signed-detail更新RMS不超过其对应输入证据RMS，未超限更新不变 | 前序完成18/18评测且GPU连续空闲后，严格队列完成真实数据smoke并fresh启动；按用户指令主动停在epoch 3 iter 750。未生成正式epoch checkpoint，不resume、不进入论文结果；训练、launcher及队列进程均已退出，GPU 0释放，GPU 1上的其他任务未受影响 |
 | STOPPED | `0727_06_paper_base_liquid_encoder_p5temporal_sharedscalar` | 2026-07-27 02:43 | 2026-07-27 03:47 | 保留P5 MHA和signed-detail，但以两帧共享的逐位置标量增益替代channel-mixing common残差 | 只进入等待队列，未创建smoke、正式目录或训练进程。`0727_01` epoch 12的det AssA已恢复到相对Base `+0.006`，同时det DetA `+1.449`，证明原common分支可实现无关联代价的检测增益；移除其通道表达能力的设计依据消失，因此队列撤销并由`0727_08`替代 |
 | STOPPED | `0727_03_paper_base_liquid_encoder_p5temporal_scalesplit` | 2026-07-27 00:29 | 2026-07-27 02:40 | 固定`0723_01` Liquid和P5 MHA；P3只启用common共享检测增强，P4/P5启用common+signed-detail | 只进入等待队列，未创建smoke、正式目录或训练进程。epoch 8诊断表明实际矛盾是common残差带来det DetA `+2.710`但det AssA `-2.918`；移除P3 detail没有针对该问题，因此主动撤销队列并由`0727_06`替代 |
