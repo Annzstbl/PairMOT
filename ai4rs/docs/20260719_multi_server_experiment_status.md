@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 10:04 CST。
+更新时间：2026-07-31 10:49 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `37.799/43.483`，相对父配置 `+1.590/+4.730`，DetA/AssA 四项也全部提高；10:03 进入 epoch 5，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0730_09 motion-trust decoder` 从 epoch 8 恢复 | RUNNING；epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；09:41 到 epoch 2 iter 150；正式 iter 50 五项门槛通过，下一决策点 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；cls 极窄落后而 det 明显提高，继续到 epoch 8 验证中期稳定性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0730_16 antisymmetric-detail decoder` 从 epoch 4 恢复 | RUNNING；epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -700,3 +700,20 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   结构检查确认 6 组 shared attention 严格相同、18 组独立参数已分化、唯一
   terminal gate 有限非零。checkpoint、检测、TrackEval 与原始 CSV 均完整，
   因而继续到 epoch 8；10:03 已进入 epoch 5。
+
+## 2026-07-31 10:49 CST 252 terminal-midpoint epoch-4 结果
+
+- `0731_13` epoch 4 cls HOTA/DetA/AssA 为 `36.148/27.020/51.933`，
+  det 为 `43.247/33.958/56.389`；相对 encoder 同点分别为
+  `-0.061/-0.048/-0.161` 与 `+4.494/+1.504/+8.923`。因此当前不记为
+  双 HOTA 提升，但 cls 差距极窄，det 的检测与关联组成量均明显提高。
+- pair mAP `0.153978`，相对父配置约 `-0.003275`；both-independent AP50
+  `0.335487`，相对约 `+0.012338`。按当前规则 AP 仅作诊断，未显示与 det HOTA
+  同向的检测崩塌。
+- checkpoint、检测 metrics、完整 TrackEval 和原始 CSV 均已落盘。结构检查确认
+  6 组 shared attention 最大误差为零、18 组独立参数最大差异 `0.037019`，
+  唯一 terminal-midpoint gate 最大权重 `0.081010`，排除模块未学习。
+- 同 epoch 它低于 99 `0731_12 terminal-only` `1.651/0.236`，说明新增 midpoint
+  约束尚未形成早期正交增益；但其 cls 仅低父配置 `0.061`，且该结构的核心假设是避免
+  中期递归污染，因此允许继续到 epoch 8 做一次稳定性判定。epoch 8 若仍非双 HOTA
+  通过，则停止，不再延长。

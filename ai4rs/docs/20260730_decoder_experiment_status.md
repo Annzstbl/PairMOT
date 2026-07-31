@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 10:04 CST
+更新时间：2026-07-31 10:49 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；09:18 fresh 启动，09:19 正式 iter 50 五项门槛通过；09:41 到 epoch 2 iter 150 | 只在末层分类输出注入帧细节；末层框残差在 5D logit 空间严格反对称，前两层及递归 reference 与父路径逐元素一致。下一完整决策点为 epoch 4。 |
+| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`，继续到 epoch 8 | Cls 仅极窄落后，det 的 DetA/AssA 均明显提高；完整产物与结构验收通过。epoch 8 若仍非双 HOTA 通过则停止。 |
 | 178 GPU 0 | `0730_16 ... decoder_antisymmetricdetail ... resume epoch 4` | `RUNNING`；09:49 按 HOTA 优先规则恢复，09:50 epoch 5 iter 50 正式迭代通过 | 该结构 epoch 4 cls/det HOTA `36.684/39.221`，相对父配置 `+0.475/+0.468`；旧停止原因是 det DetA 保护线，而非双 HOTA 失败。当前仅以 cls/det HOTA 为主重新验证到 epoch 8。 |
 | 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `37.799/43.483`，相对父配置 `+1.590/+4.730`，继续到 epoch 8 | Cls/Det 的 DetA、AssA 四项全部提高；checkpoint、检测、完整 TrackEval、原始 CSV 与结构验收通过。10:03 已进入 epoch 5。 |
 | 197 GPU 4,5 | `0730_09 ... decoder_motiontrust ... resume epoch 8` | `RUNNING`；09:48 按 HOTA 优先规则恢复，09:49 epoch 9 iter 50 正式迭代通过 | 该结构 epoch 8 cls/det HOTA `45.498/51.160`，相对父配置 `+0.229/+0.967`；旧停止原因是 DetA/mAP 保护线，而非双 HOTA 失败。当前继续到 epoch 12。 |
@@ -533,3 +533,19 @@
 - checkpoint 结构检查确认 6 组 shared attention 最大误差为零、18 组独立参数
   最大差异 `0.038689`，唯一 terminal gate 最大权重 `0.080521`，模块确已学习。
   该结构明确继续到 epoch 8；10:03 已进入 epoch 5。
+
+## 2026-07-31 10:49 CST 0731_13 epoch-4 决策
+
+- 252 `0731_13 terminal-midpoint` 已完成 epoch 4 checkpoint、检测 metrics、
+  完整 TrackEval、原始 CSV 与 checkpoint 结构检查。cls HOTA/DetA/AssA 为
+  `36.148/27.020/51.933`，det 为 `43.247/33.958/56.389`。
+- 相对 encoder 同点，cls 三项为 `-0.061/-0.048/-0.161`，det 三项为
+  `+4.494/+1.504/+8.923`。这不是双 HOTA 通过，但 cls 落后仅 `0.061`，
+  det 增益同时来自检测与关联，不属于单纯 AssA 搬运。
+- pair mAP `0.153978`、both-independent AP50 `0.335487`，相对父配置约
+  `-0.003275/+0.012338`。AP 仅作诊断，当前没有与 det HOTA 同向的覆盖崩塌。
+- 结构检查确认 6 组 shared attention 最大误差为零、18 组独立参数最大差异
+  `0.037019`，唯一 terminal-midpoint gate 最大权重 `0.081010`。同 epoch
+  它比 99 `0731_12 terminal-only` 低 `1.651/0.236`，说明 midpoint 约束没有
+  早期互补优势；但末层隔离的核心假设是中期稳定性，因此仅继续到 epoch 8 做最终
+  稳定性判定。epoch 8 若仍非双 HOTA 通过，立即停止该方向，不再延长。
