@@ -1323,3 +1323,25 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - `0731_29` 已通过配置深拷贝、完整构建、双卡真实 4-iter smoke、有限总/DN/encoder
   loss、checkpoint 门控更新和正式 iter 50 五项启动验收。首个结构判定点为 epoch 4；
   最终成功条件仍为 cls/det HOTA 同时超过 `54.437/62.393`。
+
+## 2026-07-31 23:22 CST 0731_21 epoch-28 机制判定
+
+- `0731_21` epoch 28 cls/det HOTA 为 `52.135/59.522`，相对 Encoder 同点
+  `51.740/59.830` 为 `+0.395/-0.308`，仍不满足双提升。
+- cls DetA/AssA 相对父轨迹为 `+0.497/+0.091`；det DetA/AssA 为
+  `-0.924/+0.573`。pair 与 both-independent 的 mAP/AP50 分别提高
+  `0.006896/0.010218/0.007304/0.011789`。因此结构确实改善分类和关联，
+  但完整 5D frame-detail 仍将一部分 det 检测覆盖搬运到 AssA。
+- 该偏离幅度较小且 AP 全部提升，不按单点评估过严停止；`0731_21` 继续到 epoch 32。
+  `0731_28/29` 对 frame detail 的中心运动限制正是针对该 DetA 瓶颈，保持为优先轻量候选。
+
+## 2026-07-31 23:33 CST 0731_27 epoch-4 Gate
+
+- 逐通道 terminal factorization 的 epoch 4 cls/det HOTA 为 `36.753/42.551`，
+  相对 Encoder 同点提高 `0.544/3.798`。cls DetA/AssA 分别变化
+  `+0.033/+2.107`，det 为 `+1.199/+7.305`，不是只靠 AssA 搬运的单侧结果。
+- pair/both-independent AP50 分别提高 `0.013886/0.014332`；mAP 轻微下降
+  `0.004003/0.001532`，按 HOTA 主门槛只记为诊断项，不构成早停。
+- 正式 epoch-4 checkpoint 中两个逐通道门控最大绝对值为 `0.050928/0.180767`，
+  独立 attention 最大分化 `0.030386`，排除结构未学习。该 512 参数轻量候选继续到 e8；
+  e4 的大幅 det 增益只作强早期信号，不外推为最终结论。
