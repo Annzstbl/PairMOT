@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 21:02 CST
+更新时间：2026-07-31 21:47 CST
 
 ## 当前研究原则
 
@@ -13,9 +13,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU 0,1 | `0731_24 ... decoder_terminalconfidentcommonfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.689/42.562`，相对父配置 `+0.480/+3.809` | 无新增参数的 object-confidence common 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
+| 99 GPU 0,1 | `0731_24 ... decoder_terminalconfidentcommonfactorizedevidence ... fresh` | `RUNNING`；epoch 8 `44.103/50.795`，相对父配置 `-1.166/+0.602` | confidence 明显压低 DetA/AP；仅继续到 epoch 12 确认是否恢复，不再派生新组合。 |
 | 197 GPU 4,5 | `0731_25 ... decoder_terminalconfidentdetailfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `35.824/41.591`，相对父配置 `-0.385/+2.838` | 无新增参数的 object-confidence detail 路由；DetA/AP 偏弱，但 epoch 4 不作性能淘汰，继续到 epoch 8。 |
-| 252 GPU 0,1 | `0731_26 ... decoder_terminalconfidentbothfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.958/41.792`，相对父配置 `+0.749/+3.039` | common 与 detail 同时采用无参数 confidence 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
+| 252 GPU 0,1 | `0731_26 ... decoder_terminalconfidentbothfactorizedevidence ... fresh` | `RUNNING`；epoch 8 `44.283/50.390`，相对父配置 `-0.986/+0.197` | confidence 明显压低 DetA/AP；仅继续到 epoch 12 确认是否恢复，不再派生新组合。 |
 | 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；epoch 20 `51.475/58.956`，相对父配置 `-0.039/+0.034` | 独立 attention + 正交 common/detail；e20 恢复到近同点且四项 AP 均提升，继续到 epoch 24。 |
 
 ## 已完成或释放
@@ -925,3 +925,17 @@
   `-0.818/-0.235` 相比已经明显恢复。
 - 严格双提升尚未成立，但该零额外层级的简单结构正在恢复且训练已进入 epoch 21，继续到
   epoch 24 是比 e20 停止更合理的判定；e24 将检验近同点是否转为稳定双增益。
+
+## 2026-07-31 21:47 CST confidence epoch-8 结论与复杂度
+
+- `0731_24 confident-common` e8 为 cls/det HOTA `44.103/50.795`，相对 Encoder
+  `-1.166/+0.602`；DetA `-2.648/-2.241`，AssA `+1.807/+4.659`，四项 AP
+  下降 `0.017332/0.017646/0.022292/0.021760`。
+- `0731_26 confident-common+detail` e8 为 `44.283/50.390`，相对 Encoder
+  `-0.986/+0.197`；DetA `-2.028/-3.075`，AssA `+0.648/+4.312`，四项 AP
+  也全部下降。两者都明显低于无 confidence 的 `0731_21` e8 `46.642/52.107`。
+- 定性结论是双边分类 confidence 过度衰减末层检测修正，造成 DetA→AssA 搬运；两项按宽松
+  规则看到 e12，但不再扩展该系列。
+- `0731_21` 相对 Encoder 新增 `131,072` 参数，约占模型状态 `0.575%`；confidence
+  变体不新增参数，但会多执行末层父分类置信度计算。参数轻量不等于已经证明无速度代价，
+  主线候选仍需同卡同温训练和推理测速。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 21:02 CST。
+更新时间：2026-07-31 21:47 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,9 +15,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；epoch 4 为 `36.689/42.562`，相对 `0727_01` 同点 `+0.480/+3.809`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；epoch 8 为 `44.103/50.795`，相对 `0727_01` 同点 `-1.166/+0.602`，DetA/AP 明显下降；仅继续到 epoch 12 确认持续性 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_25 terminal object-confident detail` | RUNNING；epoch 4 为 `35.824/41.591`，相对 `0727_01` 同点 `-0.385/+2.838`；DetA/AP 偏弱，按非早停规则继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；epoch 4 为 `36.958/41.792`，相对 `0727_01` 同点 `+0.749/+3.039`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；epoch 8 为 `44.283/50.390`，相对 `0727_01` 同点 `-0.986/+0.197`，DetA/AP 明显下降；仅继续到 epoch 12 确认持续性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 20 为 `51.475/58.956`，相对 `0727_01` 同点 `-0.039/+0.034`，四项 AP 均提升；继续到 epoch 24 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1035,3 +1035,25 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 该结构简单、无额外 decoder 深度或 attention，并且 e20 出现恢复趋势；训练已自然进入
   epoch 21，故不在 e20 停止，继续观察 epoch 24。若 e24 双 HOTA 转为同点正增益，继续
   验证持续性；若再次出现明确双降，再结合 e8-e24 全轨迹决定是否释放 178。
+
+## 2026-07-31 21:47 CST confidence 路由 epoch-8 与复杂度审计
+
+- 99 `0731_24 confident-common` e8 的 cls HOTA/DetA/AssA 为
+  `44.103/35.015/59.108`，det 为 `50.795/44.820/59.804`；相对
+  `0727_01` 同点 HOTA `-1.166/+0.602`、DetA `-2.648/-2.241`、AssA
+  `+1.807/+4.659`。pair mAP/AP50 下降 `0.017332/0.017646`，both mAP/AP50
+  下降 `0.022292/0.021760`。
+- 252 `0731_26 confident-common+detail` e8 的 cls HOTA/DetA/AssA 为
+  `44.283/35.635/57.949`，det 为 `50.390/43.986/59.457`；相对父配置
+  HOTA `-0.986/+0.197`、DetA `-2.028/-3.075`、AssA `+0.648/+4.312`。
+  pair mAP/AP50 下降 `0.009266/0.001364`，both mAP/AP50 下降
+  `0.012395/0.004377`。
+- 与不加 confidence 的 `0731_21` e8 `46.642/52.107` 相比，`0731_24` 双 HOTA
+  低 `2.539/1.312`，`0731_26` 低 `2.359/1.717`。两项独立结果共同说明双边分类
+  confidence 会过度衰减末层检测修正，把 DetA/AP 搬运为 AssA，而不是改善 factorization。
+- 按放宽后的判定规则，两项都继续到 e12 做最后一次持续性确认；但不再创建新的 confidence
+  组合。若 e12 未发生实质恢复，则停止并回到无 confidence 的 `0731_21` 结构轨迹。
+- checkpoint 状态审计确认 `0731_21` 相对 Encoder 仅新增两个 `256×256` 无偏置线性门，
+  共 `131,072` 个参数；状态量由 `22,784,060` 增至 `22,915,132`，增幅约 `0.575%`。
+  24/25/26 相对 21 不新增参数，但末层需额外计算两次父分类分支得到 confidence，不能称为
+  零计算开销。最终候选仍须在同卡同温条件下实测训练和推理速度。
