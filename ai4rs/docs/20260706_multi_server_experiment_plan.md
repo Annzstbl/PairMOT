@@ -1471,3 +1471,10 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 252 下一项只做一项机制剥离：分类完全回到 Encoder，仅保留末层中心 x/y 的反对称 box detail；
   宽高角、辅助输出和 recurrent references 不变。新增 65,536 参数（约 0.29%），无新层、attention
   或 loss。单测和完整构建通过后执行真实 4-iter smoke，通过五项门槛才启动 formal fresh。
+
+## 2026-08-01 02:47 CST 0801_02 启动验收
+
+- 配置父链的数据根路径问题在首轮 smoke 数据加载前暴露并修正，未产生训练更新；失败日志保留。
+  修正后 4-iter 双卡真实 smoke、detail-only checkpoint 审计与 6 组独立 attention 检查通过。
+- 正式 fresh 已在 252 GPU0/1 运行到 iter 50，总/DN/encoder loss 和 grad norm 有限，无训练异常。
+  先看 e4 结构信号，不在早期小波动上过严停止；e8/e12 决定是否继续到 e16/e20。

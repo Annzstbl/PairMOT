@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e12 `49.186/56.248`，相对 Encoder 同点 `-0.494/-0.293`；e8 增益未持续但非全面恶化，继续到 e16 复核 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；e4 `36.757/42.605`，相对 Encoder 同点 `+0.548/+3.852`；仅 256 参数，继续到 e8 判断持续性 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无训练 | `0731_29` 已停止并释放 GPU0/1；`0801_02` detail-only 中心运动候选已通过 106 项单测与完整构建，等待真实 smoke | `0801_02 terminal center-motion detail-only` | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0801_02 terminal center-motion detail-only` | RUNNING；仅新增 65,536 参数（约 0.29%），106 项单测、完整构建、真实 smoke 与正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 terminal orthogonal factorized evidence` | RUNNING；exact resume 的 e36 为 `52.699/60.048`，HOTA/DetA 小降但四项 AP 全升，继续到 e40；恢复评估产物已防冲突归档 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -135,7 +135,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| PREPARED | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |  |  | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | 仅新增一个 `256×256` 无偏置 gate，即 65,536 参数（总参数 `22,824,311`，增量约 0.29%）；无新增 decoder 层、attention、分支或 loss。106 项 decoder 单测与完整模型构建通过，等待 252 双卡真实 4-iter smoke |
+| RUNNING | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 02:44 |  | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | 仅新增一个 `256×256` 无偏置 gate，即 65,536 参数（总参数 `22,824,311`，增量约 0.29%）；无新增 decoder 层、attention、分支或 loss。106 项单测、配置深拷贝、完整构建和双卡真实 4-iter smoke 通过；smoke gate 非零、6 组 attention 独立。正式 iter 50 为 `1.1947 s/iter`、loss `22.3855`、grad norm `144.2432`，总/DN/encoder loss 有限，GPU0/1 各约 19.2 GiB，无异常，五项启动门槛通过 |
 | STOPPED | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 | 2026-08-01 02:12 | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | e8 cls/det HOTA `44.148/49.376`，相对 Encoder 同点 `-1.121/-0.817`；cls/det DetA 为 `-2.028/-3.357`，pair mAP/AP50 下降 `0.028467/0.019227`，both-independent 下降 `0.030575/0.019963`。完整 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_26_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentbothfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 23:12 | 同时用 detached 双帧分类置信度约束 common/detail 修正；不新增参数 | e12 `48.766/55.694`，相对 Encoder 同点 `-0.914/-0.847`；cls/det DetA 为 `40.056/47.910`，pair mAP/AP50 为 `0.262434/0.479349`。epoch 12 checkpoint、检测 metrics、TrackEval metrics 与 54 个原始结果文件完整验证后精确停止；与 `0731_24/25` 一起否定全部 confidence 放置，不再派生 |
 | STOPPED | `0727_04_paper_base_liquid_encoder_p5temporal_detailenergy` | 2026-07-28 00:50 | 2026-07-29 01:51 | 固定`0723_01` Liquid与P5 MHA，保持`0726_03` common/detail结构；仅对两帧反向的signed-detail残差施加逐通道、逐样本的原始pair-detail RMS上限，防止时序修正能量超过输入帧差。约束使用detached统计、无参数、无loss且仍严格保持pair均值与帧交换等变 | 完整评估到epoch 56，共14个评测点；最后也是已评测最佳为 `53.796/61.711`，pair mAP/AP50 `0.309336/0.528966`。训练在epoch 59 iter 150收到外部SIGTERM，与“全部停止”调度一致；不resume，未达到Encoder目标 |
@@ -1149,3 +1149,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 新候选 `0801_02` 完全保持 Encoder 分类路径，只在最终 box head 对中心 x/y 加入严格反对称、
   midpoint-preserving detail。它只有一个 `256×256` gate（65,536 参数，约 0.29%），不新增
   decoder 层、attention、分支或 loss；106 项单测和完整构建通过，待 252 真实 smoke。
+
+## 2026-08-01 02:47 CST 0801_02 正式启动
+
+- 首次 smoke 在数据加载前发现父配置误指向 99 数据根目录，未执行训练迭代；失败目录完整保留为
+  `smoke_0801_02_terminal_center_motion_detail_only_4iter_failed_bad_data_root`。配置改为继承 252
+  已验证父链后，模型结构与参数数目不变。
+- 修正后双卡真实 4-iter smoke 的总/DN/encoder loss 与 grad norm 全部有限；checkpoint 仅含一个
+  detail gate，最大绝对值 `0.0003952`，6 组双帧 attention 最大分化 `0.0007661`，结构检查通过。
+- 252 GPU0/1 于 02:44 fresh 启动。正式 iter 50 为 `1.1947 s/iter`、loss `22.3855`、
+  grad norm `144.2432`，显存约 `19.2 GiB/rank`，无 Traceback/OOM/NaN/NCCL；五项门槛通过，
+  e4 只作结构 gate，e8/e12 判断持续性。
