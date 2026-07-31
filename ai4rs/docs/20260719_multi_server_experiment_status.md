@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 18:55 CST。
+更新时间：2026-07-31 19:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_24 terminal object-confident common` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_25 terminal object-confident detail` | RUNNING；GPU 4,5，18:52 到 epoch 1 iter 100，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_26 terminal object-confident common+detail` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 12 为 `49.159/56.341`，相对 `0727_01` 同点 `-0.521/-0.200`；因 epoch 8 曾双升且当前差距较小，继续到 epoch 16 做持续性判定 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 16 为 `50.273/58.085`，相对 `0727_01` 同点 `-0.818/-0.235`；按修订后的非早停规则继续到 epoch 20 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -985,3 +985,20 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   HOTA `-0.521/-0.200`、DetA `-0.747/-0.863`、AssA `+0.051/+0.767`。
   这表明 epoch 8 的双增益已出现轻度 DetA→AssA 回落，但差距尚小且 AP50 仍提高，
   因此保留到 epoch 16 做持续性判定；三条 confidence 实验的首判点均为 epoch 4。
+
+## 2026-07-31 19:52 CST 0731_21 epoch-16 与早期评估规则修订
+
+- epoch 16 的完整 checkpoint、检测 metrics、TrackEval 和 54 个原始文件均已落盘。
+  cls HOTA/DetA/AssA 为 `50.273/41.786/62.674`，det 为
+  `58.085/51.049/68.372`。相对 `0727_01` 同点，双 HOTA
+  `-0.818/-0.235`、双 DetA `-0.818/-0.665`，cls AssA `-0.554`，det AssA
+  `+0.402`。pair/both mAP 分别低 `0.000938/0.001007`，AP50 分别高
+  `0.000355/0.001311`，属于小幅但连续的 HOTA/DetA 回落。
+- 用户指出前期 eval 可能过严。规则据此修订：epoch 4 只作结构学习和灾难性退化检查；
+  epoch 8/12 用于观察 DetA/AssA 收敛顺序；单点小幅双降不淘汰。只有连续节点出现
+  系统性退化，或 HOTA、DetA、AP 同时明显恶化时才早停。有竞争力的简单结构至少观察到
+  epoch 16/20。`0731_21` 当前已出现两个连续小幅双降点，但没有 AP 全面恶化，且用户要求
+  放宽早期判定，因此不在 epoch 16 停止，继续到 epoch 20。
+- 模型复杂度和效率作为硬约束：后继不得堆叠 decoder 层、额外 attention、高分辨率分支
+  或额外 loss；须保持可解释 common/detail 语义，并在同卡同温条件下实测速度。当前
+  `0731_24/25/26` 为无参数 query 级可靠度路由，不属于复杂模型堆叠。
