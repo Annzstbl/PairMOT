@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 07:58 CST。
+更新时间：2026-07-31 09:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_09 shared-attention + regression-only enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:36 到 epoch 6 iter 200，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；07:18 fresh 启动，07:38 到 epoch 2 iter 250；仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + full-path enveloped-detail decoder` | RUNNING；epoch 12 cls HOTA `+0.491`、det HOTA `-0.111`，保留到 epoch 16 再判 | `0731_12 terminal-only` PREPARED，未排队、未建 workdir | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 全门槛通过，07:38 到 epoch 6 iter 150，下一判 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_12 shared-attention + terminal-only enveloped-detail decoder` | RUNNING；08:46 fresh 启动，09:20 已进入 epoch 2；正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_10 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `38.794/44.142`，相对父配置 `+2.585/+5.389`；09:06 到 epoch 7 iter 650，仅用 GPU 4/5 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；09:18 fresh 启动，09:19 达到 iter 50，五项正式启动门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_11 shared-attention + midpoint-regression enveloped-detail decoder` | RUNNING；epoch 8 cls/det HOTA `45.173/51.263`，相对父配置 `-0.096/+1.070`；因 cls 仅窄幅落后而保留到 epoch 12，09:05 到 epoch 11 iter 350 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -208,7 +208,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_11`，下一编号为`0731_12`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_13`，下一编号为`0731_14`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -642,3 +642,32 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 两份 launcher 均通过 `bash -n`，目标正式与 smoke workdir 在 252 上均确认不存在。
   当前状态仅为 `PREPARED`：未运行 smoke、未创建目录、未占 GPU，也未进入队列。
   只有 `0731_05` epoch 16 或其他完整 HOTA 证据触发接替时，才执行真实 DDP smoke。
+
+## 2026-07-31 09:20 CST epoch-16 决策与 terminal 结构接替
+
+- 252 `0731_05 full-path enveloped-detail` 的 epoch 16 完整结果为 cls
+  HOTA/DetA/AssA `51.007/42.964/62.130`，det
+  `57.940/50.762/68.403`。相对 encoder 同点 HOTA 为
+  `-0.084/-0.380`；虽然 pair mAP `0.2853` 与 both-independent AP50
+  `0.5439` 高于父配置，但一级双 HOTA 门槛失败。09:07 精确终止目标进程组，
+  epoch 16 及此前全部 checkpoint/评测产物保留，GPU 0/1 确认释放。
+- 99 `0731_09 regression-only` 的 epoch 8 cls/det HOTA 为
+  `44.043/49.271`，相对 encoder 同点 `-1.226/-0.922`，完成结构审计后停止。
+  99 已于 08:46 接替运行 `0731_12 terminal-only`；正式 iter 50 总、DN、
+  encoder loss 与 grad norm 均有限，09:20 已进入 epoch 2。
+- 197 `0731_10 midpoint-regression` 的 epoch 4 cls/det HOTA 为
+  `38.794/44.142`，相对父配置 `+2.585/+5.389`，双 DetA/AssA 也全部提高，
+  因而保留到 epoch 8；09:06 到 epoch 7 iter 650。
+- 178 `0731_11 midpoint-regression` 的 epoch 8 cls/det HOTA 为
+  `45.173/51.263`，相对父配置 `-0.096/+1.070`。cls 只窄幅落后、det 增益明确，
+  尚不足以淘汰；保留到 epoch 12，09:05 到 epoch 11 iter 350。
+- 新增 `0731_13 terminal-midpoint enveloped-detail`：分类只在最终层接收
+  bounded swap-odd 帧细节；回归也只在最终层接收帧细节，并把新增 5D box-logit
+  residual 显式构造成严格 `-detail/+detail`，使 pair midpoint 不发生漂移。
+  前两层、辅助输出和递归 reference 与 shared-attention 父路径逐元素一致。
+- `0731_13` 的针对性单测、配置深拷贝、完整模型构建、launcher 语法、252 真数据
+  双卡 4-iter smoke 与 checkpoint 结构验收均通过。smoke 中 6 组 attention
+  最大误差为零，18 组独立参数最大差异 `0.000794`，唯一 terminal gate 最大权重
+  `0.000393`。09:18 fresh 启动正式训练，09:19 达到 iter 50：
+  loss `22.1957`、grad norm `115.9534`，GPU 0/1 各约 `19.2 GiB`，无
+  Traceback/OOM/NaN/NCCL。代码提交为 `d9c97e0`。
