@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 17:39 CST。
+更新时间：2026-07-31 18:33 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,9 +15,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_22 detached classification-common evidence` | RUNNING；17:39 到 epoch 1 iter 50，loss/grad norm `22.3393/150.2402`，总/DN/encoder loss 有限；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；17:30 到 epoch 7 iter 450，无训练异常；等待 epoch 8 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_23 detached orthogonal factorized evidence` | RUNNING；17:39 到 epoch 1 iter 50，loss/grad norm `21.4946/108.6348`，总/DN/encoder loss 有限；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 本机 | 无 | `0731_22` 经代码审计确认与 `0731_19` 数学等价，18:32 停止并释放 GPU 0,1 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | 无 | `0731_20` epoch 8 双 HOTA 同点下降 `-1.599/-0.330`，完整评估和结构审计后于 18:31 停止，GPU 4,5 已释放 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | 无 | `0731_23` 经代码审计确认与 `0731_21` 数学等价，18:32 停止并释放 GPU 0,1 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 8 双 HOTA 相对 `0727_01` 提高 `+1.373/+1.914`，完整 TrackEval 与结构审计通过，继续训练 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -945,3 +945,21 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   epoch 1 iter 50，GPU/正式日志/有限总损失、DN loss、encoder loss 与 grad norm
   五项门槛通过；smoke gate 分别更新到 `3.935e-4`，以及
   `3.925e-4/3.949e-4`。两项首判均为 epoch 4。
+
+## 2026-07-31 18:33 CST 0731_20 收口与 0731_22/23 等价性纠正
+
+- 197 `0731_20` epoch 8 完整结果为：cls HOTA/DetA/AssA
+  `43.670/34.495/58.446`，det `49.863/43.705/58.916`。相对
+  `0727_01` 同点 HOTA `-1.599/-0.330`、DetA `-3.168/-3.356`；
+  AP 诊断也全面下降。54 个 TrackEval 原始文件、检测 metrics、checkpoint 和结构
+  审计齐全；common gate `0.052896`，shared attention 误差为零。18:31 精确停止，
+  GPU 4,5 已释放。
+- 复核提交前后的真实代码确认，归一化 common/detail gate evidence 原本就由
+  `_normalized_shared_evidence()` 以 `.detach()` 返回。`2c8b13b` 新增的
+  `terminal_detach_gate_evidence` 对该张量再次 detach，不改变任何前向或反向语义。
+  因而 17:39 记录的“旧模式仍存在 gate evidence 梯度回传”结论无效，现撤销。
+- 99 `0731_22` 与 252 `0731_23` 分别与 `0731_19/21` 数学等价，不构成有效消融，
+  已于首个 checkpoint 前在 18:32 精确停止。两台 GPU 均释放，日志保留但不进入
+  正式科学结果表。当前唯一继续训练的是 178 `0731_21`；其 epoch 8 双 HOTA 增益
+  仍是有效结果，但机制应归因于独立双帧 attention 与末层 common/detail 正交分解，
+  不能归因于新增的梯度隔离开关。

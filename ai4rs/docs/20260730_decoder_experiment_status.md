@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 15:14 CST
+更新时间：2026-07-31 18:33 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,6 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；15:14 到 epoch 1 iter 50，loss/grad norm `20.9349/90.7400` | 不共享 decoder attention；分类只接收末层共同证据，boxes 只接收严格反对称 detail，box midpoint 为零。与 `0731_18/19/20` 补成 `shared attention × box detail` 的 2×2 结构对照；首判 epoch 4。 |
-| 252 GPU 0,1 | `0731_18 ... decoder_sharedattention_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045` | 分类只接收末层共同证据，框只接收严格反对称 detail；共同证据不再改变任何 box reference，detail 的 pair midpoint 严格为零。首判 epoch 4 双 HOTA。 |
-| 197 GPU 4,5 | `0731_20 ... decoder_sharedattention_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948` | 共享 decoder attention，仅分类接收末层共同证据；boxes、auxiliary output 和 recurrent references 与父模型严格一致。首判 epoch 4 双 HOTA。 |
-| 99 GPU 0,1 | `0731_19 ... decoder_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189` | 不共享 decoder attention，仅分类接收末层共同证据；与 `0731_20` 构成 attention sharing 的严格结构对照。首判 epoch 4 双 HOTA。 |
 
 ## 已完成或释放
 
@@ -849,3 +846,25 @@
   “attached/detached × classification-only/factorized”的严格结构对照。两项
   均通过 103 项 decoder 单测、配置深拷贝、完整模型构建、真实双卡 4-iter smoke
   和正式 iter 50 五项门槛；首个 HOTA 判定点为 epoch 4。
+
+## 2026-07-31 18:33 CST 0731_20 epoch-8 淘汰与梯度解释纠正
+
+- 197 `0731_20 shared attention + classification common only` 的 epoch 8
+  checkpoint、检测 metrics、完整 TrackEval、54 个原始结果和结构审计均已完成。
+  cls HOTA/DetA/AssA 为 `43.670/34.495/58.446`，det 为
+  `49.863/43.705/58.916`；相对 `0727_01` 同点 HOTA
+  `-1.599/-0.330`、DetA `-3.168/-3.356`，而 AssA
+  `+1.145/+3.771`。pair mAP/AP50 下降 `0.027697/0.027872`，
+  both-independent mAP/AP50 下降 `0.031427/0.030375`。
+- checkpoint 审计确认唯一 common gate 已学到 `0.052896`，6 组共享
+  attention 最大误差为零，18 组其余逐帧参数最大差异 `0.056359`。因此失败是
+  中期 DetA→AssA 搬运，不是模块未学习。完整产物保留后于 18:31 精确停止，
+  197 GPU 4,5 已释放。
+- 对提交前代码的逐行复核发现：`_normalized_shared_evidence()` 从这些实验开始前就以
+  `.detach()` 返回，`_normalized_motion_evidence()` 也同样停止梯度。因此
+  `terminal_detach_gate_evidence=True` 只是对已 detached 张量再次 detach；
+  `0731_22` 与 `0731_19`、`0731_23` 与 `0731_21` 在前向和反向上分别严格等价。
+  此前“gate evidence 梯度污染共享 decoder 表征”的解释错误，现正式撤销。
+- `0731_22/23` 不再作为科学实验或有效消融。两项均在首个 checkpoint 前于 18:32
+  精确停止，日志保留，99 GPU 0,1 与 252 GPU 0,1 已释放。后续不得把它们的
+  smoke gate 更新或训练 loss 当成支持梯度隔离假设的证据。
