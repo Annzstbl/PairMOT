@@ -1200,3 +1200,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - epoch 16 checkpoint、检测 metrics、TrackEval、50 序列结果与 108 个评估文件核验完整后，
   精确终止 PGID `580205`；screen 与全部 worker 已退出，99 GPU0/1 为 `0%/10 MiB`。
   99 暂时空闲，等待 `0801_01` e8 与 `0801_02` e4，避免在证据到达前增加新复杂度。
+
+## 2026-08-01 04:14 CST 0801_02 epoch-4 结构 Gate
+
+- 252 `0801_02 terminal center-motion detail-only` e4 cls HOTA/DetA/AssA 为
+  `36.757/26.915/54.146`，det 为 `42.974/33.391/56.520`；相对 Encoder 同点
+  `36.209/27.068/52.094` 与 `38.753/32.454/47.466`，双 HOTA 分别提高
+  `0.548/4.221`。cls DetA 只下降 `0.153`，det DetA 提高 `0.937`，不是用明显检测覆盖损失
+  换取表面关联增益。
+- pair mAP/AP50 为 `0.1555/0.3083`，相对父轨迹变化约 `-0.0018/+0.0122`；
+  both-independent 为 `0.1828/0.3358`，变化约 `-0.0017/+0.0127`。AP50 与双 HOTA
+  同向改善，mAP 仅轻微波动，支持“分类保持 Encoder、只给最终中心 x/y 注入反对称运动 detail”
+  这一最小结构假设。
+- epoch 4 checkpoint、检测 metrics、TrackEval metrics 与 50 个序列结果完整，训练已正常进入
+  epoch 5；无 Traceback/OOM/NaN/NCCL。e4 仍只作结构 gate，继续到 e8/e12 检查增益持续性。
+  该模型只增加 `65,536` 参数（约 `0.29%`），无新 decoder 层、attention、分支或 loss；
+  只有形成持续 HOTA 候选后才做同卡同温速度测试，吞吐下降上限为 `5%`。
