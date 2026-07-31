@@ -939,3 +939,24 @@
 - `0731_21` 相对 Encoder 新增 `131,072` 参数，约占模型状态 `0.575%`；confidence
   变体不新增参数，但会多执行末层父分类置信度计算。参数轻量不等于已经证明无速度代价，
   主线候选仍需同卡同温训练和推理测速。
+
+## 2026-07-31 22:19 CST e24、confidence 收口与轻量门控
+
+- `0731_21` epoch 24 达到 cls HOTA/DetA/AssA `52.141/43.566/64.279`，det
+  `59.381/51.920/70.336`。相对 Encoder 同点 HOTA 为 `+0.427/-0.138`：cls 已超过，
+  det 仍差 `0.138`；pair mAP/AP50 提高 `0.007922/0.015433`，both-independent
+  提高 `0.008977/0.017255`。该点不是系统性恶化，继续观察到 epoch 28。
+- `0731_25 confident-detail` epoch 8 为 cls/det HOTA `43.629/50.129`，相对
+  Encoder 同点 `-1.640/-0.064`，DetA 与四项 AP 全面下降。完整 checkpoint、评估和
+  54 个 TrackEval 原始文件确认后已停止，197 GPU 4,5 已释放。结合 `0731_24/26` e8，
+  三种 confidence 路由均弱于无 confidence 的 `0731_21`，不再扩展该系列。
+- 新建 `0731_27 terminal diagonal factorized evidence`：保留 `0731_21` 的末层
+  common/detail 语义、独立 attention、零初始化与严格 box midpoint，仅把两个
+  `256×256` 稠密门改成两个 256 维逐通道门。新增参数从 `131,072` 降至 `512`，完整模型
+  为 `22,759,287` 参数；不增加 decoder 层、attention、分支或 loss。
+- 103 项 decoder 单测、配置构建、双卡真实数据 4-iter smoke 与 checkpoint 结构检查均通过。
+  `0731_27` 已在 197 GPU 4,5 fresh 正式启动，并于 22:17 到 epoch 1 iter 50；总损失、
+  DN/encoder loss 与梯度均有限，无 Traceback/OOM/NaN/NCCL。首个结构检查点为 epoch 4。
+- 后续候选采用联合门槛：先看同点 cls/det HOTA，再核对 DetA/AssA；论文候选还必须在同卡
+  同温下证明训练与推理吞吐没有大幅下降。依赖堆叠深度、额外 attention、高分辨率分支或
+  新增 loss 才取得的小幅收益不进入主线。
