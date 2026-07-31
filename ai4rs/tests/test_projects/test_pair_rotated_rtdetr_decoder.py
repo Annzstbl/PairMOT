@@ -97,6 +97,8 @@ def _build_decoder(num_layers: int = 2,
                    bool = False,
                    common_evidence_bypass_decoder: bool = False,
                    terminal_common_evidence_bypass_decoder: bool = False,
+                   terminal_classification_common_evidence_decoder:
+                   bool = False,
                    terminal_factorized_evidence_decoder: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
@@ -154,6 +156,8 @@ def _build_decoder(num_layers: int = 2,
         common_evidence_bypass_decoder=common_evidence_bypass_decoder,
         terminal_common_evidence_bypass_decoder=(
             terminal_common_evidence_bypass_decoder),
+        terminal_classification_common_evidence_decoder=(
+            terminal_classification_common_evidence_decoder),
         terminal_factorized_evidence_decoder=(
             terminal_factorized_evidence_decoder),
     ).to(device)
@@ -2551,6 +2555,79 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertIsNotNone(gate.weight.grad)
         self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_terminal_classification_common_is_final_only_and_box_exact(self):
+        for shared_attention in (False, True):
+            decoder, reg_prev, reg_curr = _build_decoder(
+                num_layers=3,
+                device=self.device,
+                shared_attention_decoder=shared_attention,
+                terminal_classification_common_evidence_decoder=True)
+            decoder.init_weights()
+            gate = decoder.terminal_common_evidence_bypass_gates[0]
+            torch.manual_seed(149 + int(shared_attention))
+            with torch.no_grad():
+                torch.nn.init.normal_(gate.weight, std=0.05)
+            spatial_shapes, level_start_index, num_value = _spatial_meta(
+                self.device)
+            memory_prev, memory_curr = _random_memories(
+                1, num_value, decoder.embed_dims, self.device)
+            classified = decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr)
+            decoder.terminal_classification_common_evidence_decoder = False
+            parent = decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr)
+
+            for group in (1, 2):
+                for classified_tensor, parent_tensor in zip(
+                        classified[group], parent[group]):
+                    self.assertTrue(torch.equal(
+                        classified_tensor, parent_tensor))
+            for lid in range(decoder.num_layers - 1):
+                for group in (3, 4):
+                    self.assertTrue(torch.equal(
+                        classified[group][lid], parent[0][lid]))
+            self.assertTrue(torch.equal(
+                classified[3][-1], classified[4][-1]))
+            self.assertFalse(torch.equal(
+                classified[3][-1], parent[0][-1]))
+
+    def test_terminal_classification_common_gate_receives_gradient(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_classification_common_evidence_decoder=True)
+        decoder.init_weights()
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        output = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        torch.manual_seed(151)
+        loss = sum(
+            (value * torch.randn_like(value)).mean()
+            for group in output[3:]
+            for value in group)
+        loss.backward()
+        gate = decoder.terminal_common_evidence_bypass_gates[0]
+        self.assertIsNotNone(gate.weight.grad)
+        self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
     def test_terminal_factorized_evidence_requires_shared_attention(self):
         with self.assertRaisesRegex(ValueError, 'requires'):
             _build_decoder(
@@ -2826,6 +2903,8 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 ('common_evidence_bypass_decoder',
                  'common_evidence_bypass_gates'),
                 ('terminal_common_evidence_bypass_decoder',
+                 'terminal_common_evidence_bypass_gates'),
+                ('terminal_classification_common_evidence_decoder',
                  'terminal_common_evidence_bypass_gates')):
             decoder, _, _ = _build_decoder(
                 device=self.device, **{flag: True})
