@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 12:15 CST。
+更新时间：2026-07-31 12:26 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；12:13 到 epoch 2 iter 800，loss/grad norm `11.2420/26.9715`；总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；12:12 到 epoch 2 iter 950，loss/grad norm `12.2897/30.3471`；总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无训练 | `0731_13 terminal-midpoint` 在 epoch 8 双 HOTA 相对父 encoder 同点 `-2.099/-1.709`；完整评估与结构审计后于 12:11 精确停止，GPU 0/1 已释放 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；该实验 epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`，此前仅因已取消的 mAP 保护线停止；12:24 从 `epoch_4.pth` 恢复，12:25 到 epoch 5 iter 50，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | 无训练 | `0730_16 antisymmetric-detail` 恢复至 epoch 8 后双 HOTA 相对父配置 `-0.678/-0.508`，完整评估与结构审计后停止；GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 12:15 CST
+更新时间：2026-07-31 12:26 CST
 
 ## 当前研究原则
 
@@ -13,6 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... resume epoch 4` | `RUNNING`；12:24 从可信 `epoch_4.pth` 恢复，12:25 到 epoch 5 iter 50，五项正式恢复门槛通过 | recurrent decoder query 不变，仅让检测头经零起点、交换不变门控恢复两帧共享原始 cross-attention 证据。epoch 4 相对父 encoder 同点双 HOTA `+0.355/+4.526`；因现规则以 HOTA 为主，恢复至 epoch 8 验证可持续性。 |
 | 197 GPU 4,5 | `0731_15 ... decoder_sharedattention_terminalmidpointregressionenvelopeddetail ... fresh` | `RUNNING`；12:12 到 epoch 2 iter 950，loss/grad norm `12.2897/30.3471` | 仅最终 5D box-logit residual 接收严格反对称细节，新增 pair midpoint 为零；分类 hidden state、所有前层 reference 与共享父路径一致。首判 epoch 4 双 HOTA。 |
 | 99 GPU 0,1 | `0731_14 ... decoder_sharedattention_terminalregressionenvelopeddetail ... fresh` | `RUNNING`；12:13 到 epoch 2 iter 800，loss/grad norm `11.2420/26.9715` | 分类 hidden state 全层共享，仅最终框输出接收 bounded frame detail，不产生 reference 递归污染。首判 epoch 4 双 HOTA。 |
 
@@ -28,7 +29,6 @@
 | 178 GPU 0 | `0731_11 ... decoder_sharedattention_midpointregressionenvelopeddetail ... fresh` | `STOPPED`；epoch 12 全量评估后于 09:47 精确停止 | epoch 12 cls HOTA/DetA/AssA `49.478/40.961/62.396`，det `56.451/50.351/65.494`；相对父 encoder 同点 HOTA `-0.202/-0.090`。epoch 8 的 det 优势未延续，midpoint-regression 方向未形成稳定双提升。 |
 | 197 GPU 4,5 | `0731_08 ... decoder_sharedattention_classificationenvelopeddetail ... fresh` | `STOPPED`；epoch 4 后按 HOTA 优先规则恢复，epoch 8 完整评估后于 07:14 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.801/35.436/56.745`，det `49.318/43.792/57.563`；相对父配置 HOTA `-1.468/-0.875`、DetA `-2.227/-3.269`。pair mAP `0.213045`、both-independent AP50 `0.436989` 也明显下降。共享 attention 误差为零，独立参数和三层分类门控均充分学习，结论是分类专用细节引起中期检测覆盖退化。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... fresh` | `STOPPED`；epoch 8 全部 artifacts 和两项结构审计完成后精确停止 | cls HOTA/DetA/AssA `45.152/37.611/57.666`，det `50.817/46.745/57.206`；相对父配置 cls HOTA `-0.117`、det HOTA `+0.624`，cls/det DetA `-0.052/-0.316`。pair mAP `0.246292`、both-independent AP50 `0.479887`，分别提高 `0.008558/0.013936`。结构确已学习：6 组共享 attention 误差为零，18 组独立参数最大差异 `0.060115`，三层 detail 权重有限非零。因 cls HOTA 唯一低于父配置，未将关联/AP 增益误判为全门槛通过。 |
-| 252 GPU 0,1 | `0731_03 ... decoder_commonevidencebypass ... fresh` | `STOPPED`；epoch 4 完整评估和结构审计后于 03:15 精确停止 | cls HOTA/DetA/AssA `36.564/27.324/52.415`，det `43.279/34.694/55.415`；相对父配置 HOTA `+0.355/+4.526`、DetA `+0.256/+2.240`。但 pair mAP `0.153565`，相对父配置下降 `0.003688`，超过固定保护线 `0.003` 共 `0.000688`；both-independent AP50 `0.341695`。三层 common-evidence 权重均有限非零，结论为公共证据旁路造成轻微 pair AP 搬运，而非结构未生效。 |
 | 197 GPU 4,5 | `0730_15 ... decoder_sharedevidence_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后于 01:35 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.386/34.314/57.656`，det `49.340/42.544/59.013`；pair mAP/AP50 `0.207499/0.401020`，both-independent mAP/AP50 `0.241319/0.431198`。早期优势未保持，明显低于 `0727_01` 同点；6 组共享 attention 误差为零、两类结构参数均已学习，故结论是结构方向失败而非未生效。 |
 | 99 GPU 0,1 | `0730_14 ... decoder_motiontrust_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `44.366/35.594/57.867`，det `50.647/44.289/60.035`；pair mAP/AP50 `0.221063/0.416210`，both-independent mAP/AP50 `0.255138/0.449079`。相对父配置 HOTA `-0.903/+0.454`、DetA `-2.069/-2.772`，检测覆盖损失明显。 |
 | 252 GPU 0,1 | `0730_13 ... decoder_sharedattention ... fresh` | `STOPPED`；epoch 8 完整评估和结构审计后按固定门槛停止 | epoch 8 cls HOTA/DetA/AssA `43.310/34.380/57.487`，det `49.011/43.032/57.581`；pair mAP/AP50 `0.207615/0.397715`，both-independent mAP/AP50 `0.242288/0.429662`。相对父配置 HOTA `-1.959/-1.182`、DetA `-3.283/-4.029`；epoch 4 的关联增益在 epoch 8 退化为检测覆盖损失。 |
@@ -634,3 +634,23 @@
   目标进程已完全退出，GPU 0/1 均为 `1 MiB/0%`，epoch 8 checkpoint 与全部
   评估产物保留。当前仅 99 `0731_14` 和 197 `0731_15` 运行，二者均在 epoch 2
   稳定训练并等待 epoch 4 首次 HOTA 判定；178 与 252 空闲。
+
+## 2026-07-31 12:26 CST 按 HOTA 主规则恢复 0731_03
+
+- 重新审计历史 Decoder 后，252 `0731_03 common-evidence bypass` 在 epoch 4
+  相对 `0727_01` 同点的 cls/det HOTA 为 `+0.355/+4.526`，DetA 也分别提高
+  `+0.256/+2.240`。它此前停止的唯一原因是 pair mAP 下降 `0.003688`，超过旧
+  保护线 `0.003`；这与当前“Cls/Det HOTA 为主、mAP 只作诊断”的规则不一致。
+- 该结构保持 recurrent decoder query 不变，只在每层预测头之前通过零起点、
+  frame-swap invariant 门控恢复两帧共同 cross-attention 证据，属于模型结构改动，
+  不是 loss/类别重权或 residual-scale 扫描。三层 gate 在 epoch 4 的最大绝对权重
+  为 `0.030437/0.037983/0.040347`，结构检查通过。
+- 252 代码已同步到 `17ef55f`。恢复前核验了干净 tracked 状态、`epoch_4.pth`
+  的 epoch/优化器状态、检测和完整 TrackEval、配置深拷贝、完整模型构建、
+  launcher 语法、数据/GMC/预训练权重及 GPU 0/1 空闲状态。
+- 12:24 从可信 `epoch_4.pth` 恢复；日志确认 `resumed epoch: 4, iter: 4152`。
+  12:25 到 epoch 5 iter 50，学习率 `1.0e-4`、time `1.1729 s/iter`、
+  loss `11.6087`、grad norm `34.1805`；总 loss、DN loss、encoder loss
+  均有限，GPU 0/1 各约 `19.4 GiB`，无 Traceback/OOM/NaN/NCCL。
+  该轨迹只继续到 epoch 8 做双 HOTA 可持续性判断，不把旧 epoch 5 的部分训练日志
+  当作当前恢复轨迹。
