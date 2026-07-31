@@ -1463,3 +1463,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `0.934/7.816`，初步支持“约束两路末层修正共同幅度”这一结构假设。
 - e4 仍只视为结构信号，继续到 e8/e12 判断持续性。后续候选优先采用同等级别的单点、低参数、
   不改变分类主干或 decoder 深度的机制改动；形成候选后再做同卡同温测速，吞吐下降上限保持 5%。
+
+## 2026-08-01 02:38 CST 0801_02 中心运动 detail-only
+
+- `0731_28` e12 相对 Encoder 双 HOTA 转为 `-0.494/-0.293`，说明 e8 的 common+detail
+  联合增益不稳定；但 AP50 和 det AssA 尚有提升，因此原实验继续到 e16 复核。
+- 252 下一项只做一项机制剥离：分类完全回到 Encoder，仅保留末层中心 x/y 的反对称 box detail；
+  宽高角、辅助输出和 recurrent references 不变。新增 65,536 参数（约 0.29%），无新层、attention
+  或 loss。单测和完整构建通过后执行真实 4-iter smoke，通过五项门槛才启动 formal fresh。

@@ -285,6 +285,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_factorized_diagonal_gates: bool = False,
                  terminal_factorized_coupled_gate: bool = False,
                  terminal_factorized_center_motion_only: bool = False,
+                 terminal_factorized_detail_only: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -337,6 +338,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_factorized_coupled_gate)
         self.terminal_factorized_center_motion_only = bool(
             terminal_factorized_center_motion_only)
+        self.terminal_factorized_detail_only = bool(
+            terminal_factorized_detail_only)
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
             raise ValueError(
@@ -362,6 +365,22 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'terminal_factorized_center_motion_only requires '
                 'terminal_factorized_evidence_decoder')
+        if (self.terminal_factorized_detail_only
+                and not self.terminal_factorized_evidence_decoder):
+            raise ValueError(
+                'terminal_factorized_detail_only requires '
+                'terminal_factorized_evidence_decoder')
+        if (self.terminal_factorized_detail_only
+                and self.terminal_factorized_coupled_gate):
+            raise ValueError(
+                'terminal_factorized_detail_only is incompatible with '
+                'terminal_factorized_coupled_gate')
+        if (self.terminal_factorized_detail_only
+                and self.terminal_factorized_confidence in {
+                    'common', 'both'}):
+            raise ValueError(
+                'terminal_factorized_detail_only cannot apply common '
+                'confidence')
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -748,7 +767,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             ])
         if (self.terminal_common_evidence_bypass_decoder
                 or self.terminal_classification_common_evidence_decoder
-                or self.terminal_factorized_evidence_decoder):
+                or (self.terminal_factorized_evidence_decoder
+                    and not self.terminal_factorized_detail_only)):
             # A terminal-only bypass cannot perturb recurrent references.
             # Allocate exactly one gate so DDP sees no intentionally unused
             # parameters on the auxiliary decoder layers.
@@ -1148,7 +1168,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.init.zeros_(gate.weight)
         if (self.terminal_common_evidence_bypass_decoder
                 or self.terminal_classification_common_evidence_decoder
-                or self.terminal_factorized_evidence_decoder):
+                or (self.terminal_factorized_evidence_decoder
+                    and not self.terminal_factorized_detail_only)):
             for gate in self.terminal_common_evidence_bypass_gates:
                 if isinstance(gate, nn.Parameter):
                     nn.init.zeros_(gate)
@@ -1580,17 +1601,20 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                                 layer_output,
                                 cls_branches_prev[lid],
                                 cls_branches_curr[lid])
-                        common_correction = (
-                            self._terminal_common_evidence_bypass_correction(
-                                layer_output,
-                                frame_evidence_prev,
-                                frame_evidence_curr))
-                        if self.terminal_factorized_confidence in {
-                                'common', 'both'}:
-                            common_correction = confidence * common_correction
-                        common_output = layer_output + common_correction
-                        layer_output_prev = common_output
-                        layer_output_curr = common_output
+                        if not self.terminal_factorized_detail_only:
+                            common_correction = (
+                                self.
+                                _terminal_common_evidence_bypass_correction(
+                                    layer_output,
+                                    frame_evidence_prev,
+                                    frame_evidence_curr))
+                            if self.terminal_factorized_confidence in {
+                                    'common', 'both'}:
+                                common_correction = (
+                                    confidence * common_correction)
+                            common_output = layer_output + common_correction
+                            layer_output_prev = common_output
+                            layer_output_curr = common_output
                         frame_detail = (
                             self._terminal_enveloped_detail_correction(
                                 frame_evidence_prev,
