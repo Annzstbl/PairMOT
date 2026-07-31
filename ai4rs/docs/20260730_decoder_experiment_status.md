@@ -674,3 +674,23 @@
 - 当前四路并行为：99 `0731_14`、197 `0731_15`、252 恢复的 `0731_03`、
   178 `0731_16`。前三者分别等待 epoch 4/4/8 完整结果；`0731_16` 首判
   epoch 4。决策仍以同 checkpoint 的 cls/det HOTA 为主，mAP 只作检测退化诊断。
+
+## 2026-07-31 12:59 CST terminal regression epoch-4 对照
+
+- `0727_01` 同点基准为：cls HOTA/DetA/AssA
+  `36.209/27.068/52.094`，det `38.753/32.454/47.466`。
+- 99 `0731_14 terminal regression-only` 达到 cls
+  `37.209/27.864/53.684`、det `43.646/34.679/56.188`；相对基准双 HOTA
+  `+1.000/+4.893`、双 DetA `+0.796/+2.225`。pair mAP/AP50
+  `0.163485/0.323237`，both-independent mAP/AP50
+  `0.192363/0.351268`，检测诊断也全面提高。
+- 197 `0731_15 terminal midpoint-regression` 达到 cls
+  `38.153/27.923/55.246`、det `44.506/34.409/59.052`；相对基准双 HOTA
+  `+1.944/+5.753`、双 DetA `+0.855/+1.955`。pair mAP/AP50
+  `0.161120/0.318966`，both-independent mAP/AP50
+  `0.189558/0.346678`。
+- 两项 checkpoint 均确认 6 组 shared attention 严格共享、18 组独立参数已分化、
+  唯一 terminal gate 已获得非零更新；完整 TrackEval 与原始 CSV 齐全。两者均
+  继续到 epoch 8。197 当前 HOTA 更强，99 当前 DetA 保持更强；后续以是否出现
+  DetA 向 AssA 搬运作为中期定性分界，而最终成功标准仍是
+  cls/det HOTA 同时超过 `54.437/62.393`。

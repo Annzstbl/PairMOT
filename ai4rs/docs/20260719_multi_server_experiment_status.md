@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 12:44 CST。
+更新时间：2026-07-31 12:59 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；12:42 到 epoch 4 iter 600，loss/grad norm `11.2330/37.3656`；总、DN、encoder loss 有限，等待 epoch 4 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；12:43 到 epoch 4 iter 950，loss/grad norm `10.8398/39.4393`；总、DN、encoder loss 有限，等待 epoch 4 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`；12:24 从 `epoch_4.pth` 恢复，12:42 到 epoch 5 iter 950，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；真实数据 smoke 和 terminal-gate checkpoint 检查通过；12:42 fresh 启动，12:43 到 epoch 1 iter 50，loss/grad norm `21.4237/94.8035`，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；epoch 4 cls/det HOTA `37.209/43.646`，相对 encoder 同点 `+1.000/+4.893`，DetA 也双升；已继续到 epoch 5，等待 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；epoch 4 cls/det HOTA `38.153/44.506`，相对 encoder 同点 `+1.944/+5.753`，DetA 也双升；已继续到 epoch 5，等待 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_03 common-evidence bypass decoder` 恢复实验 | RUNNING；epoch 4 相对父 encoder 同点 cls/det HOTA `+0.355/+4.526`；12:24 从 `epoch_4.pth` 恢复，12:56 到 epoch 6 iter 600，等待 epoch 8 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_16 terminal common-evidence bypass decoder` | RUNNING；真实数据 smoke 和 terminal-gate checkpoint 检查通过；12:56 到 epoch 1 iter 900，总、DN、encoder loss 有限，首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -209,7 +209,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_13`，下一编号为`0731_14`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_16`，下一编号为`0731_17`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -777,3 +777,28 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   252 的既有 `0731_13` 进程保持运行且未重启。首个统一科学决策点为 epoch 4，
   主判据仍是相对 `0727_01` 同 epoch 的 cls/det HOTA，DetA/AssA 用于归因，
   mAP 仅作检测崩塌诊断。
+
+## 2026-07-31 12:59 CST 0731_14/15 epoch-4 双提升
+
+- 两项实验的 epoch 4 checkpoint、检测 metrics、完整 TrackEval、54 个原始
+  TrackEval 输出及结构检查均已形成。固定父配置 `0727_01` 同点为：cls
+  HOTA/DetA/AssA `36.209/27.068/52.094`，det
+  `38.753/32.454/47.466`；pair mAP/AP50 `0.157253/0.296134`，
+  both-independent mAP/AP50 `0.184465/0.323149`。
+- 99 `0731_14 terminal regression-only` 的 cls 为
+  `37.209/27.864/53.684`，det 为 `43.646/34.679/56.188`。相对父配置
+  cls/det HOTA `+1.000/+4.893`，DetA `+0.796/+2.225`，AssA
+  `+1.590/+8.722`。pair mAP/AP50 `0.163485/0.323237`，
+  both-independent mAP/AP50 `0.192363/0.351268`，均无检测退化。
+  checkpoint 中 6 组 shared attention 误差为零、18 组独立参数最大差异
+  `0.031446`、terminal gate 最大权重 `0.070805`。
+- 197 `0731_15 terminal midpoint-regression` 的 cls 为
+  `38.153/27.923/55.246`，det 为 `44.506/34.409/59.052`。相对父配置
+  cls/det HOTA `+1.944/+5.753`，DetA `+0.855/+1.955`，AssA
+  `+3.152/+11.586`。pair mAP/AP50 `0.161120/0.318966`，
+  both-independent mAP/AP50 `0.189558/0.346678`，也均提高。
+  checkpoint 中 shared attention 误差为零、独立参数最大差异 `0.029741`、
+  terminal midpoint gate 最大权重 `0.068100`。
+- 两者均通过 HOTA 主门槛并继续到 epoch 8。197 的早期 HOTA 更高，但更依赖
+  AssA；99 的 det DetA 更高、AssA 搬运较少，因此 epoch 8 重点检查哪条路径能
+  避免历史上的 DetA→AssA 中期退化。
