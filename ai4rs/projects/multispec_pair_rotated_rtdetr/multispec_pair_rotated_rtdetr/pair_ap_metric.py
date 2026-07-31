@@ -471,6 +471,28 @@ def _default_val_det_out_dir(track_eval_out_dir: Optional[str]) -> Optional[str]
     return osp.join(osp.abspath(track_eval_out_dir), 'val_det')
 
 
+def _existing_track_eval_count(track_eval_out_dir: Optional[str]) -> int:
+    """Recover the largest validation index after an in-place resume.
+
+    Metric instances are rebuilt when training resumes, so an in-memory
+    counter would otherwise restart at one and overwrite earlier TrackEval
+    artifacts.  Archived recovery directories keep the same four-digit
+    prefix (for example ``val_track_0009_resume_epoch36``), and must also
+    advance the counter.
+    """
+    if not track_eval_out_dir or not osp.isdir(track_eval_out_dir):
+        return 0
+    prefix = 'val_track_'
+    largest = 0
+    for name in os.listdir(track_eval_out_dir):
+        if not name.startswith(prefix):
+            continue
+        digits = name[len(prefix):len(prefix) + 4]
+        if len(digits) == 4 and digits.isdigit():
+            largest = max(largest, int(digits))
+    return largest
+
+
 def _write_val_det_from_records(records: Sequence[dict], out_dir: str) -> str:
     pair_records = [_record_from_dict(record) for record in records]
     by_seq: Dict[str, List[PairFrameRecord]] = {}
@@ -881,7 +903,8 @@ class HSMOTPairOverfitMetric(BaseMetric):
         self.track_max_age = int(track_max_age)
         self.track_init_same_iou_th = float(track_init_same_iou_th)
         self.track_class_aware = bool(track_class_aware)
-        self._track_eval_count = 0
+        self._track_eval_count = _existing_track_eval_count(
+            self.track_eval_out_dir)
         self._val_det_count = 0
 
     def _filter_gt(self, gt):

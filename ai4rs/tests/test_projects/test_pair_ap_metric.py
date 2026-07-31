@@ -1,4 +1,6 @@
 import math
+import os
+import tempfile
 import unittest
 
 import torch
@@ -6,6 +8,7 @@ from mmengine.structures import InstanceData
 
 from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_ap_metric import (
     HSMOTPairAPMetric,
+    _existing_track_eval_count,
     _format_pair_metric_table,
 )
 from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_ap import (
@@ -16,6 +19,17 @@ from projects.multispec_pair_rotated_rtdetr.multispec_pair_rotated_rtdetr.pair_a
 
 
 class TestPairAPMetricDiagnosticMode(unittest.TestCase):
+
+    def test_track_eval_count_recovers_across_resume(self):
+        with tempfile.TemporaryDirectory() as out_dir:
+            os.makedirs(os.path.join(out_dir, 'val_track_0002'))
+            os.makedirs(os.path.join(
+                out_dir, 'val_track_0009_resume_epoch36'))
+            os.makedirs(os.path.join(out_dir, 'val_track_invalid'))
+            self.assertEqual(_existing_track_eval_count(out_dir), 9)
+            metric = HSMOTPairAPMetric(
+                track_eval=True, track_eval_out_dir=out_dir)
+            self.assertEqual(metric._track_eval_count, 9)
 
     def _sample(self):
         gt = InstanceData()
