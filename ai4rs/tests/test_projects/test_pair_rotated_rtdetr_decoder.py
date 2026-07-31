@@ -99,7 +99,8 @@ def _build_decoder(num_layers: int = 2,
                    terminal_common_evidence_bypass_decoder: bool = False,
                    terminal_classification_common_evidence_decoder:
                    bool = False,
-                   terminal_factorized_evidence_decoder: bool = False):
+                   terminal_factorized_evidence_decoder: bool = False,
+                   terminal_detach_gate_evidence: bool = False):
     layer_cfg = dict(
         self_attn_cfg=dict(
             embed_dims=embed_dims, num_heads=4, dropout=0.0, batch_first=True),
@@ -160,6 +161,7 @@ def _build_decoder(num_layers: int = 2,
             terminal_classification_common_evidence_decoder),
         terminal_factorized_evidence_decoder=(
             terminal_factorized_evidence_decoder),
+        terminal_detach_gate_evidence=terminal_detach_gate_evidence,
     ).to(device)
     reg_branches_prev = _build_reg_branches(
         num_layers, embed_dims, device, seed=0)
@@ -2628,6 +2630,34 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertIsNotNone(gate.weight.grad)
         self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
 
+    def test_terminal_detached_common_gate_is_trainable_without_input_gradient(
+            self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            terminal_classification_common_evidence_decoder=True,
+            terminal_detach_gate_evidence=True)
+        decoder.init_weights()
+        gate = decoder.terminal_common_evidence_bypass_gates[0]
+        torch.manual_seed(152)
+        with torch.no_grad():
+            torch.nn.init.normal_(gate.weight, std=0.05)
+        layer_output = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device,
+            requires_grad=True)
+        out_prev = torch.randn_like(layer_output, requires_grad=True)
+        out_curr = torch.randn_like(layer_output, requires_grad=True)
+        correction = decoder._terminal_common_evidence_bypass_correction(
+            layer_output,
+            out_prev,
+            out_curr,
+            detach_evidence=True)
+        correction.square().mean().backward()
+        self.assertIsNotNone(gate.weight.grad)
+        self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+        self.assertIsNone(layer_output.grad)
+        self.assertIsNone(out_prev.grad)
+        self.assertIsNone(out_curr.grad)
+
     def test_terminal_factorized_evidence_supports_independent_attention(self):
         decoder, reg_prev, reg_curr = _build_decoder(
             num_layers=3,
@@ -2878,6 +2908,36 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 decoder.terminal_enveloped_detail_gates[0]):
             self.assertIsNotNone(gate.weight.grad)
             self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+
+    def test_terminal_detached_detail_gate_is_trainable_without_input_gradient(
+            self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            terminal_factorized_evidence_decoder=True,
+            terminal_detach_gate_evidence=True)
+        decoder.init_weights()
+        gate = decoder.terminal_enveloped_detail_gates[0]
+        torch.manual_seed(164)
+        with torch.no_grad():
+            torch.nn.init.normal_(gate.weight, std=0.05)
+        out_prev = torch.randn(
+            2, 7, decoder.embed_dims, device=self.device,
+            requires_grad=True)
+        out_curr = torch.randn_like(out_prev, requires_grad=True)
+        correction = decoder._terminal_enveloped_detail_correction(
+            out_prev, out_curr, detach_evidence=True)
+        correction.square().mean().backward()
+        self.assertIsNotNone(gate.weight.grad)
+        self.assertGreater(gate.weight.grad.abs().max().item(), 0.0)
+        self.assertIsNone(out_prev.grad)
+        self.assertIsNone(out_curr.grad)
+
+    def test_terminal_detach_gate_evidence_requires_supported_mode(self):
+        with self.assertRaisesRegex(
+                ValueError, 'requires terminal classification-common'):
+            _build_decoder(
+                device=self.device,
+                terminal_detach_gate_evidence=True)
 
     def test_orthogonal_evidence_decomposition_is_exact_zero_start(self):
         decoder, reg_prev, reg_curr = _build_decoder(

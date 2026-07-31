@@ -281,6 +281,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  terminal_classification_common_evidence_decoder:
                  bool = False,
                  terminal_factorized_evidence_decoder: bool = False,
+                 terminal_detach_gate_evidence: bool = False,
                  **kwargs) -> None:
         self.num_queries = num_queries
         self.angle_factor = angle_factor
@@ -325,6 +326,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_classification_common_evidence_decoder)
         self.terminal_factorized_evidence_decoder = bool(
             terminal_factorized_evidence_decoder)
+        self.terminal_detach_gate_evidence = bool(
+            terminal_detach_gate_evidence)
+        if (self.terminal_detach_gate_evidence
+                and not (
+                    self.terminal_classification_common_evidence_decoder
+                    or self.terminal_factorized_evidence_decoder)):
+            raise ValueError(
+                'terminal_detach_gate_evidence requires terminal '
+                'classification-common or factorized evidence decoder')
         if self.dual_output_cls_scale < 0:
             raise ValueError('dual_output_cls_scale must be non-negative')
         if self.dual_output_reg_scale < 0:
@@ -935,6 +945,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self,
         out_prev: Tensor,
         out_curr: Tensor,
+        detach_evidence: bool = False,
     ) -> Tensor:
         """Return bounded frame detail for the terminal prediction only.
 
@@ -944,6 +955,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         positions or classification features.
         """
         evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        if detach_evidence:
+            evidence = evidence.detach()
         gate = self.terminal_enveloped_detail_gates[0](evidence).tanh()
         detail = (0.5 * (out_curr - out_prev)).detach()
         return gate * detail
@@ -973,6 +986,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         layer_output: Tensor,
         out_prev: Tensor,
         out_curr: Tensor,
+        detach_evidence: bool = False,
     ) -> Tensor:
         """Recover common evidence only for the terminal predictions.
 
@@ -982,6 +996,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         on the parent path.
         """
         evidence = self._normalized_shared_evidence(out_prev, out_curr)
+        if detach_evidence:
+            evidence = evidence.detach()
         gate = self.terminal_common_evidence_bypass_gates[0](
             evidence).tanh()
         common = (0.5 * (out_prev + out_curr)).detach()
@@ -1450,7 +1466,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                             _terminal_common_evidence_bypass_correction(
                                 layer_output,
                                 frame_evidence_prev,
-                                frame_evidence_curr))
+                                frame_evidence_curr,
+                                detach_evidence=(
+                                    self.terminal_detach_gate_evidence)))
                         layer_output_prev = common_output
                         layer_output_curr = common_output
                     tmp_prev = reg_branches_prev[lid](layer_output)
@@ -1473,13 +1491,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                             _terminal_common_evidence_bypass_correction(
                                 layer_output,
                                 frame_evidence_prev,
-                                frame_evidence_curr))
+                                frame_evidence_curr,
+                                detach_evidence=(
+                                    self.terminal_detach_gate_evidence)))
                         layer_output_prev = common_output
                         layer_output_curr = common_output
                         frame_detail = (
                             self._terminal_enveloped_detail_correction(
                                 frame_evidence_prev,
-                                frame_evidence_curr))
+                                frame_evidence_curr,
+                                detach_evidence=(
+                                    self.terminal_detach_gate_evidence)))
                         # Keep the box midpoint on the unmodified parent
                         # representation.  Common evidence is classification
                         # only; otherwise it can improve association while
