@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 01:10 CST。
+更新时间：2026-08-01 01:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e4 `35.714/42.426`，相对 Encoder 同点 `-0.495/+3.673`；Det 增益强但 Cls/DetA 与 mAP 有取舍，不以单个早期点停止，继续到 e8 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e8 `45.675/51.723`，相对 Encoder 同点 `+0.406/+1.530`；双 HOTA 提升但 DetA/mAP 与 AssA/AP50 有明确取舍，继续到 e12 看持续性 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；只增加一个由 common/detail 共用的 256 维逐通道 gate；105 项单测、完整构建、双卡真实 smoke 和正式 iter 100 五项验收通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_29 terminal diagonal center-motion factorized evidence` | RUNNING；e4 `36.687/42.411`，相对同点 `+0.478/+3.658`；双 DetA 提升且仅 512 参数，继续到决定性的 e8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 terminal orthogonal factorized evidence` | RUNNING；从完整 epoch-32 状态 exact resume，已稳定进入 epoch 33；继续到 e36/e40 复核 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -28,7 +28,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0731_28_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:48 |  | 在 `0731_21` 上把反对称 box detail 限定为旋转框中心 `x/y`；`w/h/angle` 保持父模型几何，classification common 不变 | e4 cls/det HOTA `35.714/42.426`，相对 Encoder 同点 `-0.495/+3.673`；cls DetA/AssA `25.915/53.044`，det 为 `32.743/56.325`；pair mAP/AP50 `0.150254/0.299865`，both-independent `0.177156/0.325512`。检测和关联增益很强，但分类 DetA 与两项 mAP 偏低；正式 checkpoint 的独立 attention 最大分化 `0.048394`，common/detail 门控最大值 `0.030225/0.074534`。不因单个早期点停止，继续到 e8 验证取舍是否持续 |
+| RUNNING | `0731_28_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:48 |  | 在 `0731_21` 上把反对称 box detail 限定为旋转框中心 `x/y`；`w/h/angle` 保持父模型几何，classification common 不变 | e8 cls/det HOTA `45.675/51.723`，相对 Encoder 同点 `+0.406/+1.530`；cls DetA/AssA 相对父轨迹 `-0.827/+1.814`，det 为 `-2.140/+6.310`。pair mAP/AP50 `0.229744/0.439259`，相对父轨迹 `-0.007990/+0.008348`；both-independent `0.267189/0.472084`，变化 `-0.008993/+0.006133`。e8 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与汇总 CSV 完整；6 组 attention 最大分化 `0.084948`，common/detail gate 最大值 `0.039202/0.091669`。双 HOTA 已由 e4 单侧提升转为 e8 双提升，虽存在检测覆盖向关联搬运，但不按单个中早期取舍停止，继续到 e12；若双 HOTA 保持则至少看 e16/e20 |
 | STOPPED | `0731_24_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentcommonfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:35 | `0731_21` 因子结构的 common 路由乘 detached 双帧分类置信度；不新增参数 | e12 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；DetA `-1.834/-1.524`，四项 AP 下降 `0.014159/0.007145/0.014924/0.007281`。checkpoint、metrics 与 54 个 TrackEval 原始文件验证后停止 |
 | COMPLETED | `0727_12_paper_base_liquid_encoder_p5temporal_crossscalebudget` | 2026-07-27 20:18 | 2026-07-28 18:20 | 严格继承`0727_01`的Base+Liquid、P5 temporal MHA及common/detail Dual-Evidence；用每层`[common mean, abs(detail) mean]`生成三尺度token，并结合三尺度均值上下文预测逐通道common/detail尺度预算。预算在P3/P4/P5维softmax后乘3，每个分支/通道总预算严格为3，仅重分配尺度贡献，不改变平均残差强度；描述侧停止梯度，输出层零初始化，无额外loss或高分辨率卷积 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 60为 `54.217/61.875`，同点 pair mAP/AP50 `0.316913/0.534141`，both-independent `0.353674/0.563208`。未超过 Encoder 最终 `54.437/62.393`，不进入decoder主线；进程已退出 |
 | COMPLETED | `0723_05_pairdn_paircoherent_le180_cpdse_local` | 2026-07-24 03:56 | 2026-07-25 03:56 | `0723_01` + consistency-preserving DSE local：保留`x.mean`主路径，以归一化通道离散度生成零初始化、最大绝对值0.5的逐像素SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`；相对Paper Base为`+0.222/-0.363`，不满足双提升。PairMOT训练及评测进程已退出，99不排新任务；不对其他用户当前GPU占用做清理或调度 |

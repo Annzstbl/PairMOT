@@ -1425,3 +1425,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   结构检查全部通过；正式 fresh 训练于 01:07 使用 GPU4/5 启动，iter 100 的总/DN/encoder
   loss 与 grad norm 均有限，五项启动验收通过。先看 e4 结构信号，e8/e12 判断持续性；若有
   潜力至少训练到 e16/e20。论文候选仍须补做同卡同温速度审计，吞吐下降原则上不超过 5%。
+
+## 2026-08-01 01:15 CST 0731_28 epoch-8 决策
+
+- 中心运动限制的稠密 terminal factorization 在 e8 得到 cls/det HOTA
+  `45.675/51.723`，相对 Encoder 同点 `45.269/50.193` 提高 `+0.406/+1.530`。
+  因此 e4 的 `-0.495/+3.673` 单侧现象已转为双 HOTA 提升，按主门槛继续。
+- 归因仍有清晰取舍：cls DetA/AssA 相对父轨迹为 `-0.827/+1.814`，det 为
+  `-2.140/+6.310`；pair mAP/AP50 变化 `-0.007990/+0.008348`，
+  both-independent 为 `-0.008993/+0.006133`。即 HOTA 增益主要来自关联改善，
+  检测覆盖尚未得到同等保护，但没有出现 HOTA、DetA 与 AP 全部同向恶化。
+- e8 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与汇总 CSV 均完整；
+  6 组独立 attention 最大分化 `0.084948`，common/detail gate 最大绝对值
+  `0.039202/0.091669`，排除未学习。继续到 e12 判断 DetA/mAP 取舍是否收窄；
+  若双 HOTA 仍高于父轨迹，则至少看到 e16/e20，不以单点 AP 下降过早终止。
