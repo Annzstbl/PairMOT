@@ -1478,3 +1478,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   修正后 4-iter 双卡真实 smoke、detail-only checkpoint 审计与 6 组独立 attention 检查通过。
 - 正式 fresh 已在 252 GPU0/1 运行到 iter 50，总/DN/encoder loss 和 grad norm 有限，无训练异常。
   先看 e4 结构信号，不在早期小波动上过严停止；e8/e12 决定是否继续到 e16/e20。
+
+## 2026-08-01 03:19 CST 0731_21 e40 决策
+
+- e40 cls/det HOTA `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；
+  e32、e36、e40 连续未形成双提升。虽然 pair 与 both-independent 的 mAP/AP50 均高于父轨迹，
+  但 det DetA/AssA 仍分别低 `0.572/0.902`，说明完整 5D 稠密正交 detail 的 HOTA 取舍没有消失。
+- 完整产物已归档并停止该分支，不再因 AP 改善延长训练。178 暂时空闲，等待 `0801_01` e8
+  和 `0801_02` e4 后再决定下一项；下一候选仍须是单点轻量机制，不叠加层、attention、分支或 loss。

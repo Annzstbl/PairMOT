@@ -18,7 +18,7 @@
 | 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；e12 `49.186/56.248`，相对 Encoder 同点 `-0.494/-0.293`；e8 增益未持续但非全面恶化，继续到 e16 复核 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；e4 `36.757/42.605`，相对 Encoder 同点 `+0.548/+3.852`；仅 256 参数，继续到 e8 判断持续性 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0801_02 terminal center-motion detail-only` | RUNNING；仅新增 65,536 参数（约 0.29%），106 项单测、完整构建、真实 smoke 与正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 terminal orthogonal factorized evidence` | RUNNING；exact resume 的 e36 为 `52.699/60.048`，HOTA/DetA 小降但四项 AP 全升，继续到 e40；恢复评估产物已防冲突归档 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_21 terminal orthogonal factorized evidence` | STOPPED；e40 `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超，完整归档后停止并释放 GPU0 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -170,7 +170,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0731_21_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 15:13；2026-08-01 00:52 resume |  | 独立双帧 attention + 末层分类 common 与严格反对称 box detail 分解；零初始化 | e36 cls/det HOTA `52.699/60.048`，相对 Encoder 同点 `-0.213/-0.659`；DetA 小降但 pair/both 的 mAP/AP50 全升，继续到 e40。resume 计数复位导致 e36 临时写入旧 val1；e36 与原 e8 均已分别完整归档，后续计数根因修复测试通过；当前训练进程不热替换代码，模型状态不受影响 |
+| STOPPED | `0731_21_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 15:13；2026-08-01 00:52 resume | 2026-08-01 03:18 | 独立双帧 attention + 末层分类 common 与严格反对称 box detail 分解；零初始化 | e40 cls/det HOTA `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超。e40 检测、TrackEval、50 序列与 108 文件已归档至 `val_track_0010_resume_epoch40` 并校验；精确停止后 GPU0 释放，不再 resume |
 | STOPPED | `0731_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcommonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 12:42 | 2026-07-31 15:03 | 继承`0727_01`及其共享 decoder 路径，只在最后一层最终双帧预测头前注入 swap-invariant、零起点且有界的共同 cross-attention 证据；不改 recurrent query、所有 auxiliary output 及任何供后续层消费的 reference | e8 `43.972/49.378`，相对Encoder同点 `-1.297/-0.815`；两次完整评估后停止并由 `0731_21` 的common/detail正交分解替代。无训练故障，不resume |
 | STOPPED | `0727_08_paper_base_liquid_encoder_p5temporal_dualbranchtrust` | 2026-07-27 20:51 | 2026-07-27 21:37 | 完整保留`0727_01`的P5 MHA与common/detail双残差，不使用空间门；仅分别限制shared-common和signed-detail更新RMS不超过其对应输入证据RMS，未超限更新不变 | 前序完成18/18评测且GPU连续空闲后，严格队列完成真实数据smoke并fresh启动；按用户指令主动停在epoch 3 iter 750。未生成正式epoch checkpoint，不resume、不进入论文结果；训练、launcher及队列进程均已退出，GPU 0释放，GPU 1上的其他任务未受影响 |
 | STOPPED | `0727_06_paper_base_liquid_encoder_p5temporal_sharedscalar` | 2026-07-27 02:43 | 2026-07-27 03:47 | 保留P5 MHA和signed-detail，但以两帧共享的逐位置标量增益替代channel-mixing common残差 | 只进入等待队列，未创建smoke、正式目录或训练进程。`0727_01` epoch 12的det AssA已恢复到相对Base `+0.006`，同时det DetA `+1.449`，证明原common分支可实现无关联代价的检测增益；移除其通道表达能力的设计依据消失，因此队列撤销并由`0727_08`替代 |
@@ -1170,3 +1170,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   已按安全激活顺序补充 `set +u` / `set -u`，两份脚本均通过 `bash -n`；提交为 `d806611`，
   GitHub 与 99/197/252/178 tracked HEAD 已同步。该提交只修复未来启动路径，不重启、不热替换，
   不改变当前四个训练进程的科学代码或轨迹。
+
+## 2026-08-01 03:19 CST 0731_21 e40 收口
+
+- 178 `0731_21 terminal orthogonal factorization` e40 cls/det HOTA 为
+  `53.655/60.379`，相对 Encoder 同点 `53.797/61.063` 为 `-0.142/-0.684`。
+  cls DetA/AssA 变化 `+0.388/-1.043`，det 为 `-0.572/-0.902`；分类检测覆盖基本受保护，
+  但关联和 det 路径仍未恢复。
+- pair mAP/AP50 为 `0.3148/0.5390`，相对父轨迹提高 `0.0092/0.0127`；
+  both-independent mAP/AP50 为 `0.3536/0.5704`，提高 `0.0107/0.0146`。
+  AP 全升说明模型没有整体检测崩溃，但不能替代 cls/det HOTA 的主目标。
+- e40 checkpoint、检测结果、TrackEval metrics、50 个序列 txt 与 108 个评估文件完整；旧进程写入的
+  `val_track_0002` 已复制归档为 `val_track_0010_resume_epoch40`，两边文件数、序列数与 metrics
+  SHA256 一致。结合 e32/e36/e40 连续双 HOTA 未超过父轨迹，03:18 精确终止训练进程组，
+  178 GPU0 已释放；该较复杂分支不再 resume，也不进入论文 decoder 主线。
+- 178 暂不立即启动新结构。先等待仅 256 参数的 `0801_01` e8 与分类不改动的 `0801_02` e4，
+  再选择单一、可解释、低开销的下一步，避免为占满 GPU 运行低信息实验。
