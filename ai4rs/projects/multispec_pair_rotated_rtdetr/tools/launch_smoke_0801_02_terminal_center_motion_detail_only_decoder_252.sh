@@ -4,8 +4,10 @@ set -Eeuo pipefail
 REPO=/data/users/litianhao01/PairMmot/ai4rs
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/smoke/o2_pair_rtdetr_r18vd_0801_02_terminal_center_motion_detail_only_decoder_4iter_smoke_252.py
 WORK_DIR=/data4/litianhao/PairMmot/workdir_252/smoke_0801_02_terminal_center_motion_detail_only_4iter
+set +u
 source /data/users/litianhao01/anaconda3/etc/profile.d/conda.sh
 conda activate py310
+set -u
 test "${CONDA_DEFAULT_ENV}" = py310
 test "${CONDA_PREFIX}" = /data/users/litianhao01/anaconda3/envs/py310
 PYTHON_ROOT=${CONDA_PREFIX}/bin
