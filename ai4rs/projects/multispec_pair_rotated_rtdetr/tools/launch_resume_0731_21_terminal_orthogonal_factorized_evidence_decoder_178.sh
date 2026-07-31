@@ -17,6 +17,10 @@ export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
 unset PYTORCH_CUDA_ALLOC_CONF
 unset CUBLAS_WORKSPACE_CONFIG
 unset TORCH_DISTRIBUTED_DEBUG
+# PyTorch 2.6 defaults torch.load() to weights_only=True. MMEngine resume
+# restores trusted optimizer/scheduler/HistoryBuffer objects from our own
+# formal checkpoint, so opt out only for this exact-resume process.
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 
 echo "[$(date '+%F %T')] exact resume 0731_21 from epoch_32 commit $(git rev-parse --short HEAD)" \
     >> "${WORK_DIR}/launch.log"
