@@ -1532,3 +1532,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 正式 fresh 于 05:56 启动，iter 50 为 `1.1619 s/iter`、loss `21.5299`、grad norm
   `106.3036`，GPU0/1 各约 19.2 GiB，五项门槛通过。先按既定规则看 e4 结构信号，再以
   e8/e12 判断持续性；性能未形成候选前不追加复杂结构或低价值速度测试。
+
+## 2026-08-01 06:46 CST 0801_01 e12 收口
+
+- e12 cls HOTA/DetA/AssA `47.158/38.483/59.975`，det
+  `55.516/47.987/66.488`；相对 Encoder 同点 HOTA `-2.522/-1.025`、DetA
+  `-2.877/-2.358`，仅 det AssA 提高 `0.909`。e4 增益在 e8 消失，e12 没有恢复。
+- pair mAP/AP50 `0.2468/0.4538`，both-independent `0.2834/0.4872`；可直接核对的
+  父配置 pair mAP 与 both AP50 分别高 `0.02637/0.02455`。结果继续表现为检测覆盖下降与
+  AssA 搬运，而不是可持续双 HOTA 改善。
+- epoch 12 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列结果与 108 个评估
+  文件完整后，于 06:46 精确终止 PGID `1703376`；screen 与训练 worker 已退出，GPU4/5
+  均为 `0%/1 MiB`。该共享门分支不再 resume 或派生，197 暂时空闲，等待 `0801_03` e4/e8。

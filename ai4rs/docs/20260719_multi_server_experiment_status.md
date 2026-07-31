@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 05:58 CST。
+更新时间：2026-08-01 06:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；e4 `36.757/42.605`，相对 Encoder 同点 `+0.548/+3.852`；仅 256 参数，继续到 e8 判断持续性 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0801_03 terminal diagonal center-motion detail-only` | RUNNING；仅新增 256 参数并移除稠密矩阵乘法；真实双卡 smoke、checkpoint 结构审计与正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 terminal orthogonal factorized evidence` | STOPPED；e40 `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超，完整归档后停止并释放 GPU0 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -71,7 +71,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0801_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcoupleddiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 01:07 |  | 针对 `0731_27` detail gate 长期约为 common gate 三倍的实测失衡，把两条末层路线的独立 gate 合并为一个共用逐通道 gate；仅 256 参数，无新增 decoder 层、attention、分支、loss 或矩阵乘法 | e4 cls/det HOTA `36.757/42.605`，相对 Encoder 同点 `+0.548/+3.852`；cls DetA/AssA 变化 `-0.079/+1.900`，det 为 `+0.934/+7.816`。pair mAP/AP50 `0.154920/0.312850`，相对父轨迹 `-0.002332/+0.016715`；both-independent `0.184995/0.341277`，变化 `+0.000530/+0.018128`。完整 checkpoint、检测 metrics、TrackEval metrics 与 50 个序列结果齐全；e4 属结构 gate，提升非灾难且模型仅增加 256 参数，继续到 e8 判断持续性 |
+| STOPPED | `0801_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcoupleddiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 01:07 | 2026-08-01 06:46 | 针对 `0731_27` detail gate 长期约为 common gate 三倍的实测失衡，把两条末层路线的独立 gate 合并为一个共用逐通道 gate；仅 256 参数，无新增 decoder 层、attention、分支、loss 或矩阵乘法 | e12 cls HOTA/DetA/AssA `47.158/38.483/59.975`，det `55.516/47.987/66.488`；相对 Encoder 同点 HOTA `-2.522/-1.025`、DetA `-2.877/-2.358`，仅 det AssA `+0.909`。pair mAP/AP50 `0.2468/0.4538`，both-independent `0.2834/0.4872`；其中 pair mAP 与 both AP50 相对已确认父值下降 `0.02637/0.02455`。e8/e12 连续显示 DetA→AssA 搬运且 cls 进一步恶化；epoch 12 checkpoint、检测 metrics、TrackEval metrics、50 序列 txt 与 108 个评估文件完整后精确停止，GPU4/5 已释放 |
 | STOPPED | `0731_27_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:16 | 2026-08-01 00:42 | 保留独立 attention 与末层 common/detail 语义，把两个 `256×256` 稠密门简化为两个逐通道向量 | e8 cls/det HOTA `43.344/49.456`，相对 Encoder 同点 `-1.925/-0.737`；cls DetA/AssA `-2.641/-1.160`，det `-3.760/+3.246`；pair mAP/AP50 下降 `0.024681/0.022977`，both-independent 下降 `0.027357/0.024470`。e4 的强早期增益没有保持；epoch 8 checkpoint、检测、TrackEval 与 54 个原始文件完整后精确停止，GPU4/5 已释放 |
 | STOPPED | `0731_25_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentdetailfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:11 | 仅以 detached 双帧分类置信度约束 detail 修正，无新增参数 | e8 `43.629/50.129`，相对 Encoder 同点 `-1.640/-0.064`；DetA 与四项 AP 系统性下降，checkpoint、metrics 和 54 个 TrackEval 原始文件验证后停止 |
 | STOPPED | `0728_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder0708_03` | 2026-07-28 09:30 | 2026-07-29 01:29 | 严格以`0727_01`为父配置，冻结Base、Liquid、P5 temporal、Dual-Evidence encoder、proposal、PairDN和loss；仅加入`0708_03`的`pointer/query_prev/query_curr` tri-state decoder，并启用零初始化frame-pointer循环耦合，不使用separate FFN | 完整评估到epoch 48，共12个评测点；最后也是已评测最佳为 `52.587/60.682`，pair mAP/AP50 `0.305359/0.528296`。训练在epoch 52 iter 250收到外部SIGTERM，与随后“全部停止”调度一致，并非模型异常；不resume，已被当前轻量terminal方向取代 |

@@ -1036,3 +1036,14 @@
 - formal fresh 于 05:56 启动并通过 iter 50：`1.1619 s/iter`、loss `21.5299`、grad norm
   `106.3036`，两卡各约 19.2 GiB。该候选正式记为 RUNNING；首个 e4 仅用于结构检查，e8/e12
   决定逐通道门能否避免 `0801_02` 的中期 DetA 与 AP 退化。
+
+## 2026-08-01 06:46 CST 0801_01 epoch-12 最终结论
+
+- 仅 256 参数的 common/detail 共用逐通道 gate 在 e12 得到 cls HOTA/DetA/AssA
+  `47.158/38.483/59.975`，det `55.516/47.987/66.488`。相对 Encoder 同点双 HOTA
+  `-2.522/-1.025`、双 DetA `-2.877/-2.358`，仅 det AssA `+0.909`。
+- pair mAP/AP50 `0.2468/0.4538`，both-independent `0.2834/0.4872`；已确认 pair mAP
+  与 both AP50 相对父配置下降 `0.02637/0.02455`。e8/e12 连续证明共享幅度约束不能阻止
+  DetA→AssA 搬运，且 cls HOTA 进一步恶化。
+- e12 checkpoint、检测、TrackEval、50 序列与 108 个评估文件完整后，197 已精确停止并释放
+  GPU4/5。该机制不再扩展；当前唯一运行候选是更小且分类完全保持 Encoder 的 `0801_03`。
