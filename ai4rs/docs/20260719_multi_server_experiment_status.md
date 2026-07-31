@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 05:45 CST。
+更新时间：2026-08-01 05:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | RUNNING；e4 `36.757/42.605`，相对 Encoder 同点 `+0.548/+3.852`；仅 256 参数，继续到 e8 判断持续性 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0801_03 terminal diagonal center-motion detail-only` | PREPARED；只把 `0801_02` 的 `256×256` 稠密 gate 改为 256 维逐通道 gate；107 项 decoder 单测与配置深拷贝通过，待真实双卡 smoke | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0801_03 terminal diagonal center-motion detail-only` | RUNNING；仅新增 256 参数并移除稠密矩阵乘法；真实双卡 smoke、checkpoint 结构审计与正式 iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 terminal orthogonal factorized evidence` | STOPPED；e40 `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超，完整归档后停止并释放 GPU0 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -135,7 +135,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| PREPARED | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |  |  | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | 仅新增 256 参数，不增加 decoder 层、attention、分支或 loss，并移除稠密矩阵乘法。107 项 decoder 单测、配置加载与深拷贝通过；待提交同步后执行真实双卡 4-iter smoke，未通过五项门槛前不记为 RUNNING |
+| RUNNING | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 05:56 |  | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | 仅新增 256 参数，不增加 decoder 层、attention、分支或 loss，并移除稠密矩阵乘法。107 项 decoder 单测与配置深拷贝通过；双卡真实 4-iter smoke 的总/DN/encoder loss 和 grad norm 有限，checkpoint 唯一 gate 为非零 256 维向量且 6 组 attention 独立。正式 iter 50 为 `1.1619 s/iter`、loss `21.5299`、grad norm `106.3036`，GPU0/1 各约 19.2 GiB，无 Traceback/OOM/NaN/NCCL，五项启动门槛通过 |
 | STOPPED | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 02:44 | 2026-08-01 05:38 | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | e8 cls HOTA/DetA/AssA `44.632/35.582/58.513`，det `49.687/43.373/59.043`；相对 Encoder 同点 HOTA `-0.637/-0.506`、DetA `-2.081/-3.688`，pair mAP/AP50 下降 `0.0219/0.0130`，both-independent 下降 `0.0243/0.0142`。HOTA、DetA、AP 系统性下降；完整 e8 checkpoint、检测 metrics、TrackEval 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 | 2026-08-01 02:12 | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | e8 cls/det HOTA `44.148/49.376`，相对 Encoder 同点 `-1.121/-0.817`；cls/det DetA 为 `-2.028/-3.357`，pair mAP/AP50 下降 `0.028467/0.019227`，both-independent 下降 `0.030575/0.019963`。完整 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_26_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentbothfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 23:12 | 同时用 detached 双帧分类置信度约束 common/detail 修正；不新增参数 | e12 `48.766/55.694`，相对 Encoder 同点 `-0.914/-0.847`；cls/det DetA 为 `40.056/47.910`，pair mAP/AP50 为 `0.262434/0.479349`。epoch 12 checkpoint、检测 metrics、TrackEval metrics 与 54 个原始结果文件完整验证后精确停止；与 `0731_24/25` 一起否定全部 confidence 放置，不再派生 |

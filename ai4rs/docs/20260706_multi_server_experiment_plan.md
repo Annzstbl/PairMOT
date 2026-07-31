@@ -1523,3 +1523,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   中唯一 256 维 gate 非零、6 组 attention 独立、各类 loss/grad 有限且无分布式异常时才启动正式训练。
 - 后续继续执行复杂度硬约束：新增参数原则上不超过 1%，同卡同温吞吐下降不超过 5%；不堆叠
   decoder 深度、额外 attention、高分辨率分支或辅助 loss，不用参数扫描代替模型机制验证。
+
+## 2026-08-01 05:58 CST 0801_03 启动验收
+
+- 提交 `9a18a0c` 已同步到四台服务器。252 双卡真实 4-iter smoke 产生 `iter_4.pth`；总损失、
+  DN、encoder proposal 与 grad norm 全部有限，唯一 detail gate 为非零 256 维向量，6 组
+  prev/curr attention 保持独立，无 Traceback/OOM/NaN/NCCL。
+- 正式 fresh 于 05:56 启动，iter 50 为 `1.1619 s/iter`、loss `21.5299`、grad norm
+  `106.3036`，GPU0/1 各约 19.2 GiB，五项门槛通过。先按既定规则看 e4 结构信号，再以
+  e8/e12 判断持续性；性能未形成候选前不追加复杂结构或低价值速度测试。
