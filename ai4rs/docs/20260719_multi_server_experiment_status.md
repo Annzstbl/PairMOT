@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 15:03 CST。
+更新时间：2026-07-31 15:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | `0731_19 terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_18 shared-attention + terminal orthogonal factorized evidence` | RUNNING；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无训练 | `0731_16` epoch 8 完整评估后于 15:03 停止；GPU0 已释放，GPU1 未触碰 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；真实单卡 smoke 与结构 checkpoint 检查通过；15:14 到 epoch 1 iter 50，loss/grad norm `20.9349/90.7400` | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -209,7 +209,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_20`，下一编号为`0731_21`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_21`，下一编号为`0731_22`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -836,3 +836,24 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - checkpoint 中唯一 terminal-common gate 最大权重为 `0.032061`，epoch/iter
   为 `8/8304`，排除结构未学习。15:03 精确关闭唯一 screen，训练进程退出，
   GPU0 为 `0%/1 MiB`；epoch 4/8 全部产物保留，GPU1 未触碰。
+
+## 2026-07-31 15:14 CST 0731_21 正式启动
+
+- 当前三项严格隔离实验构成了 `shared attention × antisymmetric box detail` 的
+  2×2 结构设计，但缺少“独立 attention + 分类共同证据 + 反对称 box detail”。
+  `0731_21` 补齐该单元：分类只接收末层共同证据，boxes 只接收严格反对称
+  5D detail residual；auxiliary output 与 recurrent references 保持父路径，
+  两帧 attention-weight 投影保持独立。
+- 原实现人为要求 factorized evidence 必须开启 shared attention。审计确认其
+  common/antisymmetric 代数、box midpoint 守恒和父路径隔离并不依赖参数共享后，
+  提交 `a77e135` 移除该不必要绑定并增加独立 attention 专项测试。完整 100 项
+  decoder 单测、正式/smoke 配置深拷贝、完整模型构建、launcher 语法及目标环境
+  数据/GMC/预训练权重检查全部通过。
+- 178 GPU0 的真实 4-iter smoke 最终 loss/grad norm 为
+  `19.8328/67.2125`，总、DN、encoder loss 有限。checkpoint 中 6 组独立
+  attention-weight 最大差异 `7.67466e-4`，common/detail terminal gate 最大值
+  分别为 `3.97146e-4/3.92367e-4`；结构已更新且 midpoint 单测通过。
+- 15:13 fresh 正式启动，15:14 到 epoch 1 iter 50：学习率
+  `2.5488e-6`、time `0.9401 s/iter`、loss `20.9349`、grad norm
+  `90.7400`；GPU0 约 31.4 GiB，总、DN、encoder loss 有限，无
+  Traceback/OOM/NaN/NCCL。GPU1 未触碰，首判 epoch 4。

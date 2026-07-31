@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 15:03 CST
+更新时间：2026-07-31 15:14 CST
 
 ## 当前研究原则
 
@@ -13,6 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；15:14 到 epoch 1 iter 50，loss/grad norm `20.9349/90.7400` | 不共享 decoder attention；分类只接收末层共同证据，boxes 只接收严格反对称 detail，box midpoint 为零。与 `0731_18/19/20` 补成 `shared attention × box detail` 的 2×2 结构对照；首判 epoch 4。 |
 | 252 GPU 0,1 | `0731_18 ... decoder_sharedattention_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045` | 分类只接收末层共同证据，框只接收严格反对称 detail；共同证据不再改变任何 box reference，detail 的 pair midpoint 严格为零。首判 epoch 4 双 HOTA。 |
 | 197 GPU 4,5 | `0731_20 ... decoder_sharedattention_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948` | 共享 decoder attention，仅分类接收末层共同证据；boxes、auxiliary output 和 recurrent references 与父模型严格一致。首判 epoch 4 双 HOTA。 |
 | 99 GPU 0,1 | `0731_19 ... decoder_terminalclassificationcommonevidence ... fresh` | `RUNNING`；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189` | 不共享 decoder attention，仅分类接收末层共同证据；与 `0731_20` 构成 attention sharing 的严格结构对照。首判 epoch 4 双 HOTA。 |
@@ -755,3 +756,19 @@
 - terminal-common gate 已学到 `0.032061`，所以失败不是模块未更新。该结构把共同
   证据同时送入分类和框，即使隔离到末层仍会造成严重 DetA→AssA 搬运；15:03 已精确
   停止并释放 178 GPU0。后续不再派生“共同证据直接改框”的 decoder。
+
+## 2026-07-31 15:14 CST 0731_21 独立 attention 因子对照
+
+- `0731_18/19/20` 已覆盖 shared/non-shared attention 与 classification common
+  evidence，但缺少 non-shared attention 下是否加入 antisymmetric box detail 的
+  因子单元。`0731_21` 补齐该严格结构对照，不修改 loss、类别权重、residual scale、
+  encoder、proposal、PairDN 或训练协议。
+- 提交 `a77e135` 将 factorized evidence 与 shared attention 解耦；新增测试证明在
+  attention-weight 参数独立时，共同证据仍完全不改变 boxes，detail 对 box-logit
+  的新增 pair midpoint 仍严格为零。100 项 decoder 单测、配置深拷贝、完整构建及
+  178 目标环境预检全部通过。
+- 真实单卡 4-iter smoke 的最终 loss/grad norm `19.8328/67.2125`；6 组
+  attention-weight 最大差异 `7.67466e-4`，common/detail gate 分别获得
+  `3.97146e-4/3.92367e-4` 的非零更新。15:13 fresh 正式启动，15:14 到
+  epoch 1 iter 50，loss `20.9349`，总、DN、encoder loss 有限，GPU0 正常，
+  无训练异常；GPU1 未触碰。
