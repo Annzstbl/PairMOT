@@ -1308,3 +1308,18 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 当前不运行 smoke、不排队、不占 GPU。触发条件保持为：现有 full-path/midpoint
   候选在完整同点 HOTA 下失败且对应资源释放。触发后仍须先通过真数据 4-iter DDP
   smoke、有限 loss/grad 与 checkpoint 结构验收，再允许正式 fresh 训练。
+
+## 2026-07-31 23:17 CST 轻量 decoder 约束与 0731_29
+
+- 后续 decoder 候选必须保持结构简洁和计算可控：不堆叠 decoder 层、额外 attention、
+  高分辨率分支或辅助 loss；论文候选还需做同卡同温速度验证，原则上吞吐下降不超过 5%。
+- `0731_26 confidence-common+detail` 的 epoch 12 cls/det HOTA 为
+  `48.766/55.694`，相对 Encoder 同点 `49.680/56.541` 下降
+  `0.914/0.847`；其 DetA 与检测 AP 同样偏低。结合 `0731_24/25`，三种
+  confidence 放置均被连续证据否定，完整产物验证后停止，不再扫描 confidence 或 scale。
+- 252 接替运行 `0731_29 terminal diagonal center-motion factorization`。它只增加
+  512 个逐通道门控标量，并将末层反对称框修正限制到中心 `x/y`；`w/h/angle`、
+  recurrent reference、auxiliary outputs、loss 和训练协议均保持父模型不变。
+- `0731_29` 已通过配置深拷贝、完整构建、双卡真实 4-iter smoke、有限总/DN/encoder
+  loss、checkpoint 门控更新和正式 iter 50 五项启动验收。首个结构判定点为 epoch 4；
+  最终成功条件仍为 cls/det HOTA 同时超过 `54.437/62.393`。

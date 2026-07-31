@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 22:49 CST。
+更新时间：2026-07-31 23:17 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；正式 epoch 1 iter 50 五项门槛通过；相对 `0731_21` 无额外可学习参数，仅增加固定 5D 掩码，首看 e4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_27 terminal diagonal factorized evidence` | RUNNING；正式 iter 50 五项门槛通过，当前 epoch 1；仅新增 512 参数，首个判定点为 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；当前 epoch 11；e8 为 `44.283/50.390`，DetA/AP 明显下降，仅观察 e12 持续性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0731_29 terminal diagonal center-motion factorized evidence` | RUNNING；仅新增 512 个逐通道门控参数，中心运动只作用于 `x/y`；真实双卡 smoke、checkpoint 审计与正式 iter 50 五项门槛通过，首看 e4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 24 为 `52.141/59.381`，相对同点 `+0.427/-0.138`，四项 AP 提升；继续到 epoch 28 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -134,7 +134,8 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0731_26_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentbothfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 |  | 同时用 detached 双帧分类置信度约束 common/detail 修正；不新增参数 | e8 `44.283/50.390`，相对 Encoder 同点 `-0.986/+0.197`，DetA 与四项 AP 下降；当前 e11，仅保留至 e12 完整评估确认 |
+| RUNNING | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 |  | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | 提交 `b66ae02`；完整模型 `22,759,287` 参数，其中新增门控 512。目标配置深拷贝、完整构建、双卡真实 4-iter smoke 与 checkpoint 审计通过；正式 e1 iter 50 为 `1.1538 s/iter`，总、DN、encoder loss 与 grad norm 有限，GPU0/1 各约 19.2 GiB，无致命异常，首看 e4 |
+| STOPPED | `0731_26_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentbothfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 23:12 | 同时用 detached 双帧分类置信度约束 common/detail 修正；不新增参数 | e12 `48.766/55.694`，相对 Encoder 同点 `-0.914/-0.847`；cls/det DetA 为 `40.056/47.910`，pair mAP/AP50 为 `0.262434/0.479349`。epoch 12 checkpoint、检测 metrics、TrackEval metrics 与 54 个原始结果文件完整验证后精确停止；与 `0731_24/25` 一起否定全部 confidence 放置，不再派生 |
 | RUNNING | `0727_04_paper_base_liquid_encoder_p5temporal_detailenergy` | 2026-07-28 00:50 |  | 固定`0723_01` Liquid与P5 MHA，保持`0726_03` common/detail结构；仅对两帧反向的signed-detail残差施加逐通道、逐样本的原始pair-detail RMS上限，防止时序修正能量超过输入帧差。约束使用detached统计、无参数、无loss且仍严格保持pair均值与帧交换等变 | 严格队列在父实验18/18完成后通过真实数据smoke并fresh启动；当前epoch 4 iter 350，约`1.29 s/iter`、峰值约11.0 GB/rank，总/DN/encoder loss与梯度有限 |
 | COMPLETED | `0726_03_paper_base_liquid_encoder_p5temporal_commondetail_pairdn_paircoherent_le180` | 2026-07-26 20:35 | 2026-07-28 00:49 | `0726_02`的严格encoder后继：保留`0723_01` Base + Liquid、P5双向全局MHA和全部训练协议；将原三尺度方向性pyramid-local替换为pair-common/detail分解。共享`[mean, abs(detail)]`描述控制奇函数local detail变换，两帧施加等大反向残差，严格保持pair均值且交换帧时输出等变 | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为`54.654/62.240`，同epoch pair mAP/AP50为`0.3239/0.5380`。相对Base+Liquid双提升`+0.699/+0.208`，相对Paper Base双提升`+1.340/+0.258`；det DetA/AssA相对Base+Liquid也同时提高`+0.039/+0.447` |
 | COMPLETED | `0725_03_pairdn_paircoherent_le180_dse_cpdse_dettangent_fast` | 2026-07-25 11:05 | 2026-07-26 17:44 | `0725_01` + Detection-Tangent CP-DSE：按已有Conv3D second moment和DSE gate的group敏感度形成pair共享检测重要性向量，只移除CP-DSE残差沿该向量的一阶检测响应分量；保留其余关联修正，无新增参数/loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 72为cls/det HOTA `54.229/61.808`，同epoch pair mAP/AP50为`0.3196/0.5340`；相对Paper Base为`+0.915/-0.174`，det DetA/AssA分别为`-0.074/-0.122`；相对未投影父配置`0725_01`同epoch为`-0.897/-0.190`，不再沿该方向派生 |
