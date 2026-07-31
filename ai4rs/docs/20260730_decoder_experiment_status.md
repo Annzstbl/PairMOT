@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 11:33 CST
+更新时间：2026-07-31 11:45 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`，继续到 epoch 8 | Cls 仅极窄落后，det 的 DetA/AssA 均明显提高；完整产物与结构验收通过。epoch 8 若仍非双 HOTA 通过则停止。 |
+| 197 GPU 4,5 | `0731_15 ... decoder_sharedattention_terminalmidpointregressionenvelopeddetail ... fresh` | `RUNNING`；真实双卡 smoke 与正式 iter 50 五项门槛通过 | 仅最终 5D box-logit residual 接收严格反对称细节，新增 pair midpoint 为零；分类 hidden state、所有前层 reference 与共享父路径一致。首判 epoch 4 双 HOTA。 |
+| 99 GPU 0,1 | `0731_14 ... decoder_sharedattention_terminalregressionenvelopeddetail ... fresh` | `RUNNING`；真实双卡 smoke 与正式 iter 50 五项门槛通过 | 分类 hidden state 全层共享，仅最终框输出接收 bounded frame detail，不产生 reference 递归污染。首判 epoch 4 双 HOTA。 |
+| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；11:44 到 epoch 8 iter 400 | Cls 仅极窄落后，det 的 DetA/AssA 均明显提高；等待 epoch 8 checkpoint 的完整 HOTA 评估。 |
 
 ## 已完成或释放
 
@@ -594,3 +596,23 @@
   且 detector 初始化后唯一 gate 仍为零。正式与 smoke 配置均通过深拷贝，两个完整
   模型构建通过，四个 launcher 通过 `bash -n`。下一步分别在 99 与 197 做真实双卡
   4-iter smoke，只有 smoke checkpoint 结构验收和有限 loss 全部通过后才正式启动。
+
+## 2026-07-31 11:45 CST 0731_14/15 正式启动
+
+- 提交 `1575d96` 已同步到四台本地服务器；99 与 197 的正式和 smoke workdir
+  均相互隔离，启动前为空。99 使用 GPU 0/1，197 仅使用 GPU 4/5。
+- `0731_14` smoke 完成 4 个真实训练 iter，iter 4 loss/grad norm
+  `19.8231/87.0932`，DN 与 encoder loss 有限。checkpoint 检查为：
+  attention share 6 组、最大误差 `0`；18 组独立参数最大差异 `7.85518e-4`；
+  terminal gate 最大值 `3.92929e-4`。
+- `0731_15` smoke 完成 4 个真实训练 iter，iter 4 loss/grad norm
+  `19.9996/94.1014`，DN 与 encoder loss 有限。checkpoint 检查为：
+  attention share 6 组、最大误差 `0`；18 组独立参数最大差异 `7.79018e-4`；
+  midpoint terminal gate 最大值 `3.92011e-4`。
+- 两项正式 fresh 训练均通过五项启动门槛。99 `0731_14` 于 11:45 达到
+  epoch 1 iter 50，`0.9528 s/iter`、loss `22.1461`、grad norm
+  `126.9356`；197 `0731_15` 同时达到 iter 50，`0.8932 s/iter`、
+  loss `22.1811`、grad norm `124.8561`。两者总、DN、encoder loss
+  均有限，目标 GPU 各约 `19.2 GiB`，没有训练异常。
+- 当前并行实验为 252 `0731_13`、99 `0731_14`、197 `0731_15`；
+  178 空闲。三项均以同 epoch cls/det HOTA 为主判据，首判新实验的 epoch 4。

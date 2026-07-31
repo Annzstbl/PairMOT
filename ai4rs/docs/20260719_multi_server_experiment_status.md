@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 11:33 CST。
+更新时间：2026-07-31 11:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无训练 | `0731_12 terminal-only` epoch 8 cls/det HOTA `43.178/50.010`，相对父配置 `-2.091/-0.183`；完整评估与结构审计后停止，GPU 0/1 空闲 | `0731_14 terminal regression-only` 完成代码级验证，待真实 smoke | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无训练 | `0730_09 motion-trust` 恢复至 epoch 12 后双 HOTA 相对父配置 `-0.803/-0.722`，完整评估与结构审计后停止；GPU 4/5 空闲 | 等待 99 epoch 8 决策 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；11:11 在 epoch 6，继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无训练 | `0730_16 antisymmetric-detail` 恢复至 epoch 8 后双 HOTA 相对父配置 `-0.678/-0.508`，完整评估与结构审计后停止；GPU 0 空闲 | 等待 99 epoch 8 决策 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_14 shared-attention + terminal regression-only detail` | RUNNING；真实双卡 4-iter smoke 和 checkpoint 结构验收通过；11:45 正式 fresh 训练到 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_15 shared-attention + terminal midpoint-regression detail` | RUNNING；真实双卡 4-iter smoke 和 midpoint 结构验收通过；11:45 正式 fresh 训练到 epoch 1 iter 50 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_13 shared-attention + terminal-midpoint enveloped-detail decoder` | RUNNING；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；11:44 在 epoch 8 iter 400，等待 epoch 8 完整评估 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | 无训练 | `0730_16 antisymmetric-detail` 恢复至 epoch 8 后双 HOTA 相对父配置 `-0.678/-0.508`，完整评估与结构审计后停止；GPU 0 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -764,3 +764,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 89 项 decoder 单测、两份正式和两份 smoke 配置深拷贝、两个完整模型构建及四个
   launcher 语法检查通过。下一步在 99/197 各执行真实双卡 4-iter smoke；只有
   checkpoint 结构、有限 loss 与正式 iter 50 五项门槛全部通过才记为 `RUNNING`。
+
+## 2026-07-31 11:45 CST terminal regression 两项正式启动
+
+| Status | 服务器/资源 | 实验 | 开始/结束 | 进度或说明 |
+| --- | --- | --- | --- | --- |
+| RUNNING | 197 GPU 4,5 | `0731_15_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalmidpointregressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 11:43 /  | 4-iter 真实数据 DDP smoke 的总、DN、encoder loss 与 grad norm 全部有限；checkpoint 中 6 组 attention 严格共享、18 组独立参数最大差异 `7.79018e-4`，terminal midpoint gate 最大值 `3.92011e-4`。正式 fresh 训练于 11:45 到 epoch 1 iter 50，`0.8932 s/iter`、loss `22.1811`、grad norm `124.8561`，GPU 4/5 各约 `19.2 GiB`，无 Traceback/OOM/NaN/NCCL/DDP 异常。 |
+| RUNNING | 99 GPU 0,1 | `0731_14_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_sharedattention_terminalregressionenvelopeddetail_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 11:43 /  | 4-iter 真实数据 DDP smoke 的总、DN、encoder loss 与 grad norm 全部有限；checkpoint 中 6 组 attention 严格共享、18 组独立参数最大差异 `7.85518e-4`，terminal gate 最大值 `3.92929e-4`。正式 fresh 训练于 11:45 到 epoch 1 iter 50，`0.9528 s/iter`、loss `22.1461`、grad norm `126.9356`，GPU 0/1 各约 `19.2 GiB`，无 Traceback/OOM/NaN/NCCL/DDP 异常；GPU 2 上外部任务未触碰。 |
+
+- 两项实验均基于提交 `1575d96`，99、197、252、178 已验证为同一 commit；
+  252 的既有 `0731_13` 进程保持运行且未重启。首个统一科学决策点为 epoch 4，
+  主判据仍是相对 `0727_01` 同 epoch 的 cls/det HOTA，DetA/AssA 用于归因，
+  mAP 仅作检测崩塌诊断。
