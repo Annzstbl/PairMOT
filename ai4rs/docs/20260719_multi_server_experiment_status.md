@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 18:33 CST。
+更新时间：2026-07-31 18:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 | `0731_22` 经代码审计确认与 `0731_19` 数学等价，18:32 停止并释放 GPU 0,1 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无 | `0731_20` epoch 8 双 HOTA 同点下降 `-1.599/-0.330`，完整评估和结构审计后于 18:31 停止，GPU 4,5 已释放 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无 | `0731_23` 经代码审计确认与 `0731_21` 数学等价，18:32 停止并释放 GPU 0,1 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 8 双 HOTA 相对 `0727_01` 提高 `+1.373/+1.914`，完整 TrackEval 与结构审计通过，继续训练 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_25 terminal object-confident detail` | RUNNING；GPU 4,5，18:52 到 epoch 1 iter 100，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 12 为 `49.159/56.341`，相对 `0727_01` 同点 `-0.521/-0.200`；因 epoch 8 曾双升且当前差距较小，继续到 epoch 16 做持续性判定 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -64,7 +64,7 @@
 
 ## 197 服务器
 
-登录：`litianhao@10.106.14.197`；代码路径：`/data/users/litianhao/PairMOT/ai4rs`。
+登录：`litianhao@10.106.14.197`；当前正式代码路径：`/data/users/litianhao/PairMOT_sync_3cb888d/ai4rs`。
 当前正式训练使用GPU 4、5。
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
@@ -209,7 +209,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_21`，下一编号为`0731_22`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0731_26`，下一编号为`0731_27`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。
@@ -963,3 +963,25 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   正式科学结果表。当前唯一继续训练的是 178 `0731_21`；其 epoch 8 双 HOTA 增益
   仍是有效结果，但机制应归因于独立双帧 attention 与末层 common/detail 正交分解，
   不能归因于新增的梯度隔离开关。
+
+## 2026-07-31 18:55 CST object-reliable terminal factorization 三路启动
+
+- 提交 `737210b` 在 `0731_21` 的末层正交 common/detail 结构上增加
+  `terminal_factorized_confidence`。可靠度取两条父分类路径最大 object confidence 的
+  detached 几何均值，只控制 common 修正、detail 修正或两者；不引入类别权重、loss
+  重加权、阈值、可学习 scale，也不修改 encoder、proposal、PairDN 或训练协议。
+- 102 项 decoder 单测、3 份正式配置深拷贝与完整构建、3 份 smoke 配置深拷贝、
+  6 份 launcher 语法检查均通过。99/197/252 的目标双卡真实数据 4-iter smoke 均产生
+  有限总损失、DN loss、encoder loss 和 grad norm，且独立 attention 与 terminal gate
+  均获得非零更新。
+- 99 `0731_24 object-confident common`、197 `0731_25 object-confident detail`、
+  252 `0731_26 object-confident common+detail` 均于 18:49 fresh 启动。18:52 分别达到
+  epoch 1 iter `150/100/150`，screen、worker、目标 GPU、正式日志、有限损失与无致命
+  错误五项门槛全部通过。197 进程实际 cwd 为干净的
+  `/data/users/litianhao/PairMOT_sync_3cb888d/ai4rs`、HEAD `737210b`；旧
+  `/data/users/litianhao/PairMOT` 不是本次训练目录。
+- 178 `0731_21` 的 epoch 12 完整结果为 cls HOTA/DetA/AssA
+  `49.159/40.613/61.861`，det `56.341/49.482/66.346`；相对 `0727_01` 同点
+  HOTA `-0.521/-0.200`、DetA `-0.747/-0.863`、AssA `+0.051/+0.767`。
+  这表明 epoch 8 的双增益已出现轻度 DetA→AssA 回落，但差距尚小且 AP50 仍提高，
+  因此保留到 epoch 16 做持续性判定；三条 confidence 实验的首判点均为 epoch 4。

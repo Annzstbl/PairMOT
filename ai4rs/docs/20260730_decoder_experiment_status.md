@@ -868,3 +868,19 @@
 - `0731_22/23` 不再作为科学实验或有效消融。两项均在首个 checkpoint 前于 18:32
   精确停止，日志保留，99 GPU 0,1 与 252 GPU 0,1 已释放。后续不得把它们的
   smoke gate 更新或训练 loss 当成支持梯度隔离假设的证据。
+
+## 2026-07-31 18:55 CST object-reliable factorization 与 epoch-12 复核
+
+- `0731_21` epoch 12 达到 cls HOTA/DetA/AssA `49.159/40.613/61.861`，
+  det `56.341/49.482/66.346`。相对 `0727_01` 同点 HOTA 为
+  `-0.521/-0.200`，DetA 为 `-0.747/-0.863`，AssA 为 `+0.051/+0.767`。
+  epoch 8 的双 HOTA 增益没有在 epoch 12 保持，表现为轻度 DetA→AssA 搬运；但差距
+  仍小、pair/both AP50 仍分别提高 `0.006536/0.005902`，故继续至 epoch 16 确认趋势。
+- 新结构不再调 loss 或 residual scale，而是用两条父分类路径最大 object confidence 的
+  detached 几何均值限制 terminal common/detail 修正只作用于更可信的 object query。
+  `0731_24/25/26` 分别只约束 common、只约束 detail、同时约束两者，形成直接定位
+  DetA 回落来源的三单元结构对照；无类别重加权、阈值或新增监督。
+- 提交 `737210b` 已同步四机。102 项单测、配置深拷贝、完整构建、launcher 语法及
+  三机双卡真实数据 smoke 全部通过。99 `0731_24`、197 `0731_25`、252 `0731_26`
+  于 18:49 fresh 启动，18:52 均通过正式迭代五项门槛，无 Traceback/OOM/NaN/NCCL；
+  首个 HOTA 判定点均为 epoch 4。
