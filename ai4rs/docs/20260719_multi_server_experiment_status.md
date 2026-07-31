@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 19:52 CST。
+更新时间：2026-07-31 20:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,9 +15,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_25 terminal object-confident detail` | RUNNING；GPU 4,5，18:52 到 epoch 1 iter 100，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；GPU 0,1，18:52 到 epoch 1 iter 150，正式五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 本机 | `0731_24 terminal object-confident common` | RUNNING；epoch 4 为 `36.689/42.562`，相对 `0727_01` 同点 `+0.480/+3.809`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_25 terminal object-confident detail` | RUNNING；epoch 4 为 `35.824/41.591`，相对 `0727_01` 同点 `-0.385/+2.838`；DetA/AP 偏弱，按非早停规则继续到 epoch 8 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_26 terminal object-confident common+detail` | RUNNING；epoch 4 为 `36.958/41.792`，相对 `0727_01` 同点 `+0.749/+3.039`；增益主要来自 AssA，继续到 epoch 8/12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 16 为 `50.273/58.085`，相对 `0727_01` 同点 `-0.818/-0.235`；按修订后的非早停规则继续到 epoch 20 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1002,3 +1002,22 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 模型复杂度和效率作为硬约束：后继不得堆叠 decoder 层、额外 attention、高分辨率分支
   或额外 loss；须保持可解释 common/detail 语义，并在同卡同温条件下实测速度。当前
   `0731_24/25/26` 为无参数 query 级可靠度路由，不属于复杂模型堆叠。
+
+## 2026-07-31 20:35 CST 三路 object-confidence epoch-4 结果
+
+- 99 `0731_24 confident-common` 的 cls HOTA/DetA/AssA 为
+  `36.689/26.771/53.796`，det 为 `42.562/32.498/56.889`；相对
+  `0727_01` 同点 HOTA `+0.480/+3.809`，但 DetA 仅 `-0.297/+0.044`，
+  主要是 AssA 提升。pair/both mAP 略降，AP50 分别提高 `0.011296/0.008962`。
+- 252 `0731_26 confident-common+detail` 的 cls HOTA/DetA/AssA 为
+  `36.958/26.877/54.801`，det 为 `41.792/32.810/54.722`；相对父配置
+  HOTA `+0.749/+3.039`、DetA `-0.191/+0.356`。其双 HOTA 通过 epoch-4
+  结构学习检查，但同样主要依赖 AssA，pair/both mAP 略降而 AP50 提高。
+- 197 `0731_25 confident-detail` 的 cls HOTA/DetA/AssA 为
+  `35.824/25.781/53.847`，det 为 `41.591/30.920/57.109`；相对父配置
+  HOTA `-0.385/+2.838`、DetA `-1.287/-1.534`，pair/both mAP 也分别下降
+  `0.007218/0.008269`，是三路中最弱的一项。
+- epoch 4 只作结构是否学习和灾难性退化检查，不能据此否定简单结构。因此三路均继续：
+  `0731_24/26` 至少观察 epoch 8/12，`0731_25` 先观察 epoch 8；只有连续节点出现
+  HOTA、DetA 与 AP 的系统性恶化才停止。三种路由均不增加可学习参数、decoder 深度、
+  attention 或 loss；若形成候选主线，必须补做同卡同温训练与推理速度比较。

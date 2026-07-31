@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 18:33 CST
+更新时间：2026-07-31 20:35 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；15:14 到 epoch 1 iter 50，loss/grad norm `20.9349/90.7400` | 不共享 decoder attention；分类只接收末层共同证据，boxes 只接收严格反对称 detail，box midpoint 为零。与 `0731_18/19/20` 补成 `shared attention × box detail` 的 2×2 结构对照；首判 epoch 4。 |
+| 99 GPU 0,1 | `0731_24 ... decoder_terminalconfidentcommonfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.689/42.562`，相对父配置 `+0.480/+3.809` | 无新增参数的 object-confidence common 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
+| 197 GPU 4,5 | `0731_25 ... decoder_terminalconfidentdetailfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `35.824/41.591`，相对父配置 `-0.385/+2.838` | 无新增参数的 object-confidence detail 路由；DetA/AP 偏弱，但 epoch 4 不作性能淘汰，继续到 epoch 8。 |
+| 252 GPU 0,1 | `0731_26 ... decoder_terminalconfidentbothfactorizedevidence ... fresh` | `RUNNING`；epoch 4 `36.958/41.792`，相对父配置 `+0.749/+3.039` | common 与 detail 同时采用无参数 confidence 路由；增益主要来自 AssA，继续看 epoch 8/12。 |
+| 178 GPU 0 | `0731_21 ... decoder_terminalorthogonalfactorizedevidence ... fresh` | `RUNNING`；epoch 16 `50.273/58.085`，相对父配置 `-0.818/-0.235` | 独立 attention + 正交 common/detail；没有 AP 全面恶化，按非早停规则继续到 epoch 20。 |
 
 ## 已完成或释放
 
@@ -896,3 +899,19 @@
   有竞争力的结构至少看到 epoch 16/20。故 `0731_21` 继续到 epoch 20。
 - 后继模型必须保持简单、可解释和高效：不增加 decoder 深度、额外 attention、高分辨率
   分支或额外 loss；参数、显存基本不变，并在同卡同温条件下比较训练和推理速度。
+
+## 2026-07-31 20:35 CST object-confidence 三路 epoch-4 对照
+
+- `0731_24 confident-common`：cls HOTA/DetA/AssA `36.689/26.771/53.796`，
+  det `42.562/32.498/56.889`；相对 Encoder 同点 HOTA `+0.480/+3.809`，
+  DetA `-0.297/+0.044`。HOTA 增益主要来自 AssA，mAP 略降但 AP50 提高。
+- `0731_26 confident-common+detail`：cls HOTA/DetA/AssA `36.958/26.877/54.801`，
+  det `41.792/32.810/54.722`；HOTA `+0.749/+3.039`，DetA `-0.191/+0.356`。
+  其 cls HOTA 为三条新实验最高，但仍需验证中期 DetA 是否恢复。
+- `0731_25 confident-detail`：cls HOTA/DetA/AssA `35.824/25.781/53.847`，
+  det `41.591/30.920/57.109`；HOTA `-0.385/+2.838`，DetA `-1.287/-1.534`，
+  pair/both mAP 同时下降，是当前最弱候选。
+- 三条结构均为 query 级乘法路由，没有新增可学习参数、decoder 层、attention 或 loss，
+  满足复杂度约束。epoch 4 只用于排除灾难性退化，不作性能淘汰；24/26 继续到
+  epoch 8/12，25 先到 epoch 8。任何论文主线候选还必须通过同卡同温速度实测，不能
+  以跨服务器的训练日志估算效率。
