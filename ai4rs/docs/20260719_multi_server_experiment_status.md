@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 22:35 CST。
+更新时间：2026-07-31 22:49 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,7 +15,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 | `0731_24` e12 完整结果 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；产物验证后已停止，GPU 0,1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0731_28 terminal center-motion factorized evidence` | RUNNING；正式 epoch 1 iter 50 五项门槛通过；相对 `0731_21` 无额外可学习参数，仅增加固定 5D 掩码，首看 e4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0731_27 terminal diagonal factorized evidence` | RUNNING；正式 iter 50 五项门槛通过，当前 epoch 1；仅新增 512 参数，首个判定点为 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_26 terminal object-confident common+detail` | RUNNING；当前 epoch 11；e8 为 `44.283/50.390`，DetA/AP 明显下降，仅观察 e12 持续性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 24 为 `52.141/59.381`，相对同点 `+0.427/-0.138`，四项 AP 提升；继续到 epoch 28 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -28,6 +28,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| RUNNING | `0731_28_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:48 |  | 在 `0731_21` 上把反对称 box detail 限定为旋转框中心 `x/y`；`w/h/angle` 保持父模型几何，classification common 不变 | 相对 `0731_21` 不新增参数、decoder 层、attention、分支或 loss；104 项单测、完整构建、双卡真实 smoke 与 checkpoint 审计通过。正式 e1 iter 50 五项门槛通过，无致命异常，首看 e4 |
 | STOPPED | `0731_24_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentcommonfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:35 | `0731_21` 因子结构的 common 路由乘 detached 双帧分类置信度；不新增参数 | e12 `48.271/56.179`，相对 Encoder 同点 `-1.409/-0.362`；DetA `-1.834/-1.524`，四项 AP 下降 `0.014159/0.007145/0.014924/0.007281`。checkpoint、metrics 与 54 个 TrackEval 原始文件验证后停止 |
 | RUNNING | `0727_12_paper_base_liquid_encoder_p5temporal_crossscalebudget` | 2026-07-27 20:18 |  | 严格继承`0727_01`的Base+Liquid、P5 temporal MHA及common/detail Dual-Evidence；用每层`[common mean, abs(detail) mean]`生成三尺度token，并结合三尺度均值上下文预测逐通道common/detail尺度预算。预算在P3/P4/P5维softmax后乘3，每个分支/通道总预算严格为3，仅重分配尺度贡献，不改变平均残差强度；描述侧停止梯度，输出层零初始化，无额外loss或高分辨率卷积 | 新增37,696参数，完整模型`22,796,471`，相对父配置`+0.166%`。32项功能/梯度/帧交换等变测试、配置深拷贝、完整构建和精确2卡真实数据4-iter DDP smoke全部通过；正式GPU 0、1 fresh训练已到epoch 7，约`0.972 s/iter`、MMEngine峰值约11.25 GB/rank，总/DN/encoder loss及grad norm有限；尚未产生首个正式评测点 |
 | COMPLETED | `0723_05_pairdn_paircoherent_le180_cpdse_local` | 2026-07-24 03:56 | 2026-07-25 03:56 | `0723_01` + consistency-preserving DSE local：保留`x.mean`主路径，以归一化通道离散度生成零初始化、最大绝对值0.5的逐像素SE-logit残差；8个新增参数，无额外loss | 完成72 epochs和18/18 TrackEval；唯一最佳epoch 68为`53.536/61.619`，同点pair mAP/AP50为`0.3148/0.5320`；相对Paper Base为`+0.222/-0.363`，不满足双提升。PairMOT训练及评测进程已退出，99不排新任务；不对其他用户当前GPU占用做清理或调度 |
@@ -1089,3 +1090,18 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - confidence-common、confidence-detail 和 confidence-common+detail 已形成一致否定证据；不再
   扩展 confidence 或 residual-scale 组合。99 后续只接收作用机制独立、结构轻量且不明显增加
   计算量的 decoder 实验。
+
+## 2026-07-31 22:49 CST 0731_28 中心运动约束启动
+
+- `0731_21` e24 的 cls HOTA 已相对同点提高 `0.427`，det AssA 提高 `0.814`，但 det
+  DetA 下降 `0.735`、det HOTA 仍低 `0.138`。据此建立结构假设：相邻帧反对称 detail
+  应主要表达中心位移，不应同时扰动短时内较稳定的宽、高和旋转角。
+- 提交 `8a24666` 增加 `0731_28`：classification common 完全不变，box detail 只作用于
+  旋转框 `x/y`，`w/h/angle` 严格保留父模型输出；仍保持零初始化、帧交换等变和精确 pair
+  midpoint。相对 `0731_21` 不新增参数、decoder 层、attention、分支、loss 或实质 FLOPs。
+- 104 项 decoder 单测通过，覆盖零起点、中心两维非零修正、后三维严格不变、pair midpoint、
+  分类正交和 detail gate 梯度。正式/短测配置深拷贝、完整模型构建、launcher 语法与双卡真实
+  4-iter smoke 均通过；checkpoint 中 6 组独立 attention 已分化，两个 gate 均有非零更新。
+- 99 GPU 0,1 于 22:48 fresh 启动；22:49 到 epoch 1 iter 50，GPU 显存约
+  `19.2 GB/rank`，MMEngine 约 `11.17 GB/rank`，总/DN/encoder loss 与梯度有限，
+  无 Traceback/OOM/NaN/NCCL。首个 HOTA 结构检查点为 epoch 4。

@@ -972,3 +972,15 @@
 - 完整 e12 checkpoint、检测评估、TrackEval metrics 和 54 个原始文件验证后，99 上该实验
   已精确停止并释放 GPU 0,1。三种 confidence 路由均不再扩展；下一步只考虑轻量、结构性且
   与 confidence/scale 调参不同的 decoder 改进。
+
+## 2026-07-31 22:49 CST 0731_28 center-motion factorization
+
+- 机制依据：`0731_21` e24 的 det AssA 相对 Encoder 提高 `0.814`，但 det DetA 下降
+  `0.735`。完整五维 antisymmetric detail 可能保留关联收益的同时扰动 width/height/angle。
+- `0731_28` 仅允许该 detail 修正旋转框中心 `x/y`；`w/h/angle` 使用未修改的父模型几何。
+  classification common、独立 attention、零初始化、严格 pair midpoint、数据、PairDN 和 loss
+  全部不变。这是运动几何约束，不是 confidence、residual scale 或类别重加权。
+- 相对 `0731_21` 参数和主要计算完全不变：完整模型 `22,889,847` 个参数，两个稠密 gate
+  仍共 `131,072` 参数；仅对已有 5D detail 固定屏蔽后三维。
+- 提交 `8a24666`；104 项单测、配置与完整构建、双卡真实 4-iter smoke、checkpoint gate/
+  attention 审计以及正式 iter 50 五项门槛均通过。99 `0731_28` 已 RUNNING，首看 e4。
