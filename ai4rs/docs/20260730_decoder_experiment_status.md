@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-07-31 11:45 CST
+更新时间：2026-07-31 12:15 CST
 
 ## 当前研究原则
 
@@ -13,14 +13,14 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU 4,5 | `0731_15 ... decoder_sharedattention_terminalmidpointregressionenvelopeddetail ... fresh` | `RUNNING`；真实双卡 smoke 与正式 iter 50 五项门槛通过 | 仅最终 5D box-logit residual 接收严格反对称细节，新增 pair midpoint 为零；分类 hidden state、所有前层 reference 与共享父路径一致。首判 epoch 4 双 HOTA。 |
-| 99 GPU 0,1 | `0731_14 ... decoder_sharedattention_terminalregressionenvelopeddetail ... fresh` | `RUNNING`；真实双卡 smoke 与正式 iter 50 五项门槛通过 | 分类 hidden state 全层共享，仅最终框输出接收 bounded frame detail，不产生 reference 递归污染。首判 epoch 4 双 HOTA。 |
-| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `RUNNING`；epoch 4 cls/det HOTA `36.148/43.247`，相对父配置 `-0.061/+4.494`；11:44 到 epoch 8 iter 400 | Cls 仅极窄落后，det 的 DetA/AssA 均明显提高；等待 epoch 8 checkpoint 的完整 HOTA 评估。 |
+| 197 GPU 4,5 | `0731_15 ... decoder_sharedattention_terminalmidpointregressionenvelopeddetail ... fresh` | `RUNNING`；12:12 到 epoch 2 iter 950，loss/grad norm `12.2897/30.3471` | 仅最终 5D box-logit residual 接收严格反对称细节，新增 pair midpoint 为零；分类 hidden state、所有前层 reference 与共享父路径一致。首判 epoch 4 双 HOTA。 |
+| 99 GPU 0,1 | `0731_14 ... decoder_sharedattention_terminalregressionenvelopeddetail ... fresh` | `RUNNING`；12:13 到 epoch 2 iter 800，loss/grad norm `11.2420/26.9715` | 分类 hidden state 全层共享，仅最终框输出接收 bounded frame detail，不产生 reference 递归污染。首判 epoch 4 双 HOTA。 |
 
 ## 已完成或释放
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 12:11 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.170/34.514/57.338`，det `48.484/42.910/56.678`；相对父 encoder 同点 HOTA `-2.099/-1.709`、DetA `-3.149/-4.151`，而 AssA `+0.037/+1.533`，属于检测覆盖下降而非双提升。pair mAP/AP50 `0.212921/0.391949`，both-independent mAP/AP50 `0.248771/0.430138`，诊断指标同样下降。结构检查通过：6 组共享 attention 误差为零、18 组独立参数最大差异 `0.058077`、terminal-midpoint gate 从 smoke 的约 `3.9e-4` 学到 `0.119707`，排除模块未学习。epoch 8 checkpoint、检测和完整 TrackEval 均保留；GPU 0/1 已释放。 |
 | 99 GPU 0,1 | `0731_12 ... decoder_sharedattention_terminalenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后停止 | epoch 8 cls HOTA/DetA/AssA `43.178/35.246/55.355`，det `50.010/43.700/59.276`；相对父 encoder 同点 HOTA `-2.091/-0.183`，DetA `-2.417/-3.361`，cls AssA `-1.946`，仅 det AssA `+4.131`。pair mAP/AP50 `0.217536/0.410164`，both-independent AP50 `0.448156`，检测诊断也下降。结构检查通过，证明末层分类与回归同时专门化仍会损伤覆盖；GPU 0/1 已释放。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... fresh` | `STOPPED`；epoch 16 全量评估后于 09:07 精确停止 | epoch 16 cls HOTA/DetA/AssA `51.007/42.964/62.130`，det `57.940/50.762/68.403`；相对父 encoder 同点 HOTA `-0.084/-0.380`。虽然 pair mAP 和 both-independent AP50 提高，但双 HOTA 未通过预设门槛，故不再消耗 epoch 17 以后资源。checkpoint、检测、TrackEval、原始 CSV 与结构检查均保留。 |
 | 99 GPU 0,1 | `0731_09 ... decoder_sharedattention_regressionenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估后停止 | epoch 8 cls/det HOTA `44.043/49.271`，相对父 encoder 同点 `-1.226/-0.922`，双 HOTA 同时失败；结构 checkpoint 验收通过，说明是方向失败而非模块未学习。 |
@@ -616,3 +616,21 @@
   均有限，目标 GPU 各约 `19.2 GiB`，没有训练异常。
 - 当前并行实验为 252 `0731_13`、99 `0731_14`、197 `0731_15`；
   178 空闲。三项均以同 epoch cls/det HOTA 为主判据，首判新实验的 epoch 4。
+
+## 2026-07-31 12:15 CST 0731_13 epoch-8 淘汰
+
+- 252 `0731_13 terminal-midpoint` 的 epoch 8 checkpoint、检测 metrics、完整
+  TrackEval、原始 CSV 与结构审计均已完成。cls HOTA/DetA/AssA 为
+  `43.170/34.514/57.338`，det 为 `48.484/42.910/56.678`。
+- 相对 `0727_01` 同点，cls HOTA/DetA/AssA 为
+  `-2.099/-3.149/+0.037`，det 为 `-1.709/-4.151/+1.533`。它从 epoch 4
+  的 det 全组成量增益退化为明显 DetA 损失，仅保留 AssA 搬运；不是随机小波动，
+  也不满足 HOTA 双过。
+- pair mAP/AP50 为 `0.212921/0.391949`，both-independent mAP/AP50 为
+  `0.248771/0.430138`，检测诊断同样低于父配置。checkpoint 检查确认 6 组
+  shared attention 最大误差为零、18 组独立参数最大差异 `0.058077`，
+  terminal-midpoint gate 最大权重 `0.119707`，证明结构已充分学习。
+- 按预设 epoch-8 门槛于 12:11 对该 workdir 的唯一训练进程组发送 SIGTERM；
+  目标进程已完全退出，GPU 0/1 均为 `1 MiB/0%`，epoch 8 checkpoint 与全部
+  评估产物保留。当前仅 99 `0731_14` 和 197 `0731_15` 运行，二者均在 epoch 2
+  稳定训练并等待 epoch 4 首次 HOTA 判定；178 与 252 空闲。
