@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-07-31 16:38 CST。
+更新时间：2026-07-31 17:39 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0731_19 terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 400，loss/grad norm `17.2928/11.1189`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；14:38 到 epoch 1 iter 250，loss/grad norm `18.3156/27.1948`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_18 shared-attention + terminal orthogonal factorized evidence` | RUNNING；14:38 到 epoch 2 iter 50，loss/grad norm `12.7175/23.6045`，无训练异常；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；真实单卡 smoke 与结构 checkpoint 检查通过；15:14 到 epoch 1 iter 50，loss/grad norm `20.9349/90.7400` | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0731_22 detached classification-common evidence` | RUNNING；17:39 到 epoch 1 iter 50，loss/grad norm `22.3393/150.2402`，总/DN/encoder loss 有限；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0731_20 shared-attention + terminal classification common evidence` | RUNNING；17:30 到 epoch 7 iter 450，无训练异常；等待 epoch 8 完整 HOTA | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0731_23 detached orthogonal factorized evidence` | RUNNING；17:39 到 epoch 1 iter 50，loss/grad norm `21.4946/108.6348`，总/DN/encoder loss 有限；首判 epoch 4 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0731_21 independent-attention + terminal orthogonal factorized evidence` | RUNNING；epoch 8 双 HOTA 相对 `0727_01` 提高 `+1.373/+1.914`，完整 TrackEval 与结构审计通过，继续训练 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -919,3 +919,29 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   但 det AssA 降低 `9.761`，因而 det HOTA 相对 classification-only 单元下降
   `2.122`。所以不能把 shared attention 与 antisymmetric detail 当作可直接相加
   的独立增益；四项均保留到 epoch 8 检验中期稳定性。
+
+## 2026-07-31 17:39 CST epoch-8 分流与梯度隔离实验启动
+
+- 99 `0731_19 independent attention + classification common only` 的 epoch 8
+  cls/det HOTA 为 `43.480/50.152`，相对 `0727_01` 同点
+  `-1.789/-0.041`；cls/det DetA 分别下降 `2.883/3.568`。252
+  `0731_18 shared attention + factorized evidence` 为 `43.681/51.660`，
+  相对父配置 `-1.588/+1.467`，cls/det DetA 下降 `3.302/2.752`。
+  两项均在 checkpoint、检测、54 个 TrackEval 原始文件和结构审计齐全后停止，
+  保留全部 epoch 4/8 产物。
+- 178 `0731_21 independent attention + factorized evidence` 的 epoch 8
+  cls HOTA/DetA/AssA 为 `46.642/38.691/59.237`，det 为
+  `52.107/46.230/60.830`；相对 `0727_01` 同点双 HOTA
+  `+1.373/+1.914`。pair mAP/AP50 提高 `0.010728/0.035152`，
+  both-independent 提高 `0.010185/0.033446`。54 个 TrackEval 原始文件完整；
+  独立 attention 最大差异 `0.056624`，common/detail gate
+  `0.036273/0.072394`。该候选通过 epoch-8 门槛并继续训练。
+- 代码审计确认旧 terminal common/detail 模式虽然对 residual/detail 本体停止梯度，
+  gate 的归一化两帧 evidence 仍向共享 decoder 表征反向传播。提交 `2c8b13b`
+  新增结构开关，只切断这条附加梯度路径而保持 gate 可学习；103 项 decoder 单测、
+  4 份配置深拷贝、2 个完整模型构建和双机真实 4-iter DDP smoke 均通过。
+- 99 `0731_22 detached classification-common` 与 252
+  `0731_23 detached orthogonal factorized` 于 17:37 fresh 启动。17:39 两者均到
+  epoch 1 iter 50，GPU/正式日志/有限总损失、DN loss、encoder loss 与 grad norm
+  五项门槛通过；smoke gate 分别更新到 `3.935e-4`，以及
+  `3.925e-4/3.949e-4`。两项首判均为 epoch 4。

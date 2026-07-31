@@ -828,3 +828,24 @@
   下加入 antisymmetric detail 虽使 cls/det DetA `+2.861/+3.198`，却使
   det AssA `-9.761`、det HOTA `-2.122`。因此当前不扩展更多组合，四项继续到
   epoch 8，以双 HOTA 是否保持和 DetA/AssA 是否发生中期搬运决定方向。
+
+## 2026-07-31 17:39 CST epoch-8 结论与梯度隔离对照
+
+- `0731_19` 在 epoch 8 的 cls/det HOTA 为 `43.480/50.152`，相对
+  `0727_01` 同点 `-1.789/-0.041`；`0731_18` 为 `43.681/51.660`，
+  相对父配置 `-1.588/+1.467`。两者都出现系统性 DetA 损失且 cls 未通过，
+  完整产物与结构审计齐全后已停止。
+- `0731_21 independent attention + factorized evidence` 在 epoch 8 达到
+  cls HOTA/DetA/AssA `46.642/38.691/59.237`，det
+  `52.107/46.230/60.830`；相对父配置双 HOTA `+1.373/+1.914`。
+  pair mAP/AP50 与 both-independent mAP/AP50 也分别提高
+  `0.010728/0.035152` 和 `0.010185/0.033446`。这说明独立 attention 下的
+  common/detail 正交分解在中期仍有净增益，目前继续训练。
+- 失败单元暴露的关键结构问题不是 boxes 前向本身，而是 common/detail gate 输入
+  evidence 仍把分类或回归梯度送回两帧共享 decoder 表征。提交 `2c8b13b` 增加
+  `terminal_detach_gate_evidence`：仅停止 gate evidence 输入的反向路径，
+  residual/detail 已有停止梯度保持不变，gate 参数仍正常学习。
+- 99 `0731_22` 对照 `0731_19`，252 `0731_23` 对照 `0731_21`，构成
+  “attached/detached × classification-only/factorized”的严格结构对照。两项
+  均通过 103 项 decoder 单测、配置深拷贝、完整模型构建、真实双卡 4-iter smoke
+  和正式 iter 50 五项门槛；首个 HOTA 判定点为 epoch 4。
