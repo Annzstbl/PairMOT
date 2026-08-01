@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 13:12 CST。
+更新时间：2026-08-01 18:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0801_04 symmetric-position decoder` | RUNNING；零新增参数与矩阵乘法；真实双卡 4-iter smoke 及 checkpoint 结构审计通过，11:27 formal iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无 | IDLE；`0730_10 symmetric-pair decoder` e8 出现双 HOTA、双 DetA 与检测 AP 系统性下降，完整产物核验后于 12:31 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0801_05 symmetric-feature decoder` | RUNNING；e4 cls/det HOTA `34.947/38.300`，相对 Encoder 同点 `-1.262/-0.453`；完整评估已核验，按放宽规则继续 e8 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0801_08 iterative-cls DN-isolated decoder` | RUNNING；真实双卡 smoke 与 checkpoint 更新审计通过，18:04 formal epoch 1 iter 50 五项门槛通过，约 `1.02 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | 无 | IDLE；PairMOT GPU 4、5 保留给通过首轮门槛后的确认实验，不启动低信息重复变体 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0801_07 iterative-cls residual decoder` | RUNNING；既有双卡实验继续到首个 e4 评测，18:00 位于 epoch 3 iter 900；252 不再承担新候选首轮验证 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0801_09 iterative-cls DN-isolated E2E decoder` | RUNNING；真实单卡 smoke 与 checkpoint 更新审计通过，18:04 formal epoch 1 iter 50 五项门槛通过，约 `0.95 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机

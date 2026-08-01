@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 13:12 CST
+更新时间：2026-08-01 18:05 CST
 
 ## 当前研究原则
 
@@ -8,16 +8,16 @@
 - decoder 目标是同时超过 `0727_01` 的 cls HOTA 54.437 和 det HOTA 62.393。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
+- 调度采用“快服务器首轮、慢服务器确认”：99/178/197 负责新结构快速筛选，252 只延续已投入实验或复验明确候选；同一时间只并行严格正交、能回答不同机制问题的候选。
 
 ## 运行中
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... resume epoch 4` | `STOPPED` | e8 cls/det HOTA `42.890/48.228`，相对 Encoder 同点 `-2.379/-1.965`；cls/det DetA 下降 `4.335/5.630`，pair 与 both-independent AP 同时明显下降。完整 checkpoint、检测与 TrackEval 产物核验后于 12:31 精确停止，GPU0/1 已释放。 |
-| 197 GPU 4,5 | `0801_04 ... decoder_symmetricposition ... fresh` | `RUNNING` | 只对共享 decoder pair-position 做交换对称化，保留独立 cross-attention 和原有有序 frame-feature fusion；零新增参数、零新增矩阵乘法。真实双卡 4-iter smoke 与 checkpoint 结构审计通过；11:27 formal iter 50 为 `1.7400 s/iter`、loss `21.5687`、grad norm `115.9326`，两卡约 19.2 GiB，无异常。 |
-| 178 GPU 0 | `0801_05 ... decoder_symmetricfeature ... fresh` | `RUNNING` | 只把每层 frame-feature fusion 改为交换对称，保留独立 cross-attention 与原有有序 pair-position；零新增参数和矩阵乘法。113 项单测、严格父模型审计和真实 4-iter smoke 通过；11:58 iter 50 为 `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，GPU0 约 31.4 GiB，无异常。 |
-| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `STOPPED` | epoch 20 cls/det HOTA `51.640/58.491`，相对 Encoder 同点 `+0.126/-0.431`；det DetA 下降 `0.839`，AP50 虽提高但不足以通过主目标。完整产物核验后于 10:51 精确停止。 |
-| 99 / 197 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
+| 252 GPU 0,1 | `0801_07 ... decoder_iterativeclsresidual ... fresh` | `RUNNING` | 普通 query 以 detached encoder proposal logits 为基底逐层学习分类残差；DN prefix 也沿用统一残差路径。既有投入保留到 e4，18:00 位于 epoch 3 iter 900，约 `1.08 s/iter`，loss/梯度有限。该实验给出统一路径对照，但 252 不再用于新结构首轮筛选。 |
+| 99 GPU 0,1 | `0801_08 ... decoder_iterativeclsdnisolated ... fresh` | `RUNNING` | 普通 query 保留逐层分类残差；DN prefix 改用已有绝对分类头，消除“普通 query 有 encoder 基底、DN query 无同语义基底”的冲突。相对 `0801_07` 不增加总参数、attention 或 loss。真实 smoke、checkpoint 双类分类头更新审计通过；18:04 iter 50 为约 `1.02 s/iter`、loss `21.3868`、grad norm `99.5376`，无异常。 |
+| 178 GPU 0 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... fresh` | `RUNNING` | 在 `0801_08` 的 DN 隔离上，仅允许最终 decoder 分类损失贯通早期残差层；encoder proposal 基底仍 detached。与 `0801_08` 参数量完全相同，构成严格梯度路由因子比较。真实 smoke 与 checkpoint 更新审计通过；18:04 iter 50 为约 `0.95 s/iter`、loss `21.0149`、grad norm `137.5518`，无异常；验证 loader 改为单进程仅规避 178 `/dev/shm` 外部占用，不改预测或指标。 |
+| 197 GPU 4,5 | 无 | `IDLE` | 保留给 e4/e8 出现明确优势后的确认实验，不启动第三个低信息候选。 |
 
 ## 已完成或释放
 
