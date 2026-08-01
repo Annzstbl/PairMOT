@@ -1284,3 +1284,27 @@
   不改变回归、reference、attention、decoder 深度、loss、类别权重或 scale，仅新增两个
   `256→8` 线性头，目标是保留 `0801_09` 的 DetA/AP 改善，同时避免三层累计改写导致的
   AssA 崩塌。计划通过单测、构建和 197 双卡真数据 smoke 后启动 formal。
+
+## 2026-08-01 19:50 CST：0801_10 验证与正式启动
+
+- 38 项 head 单测、配置深拷贝和完整模型构建通过。相对不启用该功能的同配置 Encoder
+  parent，只新增 prev/curr 两个末层 `256→8` 线性头，共 `4,112` 参数；总参数
+  `22,762,887`，相对 `22,758,775` 增加 `0.0181%`。新增 state dict 仅有四个
+  weight/bias 张量，没有 decoder layer、attention、回归分支或 loss 变化。
+- 197 GPU4/5 真数据 2xb4、4-iter smoke 完成。四个迭代的主分类/回归、DN、Encoder
+  loss 与 grad norm 全部有限，无 Traceback/OOM/NaN/NCCL；峰值训练显存约
+  `11.15 GiB/卡`。`iter_4.pth` 中四个新张量全部有限，prev/curr weight 各
+  `2048/2048` 个元素非零，证明两个末层残差头均获得真实梯度更新。
+- 197 的默认 Python 路径曾指向另一份旧目录；构建门槛据此失败并在正式启动前纠正。
+  核验后的实际导入路径为
+  `/data/users/litianhao/PairMOT_sync_3cb888d/ai4rs/.../pair_rotated_rtdetr_head.py`，
+  与 launch script 的 `PYTHONPATH` 一致，不存在混用旧实现。
+- 提交 `936b1ae` 已从 99 以增量 bundle 快进同步至 178、252、197，四台仓库 HEAD
+  一致。formal fresh 于 19:48 在 197 GPU4/5 启动；19:49 到 epoch 1 iter 50：
+  `1.6436 s/iter`、data time `0.0357 s`、loss `21.3908`、grad norm
+  `111.9423`、训练显存 `11,162 MiB`，无异常。GPU 利用率受同机其他用户作业影响有
+  波动，因此当前速度只作为运行状态，不与不同温度/负载的历史 smoke 做百分比结论；
+  参数和主计算图增量远低于 1%，继续以稳定窗口核验不超过 5% 的效率约束。
+- e4 仍只作为结构信号，重点检查 `0801_09` 已改善的 DetA/AP 是否保留、cls/det
+  AssA 是否明显恢复；e8 判断持续性。最终成功标准不变：同一 checkpoint 的 cls/det
+  HOTA 同时严格超过 Encoder `54.437/62.393`。
