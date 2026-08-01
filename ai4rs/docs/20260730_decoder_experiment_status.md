@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 09:11 CST
+更新时间：2026-08-01 09:21 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,8 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... resume epoch 8` | `RUNNING` | 旧实验在 epoch 8 仅因 cls HOTA 低父模型 `0.117` 而按旧严格规则停止；det HOTA 高 `0.624`，AP 同步改善。现按放宽后的持久性规则续至 epoch 12，不改变结构、loss 或训练协议。参数仅增加 `122,592`（`+0.539%`），同机实测训练速度约下降 `2.3%`。 |
-| 99 / 197 / 252 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
+| 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `RUNNING` | e8 曾双超；e12 仅 det HOTA 低 `0.111`，e16 仅低 `0.084/0.380` 且 AP 未退化。按放宽后的持久性规则从原 epoch 16 续至 epoch 20；参数同样仅增加 `122,592`（`+0.539%`），不改变模型、loss 或协议。 |
+| 99 / 197 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
 
 ## 已完成或释放
 
@@ -65,6 +66,12 @@
 - 结构效率审计：Encoder 为 `22,758,775` 参数，0731_01 为 `22,881,367`，增量 `122,592`（`0.539%`）；178 同机相近协议 epoch 9 日志均值约 `0.919 s/iter`，对照约 `0.898 s/iter`，下降约 `2.3%`，符合参数不超过约 1%、吞吐下降不超过 5% 的约束。
 - 首次恢复因 PyTorch 2.6 默认 `weights_only=True` 拒绝旧 MMEngine checkpoint 而在加载阶段退出，未进入训练且 GPU 自动释放。随后仅在该受信任本地 checkpoint 的专用 launcher 中设置 `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1`，未修改模型或训练协议。
 - 09:09 再次恢复，09:10 已通过正式五项门槛：epoch 9 iter 50、`0.9572 s/iter`、loss `10.2507`、grad norm `46.6676`，DN 与 encoder proposal losses 均有限；GPU0 约 `31.4 GiB`，无 Traceback/OOM/NaN/NCCL/DDP 异常。计划只续至 epoch 12 完整检测与 TrackEval 后判定。
+
+## 2026-08-01 09:21 CST：0731_05 低成本补证
+
+- `0731_05 shared-attention + enveloped detail` 是除 0731_01 外唯一保留到中期仍接近双门槛的简单候选：e8 相对 Encoder `+0.072/+1.396`，e12 `+0.491/-0.111`，e16 `-0.084/-0.380`，且检测 AP 未系统性下降。
+- 完整模型为 `22,881,367` 参数，相对 Encoder 只增加 `122,592`（`0.539%`）；沿用原 252 双卡 physical `2xb4` 协议，从可信的 `epoch_16.pth` 恢复，只补到 epoch 20，不做参数扫描。
+- 09:20 正式到达 epoch 17 iter 50：`1.1663 s/iter`、loss `10.4376`、grad norm `61.8605`，总/DN/encoder losses 均有限；两卡各约 `19.4 GiB`，无 Traceback/OOM/NaN/NCCL/DDP 异常。
 
 ## 2026-07-30 18:25 CST 状态覆盖
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 09:11 CST.
+Last updated: 2026-08-01 09:21 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1573,3 +1573,8 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 新候选优先满足：参数增量约 `<=1%`，同卡实测吞吐下降 `<=5%`；不通过增加 decoder 深度、额外注意力层、大分辨率支路或附加 loss 换取性能。
 - 在发明新结构前，先把旧严格早停遗漏的 `0731_01 shared-attention + antisymmetric detail` 从 epoch 8 续到 epoch 12。它在 epoch 8 相对 Encoder 同点 cls HOTA `-0.117`、det HOTA `+0.624`，且 pair mAP 与 both-independent AP50 同步提高，具备继续验证的最高信息价值。
 - epoch 12 仍以 cls/det HOTA 为主判据；DetA/AssA 用于解释机制，AP 仅作诊断。若不能形成双 HOTA 持续提升，则停止该方向，不做参数扫描或复杂化衍生。
+
+## 2026-08-01：0731_05 epoch-20 补证
+
+- 利用空闲 252 GPU0/1，从 `0731_05` 原 epoch 16 断点只续一个评估周期到 epoch 20。该轨迹参数增量仅 `0.539%`，e8 曾双超、e12/e16 仅窄幅未过且 AP 稳定，比重新训练或添加新模块具有更高信息/计算比。
+- epoch 20 若未同时超过 Encoder 同点 cls/det HOTA，则停止并否定继续长跑；不派生 scale、loss 权重、类别重权或更深 decoder。
