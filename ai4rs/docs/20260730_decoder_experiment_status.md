@@ -1474,3 +1474,14 @@
   formal 于 02:14 在 screen `decoder_0801_11_197` 启动；epoch 1 iter 50 为
   `1.6317 s/iter`、loss `21.2437`、grad norm `112.9867`，DN 与 Encoder loss 均有限，
   双卡各约 `19.2 GiB`，目标进程 7 个且无致命信号。该实验登记为 `RUNNING`，下一完整节点为 e4。
+
+## 2026-08-02 02:22 CST：0731_21 epoch-40 长程后备恢复入口
+
+- 历史 `0731_21 terminal orthogonal factorized evidence` 已完整评估到 e40，绝对 cls/det HOTA
+  为 `53.655/60.379`；相对 Encoder 同点为 `-0.142/-0.684`，但四项检测 AP 均提高，且
+  e28/e32/e36/e40 形成了远晚于早期节点的可靠轨迹。共享盘上的 `epoch_40.pth` 为
+  `421,537,702` bytes，`last_checkpoint` 精确指向它，10 个 checkpoint 与 21 个 metrics 文件均保留。
+- 新增 `launch_resume_0731_21_from_epoch40_178.sh`，只提供从该可信 checkpoint 到 72 epoch 的
+  精确恢复入口；它校验 checkpoint、`last_checkpoint`、GMC/预训练资源、唯一 workdir 进程和 GPU0
+  空闲状态，并设置 PyTorch 2.6 可信 optimizer 恢复兼容变量。launcher 已通过 `bash -n`，当前仅为
+  `PREPARED`，不会热更新或抢占正在运行且同点更接近的 `0801_09`。
