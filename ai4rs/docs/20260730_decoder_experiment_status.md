@@ -1374,3 +1374,20 @@
   初始等价性、梯度与互斥检查、正式/smoke 配置深拷贝、完整模型构建以及 launcher 语法均通过。
   当前仅为 `PREPARED`，尚未占用 GPU；优先级在更一般的 `0801_11 256→8 pair-common residual`
   之后，用作类别自由度是否必要的最小消融。
+
+## 2026-08-02 00:12 CST：0801_10 epoch-8 与 0801_07 epoch-20
+
+- `0801_10 terminal Encoder-anchored cls residual` e8 的 cls/det HOTA 为
+  `41.840/48.644`，相对 Encoder 同点 `-3.429/-1.549`；cls/det DetA 为
+  `-2.104/-2.552`，AssA 为 `-5.653/+0.017`。pair mAP/AP50 下降
+  `0.041760/0.056862`，both-independent mAP/AP50 下降 `0.032582/0.018702`。
+  e4 的 det HOTA/DetA 正增益没有保持，且 e8 出现 HOTA、DetA 与 AP 同向下降；但按当前目标
+  约束，e8 仍不单独否决 decoder，保留到 e12 检查晚恢复，不复制该机制。
+- `0801_07 unified iterative cls residual` e20 的 cls/det HOTA 为
+  `50.470/57.537`，相对 Encoder 同点 `-1.044/-1.385`；较 e16 的
+  `-1.609/-1.980` 再次收窄。cls/det AssA 已转为 `+0.557/+0.168`，主要差距集中在
+  DetA `-1.893/-2.414`；pair mAP/AP50 仍低 `0.021732/0.032611`，both-independent
+  mAP/AP50 低 `0.013799/0.010339`。
+- 由于 e16→e20 的双 HOTA、AssA 与 AP 差距都继续恢复，`0801_07` 不在 e20 停止，继续到
+  至少 e24。若 e24 DetA/AP 仍收窄则保留长收敛；若出现恢复停滞或反转，再释放 252 给
+  `0731_05 epoch-20` 晚收敛复核。该决策依据完整 e12/e16/e20 轨迹，而非早期单点。
