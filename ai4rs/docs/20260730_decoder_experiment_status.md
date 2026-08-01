@@ -1202,3 +1202,20 @@
   不继续 e12，也不派生参数、scale、loss 或复杂结构变体。
 - 197 GPU0/1 当前由其他用户进程占用，各约 13 GiB；PairMOT 无残留进程，因此197暂不调度。
   当前唯一保留的 decoder 候选为252上的 `0801_06`，继续到 e8 验证残差保留融合是否维持双 HOTA。
+
+## 2026-08-01 16:47 CST：0801_06 epoch-8 最终结论
+
+- `0801_06 symmetric-position + residual-preserving fusion` 的完整 epoch-8 结果为：
+  cls HOTA/DetA/AssA `42.599/34.046/55.870`，det `48.910/42.651/57.782`。
+  相对 Encoder e8，cls/det HOTA 为 `-2.670/-1.283`，DetA 为 `-3.617/-4.410`，
+  AssA 为 `-1.431/+2.637`；相对 `0801_04` e8，双 HOTA 又下降 `1.337/1.276`。
+- 检测诊断 pair mAP/AP50 为 `0.2031/0.3842`，both-independent 为
+  `0.2373/0.4167`。HOTA、DetA 与四项 AP 构成系统性退化，e4 的
+  `+0.014/+4.184` 早期信号没有持续；显式保留 shared query 仍无法避免中期帧特异检测证据衰减。
+- `epoch_4.pth`、`epoch_8.pth`、50 序列、5416 条记录、28 个 CSV、108 个评估文件与
+  `track/async_done=1` 均已核验。16:47 精确终止对应进程组，252 GPU0/1完全释放；
+  不继续 e12，也不再扩展 symmetric-position/feature/fusion 系列。
+- 下一候选只考虑已经过只读路径审计的逐层分类 logit 残差：3 层双帧共 6 个 `256→8`
+  零初始化线性头，新增 `12,336` 参数（约 `0.054%`），不增加 decoder 深度、attention、
+  loss 或主计算。普通 query 以 detached Encoder proposal logits 为基值，DN query 以零为基值，
+  层间像 box reference 一样 detach；实现前后必须证明默认配置严格等价，并通过真实数据 smoke。
