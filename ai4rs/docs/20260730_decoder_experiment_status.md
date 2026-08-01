@@ -1187,3 +1187,18 @@
   `track/async_done=1` 均已核验。训练已自动进入 epoch 5，继续到 e8 判断双 HOTA、
   DetA 与 AssA 的持续性；最终标准仍为同一 checkpoint 同时超过
   `54.437/62.393`。
+
+## 2026-08-01 15:49 CST：0801_04 epoch-8 最终结论
+
+- `0801_04 symmetric-position decoder` 的完整 epoch-8 结果为：cls HOTA/DetA/AssA
+  `43.936/35.319/57.280`，det `50.186/44.544/58.474`。相对 Encoder 同点
+  `45.269/37.663/57.301` 与 `50.193/47.061/55.145`，cls/det HOTA 分别为
+  `-1.333/-0.007`，DetA 为 `-2.344/-2.517`，AssA 为 `-0.021/+3.329`。
+- det HOTA 表面接近持平，但由明显 DetA 损失与 AssA 补偿构成；cls HOTA、DetA 从 e4 到 e8
+  的差距继续扩大。检测评估 pair mAP/AP50 为 `0.2068/0.4058`，both-independent
+  mAP/AP50 为 `0.2428/0.4403`，未提供反向支持。
+- `epoch_4.pth`、`epoch_8.pth`、50 序列、5416 条记录、28 个 CSV 与
+  `track/async_done=1` 均已核验。该结构满足中止条件，15:49 精确终止工作目录对应进程组，
+  不继续 e12，也不派生参数、scale、loss 或复杂结构变体。
+- 197 GPU0/1 当前由其他用户进程占用，各约 13 GiB；PairMOT 无残留进程，因此197暂不调度。
+  当前唯一保留的 decoder 候选为252上的 `0801_06`，继续到 e8 验证残差保留融合是否维持双 HOTA。
