@@ -77,4 +77,3 @@ print('TERMINAL_PAIR_COMMON_CLS_RESIDUAL_BUILD_OK', {
     'new_state_keys': new_keys,
     'smoke_iters': smoke_config.train_cfg.max_iters,
 })
-

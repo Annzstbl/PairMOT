@@ -17,4 +17,3 @@ assert float(bias.abs().max()) > 0.0
 assert tuple(weight.shape) == (8, 256)
 assert tuple(bias.shape) == (8, )
 print('terminal pair-common classification residual is finite and trained')
-

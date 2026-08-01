@@ -20,4 +20,3 @@ custom_hooks = [
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_99/'
     'smoke_0801_11_terminal_pair_common_cls_residual_decoder_4iter')
-

@@ -33,4 +33,3 @@ test -f "${WORK_DIR}/iter_4.pth"
 "${PYTHON_ROOT}/python" \
     projects/multispec_pair_rotated_rtdetr/tools/check_terminal_pair_common_cls_residual_checkpoint.py \
     "${WORK_DIR}/iter_4.pth" >> "${WORK_DIR}/launch.log" 2>&1
-

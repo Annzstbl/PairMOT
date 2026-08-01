@@ -32,4 +32,3 @@ val_evaluator['metrics'].update(
     trackeval_root='/data/users/wangying01/lth/PairMOT/TrackEval',
     track_data_root='/data/users/wangying01/lth/PairMOT/data/hsmot/test')
 test_evaluator = val_evaluator
-
