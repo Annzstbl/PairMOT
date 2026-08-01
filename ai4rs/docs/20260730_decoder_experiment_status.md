@@ -1452,3 +1452,25 @@
 - e24 时 `0801_09` 的双 HOTA 比 `0801_08` 高 `0.383/0.286`，覆盖和 cls 关联也更强；
   `0801_08` 仍保留 det AssA 与部分 both AP 优势，二者尚非严格支配关系。两项均已自动进入 e25，
   因轨迹仍有有效恢复且未达到绝对目标，继续到后续四 epoch 评测点，不以 e24 的未过门槛直接否决。
+
+## 2026-08-02 02:16 CST：0801_10 收口与 0801_11 正式启动
+
+- `0801_10 terminal Encoder-anchored cls residual` e12 的 cls/det HOTA 为
+  `45.875/54.476`，相对 Encoder 同点 `-3.805/-2.065`；cls DetA/AssA 为
+  `-3.103/-5.076`，det DetA/AssA 为 `-2.584/-0.975`。pair mAP/AP50 为
+  `-0.051749/-0.063691`，both-independent mAP/AP50 为 `-0.042793/-0.028763`。
+  它在 e4/e8/e12 三个完整点上没有晚恢复，且 e12 比 e8 的双 HOTA 差距进一步扩大，构成覆盖、
+  关联和 AP 一致退化；该路线据此收口，不再复制同机制或继续占用 197。
+- 完整 e12 检测和 50 序列 TrackEval 均落盘后，对唯一 PGID `1965422` 发送 TERM；torchrun、
+  两 rank 和全部 data worker 均退出，197 GPU4/5 回到 `0%/1 MiB`。checkpoint 与三组完整评测保留。
+  该结论来自 e4/e8/e12 轨迹，而非用 e4/e8 单点否决。
+- 197 的 tracked worktree 无修改后，从 `c294b6c` 经已验证增量 bundle 快进到 `c8bc1ef`。
+  新的 `0801_11 terminal pair-common cls residual` 保留 parent decoder 初始函数，仅在最终 normal
+  query 上把同一个零初始化 `256→8` 残差加入 prev/curr；DN 和辅助层仍使用原分类器，不增加
+  attention、decoder 深度、回归、loss、class-aware routing 或 reweight。完整构建确认参数从
+  `22,758,775` 增至 `22,760,831`，仅 `+2,056`（约 `+0.00903%`）。
+- 197 GPU4/5 的真实 4-iter DDP smoke 正常退出，`iter_4.pth` 中 632 个浮点模型张量全部有限；
+  新残差 weight `2048/2048`、bias `8/8` 元素均从零更新，日志无 Traceback/OOM/NaN/NCCL。
+  formal 于 02:14 在 screen `decoder_0801_11_197` 启动；epoch 1 iter 50 为
+  `1.6317 s/iter`、loss `21.2437`、grad norm `112.9867`，DN 与 Encoder loss 均有限，
+  双卡各约 `19.2 GiB`，目标进程 7 个且无致命信号。该实验登记为 `RUNNING`，下一完整节点为 e4。
