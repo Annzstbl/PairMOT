@@ -1518,3 +1518,13 @@
 - 完整 checkpoint、5416 条记录、50 序列、54 个 TrackEval 原始文件和检测 metrics 均已核验；
   当前恢复增量日志仍无 Traceback/OOM/NaN/NCCL。实验已经进入后续 epoch，继续到 e28，不能因
   单项差 `0.351` 在仍改善且 AP 全升时提前终止。
+
+## 2026-08-02 03:12 CST：0801_12 增加 197 可调度版本
+
+- 99 的直接 SSH 仍在 banner 前超时，虽然共享训练和评测可正常监控，但不能把下一候选的启动能力
+  绑定在该主机。为此给 `0801_12 terminal pair-common objectness residual` 增加 197 双卡正式/烟测
+  配置和 launcher；当前只登记为 `PREPARED`，不修改或中断正在运行的 `0801_11`。
+- 该版本继承 197 的数据、GMC、TrackEval 与 2xb4 资源路径，只把最终 normal query 的同一标量加到
+  两帧全部类别 logits；DN、辅助层、类别 margin、跨帧同类差、框和 decoder 均不变。独立测试副本
+  上的配置深拷贝、launcher 语法和父/新完整模型构建通过，参数为 `22,758,775→22,759,032`，
+  仅 `+257`（`+0.001129%`）。真实数据 smoke 仍须等授权 GPU 合理释放后执行。
