@@ -76,6 +76,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  cls_residual_hidden_ratio: float = 0.25,
                  cls_residual_scale: float = 0.1,
                  cls_residual_weights: Optional[List[float]] = None,
+                 iterative_cls_residual: bool = False,
                  bbox_angle_l1_weight: float = 0.05,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
@@ -90,6 +91,15 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         self.cls_residual_hidden_ratio = float(cls_residual_hidden_ratio)
         self.cls_residual_scale = float(cls_residual_scale)
         self.cls_residual_weights_cfg = cls_residual_weights
+        self.iterative_cls_residual = bool(iterative_cls_residual)
+        if self.iterative_cls_residual and not self.dual_cls:
+            raise ValueError(
+                'iterative_cls_residual requires dual_cls=True')
+        if self.iterative_cls_residual and (
+                self.cls_proto_gate or self.cls_residual_adapter):
+            raise ValueError(
+                'iterative_cls_residual cannot be combined with classification '
+                'logit adapters')
         self.bbox_angle_l1_weight = float(bbox_angle_l1_weight)
         if self.bbox_angle_l1_weight < 0:
             raise ValueError('bbox_angle_l1_weight must be non-negative')
@@ -272,6 +282,28 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             self.cls_residual_log_scale = nn.Parameter(
                 torch.tensor(np.log(self.cls_residual_scale),
                              dtype=torch.float32))
+        if self.iterative_cls_residual:
+            num_decoder_layers = self.num_pred_layer - 1
+            if num_decoder_layers <= 0:
+                raise ValueError(
+                    'iterative_cls_residual requires an encoder prediction '
+                    'branch in addition to decoder prediction branches')
+            residual_branch = Linear(self.embed_dims, self.cls_out_channels)
+            self.iterative_cls_residual_branches_prev = nn.ModuleList([
+                copy.deepcopy(residual_branch)
+                for _ in range(num_decoder_layers)
+            ])
+            self.iterative_cls_residual_branches_curr = nn.ModuleList([
+                copy.deepcopy(residual_branch)
+                for _ in range(num_decoder_layers)
+            ])
+            # The new heads replace the absolute decoder classifiers. Keep the
+            # old modules in the state dict for checkpoint compatibility, but
+            # do not leave unused trainable parameters in DDP.
+            for branch in self.cls_branches[:num_decoder_layers]:
+                branch.requires_grad_(False)
+            for branch in self.cls_branches_curr[:num_decoder_layers]:
+                branch.requires_grad_(False)
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -296,12 +328,21 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if self.cls_residual_adapter:
             nn.init.zeros_(self.cls_residual_branch[-1].weight)
             nn.init.zeros_(self.cls_residual_branch[-1].bias)
+        if self.iterative_cls_residual:
+            for branch in (
+                    list(self.iterative_cls_residual_branches_prev) +
+                    list(self.iterative_cls_residual_branches_curr)):
+                nn.init.zeros_(branch.weight)
+                nn.init.zeros_(branch.bias)
 
     def load_state_dict(self, state_dict, strict: bool = True):
         has_curr = any(
             key.startswith('reg_branches_curr.') for key in state_dict)
         has_cls_curr = any(
             key.startswith('cls_branches_curr.') for key in state_dict)
+        has_iterative_cls = any(
+            key.startswith('iterative_cls_residual_branches_')
+            for key in state_dict)
         incompatible = super().load_state_dict(state_dict, strict=False)
         if not has_cls_curr:
             self._sync_cls_branches_curr_from_prev()
@@ -319,6 +360,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     key for key in missing_keys
                     if not key.startswith('reg_branches_curr.')
                 ]
+            if self.iterative_cls_residual and not has_iterative_cls:
+                missing_keys = [
+                    key for key in missing_keys
+                    if not key.startswith(
+                        'iterative_cls_residual_branches_')
+                ]
             if missing_keys or incompatible.unexpected_keys:
                 raise RuntimeError(
                     'Error(s) in loading state_dict for '
@@ -334,6 +381,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         references_curr: List[Tensor],
         hidden_states_prev: Optional[List[Tensor]] = None,
         hidden_states_curr: Optional[List[Tensor]] = None,
+        initial_cls_prev: Optional[Tensor] = None,
+        initial_cls_curr: Optional[Tensor] = None,
+        dn_meta: Optional[Dict[str, int]] = None,
     ) -> Tuple[Tensor, ...]:
         """Build per-layer pair head outputs.
 
@@ -365,17 +415,43 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if hidden_states_curr is None:
             hidden_states_curr = hidden_states
 
+        running_cls_prev = None
+        running_cls_curr = None
+        if self.iterative_cls_residual:
+            if len(hidden_states) > len(
+                    self.iterative_cls_residual_branches_prev):
+                raise ValueError(
+                    'decoder returned more layers than configured iterative '
+                    'classification residual branches')
+            running_cls_prev = self._prepare_iterative_cls_base(
+                initial_cls_prev, hidden_states_prev[0], dn_meta, 'prev')
+            running_cls_curr = self._prepare_iterative_cls_base(
+                initial_cls_curr, hidden_states_curr[0], dn_meta, 'curr')
+
         for layer_id, hidden_state in enumerate(hidden_states):
             hidden_prev = hidden_states_prev[layer_id]
             hidden_curr = hidden_states_curr[layer_id]
             # hidden_*: (bs, num_queries, embed_dims)
-            cls_prev = self.cls_branches[layer_id](hidden_prev)
-            cls_prev = self._apply_cls_logit_adapters(cls_prev, hidden_prev)
+            if self.iterative_cls_residual:
+                cls_prev = running_cls_prev + (
+                    self.iterative_cls_residual_branches_prev[layer_id](
+                        hidden_prev))
+                running_cls_prev = cls_prev.detach()
+            else:
+                cls_prev = self.cls_branches[layer_id](hidden_prev)
+                cls_prev = self._apply_cls_logit_adapters(
+                    cls_prev, hidden_prev)
             all_cls.append(cls_prev)
             if self.dual_cls:
-                cls_curr = self.cls_branches_curr[layer_id](hidden_curr)
-                cls_curr = self._apply_cls_logit_adapters(
-                    cls_curr, hidden_curr)
+                if self.iterative_cls_residual:
+                    cls_curr = running_cls_curr + (
+                        self.iterative_cls_residual_branches_curr[layer_id](
+                            hidden_curr))
+                    running_cls_curr = cls_curr.detach()
+                else:
+                    cls_curr = self.cls_branches_curr[layer_id](hidden_curr)
+                    cls_curr = self._apply_cls_logit_adapters(
+                        cls_curr, hidden_curr)
                 all_cls_curr.append(cls_curr)
             if self.use_presence:
                 all_pres_prev.append(
@@ -414,6 +490,41 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             torch.stack(all_bbox_prev),
             torch.stack(all_bbox_curr),
         )
+
+    def _prepare_iterative_cls_base(
+            self, initial_logits: Optional[Tensor], hidden_state: Tensor,
+            dn_meta: Optional[Dict[str, int]], side: str) -> Tensor:
+        """Align detached encoder logits with normal and prepended DN queries."""
+        if initial_logits is None:
+            raise ValueError(
+                f'initial_cls_{side} is required when '
+                'iterative_cls_residual=True')
+        if initial_logits.ndim != 3 or hidden_state.ndim != 3:
+            raise ValueError('initial classification logits and hidden states '
+                             'must both be rank-3 tensors')
+        if (initial_logits.shape[0] != hidden_state.shape[0]
+                or initial_logits.shape[2] != self.cls_out_channels):
+            raise ValueError(
+                f'initial_cls_{side} shape {tuple(initial_logits.shape)} is '
+                f'incompatible with hidden state {tuple(hidden_state.shape)}')
+        num_dn = hidden_state.shape[1] - initial_logits.shape[1]
+        if num_dn < 0:
+            raise ValueError(
+                f'initial_cls_{side} has more queries than decoder hidden '
+                'states')
+        expected_dn = 0 if dn_meta is None else int(
+            dn_meta.get('num_denoising_queries', 0))
+        if num_dn != expected_dn:
+            raise ValueError(
+                f'classification query alignment mismatch for {side}: '
+                f'found {num_dn} prepended queries, dn_meta declares '
+                f'{expected_dn}')
+        base = initial_logits.detach().to(
+            device=hidden_state.device, dtype=hidden_state.dtype)
+        if num_dn:
+            base = torch.cat((base.new_zeros(
+                base.shape[0], num_dn, base.shape[2]), base), dim=1)
+        return base
 
     def _filter_both_visible_gt(self, pair_gt: InstanceData) -> InstanceData:
         """Keep only GT tracks visible in both frames for the new pair task."""
@@ -1990,7 +2101,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             references_prev,
             references_curr,
             hidden_states_prev=hidden_prev_list,
-            hidden_states_curr=hidden_curr_list)
+            hidden_states_curr=hidden_curr_list,
+            initial_cls_prev=enc_outputs_class_prev,
+            initial_cls_curr=enc_outputs_class_curr,
+            dn_meta=dn_meta)
         return self.loss_by_feat(
             *outs,
             batch_pair_gt_instances=batch_pair_gt_instances,
@@ -2016,6 +2130,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         **kwargs,
     ) -> InstanceList:
         """Run pair post-processing without NMS."""
+        enc_outputs_class_prev = kwargs.pop(
+            'enc_outputs_class_prev', None)
+        enc_outputs_class_curr = kwargs.pop(
+            'enc_outputs_class_curr', None)
+        dn_meta = kwargs.pop('dn_meta', None)
         del kwargs
         batch_img_metas = [
             data_sample.metainfo for data_sample in batch_data_samples
@@ -2030,6 +2149,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             references_prev,
             references_curr,
             hidden_states_prev=hidden_prev_list,
-            hidden_states_curr=hidden_curr_list)
+            hidden_states_curr=hidden_curr_list,
+            initial_cls_prev=enc_outputs_class_prev,
+            initial_cls_curr=enc_outputs_class_curr,
+            dn_meta=dn_meta)
         return self.predict_by_feat(
             *outs, batch_img_metas=batch_img_metas, rescale=rescale)

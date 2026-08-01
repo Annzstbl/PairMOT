@@ -813,6 +813,94 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
 
 class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
 
+    def test_iterative_cls_residual_requires_dual_cls(self):
+        with self.assertRaisesRegex(ValueError, 'requires dual_cls'):
+            _build_head(
+                num_layers=3, iterative_cls_residual=True)
+
+    def test_iterative_cls_residual_zero_init_and_dn_alignment(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden = [torch.randn(1, 5, 32) for _ in range(2)]
+        refs_prev = [torch.rand(1, 5, 5) for _ in range(2)]
+        refs_curr = [torch.rand(1, 5, 5) for _ in range(2)]
+        initial_prev = torch.randn(1, 3, 3, requires_grad=True)
+        initial_curr = torch.randn(1, 3, 3, requires_grad=True)
+        dn_meta = dict(num_denoising_queries=2)
+
+        cls_prev, cls_curr, _, _ = head.forward(
+            hidden,
+            refs_prev,
+            refs_curr,
+            initial_cls_prev=initial_prev,
+            initial_cls_curr=initial_curr,
+            dn_meta=dn_meta)
+
+        expected_prev = torch.cat((torch.zeros(1, 2, 3),
+                                   initial_prev.detach()), dim=1)
+        expected_curr = torch.cat((torch.zeros(1, 2, 3),
+                                   initial_curr.detach()), dim=1)
+        self.assertTrue(torch.equal(cls_prev[0], expected_prev))
+        self.assertTrue(torch.equal(cls_prev[1], expected_prev))
+        self.assertTrue(torch.equal(cls_curr[0], expected_curr))
+        self.assertTrue(torch.equal(cls_curr[1], expected_curr))
+        self.assertTrue(all(
+            not parameter.requires_grad
+            for branch in head.cls_branches[:2]
+            for parameter in branch.parameters()))
+        self.assertTrue(all(
+            parameter.requires_grad
+            for parameter in head.cls_branches[2].parameters()))
+
+    def test_iterative_cls_residual_detaches_between_layers(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        with torch.no_grad():
+            for branch in head.iterative_cls_residual_branches_prev:
+                branch.weight.fill_(0.1)
+        hidden = [torch.randn(1, 2, 32) for _ in range(2)]
+        refs = [torch.rand(1, 2, 5) for _ in range(2)]
+        initial = torch.randn(1, 2, 3, requires_grad=True)
+        cls_prev, _, _, _ = head.forward(
+            hidden,
+            refs,
+            refs,
+            initial_cls_prev=initial,
+            initial_cls_curr=initial)
+        cls_prev[-1].sum().backward()
+        self.assertIsNone(initial.grad)
+        first_grad = (
+            head.iterative_cls_residual_branches_prev[0].weight.grad)
+        self.assertTrue(
+            first_grad is None or torch.count_nonzero(first_grad).item() == 0)
+        self.assertIsNotNone(
+            head.iterative_cls_residual_branches_prev[1].weight.grad)
+
+    def test_iterative_cls_residual_rejects_query_mismatch(self):
+        head = _build_head(
+            num_layers=2,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            train_cfg=_no_presence_train_cfg())
+        with self.assertRaisesRegex(ValueError, 'alignment mismatch'):
+            head.forward(
+                [torch.randn(1, 4, 32)],
+                [torch.rand(1, 4, 5)],
+                [torch.rand(1, 4, 5)],
+                initial_cls_prev=torch.randn(1, 3, 3),
+                initial_cls_curr=torch.randn(1, 3, 3))
+
     def test_reg_branches_curr_synced_with_prev(self):
         head = _build_head(num_layers=2, embed_dims=32)
         head.init_weights()

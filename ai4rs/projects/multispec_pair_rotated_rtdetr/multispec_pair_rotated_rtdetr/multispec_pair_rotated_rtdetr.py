@@ -1946,6 +1946,13 @@ class MultispecPairRotatedRTDETR(RotatedRTDETR):
                 head_inputs['hidden_states'],
                 head_inputs['references_prev'],
                 head_inputs['references_curr'],
+                hidden_states_prev=head_inputs.get('hidden_states_prev'),
+                hidden_states_curr=head_inputs.get('hidden_states_curr'),
+                initial_cls_prev=head_inputs.get(
+                    'enc_outputs_class_prev'),
+                initial_cls_curr=head_inputs.get(
+                    'enc_outputs_class_curr'),
+                dn_meta=head_inputs.get('dn_meta'),
             )
 
     def predict(
