@@ -82,6 +82,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  terminal_encoder_cls_residual: bool = False,
                  terminal_pair_common_cls_residual: bool = False,
                  terminal_pair_common_objectness_residual: bool = False,
+                 terminal_pair_differential_objectness_residual: bool = False,
                  bbox_angle_l1_weight: float = 0.05,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
@@ -106,6 +107,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             terminal_pair_common_cls_residual)
         self.terminal_pair_common_objectness_residual = bool(
             terminal_pair_common_objectness_residual)
+        self.terminal_pair_differential_objectness_residual = bool(
+            terminal_pair_differential_objectness_residual)
         if self.iterative_cls_residual and not self.dual_cls:
             raise ValueError(
                 'iterative_cls_residual requires dual_cls=True')
@@ -120,11 +123,17 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             raise ValueError(
                 'terminal_pair_common_objectness_residual requires '
                 'dual_cls=True')
+        if (self.terminal_pair_differential_objectness_residual
+                and not self.dual_cls):
+            raise ValueError(
+                'terminal_pair_differential_objectness_residual requires '
+                'dual_cls=True')
         if sum((
                 self.iterative_cls_residual,
                 self.terminal_encoder_cls_residual,
                 self.terminal_pair_common_cls_residual,
-                self.terminal_pair_common_objectness_residual)) > 1:
+                self.terminal_pair_common_objectness_residual,
+                self.terminal_pair_differential_objectness_residual)) > 1:
             raise ValueError(
                 'decoder classification residual modes are mutually '
                 'exclusive')
@@ -135,7 +144,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if (self.iterative_cls_residual
                 or self.terminal_encoder_cls_residual
                 or self.terminal_pair_common_cls_residual
-                or self.terminal_pair_common_objectness_residual) and (
+                or self.terminal_pair_common_objectness_residual
+                or self.terminal_pair_differential_objectness_residual) and (
                 self.cls_proto_gate or self.cls_residual_adapter):
             raise ValueError(
                 'decoder classification residual modes cannot be '
@@ -358,6 +368,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if self.terminal_pair_common_objectness_residual:
             self.terminal_pair_common_objectness_residual_branch = Linear(
                 self.embed_dims, 1)
+        if self.terminal_pair_differential_objectness_residual:
+            self.terminal_pair_differential_objectness_residual_branch = (
+                Linear(self.embed_dims, 1))
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -404,6 +417,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 self.terminal_pair_common_objectness_residual_branch.weight)
             nn.init.zeros_(
                 self.terminal_pair_common_objectness_residual_branch.bias)
+        if self.terminal_pair_differential_objectness_residual:
+            nn.init.zeros_(
+                self.terminal_pair_differential_objectness_residual_branch.
+                weight)
+            nn.init.zeros_(
+                self.terminal_pair_differential_objectness_residual_branch.
+                bias)
 
     def load_state_dict(self, state_dict, strict: bool = True):
         has_curr = any(
@@ -422,6 +442,10 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         has_terminal_pair_common_objectness = any(
             key.startswith(
                 'terminal_pair_common_objectness_residual_branch.')
+            for key in state_dict)
+        has_terminal_pair_differential_objectness = any(
+            key.startswith(
+                'terminal_pair_differential_objectness_residual_branch.')
             for key in state_dict)
         incompatible = super().load_state_dict(state_dict, strict=False)
         if not has_cls_curr:
@@ -466,6 +490,14 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     key for key in missing_keys
                     if not key.startswith(
                         'terminal_pair_common_objectness_residual_branch.')
+                ]
+            if (self.terminal_pair_differential_objectness_residual
+                    and not has_terminal_pair_differential_objectness):
+                missing_keys = [
+                    key for key in missing_keys
+                    if not key.startswith(
+                        'terminal_pair_differential_objectness_'
+                        'residual_branch.')
                 ]
             if missing_keys or incompatible.unexpected_keys:
                 raise RuntimeError(
@@ -539,7 +571,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 initial_cls_curr, hidden_states_curr[0], dn_meta, 'curr')
             num_dn = hidden_states_prev[0].shape[1] - initial_cls_prev.shape[1]
         elif (self.terminal_pair_common_cls_residual
-              or self.terminal_pair_common_objectness_residual):
+              or self.terminal_pair_common_objectness_residual
+              or self.terminal_pair_differential_objectness_residual):
             num_dn = 0 if dn_meta is None else int(
                 dn_meta.get('num_denoising_queries', 0))
             if num_dn < 0 or num_dn > hidden_states[0].shape[1]:
@@ -594,6 +627,20 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                                 1),
                             common_objectness_residual[:, num_dn:]), dim=1)
                     cls_prev = cls_prev + common_objectness_residual
+                elif (self.terminal_pair_differential_objectness_residual
+                      and layer_id == len(hidden_states) - 1):
+                    differential_objectness_residual = (
+                        self.
+                        terminal_pair_differential_objectness_residual_branch(
+                            hidden_state))
+                    if num_dn:
+                        differential_objectness_residual = torch.cat((
+                            differential_objectness_residual.new_zeros(
+                                differential_objectness_residual.shape[0],
+                                num_dn, 1),
+                            differential_objectness_residual[:, num_dn:]),
+                            dim=1)
+                    cls_prev = cls_prev - differential_objectness_residual
             all_cls.append(cls_prev)
             if self.dual_cls:
                 if self.iterative_cls_residual:
@@ -621,6 +668,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     elif (self.terminal_pair_common_objectness_residual
                           and layer_id == len(hidden_states) - 1):
                         cls_curr = cls_curr + common_objectness_residual
+                    elif (self.
+                          terminal_pair_differential_objectness_residual
+                          and layer_id == len(hidden_states) - 1):
+                        cls_curr = (
+                            cls_curr + differential_objectness_residual)
                 all_cls_curr.append(cls_curr)
             if self.use_presence:
                 all_pres_prev.append(

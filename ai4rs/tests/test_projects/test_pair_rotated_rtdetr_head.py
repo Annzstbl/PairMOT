@@ -954,6 +954,94 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
                 terminal_pair_common_objectness_residual=True,
                 train_cfg=_no_presence_train_cfg())
 
+    def test_terminal_pair_differential_objectness_requires_dual_cls(self):
+        with self.assertRaisesRegex(ValueError, 'requires dual_cls'):
+            _build_head(
+                num_layers=3,
+                terminal_pair_differential_objectness_residual=True)
+
+    def test_terminal_pair_differential_objectness_preserves_pair_mean(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            terminal_pair_differential_objectness_residual=True,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden = [torch.randn(1, 5, 32) for _ in range(2)]
+        refs = [torch.rand(1, 5, 5) for _ in range(2)]
+        dn_meta = dict(num_denoising_queries=2)
+
+        parent_prev, parent_curr, _, _ = head.forward(
+            hidden, refs, refs, dn_meta=dn_meta)
+        with torch.no_grad():
+            branch = (
+                head.terminal_pair_differential_objectness_residual_branch)
+            branch.weight.fill_(0.05)
+            branch.bias.fill_(0.1)
+        changed_prev, changed_curr, _, _ = head.forward(
+            hidden, refs, refs, dn_meta=dn_meta)
+
+        self.assertTrue(torch.equal(changed_prev[0], parent_prev[0]))
+        self.assertTrue(torch.equal(changed_curr[0], parent_curr[0]))
+        self.assertTrue(torch.equal(
+            changed_prev[-1, :, :2], parent_prev[-1, :, :2]))
+        self.assertTrue(torch.equal(
+            changed_curr[-1, :, :2], parent_curr[-1, :, :2]))
+        self.assertGreater(
+            (changed_prev[-1, :, 2:] - parent_prev[-1, :, 2:])
+            .abs().sum().item(), 0.0)
+
+        parent_pair_mean = 0.5 * (
+            parent_prev[-1, :, 2:] + parent_curr[-1, :, 2:])
+        changed_pair_mean = 0.5 * (
+            changed_prev[-1, :, 2:] + changed_curr[-1, :, 2:])
+        torch.testing.assert_close(
+            changed_pair_mean, parent_pair_mean,
+            rtol=1e-6, atol=1e-6)
+
+        parent_prev_margin = (
+            parent_prev[-1, :, 2:]
+            - parent_prev[-1, :, 2:, :1])
+        changed_prev_margin = (
+            changed_prev[-1, :, 2:]
+            - changed_prev[-1, :, 2:, :1])
+        parent_curr_margin = (
+            parent_curr[-1, :, 2:]
+            - parent_curr[-1, :, 2:, :1])
+        changed_curr_margin = (
+            changed_curr[-1, :, 2:]
+            - changed_curr[-1, :, 2:, :1])
+        torch.testing.assert_close(
+            changed_prev_margin, parent_prev_margin,
+            rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(
+            changed_curr_margin, parent_curr_margin,
+            rtol=1e-6, atol=1e-6)
+
+        parent_frame_detail = (
+            parent_curr[-1, :, 2:] - parent_prev[-1, :, 2:])
+        changed_frame_detail = (
+            changed_curr[-1, :, 2:] - changed_prev[-1, :, 2:])
+        self.assertGreater(
+            (changed_frame_detail - parent_frame_detail)
+            .abs().sum().item(), 0.0)
+
+        changed_curr[-1, :, 2:].sum().backward()
+        self.assertGreater(
+            head.terminal_pair_differential_objectness_residual_branch.
+            weight.grad.abs().sum().item(), 0.0)
+
+    def test_terminal_pair_differential_mode_is_exclusive(self):
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                terminal_pair_common_objectness_residual=True,
+                terminal_pair_differential_objectness_residual=True,
+                train_cfg=_no_presence_train_cfg())
+
     def test_terminal_encoder_cls_residual_requires_dual_cls(self):
         with self.assertRaisesRegex(ValueError, 'requires dual_cls'):
             _build_head(
