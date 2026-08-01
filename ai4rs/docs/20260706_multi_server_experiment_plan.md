@@ -1591,3 +1591,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - e8 的 det HOTA 与 AP 优势没有形成中期双 HOTA 持续提升；10:22 精确终止
   PGID `2522015`，178 GPU0 已释放。该结构不继续到 e16，也不派生 scale、额外
   attention、附加 loss 或更复杂 decoder。继续等待 `0731_05` epoch 20 的独立补证。
+
+## 2026-08-01 10:52 CST：0731_05 epoch-20 持久性结论
+
+- epoch 20 cls HOTA/DetA/AssA 为 `51.640/43.389/63.028`，det 为
+  `58.491/51.360/68.934`；相对 Encoder 同点，cls `+0.126/+0.398/-0.721`，
+  det `-0.431/-0.839/+0.205`，未形成双 HOTA 提升。
+- pair mAP/AP50 `0.289663/0.516488`、both-independent `0.329802/0.551333`；
+  AP50 增益说明结构没有崩塌，但 det 检测覆盖损失仍阻止 HOTA 通过。
+- 完整 epoch 20 产物核验后于 10:51 精确停止，不继续 e24。结合 `0731_01`，
+  shared-attention 与 head detail 的组合在中期反复表现为 DetA/AssA 搬运，下一项只能采用
+  单点、低参数、直接保护原 Encoder 检测路径的结构假设；不做 scale 扫描、额外层或附加 loss。
