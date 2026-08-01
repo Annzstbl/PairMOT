@@ -40,10 +40,12 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
                  tristate: bool = False,
                  tristate_separate_ffn: bool = False,
                  symmetric_pair_decoder: bool = False,
+                 symmetric_feature_decoder: bool = False,
                  **kwargs) -> None:
         self.tristate = bool(tristate)
         self.tristate_separate_ffn = bool(tristate_separate_ffn)
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
+        self.symmetric_feature_decoder = bool(symmetric_feature_decoder)
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -153,25 +155,40 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             **kwargs)
-        # cat on embed dim: (bs, num_queries, 2*D) -> (bs, num_queries, D)
-        if self.symmetric_pair_decoder:
-            # The common query should not depend on the concatenation order at
-            # this fusion site.  Averaging both orders enforces that invariant
-            # while retaining the existing Linear parameterization and its
-            # pair-average initialization.
-            query = 0.5 * (
-                self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
-                + self.cross_fusion(
-                    torch.cat([out_curr, out_prev], dim=-1)))
-        else:
-            query = self.cross_fusion(
-                torch.cat([out_prev, out_curr], dim=-1))
+        query = self._fuse_frame_features(out_prev, out_curr)
         query = self.norms[1](query)
         query = self.ffn(query)
         query = self.norms[2](query)
         if return_frame_evidence:
             return query, out_prev, out_curr
         return query
+
+    def _fuse_frame_features(
+        self,
+        out_prev: Tensor,
+        out_curr: Tensor,
+    ) -> Tensor:
+        """Fuse frame evidence into the shared recurrent query.
+
+        The feature-only symmetric mode removes concatenation-order bias with
+        one invocation of the existing fusion layer. It preserves independent
+        frame cross-attention, the ordered pair-position path, parameter count,
+        and matrix-multiplication count.
+        """
+        if self.symmetric_pair_decoder:
+            # The common query should not depend on the concatenation order at
+            # this fusion site.  Averaging both orders enforces that invariant
+            # while retaining the existing Linear parameterization and its
+            # pair-average initialization.
+            return 0.5 * (
+                self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
+                + self.cross_fusion(
+                    torch.cat([out_curr, out_prev], dim=-1)))
+        if self.symmetric_feature_decoder:
+            pair_mean = 0.5 * (out_prev + out_curr)
+            return self.cross_fusion(
+                torch.cat([pair_mean, pair_mean], dim=-1))
+        return self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
 
     def forward_tristate(
         self,
@@ -265,6 +282,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  motion_trust_decoder: bool = False,
                  symmetric_pair_decoder: bool = False,
                  symmetric_position_decoder: bool = False,
+                 symmetric_feature_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -305,6 +323,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.motion_trust_decoder = bool(motion_trust_decoder)
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         self.symmetric_position_decoder = bool(symmetric_position_decoder)
+        self.symmetric_feature_decoder = bool(symmetric_feature_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -458,6 +477,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'decoder variants')
         if self.symmetric_pair_decoder and any((
                 self.symmetric_position_decoder,
+                self.symmetric_feature_decoder,
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
@@ -477,6 +497,28 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         )):
             raise ValueError(
                 'symmetric_pair_decoder is incompatible with all other '
+                'decoder variants')
+        if self.symmetric_feature_decoder and any((
+                self.symmetric_position_decoder,
+                self.tristate_decoder,
+                self.dual_output_adapter,
+                self.common_motion_decoder,
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.shared_routing_decoder,
+                self.shared_attention_decoder,
+                self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.regression_enveloped_detail_decoder,
+                self.midpoint_regression_enveloped_detail_decoder,
+                self.classification_enveloped_detail_decoder,
+                self._terminal_enveloped_detail_enabled,
+                self.terminal_classification_common_evidence_decoder,
+                self._common_evidence_bypass_enabled,
+        )):
+            raise ValueError(
+                'symmetric_feature_decoder is incompatible with all other '
                 'decoder variants')
         if self.shared_routing_decoder and any((
                 self.tristate_decoder,
@@ -675,6 +717,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 # parameter bias and makes a frame swap an exact reordering
                 # rather than a change of function.
                 layer.cross_attn_curr = layer.cross_attn_prev
+        if self.symmetric_feature_decoder:
+            for layer in self.layers:
+                layer.symmetric_feature_decoder = True
 
     @property
     def _terminal_enveloped_detail_enabled(self) -> bool:
