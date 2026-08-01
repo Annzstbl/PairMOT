@@ -1335,3 +1335,11 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   2xb4 日志对照仅慢约 `0.25%`，符合效率约束。
 - 三路均以 cls/det HOTA 为主判据，DetA/AssA 用于解释，AP 用于系统性退化诊断；
   不追加参数扫描、类别重加权、scale sweep、额外层、attention 或 loss。
+## 2026-08-01 14:16 CST：178 释放
+
+- 178 `0801_05 symmetric-feature` e8 完整结果为 cls/det HOTA
+  `43.178/49.175`，相对 Encoder 同点 `-2.091/-1.018`；双 DetA、双 AssA和两项 mAP
+  也同时下降。完整产物核验后已停止，不再继续 e12。
+- 178 GPU0 已释放。当前有效训练保留为 197 `0801_04 symmetric-position` 与
+  252 `0801_06 symmetric-position + residual-preserving fusion`；等待它们的 e8/e4
+  证据后再决定是否利用 178/99 启动下一项，避免无证据并行消耗。

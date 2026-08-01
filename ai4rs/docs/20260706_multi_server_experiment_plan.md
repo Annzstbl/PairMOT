@@ -1672,3 +1672,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 252 同卡 2xb4 的 iter-50 实测为 `1.2082 s/iter`，旧结构对照为
   `1.2052 s/iter`，差异约 `0.25%`。因此允许进入 e4/e8/e12 验证；最终仍须同时超过
   Encoder 的 cls HOTA `54.437` 与 det HOTA `62.393`。
+## 2026-08-01 14:16 CST：feature symmetry 终止结论
+
+- `0801_05` e8 相对 Encoder 的 cls/det HOTA 分别下降 `2.091/1.018`，DetA 分别下降
+  `1.584/1.374`，AssA 分别下降 `1.925/0.559`，两项 mAP 同步下降约
+  `0.014–0.016`。因此不再把 frame-feature 做交换对称化，也不继续 e12。
+- 后续只保留 position symmetry 与 shared-query residual-preserving fusion 这条零参数、
+  近零开销路线。是否启动下一候选必须等待 `0801_04` e8 或 `0801_06` e4 的机制证据；
+  不因 178/99 空闲而填充低信息量实验。
