@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 08:54 CST。
+更新时间：2026-08-01 09:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0801_03 terminal diagonal center-motion detail-only` | STOPPED；e8 `44.183/50.011`，相对 Encoder 同点 `-1.086/-0.182`；双 DetA 与四项 AP 系统性下降，完整产物和结构审计后于 08:54 停止 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_21 terminal orthogonal factorized evidence` | STOPPED；e40 `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超，完整归档后停止并释放 GPU0 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_01 shared-attention + antisymmetric detail` | RUNNING；从 epoch 8 原断点恢复，09:10 到 epoch 9 iter 50；计划只续至 epoch 12 完整评估 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1248,3 +1248,8 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 双 HOTA、双 DetA 和四项 AP 同向下降，达到放宽规则下的系统性停止条件。08:54 精确终止
   PGID `1232033`；screen 与全部训练 worker 退出，252 GPU0/1 连续采样均为空闲。
   该 terminal center-motion detail-only 路线不再 resume，也不派生稠密门、额外 attention 或参数扫描。
+## 2026-08-01 09:11 CST：178 恢复 0731_01 至 epoch 12
+
+- `0731_01 shared-attention + antisymmetric detail` 从原 `epoch_8.pth` 恢复，使用 178 GPU0、物理 batch 8；不改变结构、损失或训练协议。该候选仅增加 `122,592` 参数（`+0.539%`），同机相近协议训练速度下降约 `2.3%`。
+- 首次恢复遇到 PyTorch 2.6 对旧 MMEngine checkpoint 的 `weights_only` 加载拒绝，未进入训练且 GPU 自动释放；专用 launcher 对受信任本地断点显式设置 `TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1` 后恢复成功。
+- 09:10 正式到达 epoch 9 iter 50：`0.9572 s/iter`、loss `10.2507`、grad norm `46.6676`，总/DN/encoder losses 均有限，GPU0 约 `31.4 GiB`，无 Traceback/OOM/NaN/NCCL/DDP 异常。状态为 `RUNNING`，只续至 epoch 12 完整评估。

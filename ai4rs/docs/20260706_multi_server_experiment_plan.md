@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 08:54 CST.
+Last updated: 2026-08-01 09:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1568,3 +1568,8 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 该结果达到双 HOTA、双 DetA 与四项 AP 系统性退化的停止条件，已精确停止并释放 252。
   不继续 e12，不 resume，也不从该路径派生稠密门、额外 attention 或参数扫描。下一步先基于
   已有全部 decoder 结果做机制收口，只保留结构简单、可解释且预计效率下降不超过 `5%` 的候选。
+## 2026-08-01：低复杂度 decoder 约束与 0731_01 持久性验证
+
+- 新候选优先满足：参数增量约 `<=1%`，同卡实测吞吐下降 `<=5%`；不通过增加 decoder 深度、额外注意力层、大分辨率支路或附加 loss 换取性能。
+- 在发明新结构前，先把旧严格早停遗漏的 `0731_01 shared-attention + antisymmetric detail` 从 epoch 8 续到 epoch 12。它在 epoch 8 相对 Encoder 同点 cls HOTA `-0.117`、det HOTA `+0.624`，且 pair mAP 与 both-independent AP50 同步提高，具备继续验证的最高信息价值。
+- epoch 12 仍以 cls/det HOTA 为主判据；DetA/AssA 用于解释机制，AP 仅作诊断。若不能形成双 HOTA 持续提升，则停止该方向，不做参数扫描或复杂化衍生。
