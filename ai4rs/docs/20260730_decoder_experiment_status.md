@@ -1485,3 +1485,23 @@
   精确恢复入口；它校验 checkpoint、`last_checkpoint`、GMC/预训练资源、唯一 workdir 进程和 GPU0
   空闲状态，并设置 PyTorch 2.6 可信 optimizer 恢复兼容变量。launcher 已通过 `bash -n`，当前仅为
   `PREPARED`，不会热更新或抢占正在运行且同点更接近的 `0801_09`。
+
+## 2026-08-02 03:02 CST：0801_08/09 epoch-28 与 0801_13 静态验证
+
+- `0801_08 DN-isolated + layer-detach` e28 的 cls/det HOTA 为 `51.719/58.933`，相对
+  Encoder 同点 `-0.021/-0.897`。cls DetA 已为 `+0.481`，det AssA 为 `+0.441`；pair
+  mAP/AP50 仍为 `-0.008635/-0.006310`，both-independent AP50 为 `+0.014838`。
+  det HOTA 差距由 e24 的 `-1.024` 收窄到 `-0.897`，cls 已基本持平，继续到 e32。
+- `0801_09 DN-isolated + end-to-end` e28 的 cls/det HOTA 为 `52.177/59.280`，相对
+  Encoder 同点 `+0.437/-0.550`。cls DetA/AssA 已为 `+0.398/+0.486`，det DetA/AssA
+  仍为 `-0.716/-0.215`；pair mAP/AP50 为 `-0.008833/-0.010193`，both-independent
+  AP50 为 `+0.003575`。cls 已全面超过同点父轨迹，det HOTA 差距从 e24 的 `-0.738`
+  继续收窄，直接支持 decoder 晚收敛假设，继续到 e32 而不提前收口。
+- 新增 `0801_13 terminal pair-differential objectness residual`：最终共享 decoder state 只预测
+  每 query 一个零初始化标量，并以 `-s/+s` 加到 prev/curr 的全部类别 logits。因此 DN/辅助层、
+  每帧类别 margin、两帧平均 logits、回归和全部 decoder 计算保持不变，仅允许时间方向 objectness
+  偏差学习；它是 class-agnostic 加性残差，不使用 routing、reweight、scale、额外 attention 或深度。
+- 252 的活动训练 worktree 未修改；在独立共享对象测试副本 `PairMmot_test_0801_13_4de300a`
+  上完成 3 项定向测试和 47 项完整 head 回归，均通过。正式/烟测配置深拷贝和父/新完整模型构建
+  通过：参数从 `22,758,775` 增至 `22,759,032`，仅 `+257`（`+0.001129%`），新增 state
+  仅一个 `(1,256)` weight 与 `(1,)` bias。当前登记为 `PREPARED`，尚未做真实数据 smoke 或占用 GPU。
