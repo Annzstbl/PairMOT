@@ -1219,3 +1219,24 @@
   零初始化线性头，新增 `12,336` 参数（约 `0.054%`），不增加 decoder 深度、attention、
   loss 或主计算。普通 query 以 detached Encoder proposal logits 为基值，DN query 以零为基值，
   层间像 box reference 一样 detach；实现前后必须证明默认配置严格等价，并通过真实数据 smoke。
+
+## 2026-08-01 17:07 CST：0801_07 轻量逐层分类残差正式启动
+
+- 新候选只修改 decoder 分类输出方式：以 detached Encoder proposal logits 作为普通 query
+  的初始分类值，DN query 前缀严格补零；现有三层 decoder 各自预测 prev/curr 的 `256→8`
+  零初始化 residual，层间分类基值像 box reference 一样 detach。回归、Encoder、Liquid、
+  PairDN、loss、decoder 深度与 attention 均不改变；禁止与 class reweight、prototype gate、
+  residual scale adapter 组合。
+- 六个线性头共新增 `12,336` 参数，总参数从 `22,758,775` 增至 `22,771,111`
+  （`+0.0542%`）。旧 decoder 分类头保留在 state dict 以兼容 checkpoint，但被冻结并由新头
+  等量替换，因此可训练参数净增为 `0`。32 项 head 单测、10 项模型等价性测试、配置深拷贝和
+  完整构建均通过。
+- 252 双卡真实数据 4-iter smoke 完成，所有 loss、DN/Encoder loss 与 grad norm 有限，
+  无 Traceback/OOM/NaN/NCCL；`iter_4.pth` 中 12 个 residual 张量均有限，六个头全部非零更新。
+  与同机 `0801_06` smoke 的 iter 2–4 对比，总时间约慢 `3.7%`，扣除 data time 后模型时间约慢
+  `1.9%`，显存 `11122` 对 `11121 MiB`，满足吞吐下降不超过 `5%` 的硬约束。
+- 提交 `14f8bce` 已固定并同步到 252。formal fresh 于 17:05 在 GPU0/1 启动，
+  17:06 到 epoch 1 iter 50：`1.1511 s/iter`、loss `27.6245`、grad norm `118.7157`，
+  两卡各约 `19.2 GiB`，无数值或分布式异常。当前只认定为稳定运行；e4 仅作结构信号，
+  e8/e12 判断持续性，最终成功仍要求同一 checkpoint 的 cls/det HOTA 同时超过
+  Encoder `54.437/62.393`。
