@@ -1649,3 +1649,16 @@
 - 99 SSH 再次以 `ConnectTimeout=20` 直连仍在 TCP 连接阶段超时，经 252 跳板此前也在 banner
   exchange 超时；共享盘显示作业继续正常运行。当前无法精确核验并终止 PGID，故不使用非受控
   替代方式强停；等待管理通道恢复。e40 仍核验了第 10 个检测/跟踪点和 `54` 个 TrackEval 原始文件。
+
+## 2026-08-02 07:12 CST：0801_13 增加 252 可调度版本
+
+- 为避免 99 管理连接长期不可用阻塞下一机制，给 `0801_13 terminal pair-differential
+  objectness residual` 增加 252 双卡 formal/smoke 配置与 launcher；只适配 252 数据、GMC、
+  TrackEval、Conda 和 workdir 路径，不改变该 `-s/+s` class-agnostic 机制。
+- 两个 Python 配置通过语法编译，两个 launcher 通过 `bash -n`。在 252 的独立测试副本
+  `/data/users/litianhao01/PairMmot_test_0801_13_4de300a` 上完成配置深拷贝和父/新完整模型构建：
+  参数 `22,758,775→22,759,032`，仅 `+257`（`+0.001129%`），新增 state 仍严格只有
+  `(1,256)` weight 和 `(1,)` bias。测试副本更新到 `cc852db`，活动训练仓库仍保持 `5fc0b3e`
+  未被热更新。
+- 当前状态为 `PREPARED`，尚未执行真实数据 GPU smoke。只有在 `0731_05` 完成既定 e36 复核且
+  252 双卡安全释放后，才同步活动仓库、先跑 4-iter DDP smoke，再依据迭代 50 门槛登记 formal。
