@@ -21,6 +21,7 @@ test -d /data1/users/litianhao01/PairMOT/workdir/aux/gmc_cache/hsmot_test_gap1
 
 export CUDA_VISIBLE_DEVICES=0
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
+export TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD=1
 unset PYTORCH_CUDA_ALLOC_CONF
 unset CUBLAS_WORKSPACE_CONFIG
 unset TORCH_DISTRIBUTED_DEBUG
