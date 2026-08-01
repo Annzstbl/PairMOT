@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 11:28 CST.
+Last updated: 2026-08-01 11:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1623,3 +1623,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - formal fresh 于 11:25 启动，11:27 epoch 1 iter 50 为 `1.7400 s/iter`、loss `21.5687`、
   grad norm `115.9326`，两卡各约 19.2 GiB，五项门槛通过。首个 e4 只判断结构信号，e8/e12
   比较同点 Cls/Det HOTA；AP 仅诊断，非系统性退化时不按单点 AP 过早停止。
+
+## 2026-08-01 11:59 CST：0801_05 symmetric-feature formal 启动
+
+- 全局实验号 `0801_05` 分配给 178 GPU0；下一可用编号为 `0801_06`。它只将每层独立
+  prev/curr cross-attention 输出的 feature fusion 改为交换对称：两帧输出取均值后重复，
+  经原 `cross_fusion` 一次。cross-attention 仍独立，pair-position 仍有序，训练协议不变。
+- 该单因素与 197 `0801_04 position-only` 正交，二者共同拆分 `0730_10` 的完整对称化；
+  不新增参数、矩阵乘法、decoder 层、attention、分支或 loss。父/新模型均为
+  `22,758,775` 参数且 state_dict 结构一致。
+- 提交 `9bda2ed` 已同步四机和 GitHub。113 项 decoder 单测、配置深拷贝、完整构建和
+  launcher 检查通过。178 真实 4-iter smoke 的最终 loss/grad norm 为
+  `20.1570/185.1551`，24 组独立 attention 最大差异 `0.00076836`；formal 于 11:57
+  fresh 启动，11:58 iter 50 为 `0.9385 s/iter`、loss `21.1807`、grad norm
+  `98.8892`，GPU0 约 31.4 GiB，五项门槛通过。按 e4/e8/e12 同点双 HOTA 规则推进。

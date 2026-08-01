@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 11:28 CST。
+更新时间：2026-08-01 11:59 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_04 symmetric-position decoder` | RUNNING；零新增参数与矩阵乘法；真实双卡 4-iter smoke 及 checkpoint 结构审计通过，11:27 formal iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_10 symmetric-pair decoder` | RUNNING；从原 `epoch_4.pth` 恢复，补验旧规则过早停止的零新增参数候选；11:01 已通过正式 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_01 shared-attention + antisymmetric detail` | STOPPED；epoch 12 完整评估为 `48.465/55.436`，相对 Encoder 同点 `-1.215/-1.105`；完整产物核验后于 10:22 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0801_05 symmetric-feature decoder` | RUNNING；只将每层 frame-feature fusion 交换对称化，独立 cross-attention 与有序 pair-position 保持父配置；11:58 formal iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -173,6 +173,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| RUNNING | `0801_05_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricfeature_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-08-01 11:57 |  | 只把每层独立双帧 cross-attention 输出在进入共享 recurrent query 前取均值，并经原 `cross_fusion` 一次；保留独立 cross-attention、原有有序 pair-position、Encoder、proposal、PairDN、head、loss 与训练协议 | 零新增参数和矩阵乘法，参数量与 Encoder 均为 `22,758,775`。113 项 decoder 单测、父/新模型状态结构与参数等价、配置深拷贝和真实单卡 4-iter smoke 通过；smoke checkpoint 中 24 组独立 attention 最大差异 `0.00076836`。11:58 formal iter 50 为 `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，GPU0 约 `31.4 GiB`，总/DN/encoder loss 有限且无异常；e4 只作结构信号，e8/e12 判定双 HOTA 持续性 |
 | STOPPED | `0731_21_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalorthogonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 15:13；2026-08-01 00:52 resume | 2026-08-01 03:18 | 独立双帧 attention + 末层分类 common 与严格反对称 box detail 分解；零初始化 | e40 cls/det HOTA `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超。e40 检测、TrackEval、50 序列与 108 文件已归档至 `val_track_0010_resume_epoch40` 并校验；精确停止后 GPU0 释放，不再 resume |
 | STOPPED | `0731_16_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcommonevidencebypass_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_1xb8_fresh` | 2026-07-31 12:42 | 2026-07-31 15:03 | 继承`0727_01`及其共享 decoder 路径，只在最后一层最终双帧预测头前注入 swap-invariant、零起点且有界的共同 cross-attention 证据；不改 recurrent query、所有 auxiliary output 及任何供后续层消费的 reference | e8 `43.972/49.378`，相对Encoder同点 `-1.297/-0.815`；两次完整评估后停止并由 `0731_21` 的common/detail正交分解替代。无训练故障，不resume |
 | STOPPED | `0727_08_paper_base_liquid_encoder_p5temporal_dualbranchtrust` | 2026-07-27 20:51 | 2026-07-27 21:37 | 完整保留`0727_01`的P5 MHA与common/detail双残差，不使用空间门；仅分别限制shared-common和signed-detail更新RMS不超过其对应输入证据RMS，未超限更新不变 | 前序完成18/18评测且GPU连续空闲后，严格队列完成真实数据smoke并fresh启动；按用户指令主动停在epoch 3 iter 750。未生成正式epoch checkpoint，不resume、不进入论文结果；训练、launcher及队列进程均已退出，GPU 0释放，GPU 1上的其他任务未受影响 |
@@ -1282,3 +1283,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   的失败。checkpoint、检测 metrics、50 序列、TrackEval `async_done=1` 与 108 个文件完整。
 - 10:51 精确终止 PGID `1387291`，252 GPU0/1 均已释放。该轨迹不继续到 e24，
   也不派生 scale、loss 权重、类别重权或更深 decoder。
+
+## 2026-08-01 11:59 CST：178 启动 0801_05 symmetric-feature
+
+- `0801_05` 与 197 的 `0801_04 symmetric-position` 构成正交单因素对照：前者只消除
+  frame-feature fusion 的帧序偏置，后者只消除 pair-position 的帧序偏置；两者均保留
+  独立 prev/curr deformable cross-attention。`0801_05` 把两帧输出均值重复后送入现有
+  `cross_fusion` 一次，因此不新增参数、层、attention、分支、loss 或矩阵乘法。
+- 提交 `9bda2ed` 已精确同步四机和 GitHub。99 上 113 项 decoder 单测、formal/smoke
+  配置深拷贝、完整父/新模型构建、状态结构与同参数量 `22,758,775` 检查通过。
+- 178 GPU0 真实 4-iter smoke 的最终 loss/grad norm 为 `20.1570/185.1551`，总、DN、
+  encoder proposal loss 均有限；checkpoint 中 24 组 prev/curr attention 独立，最大差异
+  `0.00076836`，6 个 fusion 张量有限。formal fresh 于 11:57 启动，11:58 iter 50 为
+  `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，五项门槛通过且 GPU0 约
+  `31.4 GiB`。首判 e4，仅以 e8/e12 同点 Cls/Det HOTA 决定持续性。
