@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO=/data1/users/litianhao01/PairMOT/ai4rs
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/smoke/o2_pair_rtdetr_r18vd_0801_09_iterative_cls_dn_isolated_e2e_decoder_4iter_smoke_178.py
-WORK_DIR=/data4/litianhao/PairMmot/workdir_178/smoke_0801_09_iterative_cls_dn_isolated_e2e_decoder_4iter
+WORK_DIR=/data4/litianhao/PairMmot/workdir_178/smoke_0801_09_iterative_cls_dn_isolated_e2e_decoder_4iter_retry1
 PYTHON_ROOT=/data1/users/litianhao01/anaconda3/envs/py310/bin
 
 test ! -e "${WORK_DIR}"

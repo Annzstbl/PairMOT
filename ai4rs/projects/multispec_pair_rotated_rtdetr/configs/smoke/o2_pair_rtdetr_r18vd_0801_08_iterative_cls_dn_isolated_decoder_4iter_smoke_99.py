@@ -7,6 +7,11 @@ with read_base():
 
 train_dataloader['batch_size'] = 4
 train_cfg = dict(type='IterBasedTrainLoop', max_iters=4, val_interval=1000)
+# IterBasedTrainLoop validates once at loop completion even when val_interval
+# exceeds max_iters.  This smoke only needs real train steps and a checkpoint.
+val_cfg = None
+val_dataloader = None
+val_evaluator = None
 default_hooks['checkpoint'].update(
     by_epoch=False, interval=4, max_keep_ckpts=1,
     filename_tmpl='iter_{}.pth')
@@ -16,4 +21,4 @@ custom_hooks = [
 ]
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_99/'
-    'smoke_0801_08_iterative_cls_dn_isolated_decoder_4iter')
+    'smoke_0801_08_iterative_cls_dn_isolated_decoder_4iter_retry1')

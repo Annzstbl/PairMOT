@@ -25,6 +25,10 @@ work_dir = (
     '0801_09_paper_base_liquid_encoder_p5temporal_dualevidence_'
     'decoder_iterativeclsdnisolatede2e_pairdn_paircoherent_le180_r18_'
     'coco_full_1200x900_bf16_1xb8_fresh')
+# Validation predictions and metrics are unchanged; keeping loading in the
+# main process avoids shared-memory exhaustion from unrelated jobs on 178.
+val_dataloader['num_workers'] = 0
+val_dataloader['persistent_workers'] = False
 val_evaluator['metrics'].update(
     track_eval_out_dir=f'{work_dir}/val_track_eval')
 test_evaluator = val_evaluator
