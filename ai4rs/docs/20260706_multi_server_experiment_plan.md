@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 11:59 CST.
+Last updated: 2026-08-01 12:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1637,3 +1637,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `20.1570/185.1551`，24 组独立 attention 最大差异 `0.00076836`；formal 于 11:57
   fresh 启动，11:58 iter 50 为 `0.9385 s/iter`、loss `21.1807`、grad norm
   `98.8892`，GPU0 约 31.4 GiB，五项门槛通过。按 e4/e8/e12 同点双 HOTA 规则推进。
+
+## 2026-08-01 12:32 CST：0730_10 e8 淘汰与下一步归因
+
+- 完整 symmetric-pair e8 cls/det HOTA `42.890/48.228`，相对 Encoder 同点下降
+  `2.379/1.965`；cls/det DetA 下降 `4.335/5.630`。pair mAP/AP50 为
+  `0.2034/0.3969`，both-independent 为 `0.2390/0.4301`，同样明显下降。
+- checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列和 108 个评估文件完整。
+  HOTA、DetA、AP 构成系统性退化，12:31 精确停止 PGID `1466786`，252 GPU0/1 释放；
+  不再继续到 e12，也不对该结构做 scale 或 loss 调参。
+- 定性归因优先指向“共享 cross-attention + 完整对称化”抹平帧特异检测证据。197 的
+  `0801_04 position-only` 和 178 的 `0801_05 feature-only` 均保留独立 cross-attention，
+  因而继续到既定 e4/e8 检查点。在这两个单因素对照给出证据前，252 暂不启动额外复杂模型；
+  下一全局实验号仍为 `0801_06`。

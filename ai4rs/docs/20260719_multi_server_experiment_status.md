@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 11:59 CST。
+更新时间：2026-08-01 12:32 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_04 symmetric-position decoder` | RUNNING；零新增参数与矩阵乘法；真实双卡 4-iter smoke 及 checkpoint 结构审计通过，11:27 formal iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0730_10 symmetric-pair decoder` | RUNNING；从原 `epoch_4.pth` 恢复，补验旧规则过早停止的零新增参数候选；11:01 已通过正式 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | 无 | IDLE；`0730_10 symmetric-pair decoder` e8 出现双 HOTA、双 DetA 与检测 AP 系统性下降，完整产物核验后于 12:31 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0801_05 symmetric-feature decoder` | RUNNING；只将每层 frame-feature fusion 交换对称化，独立 cross-attention 与有序 pair-position 保持父配置；11:58 formal iter 50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -136,7 +136,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41；2026-08-01 10:59 resume |  | 两帧共享 decoder deformable cross-attention，并对 frame-evidence fusion 与 pair-position fusion 显式平均正反帧序；零新增参数，不改 Encoder、proposal、PairDN、head、loss 或训练调度 | 原 e4 cls/det HOTA `36.750/42.604` 均高于 Encoder 同点，但仅因旧规则 pair mAP 下降 `0.00765` 于 e5 中途停止。按后续“放松 mAP、e4 不作性能淘汰”规则从完整 `epoch_4.pth` 恢复。当前代码对 symmetric 前向语义未作改动；配置深拷贝、checkpoint/数据/GMC/GPU 审计通过。11:01 正式 epoch 5 iter 50：`1.0891 s/iter`、loss `11.6265`、grad norm `37.3829`，总/DN/encoder loss 有限，GPU0/1 各约 19.4 GiB，无 Traceback/OOM/NaN/NCCL；首个补验点为 e8，必要时继续 e12 |
+| STOPPED | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41；2026-08-01 10:59 resume | 2026-08-01 12:31 | 两帧共享 decoder deformable cross-attention，并对 frame-evidence fusion 与 pair-position fusion 显式平均正反帧序；零新增参数，不改 Encoder、proposal、PairDN、head、loss 或训练调度 | e8 cls HOTA/DetA/AssA `42.890/33.328/58.017`，det `48.228/41.431/57.793`；相对 Encoder 同点 HOTA `-2.379/-1.965`、DetA `-4.335/-5.630`。pair mAP/AP50 `0.2034/0.3969`，both-independent `0.2390/0.4301`，检测 AP 同样系统性下降。`epoch_8.pth`、检测 metrics、50 序列、TrackEval `async_done=1` 与 108 个文件完整后精确停止；GPU0/1 已释放。e4 增益未持续，完整对称化不再继续到 e12 |
 | STOPPED | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 05:56 | 2026-08-01 08:54 | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | e8 cls HOTA/DetA/AssA `44.183/35.231/58.370`，det `50.011/44.289/58.441`；相对 Encoder 同点 HOTA `-1.086/-0.182`、DetA `-2.432/-2.772`，AssA `+1.069/+3.296`。pair mAP/AP50 `0.210025/0.406177`，both-independent `0.245219/0.438068`；相对 Encoder 分别下降约 `0.0277/0.0247` 与 `0.0310/0.0279`。epoch 8 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列与 108 个评估文件完整；结构审计显示 6 组 attention 最大差异 `0.059180`、唯一 gate 最大值 `0.337337`，排除未学习。双 HOTA、双 DetA 与四项 AP 同向下降，仅 AssA 上升，按系统性退化规则停止；screen/worker 已退出，GPU0/1 均为 `0%/1 MiB` |
 | STOPPED | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 02:44 | 2026-08-01 05:38 | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | e8 cls HOTA/DetA/AssA `44.632/35.582/58.513`，det `49.687/43.373/59.043`；相对 Encoder 同点 HOTA `-0.637/-0.506`、DetA `-2.081/-3.688`，pair mAP/AP50 下降 `0.0219/0.0130`，both-independent 下降 `0.0243/0.0142`。HOTA、DetA、AP 系统性下降；完整 e8 checkpoint、检测 metrics、TrackEval 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 | 2026-08-01 02:12 | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | e8 cls/det HOTA `44.148/49.376`，相对 Encoder 同点 `-1.121/-0.817`；cls/det DetA 为 `-2.028/-3.357`，pair mAP/AP50 下降 `0.028467/0.019227`，both-independent 下降 `0.030575/0.019963`。完整 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
@@ -1297,3 +1297,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `0.00076836`，6 个 fusion 张量有限。formal fresh 于 11:57 启动，11:58 iter 50 为
   `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，五项门槛通过且 GPU0 约
   `31.4 GiB`。首判 e4，仅以 e8/e12 同点 Cls/Det HOTA 决定持续性。
+
+## 2026-08-01 12:32 CST：252 0730_10 epoch-8 收口
+
+- 完整 symmetric-pair 在 e8 得到 cls HOTA/DetA/AssA `42.890/33.328/58.017`，det
+  `48.228/41.431/57.793`。相对 Encoder e8 的 `45.269/50.193`，双 HOTA 分别下降
+  `2.379/1.965`；cls/det DetA 分别下降 `4.335/5.630`，尽管 AssA 提高，仍是明显的
+  DetA→AssA 搬运，未保持 e4 的双 HOTA 信号。
+- pair mAP/AP50 为 `0.2034/0.3969`，both-independent 为 `0.2390/0.4301`；已知相对
+  Encoder pair mAP 与 both-independent AP50 分别下降约 `0.0343/0.0359`。HOTA、DetA
+  与 AP 同向系统性退化，满足放宽规则下的精确淘汰条件。
+- `epoch_8.pth`、`val_det/epoch_07/metrics.json`、50 个检测/跟踪序列、TrackEval
+  `async_done=1`、28 个 CSV 与总计 108 个评估文件均已核验。12:31 精确终止 PGID
+  `1466786`，252 GPU0/1 均为 `0% / 1 MiB`。完整对称化不继续到 e12；197 的
+  position-only 与 178 的 feature-only 因保留独立 cross-attention，继续作为正交归因实验。

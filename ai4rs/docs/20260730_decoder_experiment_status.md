@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 11:59 CST
+更新时间：2026-08-01 12:32 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... resume epoch 4` | `RUNNING` | 零新增参数、无额外层/attention/loss。原 e4 cls/det HOTA `36.750/42.604` 均高于 Encoder，同次仅因旧 mAP 保护线过早停止；按新规则恢复到 e8/e12。11:01 epoch 5 iter 50 五项启动门槛通过，`1.0891 s/iter`、loss `11.6265`、grad norm `37.3829`，双卡约 19.4 GiB，无数值或分布式异常。 |
+| 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... resume epoch 4` | `STOPPED` | e8 cls/det HOTA `42.890/48.228`，相对 Encoder 同点 `-2.379/-1.965`；cls/det DetA 下降 `4.335/5.630`，pair 与 both-independent AP 同时明显下降。完整 checkpoint、检测与 TrackEval 产物核验后于 12:31 精确停止，GPU0/1 已释放。 |
 | 197 GPU 4,5 | `0801_04 ... decoder_symmetricposition ... fresh` | `RUNNING` | 只对共享 decoder pair-position 做交换对称化，保留独立 cross-attention 和原有有序 frame-feature fusion；零新增参数、零新增矩阵乘法。真实双卡 4-iter smoke 与 checkpoint 结构审计通过；11:27 formal iter 50 为 `1.7400 s/iter`、loss `21.5687`、grad norm `115.9326`，两卡约 19.2 GiB，无异常。 |
 | 178 GPU 0 | `0801_05 ... decoder_symmetricfeature ... fresh` | `RUNNING` | 只把每层 frame-feature fusion 改为交换对称，保留独立 cross-attention 与原有有序 pair-position；零新增参数和矩阵乘法。113 项单测、严格父模型审计和真实 4-iter smoke 通过；11:58 iter 50 为 `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，GPU0 约 31.4 GiB，无异常。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `STOPPED` | epoch 20 cls/det HOTA `51.640/58.491`，相对 Encoder 同点 `+0.126/-0.431`；det DetA 下降 `0.839`，AP50 虽提高但不足以通过主目标。完整产物核验后于 10:51 精确停止。 |
@@ -1115,3 +1115,16 @@
   最大训练差异 `0.00076836`。formal fresh 于 11:57 启动，11:58 iter 50 为
   `0.9385 s/iter`、loss `21.1807`、grad norm `98.8892`，五项门槛通过。e4 只作
   结构信号；e8/e12 与 Encoder 同点双 HOTA 决定是否继续，AP 仅作系统性退化诊断。
+
+## 2026-08-01 12:32 CST 0730_10 symmetric-pair epoch-8 结论
+
+- e8 cls HOTA/DetA/AssA 为 `42.890/33.328/58.017`，det 为
+  `48.228/41.431/57.793`。相对 Encoder e8，双 HOTA 为 `-2.379/-1.965`，双 DetA
+  为 `-4.335/-5.630`；AssA 的提高不能抵消检测覆盖损失。
+- pair mAP/AP50 `0.2034/0.3969`，both-independent `0.2390/0.4301`。检测 AP、HOTA
+  与 DetA 同向退化，说明 e4 的早期双增益没有持续；问题不是旧 AP 保护线过严，而是共享
+  cross-attention 加完整交换对称约束在中期削弱了帧特异检测证据。
+- `epoch_8.pth`、检测 metrics、50 序列、TrackEval `async_done=1`、28 个 CSV 与 108 个
+  评估文件完整。12:31 精确停止并释放 252 GPU0/1，不继续 e12。保留独立 cross-attention
+  的 `0801_04 position-only` 与 `0801_05 feature-only` 继续，以区分位置和特征融合约束本身
+  是否有效；在两者 e4/e8 出来前不启动新的复杂 decoder。
