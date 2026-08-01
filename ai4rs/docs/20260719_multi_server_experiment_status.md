@@ -1324,3 +1324,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - e4 只作结构信号，不作提前淘汰。13:11 训练已健康进入 epoch 5 iter 500，loss
   `10.1890`、grad norm `48.9170`，GPU0 约 `31.5 GiB`，无 Traceback/OOM/NaN/NCCL。
   继续到 e8 检验持续性，不追加 gate、scale、attention 或其他复杂结构。
+## 2026-08-01 13:59 CST：decoder 三路状态
+
+- 197 GPU4/5：`0801_04 symmetric-position` 继续训练到 e8；e4 cls/det HOTA
+  `35.531/41.704`，相对 Encoder `-0.678/+2.951`。
+- 178 GPU0：`0801_05 symmetric-feature` 继续训练到 e8；e4 cls/det HOTA
+  `34.947/38.300`，相对 Encoder `-1.262/-0.453`。
+- 252 GPU0/1：`0801_06 symmetric-position + residual-preserving fusion` 已通过
+  双卡真实 smoke 与正式 iter-50 五项门槛，状态为 `RUNNING`。模型参数不增加；同机
+  2xb4 日志对照仅慢约 `0.25%`，符合效率约束。
+- 三路均以 cls/det HOTA 为主判据，DetA/AssA 用于解释，AP 用于系统性退化诊断；
+  不追加参数扫描、类别重加权、scale sweep、额外层、attention 或 loss。

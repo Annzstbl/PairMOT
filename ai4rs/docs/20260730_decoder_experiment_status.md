@@ -1139,3 +1139,22 @@
   结构信号，按放宽后的 e4 规则继续到 e8，不提前停止。
 - 13:11 已进入 epoch 5 iter 500，loss `10.1890`、grad norm `48.9170`，训练与显存正常。
   feature fusion 的帧序可能承载有用的时序证据；在 e8 前不扩展该机制，也不增加模型复杂度。
+## 2026-08-01 13:59 CST：0801_04 e4 与 0801_06 启动
+
+- `0801_04 symmetric-position` 的完整 e4 结果为：cls HOTA/DetA/AssA
+  `35.531/26.057/52.181`，det `41.704/32.604/54.431`。相对 Encoder 同点，
+  cls/det HOTA 为 `-0.678/+2.951`，DetA 为 `-1.011/+0.150`，AssA 为
+  `+0.087/+6.965`。det 增益并非纯粹由 DetA 搬运到 AssA，但 cls 检测覆盖仍有损失；
+  按放宽规则继续到 e8。
+- `0801_05 symmetric-feature` e4 为 cls/det HOTA `34.947/38.300`，双 HOTA、
+  双 DetA 均低于 Encoder；feature-only 对称化当前不支持扩展，仍保留到 e8 做持续性复核。
+- 新建 `0801_06 symmetric-position + residual-preserving fusion`：每层先保留
+  `shared_query`，再融合两帧相对 shared query 的 cross-attention innovation。
+  它不增加参数、decoder 层、attention、分支、loss 或主矩阵乘法；完整模型仍为
+  `22,758,775` 参数。
+- 117 项 decoder 单测、配置深拷贝、完整构建、252 双卡真实数据 4-iter smoke 和
+  checkpoint 结构检查均通过。formal fresh 于 13:57 在 252 GPU0/1 启动，iter 50
+  的 loss/DN/encoder loss/grad norm 均有限，两卡各约 19.2 GiB。
+- 同一台 252、同为 2xb4 的 iter-50 日志对照：旧 `0730_10` 为 `1.2052 s/iter`，
+  `0801_06` 为 `1.2082 s/iter`，仅慢约 `0.25%`，显存少约 7 MiB，满足吞吐下降
+  不超过 `5%` 的效率硬约束。首看 e4 结构信号，e8/e12 判断持续性。

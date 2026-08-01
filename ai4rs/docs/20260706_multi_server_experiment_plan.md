@@ -1662,3 +1662,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   吞吐下降不超过 `5%`；不增加 decoder 深度、额外 attention 栈、高分辨率分支、辅助 loss、
   类别重加权或 scale sweep。若两项 symmetry 在 e8 均失败，下一候选只考虑保留 shared query
   并融合双帧 attention innovation 的 residual-preserving 形式，参数量和主要矩阵乘法均不增加。
+## 2026-08-01：低复杂度 decoder 推进约束与 0801_06
+
+- 模型改进必须局部、可解释且有效：新增参数原则上不超过 `1%`，同卡同温吞吐下降
+  不超过 `5%`；禁止用更深 decoder、额外 attention 栈、高分辨率分支、辅助 loss、
+  类别重加权或 scale sweep 换取小幅指标。
+- `0801_06` 保留 symmetric-position 的早期 det 优势，同时显式保留 shared query，
+  只融合两帧 cross-attention innovation。该改动零新增参数、零新增主矩阵乘法。
+- 252 同卡 2xb4 的 iter-50 实测为 `1.2082 s/iter`，旧结构对照为
+  `1.2052 s/iter`，差异约 `0.25%`。因此允许进入 e4/e8/e12 验证；最终仍须同时超过
+  Encoder 的 cls HOTA `54.437` 与 det HOTA `62.393`。
