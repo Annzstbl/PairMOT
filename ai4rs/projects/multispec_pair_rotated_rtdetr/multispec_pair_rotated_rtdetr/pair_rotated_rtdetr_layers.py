@@ -264,6 +264,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  competitive_evidence_decoder: bool = False,
                  motion_trust_decoder: bool = False,
                  symmetric_pair_decoder: bool = False,
+                 symmetric_position_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -303,6 +304,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             competitive_evidence_decoder)
         self.motion_trust_decoder = bool(motion_trust_decoder)
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
+        self.symmetric_position_decoder = bool(symmetric_position_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -455,6 +457,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'dual-output, common-motion, and competitive-evidence '
                 'decoder variants')
         if self.symmetric_pair_decoder and any((
+                self.symmetric_position_decoder,
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
@@ -863,6 +866,32 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             reference_prev.to(device=device, dtype=dtype),
             reference_curr.to(device=device, dtype=dtype),
         )
+
+    def _fuse_pair_position(
+        self,
+        query_pos_prev: Tensor,
+        query_pos_curr: Tensor,
+    ) -> Tensor:
+        """Fuse dual references into the shared self-attention position.
+
+        The position-only symmetric mode removes ordered-frame bias from the
+        shared query position while retaining independent cross-attention and
+        the original ordered feature fusion. Repeating the pair mean uses the
+        existing linear layer once, so parameter count and forward complexity
+        remain unchanged.
+        """
+        if self.symmetric_pair_decoder:
+            return 0.5 * (
+                self.pair_pos_fusion(
+                    torch.cat([query_pos_prev, query_pos_curr], dim=-1))
+                + self.pair_pos_fusion(
+                    torch.cat([query_pos_curr, query_pos_prev], dim=-1)))
+        if self.symmetric_position_decoder:
+            pair_mean = 0.5 * (query_pos_prev + query_pos_curr)
+            return self.pair_pos_fusion(
+                torch.cat([pair_mean, pair_mean], dim=-1))
+        return self.pair_pos_fusion(
+            torch.cat([query_pos_prev, query_pos_curr], dim=-1))
 
     @staticmethod
     def _normalized_motion_evidence(
@@ -1309,17 +1338,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 reference_curr, num_levels, self.angle_factor)
             query_pos_prev = self.ref_point_head(reference_prev)
             query_pos_curr = self.ref_point_head(reference_curr)
-            if self.symmetric_pair_decoder:
-                query_pos = 0.5 * (
-                    self.pair_pos_fusion(
-                        torch.cat(
-                            [query_pos_prev, query_pos_curr], dim=-1))
-                    + self.pair_pos_fusion(
-                        torch.cat(
-                            [query_pos_curr, query_pos_prev], dim=-1)))
-            else:
-                query_pos = self.pair_pos_fusion(
-                    torch.cat([query_pos_prev, query_pos_curr], dim=-1))
+            query_pos = self._fuse_pair_position(
+                query_pos_prev, query_pos_curr)
 
             if self.tristate_decoder:
                 pointer, query_prev, query_curr = layer.forward_tristate(

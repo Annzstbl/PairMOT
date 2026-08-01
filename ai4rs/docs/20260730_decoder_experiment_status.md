@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 11:02 CST
+更新时间：2026-08-01 11:20 CST
 
 ## 当前研究原则
 
@@ -14,6 +14,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... resume epoch 4` | `RUNNING` | 零新增参数、无额外层/attention/loss。原 e4 cls/det HOTA `36.750/42.604` 均高于 Encoder，同次仅因旧 mAP 保护线过早停止；按新规则恢复到 e8/e12。11:01 epoch 5 iter 50 五项启动门槛通过，`1.0891 s/iter`、loss `11.6265`、grad norm `37.3829`，双卡约 19.4 GiB，无数值或分布式异常。 |
+| 197 GPU 4,5 | `0801_04 ... decoder_symmetricposition ... fresh` | `PREPARED` | 只对共享 decoder pair-position 做交换对称化，保留独立 cross-attention 和原有有序 frame-feature fusion；零新增参数、零新增矩阵乘法。110 项单测、配置深拷贝和完整模型构建通过，参数量与父配置同为 `22,758,775`；真实双卡 smoke 与 checkpoint 结构验收通过后才启动 formal。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... resume epoch 8` | `STOPPED` | epoch 12 cls/det HOTA `48.465/55.436`，相对 Encoder 同点下降 `1.215/1.105`；双 DetA 与双 AssA 也均下降。checkpoint、检测、50 序列与 108 个 TrackEval 文件完整，10:22 精确停止。参数增量 `0.539%`、速度下降约 `2.3%`，失败来自效果而非效率。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `STOPPED` | epoch 20 cls/det HOTA `51.640/58.491`，相对 Encoder 同点 `+0.126/-0.431`；det DetA 下降 `0.839`，AP50 虽提高但不足以通过主目标。完整产物核验后于 10:51 精确停止。 |
 | 99 / 197 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
@@ -1087,3 +1088,9 @@
   均已核验。11:01 到 epoch 5 iter 50：`1.0891 s/iter`、loss `11.6265`、grad norm
   `37.3829`，总/DN/encoder loss 均有限，无 Traceback/OOM/NaN/NCCL。e8 是首个正式补验点，
   mAP 只作诊断，不再覆盖 Cls/Det HOTA 主判据；若非系统性退化则继续 e12。
+
+## 2026-08-01 11:20 CST 准备 0801_04 symmetric-position
+
+- `0730_10` 同时共享 cross-attention、交换对称化 frame-feature fusion 与 pair-position，若结果变化，三个约束难以单独归因。`0801_04` 只消除共享 self-attention position 中的帧序偏置：两帧位置先取均值，再经现有 `pair_pos_fusion` 一次；其余 decoder 路径严格保留父配置。
+- 该改动不新增参数、层、attention、分支、loss 或矩阵乘法，参数量与父配置均为 `22,758,775`；独立 prev/curr deformable cross-attention 与原有有序 frame-feature fusion 均保留，因此不是完整 symmetric-pair 的重复实验。
+- 110 项 decoder 单测、formal/smoke 配置加载与深拷贝、父/新模型完整构建和初始函数等价检查已在 99 通过。当前只登记为 `PREPARED`；197 GPU4/5 仍需通过真实双卡 4-iter smoke、有限 loss/grad、checkpoint 标志与独立 attention 审计，之后才允许 formal fresh。

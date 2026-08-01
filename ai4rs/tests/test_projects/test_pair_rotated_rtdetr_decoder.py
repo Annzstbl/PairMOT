@@ -83,6 +83,7 @@ def _build_decoder(num_layers: int = 2,
                    competitive_evidence_decoder: bool = False,
                    motion_trust_decoder: bool = False,
                    symmetric_pair_decoder: bool = False,
+                   symmetric_position_decoder: bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -140,6 +141,7 @@ def _build_decoder(num_layers: int = 2,
         competitive_evidence_decoder=competitive_evidence_decoder,
         motion_trust_decoder=motion_trust_decoder,
         symmetric_pair_decoder=symmetric_pair_decoder,
+        symmetric_position_decoder=symmetric_position_decoder,
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -1285,6 +1287,45 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                     device=self.device,
                     symmetric_pair_decoder=True,
                     **other)
+
+    def test_symmetric_position_decoder_only_symmetrizes_position(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device, symmetric_position_decoder=True)
+        decoder.init_weights()
+        query_pos_prev = torch.randn(
+            2, decoder.num_queries, decoder.embed_dims, device=self.device)
+        query_pos_curr = torch.randn_like(query_pos_prev)
+        fused = decoder._fuse_pair_position(
+            query_pos_prev, query_pos_curr)
+        swapped = decoder._fuse_pair_position(
+            query_pos_curr, query_pos_prev)
+        self.assertTrue(torch.equal(fused, swapped))
+        for layer in decoder.layers:
+            self.assertIsNot(layer.cross_attn_prev, layer.cross_attn_curr)
+            self.assertFalse(layer.symmetric_pair_decoder)
+
+    def test_symmetric_position_decoder_preserves_parent_at_init(self):
+        torch.manual_seed(63)
+        baseline, _, _ = _build_decoder(device=self.device)
+        baseline.init_weights()
+        symmetric = copy.deepcopy(baseline)
+        symmetric.symmetric_position_decoder = True
+        query_pos_prev = torch.randn(
+            2, baseline.num_queries, baseline.embed_dims, device=self.device)
+        query_pos_curr = torch.randn_like(query_pos_prev)
+        baseline_fused = baseline._fuse_pair_position(
+            query_pos_prev, query_pos_curr)
+        symmetric_fused = symmetric._fuse_pair_position(
+            query_pos_prev, query_pos_curr)
+        self.assertTrue(torch.allclose(
+            baseline_fused, symmetric_fused, atol=1e-6, rtol=1e-6))
+
+    def test_symmetric_position_decoder_rejects_full_symmetry(self):
+        with self.assertRaisesRegex(ValueError, 'incompatible'):
+            _build_decoder(
+                device=self.device,
+                symmetric_pair_decoder=True,
+                symmetric_position_decoder=True)
 
     def test_shared_routing_ties_only_sampling_policy(self):
         decoder, _, _ = _build_decoder(

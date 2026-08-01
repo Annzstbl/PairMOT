@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 11:02 CST。
+更新时间：2026-08-01 11:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0801_04 symmetric-position decoder` | PREPARED；只把共享 decoder pair-position 改为交换对称，独立 cross-attention 与原有有序 frame-feature fusion 均保持；零新增参数且无新增矩阵乘法，110 项单测、配置深拷贝和完整模型构建通过，等待 GPU4/5 真实双卡 smoke | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0730_10 symmetric-pair decoder` | RUNNING；从原 `epoch_4.pth` 恢复，补验旧规则过早停止的零新增参数候选；11:01 已通过正式 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_01 shared-attention + antisymmetric detail` | STOPPED；epoch 12 完整评估为 `48.465/55.436`，相对 Encoder 同点 `-1.215/-1.105`；完整产物核验后于 10:22 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -71,6 +71,7 @@
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| PREPARED | `0801_04_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricposition_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |  |  | 仅把共享 decoder self-attention 的 pair-position 输入改为两帧均值的交换对称表示；保留两帧独立 deformable cross-attention、原有有序 frame-feature fusion、Encoder、proposal、PairDN、head、loss 和训练协议 | 不新增参数、层、attention、分支、loss 或矩阵乘法；初始函数与父配置在浮点容差内一致。110 项 decoder 单测、formal/smoke 配置深拷贝、完整模型构建和父配置同参数量 `22,758,775` 已通过；仅在 197 GPU4/5 真实双卡 smoke 与结构 checkpoint 验收通过后启动 formal fresh |
 | STOPPED | `0801_01_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcoupleddiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 01:07 | 2026-08-01 06:46 | 针对 `0731_27` detail gate 长期约为 common gate 三倍的实测失衡，把两条末层路线的独立 gate 合并为一个共用逐通道 gate；仅 256 参数，无新增 decoder 层、attention、分支、loss 或矩阵乘法 | e12 cls HOTA/DetA/AssA `47.158/38.483/59.975`，det `55.516/47.987/66.488`；相对 Encoder 同点 HOTA `-2.522/-1.025`、DetA `-2.877/-2.358`，仅 det AssA `+0.909`。pair mAP/AP50 `0.2468/0.4538`，both-independent `0.2834/0.4872`；其中 pair mAP 与 both AP50 相对已确认父值下降 `0.02637/0.02455`。e8/e12 连续显示 DetA→AssA 搬运且 cls 进一步恶化；epoch 12 checkpoint、检测 metrics、TrackEval metrics、50 序列 txt 与 108 个评估文件完整后精确停止，GPU4/5 已释放 |
 | STOPPED | `0731_27_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 22:16 | 2026-08-01 00:42 | 保留独立 attention 与末层 common/detail 语义，把两个 `256×256` 稠密门简化为两个逐通道向量 | e8 cls/det HOTA `43.344/49.456`，相对 Encoder 同点 `-1.925/-0.737`；cls DetA/AssA `-2.641/-1.160`，det `-3.760/+3.246`；pair mAP/AP50 下降 `0.024681/0.022977`，both-independent 下降 `0.027357/0.024470`。e4 的强早期增益没有保持；epoch 8 checkpoint、检测、TrackEval 与 54 个原始文件完整后精确停止，GPU4/5 已释放 |
 | STOPPED | `0731_25_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentdetailfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 22:11 | 仅以 detached 双帧分类置信度约束 detail 修正，无新增参数 | e8 `43.629/50.129`，相对 Encoder 同点 `-1.640/-0.064`；DetA 与四项 AP 系统性下降，checkpoint、metrics 和 54 个 TrackEval 原始文件验证后停止 |
@@ -220,7 +221,7 @@ AutoDL元数据和空`work_dirs`。审计位于
 
 ## 维护规则
 
-1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0801_03`，下一编号为`0801_04`。
+1. 新实验编号在所有服务器之间全局递增；当前最后分配编号为`0801_04`，下一编号为`0801_05`。
 2. 新任务启动、停止、完成或迁移后，应同步更新本表和
    `docs/20260706_multi_server_experiment_plan.md`。
 3. `RUNNING`和`QUEUED`状态以实际进程为准，不能仅依据workdir存在或旧screen名称判断。

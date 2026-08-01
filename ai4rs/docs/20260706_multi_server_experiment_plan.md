@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 09:21 CST.
+Last updated: 2026-08-01 11:20 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1602,3 +1602,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 完整 epoch 20 产物核验后于 10:51 精确停止，不继续 e24。结合 `0731_01`，
   shared-attention 与 head detail 的组合在中期反复表现为 DetA/AssA 搬运，下一项只能采用
   单点、低参数、直接保护原 Encoder 检测路径的结构假设；不做 scale 扫描、额外层或附加 loss。
+
+## 2026-08-01 11:20 CST：预留 0801_04 symmetric-position
+
+- 全局实验号 `0801_04` 分配给 197 GPU4/5；下一可用编号为 `0801_05`。目标 formal workdir 为
+  `/data4/litianhao/PairMmot/workdir_197/0801_04_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricposition_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh`。
+- 该候选仅将共享 decoder self-attention 的 pair-position 改为交换对称表示；两帧独立
+  deformable cross-attention、原有有序 frame-feature fusion、Encoder、proposal、PairDN、
+  head、loss 与训练协议保持不变。它不新增参数或矩阵乘法，预计效率变化远低于 `5%`。
+- 99 上 110 项 decoder 单测、formal/smoke 配置深拷贝、完整父/新模型构建、同参数量
+  `22,758,775` 与初始函数等价检查已通过。当前状态仅为 `PREPARED`；必须先在 197 GPU4/5
+  完成真实双卡 4-iter smoke，并验证有限总/DN/encoder loss、grad norm、checkpoint 中唯一
+  position-only 标志及独立 cross-attention，五项正式启动门槛通过后才记为 `RUNNING`。
