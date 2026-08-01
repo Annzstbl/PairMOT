@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 10:52 CST。
+更新时间：2026-08-01 11:02 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0731_05 shared-attention + enveloped detail` | STOPPED；epoch 20 `51.640/58.491`，相对 Encoder 同点 `+0.126/-0.431`；完整产物核验后于 10:51 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0730_10 symmetric-pair decoder` | RUNNING；从原 `epoch_4.pth` 恢复，补验旧规则过早停止的零新增参数候选；11:01 已通过正式 iter 50 五项启动门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_01 shared-attention + antisymmetric detail` | STOPPED；epoch 12 完整评估为 `48.465/55.436`，相对 Encoder 同点 `-1.215/-1.105`；完整产物核验后于 10:22 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -135,6 +135,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
+| RUNNING | `0730_10_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_symmetricpair_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-30 18:41；2026-08-01 10:59 resume |  | 两帧共享 decoder deformable cross-attention，并对 frame-evidence fusion 与 pair-position fusion 显式平均正反帧序；零新增参数，不改 Encoder、proposal、PairDN、head、loss 或训练调度 | 原 e4 cls/det HOTA `36.750/42.604` 均高于 Encoder 同点，但仅因旧规则 pair mAP 下降 `0.00765` 于 e5 中途停止。按后续“放松 mAP、e4 不作性能淘汰”规则从完整 `epoch_4.pth` 恢复。当前代码对 symmetric 前向语义未作改动；配置深拷贝、checkpoint/数据/GMC/GPU 审计通过。11:01 正式 epoch 5 iter 50：`1.0891 s/iter`、loss `11.6265`、grad norm `37.3829`，总/DN/encoder loss 有限，GPU0/1 各约 19.4 GiB，无 Traceback/OOM/NaN/NCCL；首个补验点为 e8，必要时继续 e12 |
 | STOPPED | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 05:56 | 2026-08-01 08:54 | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | e8 cls HOTA/DetA/AssA `44.183/35.231/58.370`，det `50.011/44.289/58.441`；相对 Encoder 同点 HOTA `-1.086/-0.182`、DetA `-2.432/-2.772`，AssA `+1.069/+3.296`。pair mAP/AP50 `0.210025/0.406177`，both-independent `0.245219/0.438068`；相对 Encoder 分别下降约 `0.0277/0.0247` 与 `0.0310/0.0279`。epoch 8 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列与 108 个评估文件完整；结构审计显示 6 组 attention 最大差异 `0.059180`、唯一 gate 最大值 `0.337337`，排除未学习。双 HOTA、双 DetA 与四项 AP 同向下降，仅 AssA 上升，按系统性退化规则停止；screen/worker 已退出，GPU0/1 均为 `0%/1 MiB` |
 | STOPPED | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 02:44 | 2026-08-01 05:38 | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | e8 cls HOTA/DetA/AssA `44.632/35.582/58.513`，det `49.687/43.373/59.043`；相对 Encoder 同点 HOTA `-0.637/-0.506`、DetA `-2.081/-3.688`，pair mAP/AP50 下降 `0.0219/0.0130`，both-independent 下降 `0.0243/0.0142`。HOTA、DetA、AP 系统性下降；完整 e8 checkpoint、检测 metrics、TrackEval 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 | 2026-08-01 02:12 | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | e8 cls/det HOTA `44.148/49.376`，相对 Encoder 同点 `-1.121/-0.817`；cls/det DetA 为 `-2.028/-3.357`，pair mAP/AP50 下降 `0.028467/0.019227`，both-independent 下降 `0.030575/0.019963`。完整 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 10:52 CST
+更新时间：2026-08-01 11:02 CST
 
 ## 当前研究原则
 
@@ -13,6 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0730_10 ... decoder_symmetricpair ... resume epoch 4` | `RUNNING` | 零新增参数、无额外层/attention/loss。原 e4 cls/det HOTA `36.750/42.604` 均高于 Encoder，同次仅因旧 mAP 保护线过早停止；按新规则恢复到 e8/e12。11:01 epoch 5 iter 50 五项启动门槛通过，`1.0891 s/iter`、loss `11.6265`、grad norm `37.3829`，双卡约 19.4 GiB，无数值或分布式异常。 |
 | 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... resume epoch 8` | `STOPPED` | epoch 12 cls/det HOTA `48.465/55.436`，相对 Encoder 同点下降 `1.215/1.105`；双 DetA 与双 AssA 也均下降。checkpoint、检测、50 序列与 108 个 TrackEval 文件完整，10:22 精确停止。参数增量 `0.539%`、速度下降约 `2.3%`，失败来自效果而非效率。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `STOPPED` | epoch 20 cls/det HOTA `51.640/58.491`，相对 Encoder 同点 `+0.126/-0.431`；det DetA 下降 `0.839`，AP50 虽提高但不足以通过主目标。完整产物核验后于 10:51 精确停止。 |
 | 99 / 197 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
@@ -1071,3 +1072,18 @@
   `0.481`，但 det DetA 同为 `33.391`，差异来自 AssA 而不是覆盖。
 - 完整 e4 checkpoint、检测、TrackEval `async_done=1`、50 序列与 108 个文件已核验。
   该 256 参数候选继续到 e8/e12；不在 e4 增益上追加结构，也不提前做主线速度结论。
+
+## 2026-08-01 11:02 CST 恢复 0730_10 symmetric-pair
+
+- 全部近期 evidence/detail 门控实验共同表现为 DetA→AssA 搬运，因此不再继续增加门控复杂度。
+  回查发现 `0730_10 symmetric-pair decoder` 在 e4 的 cls/det HOTA 为
+  `36.750/42.604`，两项均高于 Encoder 同点；它当时只因 pair mAP 下降 `0.00765`
+  触发旧保护线，在 epoch 5 中途被停止，没有得到 e8/e12 证据。
+- 该结构共享两帧 decoder deformable cross-attention，并将 frame-evidence fusion 与
+  pair-position fusion 显式交换对称化；它不新增参数、decoder 层、attention、分支或 loss，
+  因而比新增 residual/gate 变体更符合当前简洁和效率要求。
+- 252 GPU0/1 已从原 `epoch_4.pth` 恢复。当前提交相对原启动提交只增加其他互斥 decoder
+  选项，symmetric-pair 的前向语义未变；配置深拷贝、checkpoint、HSMOT、GMC 和双卡空闲
+  均已核验。11:01 到 epoch 5 iter 50：`1.0891 s/iter`、loss `11.6265`、grad norm
+  `37.3829`，总/DN/encoder loss 均有限，无 Traceback/OOM/NaN/NCCL。e8 是首个正式补验点，
+  mAP 只作诊断，不再覆盖 Cls/Det HOTA 主判据；若非系统性退化则继续 e12。
