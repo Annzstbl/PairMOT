@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 11:20 CST.
+Last updated: 2026-08-01 11:28 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1614,3 +1614,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `22,758,775` 与初始函数等价检查已通过。当前状态仅为 `PREPARED`；必须先在 197 GPU4/5
   完成真实双卡 4-iter smoke，并验证有限总/DN/encoder loss、grad norm、checkpoint 中唯一
   position-only 标志及独立 cross-attention，五项正式启动门槛通过后才记为 `RUNNING`。
+
+## 2026-08-01 11:28 CST：0801_04 formal 启动
+
+- `d6e8c9a` 已同步到 197。GPU4/5 连续空闲、数据/GMC/预训练权重、空 workdir 与配置深拷贝
+  核验后，真实双卡 4-iter smoke 通过；checkpoint 中 24 组 prev/curr attention 张量保持独立，
+  最大训练差异 `0.00078709`，总/DN/encoder loss 与 grad norm 全部有限。
+- formal fresh 于 11:25 启动，11:27 epoch 1 iter 50 为 `1.7400 s/iter`、loss `21.5687`、
+  grad norm `115.9326`，两卡各约 19.2 GiB，五项门槛通过。首个 e4 只判断结构信号，e8/e12
+  比较同点 Cls/Det HOTA；AP 仅诊断，非系统性退化时不按单点 AP 过早停止。
