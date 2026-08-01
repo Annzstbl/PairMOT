@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 12:32 CST
+更新时间：2026-08-01 13:12 CST
 
 ## 当前研究原则
 
@@ -1128,3 +1128,14 @@
   评估文件完整。12:31 精确停止并释放 252 GPU0/1，不继续 e12。保留独立 cross-attention
   的 `0801_04 position-only` 与 `0801_05 feature-only` 继续，以区分位置和特征融合约束本身
   是否有效；在两者 e4/e8 出来前不启动新的复杂 decoder。
+
+## 2026-08-01 13:12 CST 0801_05 feature-only symmetry epoch-4
+
+- e4 cls HOTA/DetA/AssA `34.947/25.960/49.970`，det `38.300/30.836/48.870`；相对
+  Encoder e4，双 HOTA `-1.262/-0.453`、双 DetA `-1.108/-1.618`，cls/det AssA
+  `-2.124/+1.404`。因此 det 的接近不是检测覆盖改善，而是部分 DetA→AssA 搬运。
+- pair mAP/AP50 `0.1399/0.2951`，both-independent `0.1685/0.3240`。checkpoint、检测、
+  50 序列、TrackEval `async_done=1` 与 108 个评估文件完整。该点是负向但非灾难性的
+  结构信号，按放宽后的 e4 规则继续到 e8，不提前停止。
+- 13:11 已进入 epoch 5 iter 500，loss `10.1890`、grad norm `48.9170`，训练与显存正常。
+  feature fusion 的帧序可能承载有用的时序证据；在 e8 前不扩展该机制，也不增加模型复杂度。

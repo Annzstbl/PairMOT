@@ -1650,3 +1650,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `0801_04 position-only` 和 178 的 `0801_05 feature-only` 均保留独立 cross-attention，
   因而继续到既定 e4/e8 检查点。在这两个单因素对照给出证据前，252 暂不启动额外复杂模型；
   下一全局实验号仍为 `0801_06`。
+
+## 2026-08-01 13:12 CST：0801_05 e4 与复杂度硬约束
+
+- 178 `0801_05 feature-only symmetry` e4 cls/det HOTA 为 `34.947/38.300`，相对
+  Encoder 同点为 `-1.262/-0.453`；双 DetA 为 `-1.108/-1.618`，det AssA 则提高
+  `1.404`。完整 checkpoint、检测、50 序列及 108 个 TrackEval 文件已核验。
+- 该负向信号不足以在 e4 淘汰，继续到 e8；但暂不支持继续扩大 feature symmetry。
+  197 `0801_04` 仍在 epoch 4 正常训练，等待其独立 position-only 结果。
+- 后续 decoder 必须保持局部、可解释和高效：优先零增参或参数增量不超过 `1%`，同卡同温
+  吞吐下降不超过 `5%`；不增加 decoder 深度、额外 attention 栈、高分辨率分支、辅助 loss、
+  类别重加权或 scale sweep。若两项 symmetry 在 e8 均失败，下一候选只考虑保留 shared query
+  并融合双帧 attention innovation 的 residual-preserving 形式，参数量和主要矩阵乘法均不增加。
