@@ -813,6 +813,79 @@ class TestPairRotatedRTDETRHeadLoss(unittest.TestCase):
 
 class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
 
+    def test_terminal_encoder_cls_residual_requires_dual_cls(self):
+        with self.assertRaisesRegex(ValueError, 'requires dual_cls'):
+            _build_head(
+                num_layers=3, terminal_encoder_cls_residual=True)
+
+    def test_terminal_encoder_cls_residual_is_final_only_and_dn_isolated(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            terminal_encoder_cls_residual=True,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden_prev = [torch.randn(1, 5, 32) for _ in range(2)]
+        hidden_curr = [torch.randn(1, 5, 32) for _ in range(2)]
+        refs = [torch.rand(1, 5, 5) for _ in range(2)]
+        initial_prev = torch.randn(1, 3, 3, requires_grad=True)
+        initial_curr = torch.randn(1, 3, 3, requires_grad=True)
+        dn_meta = dict(num_denoising_queries=2)
+
+        cls_prev, cls_curr, _, _ = head.forward(
+            hidden_prev,
+            refs,
+            refs,
+            hidden_states_prev=hidden_prev,
+            hidden_states_curr=hidden_curr,
+            initial_cls_prev=initial_prev,
+            initial_cls_curr=initial_curr,
+            dn_meta=dn_meta)
+
+        self.assertTrue(torch.equal(
+            cls_prev[0], head.cls_branches[0](hidden_prev[0])))
+        self.assertTrue(torch.equal(
+            cls_curr[0], head.cls_branches_curr[0](hidden_curr[0])))
+        self.assertTrue(torch.equal(
+            cls_prev[-1, :, :2],
+            head.cls_branches[1](hidden_prev[1][:, :2])))
+        self.assertTrue(torch.equal(
+            cls_curr[-1, :, :2],
+            head.cls_branches_curr[1](hidden_curr[1][:, :2])))
+        self.assertTrue(torch.equal(
+            cls_prev[-1, :, 2:], initial_prev.detach()))
+        self.assertTrue(torch.equal(
+            cls_curr[-1, :, 2:], initial_curr.detach()))
+        self.assertEqual(torch.count_nonzero(
+            head.terminal_encoder_cls_residual_prev.weight).item(), 0)
+        self.assertEqual(torch.count_nonzero(
+            head.terminal_encoder_cls_residual_curr.weight).item(), 0)
+
+        (cls_prev[-1].sum() + cls_curr[-1].sum()).backward()
+        self.assertIsNone(initial_prev.grad)
+        self.assertIsNone(initial_curr.grad)
+        self.assertGreater(
+            head.terminal_encoder_cls_residual_prev.weight.grad
+            .abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.terminal_encoder_cls_residual_curr.weight.grad
+            .abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.cls_branches[1].weight.grad.abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.cls_branches_curr[1].weight.grad.abs().sum().item(), 0.0)
+
+    def test_terminal_and_iterative_cls_residual_are_exclusive(self):
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_residual=True,
+                terminal_encoder_cls_residual=True,
+                train_cfg=_no_presence_train_cfg())
+
     def test_iterative_cls_residual_requires_dual_cls(self):
         with self.assertRaisesRegex(ValueError, 'requires dual_cls'):
             _build_head(

@@ -1260,3 +1260,27 @@
   detach / end-to-end 两种梯度路径；两项 formal 均已通过真数据 smoke 与 iter-50
   五项门槛。它们到 e4 前不再增加新候选；若 e8 仍复现双 DetA/HOTA 系统性下降，
   下一结构只考虑末层 Encoder-anchored 分类修正，不继续三层累计或参数扫描。
+
+## 2026-08-01 19:35 CST：0801_08/09 epoch-4 与 0801_10 决策
+
+- `0801_08 DN-isolated + layer-detach` 完整 TrackEval 为 cls
+  HOTA/DetA/AssA `32.381/26.695/42.728`，det
+  `38.380/33.911/44.366`；both-independent mAP/AP50 为
+  `0.1898/0.3413`。相对 Encoder e4，cls/det HOTA 为
+  `-3.828/-0.373`，DetA 为 `-0.373/+1.457`，AssA 为
+  `-9.366/-3.100`。DN 绝对分类隔离能改善 det 覆盖，但层间断梯度使 cls
+  关联损失进一步扩大。
+- `0801_09 DN-isolated + end-to-end` 完整 TrackEval 为 cls
+  HOTA/DetA/AssA `34.306/27.645/44.607`，det
+  `38.590/33.639/45.922`；both-independent mAP/AP50 为
+  `0.1896/0.3496`。相对 Encoder e4，cls/det HOTA 为
+  `-1.903/-0.163`，DetA 为 `+0.577/+1.185`，AssA 为
+  `-7.487/-1.544`。相对 `0801_08`，双 HOTA 提高
+  `+1.925/+0.210`，说明端到端层间梯度优于 detach，但三层累计分类改写仍持续
+  破坏 AssA。两项均继续到 e8 检查持续性，暂不在 197 做重复复现。
+- 基于上述机制差异，新增 `0801_10 terminal encoder cls residual`：辅助 decoder
+  分类头完全保持原实现，只有最终 normal query 在 detached Encoder proposal logits
+  上做一次零初始化线性残差；最终 DN prefix 继续使用原 absolute classifier。该设计
+  不改变回归、reference、attention、decoder 深度、loss、类别权重或 scale，仅新增两个
+  `256→8` 线性头，目标是保留 `0801_09` 的 DetA/AP 改善，同时避免三层累计改写导致的
+  AssA 崩塌。计划通过单测、构建和 197 双卡真数据 smoke 后启动 formal。

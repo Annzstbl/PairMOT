@@ -79,6 +79,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  iterative_cls_residual: bool = False,
                  iterative_cls_dn_absolute: bool = False,
                  iterative_cls_detach_between_layers: bool = True,
+                 terminal_encoder_cls_residual: bool = False,
                  bbox_angle_l1_weight: float = 0.05,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
@@ -97,18 +98,29 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         self.iterative_cls_dn_absolute = bool(iterative_cls_dn_absolute)
         self.iterative_cls_detach_between_layers = bool(
             iterative_cls_detach_between_layers)
+        self.terminal_encoder_cls_residual = bool(
+            terminal_encoder_cls_residual)
         if self.iterative_cls_residual and not self.dual_cls:
             raise ValueError(
                 'iterative_cls_residual requires dual_cls=True')
+        if self.terminal_encoder_cls_residual and not self.dual_cls:
+            raise ValueError(
+                'terminal_encoder_cls_residual requires dual_cls=True')
+        if (self.iterative_cls_residual
+                and self.terminal_encoder_cls_residual):
+            raise ValueError(
+                'iterative_cls_residual and terminal_encoder_cls_residual '
+                'are mutually exclusive')
         if self.iterative_cls_dn_absolute and not self.iterative_cls_residual:
             raise ValueError(
                 'iterative_cls_dn_absolute requires '
                 'iterative_cls_residual=True')
-        if self.iterative_cls_residual and (
+        if (self.iterative_cls_residual
+                or self.terminal_encoder_cls_residual) and (
                 self.cls_proto_gate or self.cls_residual_adapter):
             raise ValueError(
-                'iterative_cls_residual cannot be combined with classification '
-                'logit adapters')
+                'encoder-anchored classification residuals cannot be '
+                'combined with classification logit adapters')
         self.bbox_angle_l1_weight = float(bbox_angle_l1_weight)
         if self.bbox_angle_l1_weight < 0:
             raise ValueError('bbox_angle_l1_weight must be non-negative')
@@ -316,6 +328,11 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     branch.requires_grad_(False)
                 for branch in self.cls_branches_curr[:num_decoder_layers]:
                     branch.requires_grad_(False)
+        if self.terminal_encoder_cls_residual:
+            self.terminal_encoder_cls_residual_prev = Linear(
+                self.embed_dims, self.cls_out_channels)
+            self.terminal_encoder_cls_residual_curr = Linear(
+                self.embed_dims, self.cls_out_channels)
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -346,6 +363,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     list(self.iterative_cls_residual_branches_curr)):
                 nn.init.zeros_(branch.weight)
                 nn.init.zeros_(branch.bias)
+        if self.terminal_encoder_cls_residual:
+            for branch in (
+                    self.terminal_encoder_cls_residual_prev,
+                    self.terminal_encoder_cls_residual_curr):
+                nn.init.zeros_(branch.weight)
+                nn.init.zeros_(branch.bias)
 
     def load_state_dict(self, state_dict, strict: bool = True):
         has_curr = any(
@@ -354,6 +377,9 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             key.startswith('cls_branches_curr.') for key in state_dict)
         has_iterative_cls = any(
             key.startswith('iterative_cls_residual_branches_')
+            for key in state_dict)
+        has_terminal_encoder_cls = any(
+            key.startswith('terminal_encoder_cls_residual_')
             for key in state_dict)
         incompatible = super().load_state_dict(state_dict, strict=False)
         if not has_cls_curr:
@@ -377,6 +403,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     key for key in missing_keys
                     if not key.startswith(
                         'iterative_cls_residual_branches_')
+                ]
+            if (self.terminal_encoder_cls_residual
+                    and not has_terminal_encoder_cls):
+                missing_keys = [
+                    key for key in missing_keys
+                    if not key.startswith(
+                        'terminal_encoder_cls_residual_')
                 ]
             if missing_keys or incompatible.unexpected_keys:
                 raise RuntimeError(
@@ -429,6 +462,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
 
         running_cls_prev = None
         running_cls_curr = None
+        terminal_cls_base_prev = None
+        terminal_cls_base_curr = None
         num_dn = 0
         if self.iterative_cls_residual:
             if len(hidden_states) > len(
@@ -439,6 +474,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             running_cls_prev = self._prepare_iterative_cls_base(
                 initial_cls_prev, hidden_states_prev[0], dn_meta, 'prev')
             running_cls_curr = self._prepare_iterative_cls_base(
+                initial_cls_curr, hidden_states_curr[0], dn_meta, 'curr')
+            num_dn = hidden_states_prev[0].shape[1] - initial_cls_prev.shape[1]
+        elif self.terminal_encoder_cls_residual:
+            terminal_cls_base_prev = self._prepare_iterative_cls_base(
+                initial_cls_prev, hidden_states_prev[0], dn_meta, 'prev')
+            terminal_cls_base_curr = self._prepare_iterative_cls_base(
                 initial_cls_curr, hidden_states_curr[0], dn_meta, 'curr')
             num_dn = hidden_states_prev[0].shape[1] - initial_cls_prev.shape[1]
 
@@ -453,6 +494,14 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                     self.iterative_cls_residual_branches_prev[layer_id],
                     self.cls_branches[layer_id],
                     num_dn)
+            elif (self.terminal_encoder_cls_residual
+                  and layer_id == len(hidden_states) - 1):
+                cls_prev = self._terminal_encoder_cls_layer(
+                    terminal_cls_base_prev,
+                    hidden_prev,
+                    self.terminal_encoder_cls_residual_prev,
+                    self.cls_branches[layer_id],
+                    num_dn)
             else:
                 cls_prev = self.cls_branches[layer_id](hidden_prev)
                 cls_prev = self._apply_cls_logit_adapters(
@@ -464,6 +513,14 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                         running_cls_curr,
                         hidden_curr,
                         self.iterative_cls_residual_branches_curr[layer_id],
+                        self.cls_branches_curr[layer_id],
+                        num_dn)
+                elif (self.terminal_encoder_cls_residual
+                      and layer_id == len(hidden_states) - 1):
+                    cls_curr = self._terminal_encoder_cls_layer(
+                        terminal_cls_base_curr,
+                        hidden_curr,
+                        self.terminal_encoder_cls_residual_curr,
                         self.cls_branches_curr[layer_id],
                         num_dn)
                 else:
@@ -516,7 +573,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if initial_logits is None:
             raise ValueError(
                 f'initial_cls_{side} is required when '
-                'iterative_cls_residual=True')
+                'encoder-anchored classification residual is enabled')
         if initial_logits.ndim != 3 or hidden_state.ndim != 3:
             raise ValueError('initial classification logits and hidden states '
                              'must both be rank-3 tensors')
@@ -543,6 +600,25 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             base = torch.cat((base.new_zeros(
                 base.shape[0], num_dn, base.shape[2]), base), dim=1)
         return base
+
+    def _terminal_encoder_cls_layer(
+            self, encoder_logits: Tensor, hidden_state: Tensor,
+            residual_branch: nn.Module, absolute_branch: nn.Module,
+            num_dn: int) -> Tensor:
+        """Apply one final correction while keeping DN classification absolute.
+
+        Auxiliary decoder layers retain their original classifiers.  Only the
+        final normal-query logits are anchored to detached encoder proposal
+        logits and corrected once.  The prepended DN queries have no aligned
+        encoder proposal, so they continue to use the original absolute head.
+        """
+        if num_dn:
+            dn_logits = absolute_branch(hidden_state[:, :num_dn])
+            normal_logits = (
+                encoder_logits[:, num_dn:] +
+                residual_branch(hidden_state[:, num_dn:]))
+            return torch.cat((dn_logits, normal_logits), dim=1)
+        return encoder_logits + residual_branch(hidden_state)
 
     def _iterative_cls_layer(
             self, running_logits: Tensor, hidden_state: Tensor,
