@@ -1420,3 +1420,20 @@
   PGID `1743885` 发送 TERM；二次核验确认全部目标进程退出、GPU0/1 为 `0%/1 MiB`，e24
   checkpoint、检测、TrackEval、50 序列与 108 个评估文件完整保留。252 接替为
   `0731_05 shared-attention + enveloped detail` 从可信 `epoch_20.pth` 原轨迹继续晚收敛复核。
+
+## 2026-08-02 01:40 CST：252 恢复 0731_05 至 72 epoch
+
+- 252 运行仓库在 `0801_07` 完全退出后，由干净 `c294b6c` 通过已验证增量 bundle 精确
+  fast-forward 到 `5fc0b3e`；未在旧训练存活时热更新。resume launcher 通过 `bash -n`，
+  `epoch_20.pth` 非空，GPU0/1 连续空闲，配置深拷贝和完整模型构建通过：模型参数
+  `22,881,367`、`max_epochs=72`、workdir 保持原目录。
+- 首次准备脚本的 `pgrep -af` 自匹配导致保护性退出，训练尚未启动；修正为只匹配唯一 workdir
+  下的 `torchrun/tools/train.py` 后全部门槛通过。01:34:37 在 screen
+  `resume_0731_05_e20_252` 启动，日志明确加载原 `epoch_20.pth` 并恢复到
+  `epoch=20, iter=20760`，不是 fresh 或错误 checkpoint。
+- 01:36 到 epoch 21 iter 100：iter 50 为 `1.1471 s`、loss `9.9780`、grad norm
+  `53.5289`；iter 100 为 `1.1032 s`、loss `9.1609`、grad norm `46.7177`。主、DN、
+  Encoder proposal losses 全部有限，两 rank 显存约 `19.4 GiB`；当前增量日志无
+  Traceback/OOM/NaN/NCCL/DDP 异常。进程组 PGID `2161450` 含 torchrun、2 个训练 rank 和
+  4 个 data worker；一个由超时只读审计遗留的 bash PID `2162241` 已精确清理，训练 PGID
+  保持不变。该实验据此登记为 `RUNNING`，下一完整节点为 e24/`val_track_0006`。
