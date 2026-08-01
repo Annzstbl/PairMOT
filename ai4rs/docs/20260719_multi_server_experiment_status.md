@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 07:26 CST。
+更新时间：2026-08-01 08:54 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0801_03 terminal diagonal center-motion detail-only` | RUNNING；e4 `36.944/42.493`，相对 Encoder 同点 `+0.735/+3.740`；DetA `+0.008/+0.937`，继续 e8/e12 判断持续性 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0801_03 terminal diagonal center-motion detail-only` | STOPPED；e8 `44.183/50.011`，相对 Encoder 同点 `-1.086/-0.182`；双 DetA 与四项 AP 系统性下降，完整产物和结构审计后于 08:54 停止 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0731_21 terminal orthogonal factorized evidence` | STOPPED；e40 `53.655/60.379`，相对 Encoder 同点 `-0.142/-0.684`；e32/e36/e40 连续未双超，完整归档后停止并释放 GPU0 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -135,7 +135,7 @@ evidence，两条路径正交且不增加额外loss。GPU3使用tmpfs、physical
 
 | Status | 实验 | 开始时间 | 结束时间 | 类型/主要改动 | 进度或说明 |
 | --- | --- | --- | --- | --- | --- |
-| RUNNING | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 05:56 |  | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | e4 cls HOTA/DetA/AssA `36.944/27.076/54.129`，det `42.493/33.391/55.143`；相对 Encoder 同点 HOTA `+0.735/+3.740`、DetA `+0.008/+0.937`。pair mAP/AP50 `0.1493/0.3078`，both-independent `0.1789/0.3365`；相对 Encoder mAP 略降 `0.0079/0.0056`、AP50 提高 `0.0117/0.0134`。相比稠密 `0801_02` e4，cls HOTA `+0.187`、det HOTA `-0.481`，det DetA 完全相同。完整 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列与 108 个评估文件齐全；e4 通过结构 gate，继续 e8/e12 |
+| STOPPED | `0801_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 05:56 | 2026-08-01 08:54 | 严格继承 `0801_02` 的 Encoder 分类路径、独立 attention、最终中心 `x/y` detail 与全部训练协议；唯一变化是把 `256×256` 稠密 gate 改为 256 维逐通道 gate | e8 cls HOTA/DetA/AssA `44.183/35.231/58.370`，det `50.011/44.289/58.441`；相对 Encoder 同点 HOTA `-1.086/-0.182`、DetA `-2.432/-2.772`，AssA `+1.069/+3.296`。pair mAP/AP50 `0.210025/0.406177`，both-independent `0.245219/0.438068`；相对 Encoder 分别下降约 `0.0277/0.0247` 与 `0.0310/0.0279`。epoch 8 checkpoint、检测 metrics、TrackEval `async_done=1`、50 序列与 108 个评估文件完整；结构审计显示 6 组 attention 最大差异 `0.059180`、唯一 gate 最大值 `0.337337`，排除未学习。双 HOTA、双 DetA 与四项 AP 同向下降，仅 AssA 上升，按系统性退化规则停止；screen/worker 已退出，GPU0/1 均为 `0%/1 MiB` |
 | STOPPED | `0801_02_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalcentermotiondetailonly_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-08-01 02:44 | 2026-08-01 05:38 | 以 Encoder/0731_28 为对照，完全取消 classification common 修正，只保留最终 box head 的严格反对称中心 x/y detail；宽高角、辅助输出和 recurrent references 保持父路径 | e8 cls HOTA/DetA/AssA `44.632/35.582/58.513`，det `49.687/43.373/59.043`；相对 Encoder 同点 HOTA `-0.637/-0.506`、DetA `-2.081/-3.688`，pair mAP/AP50 下降 `0.0219/0.0130`，both-independent 下降 `0.0243/0.0142`。HOTA、DetA、AP 系统性下降；完整 e8 checkpoint、检测 metrics、TrackEval 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_29_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminaldiagonalcentermotionfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 23:15 | 2026-08-01 02:12 | `0731_27` 与 `0731_28` 的轻量几何交叉：common/detail 均使用逐通道门控，反对称 box detail 仅修正中心 `x/y`，`w/h/angle` 保持父几何；无新增层、attention、分支或 loss | e8 cls/det HOTA `44.148/49.376`，相对 Encoder 同点 `-1.121/-0.817`；cls/det DetA 为 `-2.028/-3.357`，pair mAP/AP50 下降 `0.028467/0.019227`，both-independent 下降 `0.030575/0.019963`。完整 checkpoint、检测 metrics、TrackEval metrics、50 个序列 txt 与 108 个评估文件核验后精确停止，GPU0/1 已释放 |
 | STOPPED | `0731_26_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_terminalconfidentbothfactorizedevidence_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` | 2026-07-31 18:49 | 2026-07-31 23:12 | 同时用 detached 双帧分类置信度约束 common/detail 修正；不新增参数 | e12 `48.766/55.694`，相对 Encoder 同点 `-0.914/-0.847`；cls/det DetA 为 `40.056/47.910`，pair mAP/AP50 为 `0.262434/0.479349`。epoch 12 checkpoint、检测 metrics、TrackEval metrics 与 54 个原始结果文件完整验证后精确停止；与 `0731_24/25` 一起否定全部 confidence 放置，不再派生 |
@@ -1232,3 +1232,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 该点表现为 cls HOTA、双 DetA 与四项 AP 系统性下降，但 det HOTA 尚有 `+0.295`，不满足
   “双 HOTA、DetA、AP 全部同向恶化”的强停止条件。按放宽后的早期判定继续到 e12 作最后一次
   持续性复核；当前标记为弱候选、倾向否定，不创建共享门衍生实验，也不提前做速度测试。
+
+## 2026-08-01 08:54 CST 0801_03 epoch-8 收口
+
+- 252 `0801_03 terminal diagonal center-motion detail-only` e8 cls HOTA/DetA/AssA 为
+  `44.183/35.231/58.370`，det 为 `50.011/44.289/58.441`；相对 Encoder 同点
+  `45.269/37.663/57.301` 与 `50.193/47.061/55.145`，双 HOTA 下降
+  `1.086/0.182`、双 DetA 下降 `2.432/2.772`，只有 AssA 提高 `1.069/3.296`。
+- pair mAP/AP50 为 `0.210025/0.406177`，both-independent 为
+  `0.245219/0.438068`；相对 Encoder 约下降 `0.0277/0.0247` 与
+  `0.0310/0.0279`。逐通道化没有避免稠密 `0801_02` 的中期检测覆盖退化。
+- epoch 8 checkpoint、`val_det/epoch_07/metrics.json`、TrackEval `async_done=1`、
+  50 个序列 txt 与 108 个评估文件完整。结构审计通过：6 组独立 attention 最大差异
+  `0.059180`，唯一 256 维 detail gate 最大绝对值 `0.337337`；结论是结构充分学习但机制失败。
+- 双 HOTA、双 DetA 和四项 AP 同向下降，达到放宽规则下的系统性停止条件。08:54 精确终止
+  PGID `1232033`；screen 与全部训练 worker 退出，252 GPU0/1 连续采样均为空闲。
+  该 terminal center-motion detail-only 路线不再 resume，也不派生稠密门、额外 attention 或参数扫描。

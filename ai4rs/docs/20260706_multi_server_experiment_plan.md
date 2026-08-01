@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-07-19 CST.
+Last updated: 2026-08-01 08:54 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1557,3 +1557,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   TrackEval、50 序列与 108 个评估文件齐全。
 - e4 只通过结构 gate，不宣称最终胜出；继续 e8/e12 检查是否避免 `0801_02` 的中期 DetA/AP
   退化。当前不使用 99/178/197 派生新模型，保持单变量、低复杂度证据链。
+
+## 2026-08-01 08:54 CST 0801_03 e8 决策
+
+- e8 cls/det HOTA `44.183/50.011`，相对 Encoder 同点下降 `1.086/0.182`；双 DetA
+  下降 `2.432/2.772`，pair 与 both-independent 的 mAP/AP50 也全部下降约
+  `0.0247–0.0310`。e4 强信号没有持续，结果仍是检测覆盖向 AssA 搬运。
+- 唯一 256 维 gate 已学到最大绝对值 `0.337337`，6 组独立 attention 最大差异
+  `0.059180`；完整 e8 checkpoint、检测和 TrackEval 产物均已核验，因此不是模块未生效。
+- 该结果达到双 HOTA、双 DetA 与四项 AP 系统性退化的停止条件，已精确停止并释放 252。
+  不继续 e12，不 resume，也不从该路径派生稠密门、额外 attention 或参数扫描。下一步先基于
+  已有全部 decoder 结果做机制收口，只保留结构简单、可解释且预计效率下降不超过 `5%` 的候选。
