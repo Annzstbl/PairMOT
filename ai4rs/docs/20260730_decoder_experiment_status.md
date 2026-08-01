@@ -1662,3 +1662,27 @@
   未被热更新。
 - 当前状态为 `PREPARED`，尚未执行真实数据 GPU smoke。只有在 `0731_05` 完成既定 e36 复核且
   252 双卡安全释放后，才同步活动仓库、先跑 4-iter DDP smoke，再依据迭代 50 门槛登记 formal。
+
+## 2026-08-02 07:24 CST：0731_05 收口并启动 0801_13
+
+- `0731_05 shared-attention + enveloped detail` e36 的 cls/det HOTA 为 `52.694/60.428`，
+  相对 Encoder 同点为 `-0.218/-0.279`。cls DetA/AssA 为 `+0.653/-2.072`；det
+  DetA/AssA 为 `-0.735/+0.393`。pair mAP/AP50 为 `-0.001863/+0.006683`，
+  both-independent mAP/AP50 为 `-0.000463/+0.009689`。它较 e32 有恢复，但 e24–e36 始终
+  未双通过，且在绝对值上被 `0801_09` e40 同时超过 `1.365/0.674`。
+- 收口依据为 e4–e36 九个完整节点、后期相对平台和已有强版本，不是早期 epoch 淘汰。第 9 个
+  检测/跟踪点及 `54` 个 TrackEval 原始文件完成后，对精确 PGID `2161450` 发送 TERM；复核无
+  残留目标进程，252 GPU0/1 均回到 `0%/1 MiB`。全部 checkpoint、检测和 TrackEval 产物保留。
+- 252 活动仓库在旧任务完全退出、tracked 状态干净后，从 `5fc0b3e` 经已验证 bundle 快进到
+  `8947b00`；没有在训练存活时热更新。`0801_13` 真实数据 2-GPU 4-iter smoke 正常退出：四个
+  iteration 的总损失、DN、Encoder proposal loss 与 grad norm 均有限，无
+  Traceback/OOM/NaN/NCCL；`iter_4.pth` 为 `364,262,824` bytes，新 `(1,256)+(1,)` 分支有限且
+  获得非零更新，smoke 后双卡重新空闲。
+- 第一次 formal 外壳因 SSH 引号拆分使训练挂在临时 sshd 而非 screen；在尚未到 iter 50 时对其
+  精确 PGID `2449347` 发送 TERM，GPU 完全释放，并把 `130,258` bytes 的日志与配置移到可恢复
+  目录 `0801_13_failed_shell_20260802_0720`，未删除。随后用脚本方式在持久会话
+  `decoder_0801_13_252` 重新 fresh 启动，torchrun PGID 为 `2451495`。
+- 正式任务于 e1 iter 50 达到 `1.0978 s/iter`、loss `21.3898`、grad norm `98.8906`；主、DN、
+  Encoder proposal loss 全部有限，双卡利用率约 `83%/81%`，各约 `19.2 GiB`，无致命信号。
+  据此登记为 `RUNNING`，下一完整节点为 e4；最终成功门槛仍是同一 checkpoint 绝对
+  `cls/det HOTA > 54.437/62.393`。
