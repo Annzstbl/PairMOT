@@ -1169,3 +1169,21 @@
 - e8 checkpoint、检测结果、`async_done=1`、50 序列和 108 个 TrackEval 文件均完整。
   14:16 精确终止训练进程组 `2550260`，178 GPU0 已释放；该分支不继续 e12，也不派生
   参数、scale、loss 或更复杂结构。
+
+## 2026-08-01 15:24 CST：0801_06 epoch-4 结构信号
+
+- `0801_06 symmetric-position + residual-preserving fusion` 的完整 e4 结果为：
+  cls HOTA/DetA/AssA `36.223/26.836/52.292`，det
+  `42.937/34.036/55.255`。相对 Encoder e4 的
+  `36.209/27.068/52.094` 与 `38.753/32.454/47.466`，cls/det HOTA
+  分别为 `+0.014/+4.184`，DetA 为 `-0.232/+1.582`，AssA 为
+  `+0.198/+7.789`。cls 基本持平且未出现明显覆盖崩塌，det 同时提高 DetA 与 AssA，
+  不是单纯把检测覆盖搬运为关联收益。
+- 相对只做位置对称化的 `0801_04` 同点，`0801_06` 的 cls/det HOTA 又提高
+  `+0.692/+1.233`；这支持“显式保留 recurrent query identity，只融合两帧
+  cross-attention innovation”的结构假设，但 e4 只作为早期信号，不宣称最终成功。
+- 检测诊断为 pair mAP/AP50 `0.1479/0.3029`，both-independent
+  `0.1767/0.3320`；50 个序列、5416 条记录、28 个 CSV、`metrics.json` 中
+  `track/async_done=1` 均已核验。训练已自动进入 epoch 5，继续到 e8 判断双 HOTA、
+  DetA 与 AssA 的持续性；最终标准仍为同一 checkpoint 同时超过
+  `54.437/62.393`。
