@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import gc
+import sys
 
 from mmengine.config import Config
 from mmengine.utils import import_modules_from_strings
@@ -10,11 +11,11 @@ from mmdet.registry import MODELS
 from mmrotate.utils import register_all_modules
 
 
-NEW_CONFIG = (
+DEFAULT_NEW_CONFIG = (
     'projects/multispec_pair_rotated_rtdetr/configs/'
     'o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0801_13_terminal_pair_'
     'differential_objectness_residual_decoder_99.py')
-SMOKE_CONFIG = (
+DEFAULT_SMOKE_CONFIG = (
     'projects/multispec_pair_rotated_rtdetr/configs/smoke/'
     'o2_pair_rtdetr_r18vd_0801_13_terminal_pair_differential_'
     'objectness_residual_decoder_4iter_smoke_99.py')
@@ -29,6 +30,8 @@ def load_config(path: str) -> Config:
 
 
 register_all_modules()
+NEW_CONFIG = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_NEW_CONFIG
+SMOKE_CONFIG = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_SMOKE_CONFIG
 new_config = load_config(NEW_CONFIG)
 smoke_config = load_config(SMOKE_CONFIG)
 parent_config = copy.deepcopy(new_config)
