@@ -41,11 +41,14 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
                  tristate_separate_ffn: bool = False,
                  symmetric_pair_decoder: bool = False,
                  symmetric_feature_decoder: bool = False,
+                 residual_preserving_fusion_decoder: bool = False,
                  **kwargs) -> None:
         self.tristate = bool(tristate)
         self.tristate_separate_ffn = bool(tristate_separate_ffn)
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         self.symmetric_feature_decoder = bool(symmetric_feature_decoder)
+        self.residual_preserving_fusion_decoder = bool(
+            residual_preserving_fusion_decoder)
         super().__init__(*args, **kwargs)
 
     @staticmethod
@@ -155,7 +158,8 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             spatial_shapes=spatial_shapes,
             level_start_index=level_start_index,
             **kwargs)
-        query = self._fuse_frame_features(out_prev, out_curr)
+        query = self._fuse_frame_features(
+            out_prev, out_curr, shared_query=query)
         query = self.norms[1](query)
         query = self.ffn(query)
         query = self.norms[2](query)
@@ -167,6 +171,7 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
         self,
         out_prev: Tensor,
         out_curr: Tensor,
+        shared_query: Optional[Tensor] = None,
     ) -> Tensor:
         """Fuse frame evidence into the shared recurrent query.
 
@@ -188,6 +193,15 @@ class PairRotatedRTDETRTransformerDecoderLayer(DetrTransformerDecoderLayer):
             pair_mean = 0.5 * (out_prev + out_curr)
             return self.cross_fusion(
                 torch.cat([pair_mean, pair_mean], dim=-1))
+        if self.residual_preserving_fusion_decoder:
+            if shared_query is None:
+                raise ValueError(
+                    'shared_query is required for residual-preserving '
+                    'feature fusion')
+            innovation_prev = out_prev - shared_query
+            innovation_curr = out_curr - shared_query
+            return shared_query + self.cross_fusion(torch.cat(
+                [innovation_prev, innovation_curr], dim=-1))
         return self.cross_fusion(torch.cat([out_prev, out_curr], dim=-1))
 
     def forward_tristate(
@@ -283,6 +297,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_pair_decoder: bool = False,
                  symmetric_position_decoder: bool = False,
                  symmetric_feature_decoder: bool = False,
+                 residual_preserving_fusion_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -324,6 +339,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.symmetric_pair_decoder = bool(symmetric_pair_decoder)
         self.symmetric_position_decoder = bool(symmetric_position_decoder)
         self.symmetric_feature_decoder = bool(symmetric_feature_decoder)
+        self.residual_preserving_fusion_decoder = bool(
+            residual_preserving_fusion_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -478,6 +495,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.symmetric_pair_decoder and any((
                 self.symmetric_position_decoder,
                 self.symmetric_feature_decoder,
+                self.residual_preserving_fusion_decoder,
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
@@ -500,6 +518,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'decoder variants')
         if self.symmetric_feature_decoder and any((
                 self.symmetric_position_decoder,
+                self.residual_preserving_fusion_decoder,
                 self.tristate_decoder,
                 self.dual_output_adapter,
                 self.common_motion_decoder,
@@ -520,6 +539,29 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             raise ValueError(
                 'symmetric_feature_decoder is incompatible with all other '
                 'decoder variants')
+        if self.residual_preserving_fusion_decoder and any((
+                self.symmetric_pair_decoder,
+                self.symmetric_feature_decoder,
+                self.tristate_decoder,
+                self.dual_output_adapter,
+                self.common_motion_decoder,
+                self.shared_evidence_decoder,
+                self.competitive_evidence_decoder,
+                self.motion_trust_decoder,
+                self.shared_routing_decoder,
+                self.shared_attention_decoder,
+                self.antisymmetric_detail_decoder,
+                self.enveloped_detail_decoder,
+                self.regression_enveloped_detail_decoder,
+                self.midpoint_regression_enveloped_detail_decoder,
+                self.classification_enveloped_detail_decoder,
+                self._terminal_enveloped_detail_enabled,
+                self.terminal_classification_common_evidence_decoder,
+                self._common_evidence_bypass_enabled,
+        )):
+            raise ValueError(
+                'residual_preserving_fusion_decoder is incompatible with '
+                'decoder variants other than symmetric_position_decoder')
         if self.shared_routing_decoder and any((
                 self.tristate_decoder,
                 self.dual_output_adapter,
@@ -720,6 +762,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         if self.symmetric_feature_decoder:
             for layer in self.layers:
                 layer.symmetric_feature_decoder = True
+        if self.residual_preserving_fusion_decoder:
+            for layer in self.layers:
+                layer.residual_preserving_fusion_decoder = True
 
     @property
     def _terminal_enveloped_detail_enabled(self) -> bool:

@@ -85,6 +85,7 @@ def _build_decoder(num_layers: int = 2,
                    symmetric_pair_decoder: bool = False,
                    symmetric_position_decoder: bool = False,
                    symmetric_feature_decoder: bool = False,
+                   residual_preserving_fusion_decoder: bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -144,6 +145,8 @@ def _build_decoder(num_layers: int = 2,
         symmetric_pair_decoder=symmetric_pair_decoder,
         symmetric_position_decoder=symmetric_position_decoder,
         symmetric_feature_decoder=symmetric_feature_decoder,
+        residual_preserving_fusion_decoder=(
+            residual_preserving_fusion_decoder),
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -1377,6 +1380,77 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 _build_decoder(
                     device=self.device,
                     symmetric_feature_decoder=True,
+                    **other)
+
+    def test_residual_preserving_fusion_matches_parent_at_init(self):
+        torch.manual_seed(66)
+        baseline, _, _ = _build_decoder(device=self.device)
+        baseline.init_weights()
+        residual = copy.deepcopy(baseline)
+        residual.residual_preserving_fusion_decoder = True
+        for layer in residual.layers:
+            layer.residual_preserving_fusion_decoder = True
+        for baseline_layer, residual_layer in zip(
+                baseline.layers, residual.layers):
+            shared_query = torch.randn(
+                2, baseline.num_queries, baseline.embed_dims,
+                device=self.device)
+            out_prev = torch.randn_like(shared_query)
+            out_curr = torch.randn_like(shared_query)
+            baseline_fused = baseline_layer._fuse_frame_features(
+                out_prev, out_curr, shared_query=shared_query)
+            residual_fused = residual_layer._fuse_frame_features(
+                out_prev, out_curr, shared_query=shared_query)
+            self.assertTrue(torch.allclose(
+                baseline_fused, residual_fused, atol=1e-6, rtol=1e-6))
+
+    def test_residual_preserving_fusion_keeps_explicit_query_identity(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            symmetric_position_decoder=True,
+            residual_preserving_fusion_decoder=True)
+        decoder.init_weights()
+        for layer in decoder.layers:
+            shared_query = torch.randn(
+                2, decoder.num_queries, decoder.embed_dims,
+                device=self.device)
+            out_prev = torch.randn_like(shared_query)
+            out_curr = torch.randn_like(shared_query)
+            with torch.no_grad():
+                torch.nn.init.normal_(layer.cross_fusion.weight, std=0.03)
+                torch.nn.init.normal_(layer.cross_fusion.bias, std=0.01)
+            fused = layer._fuse_frame_features(
+                out_prev, out_curr, shared_query=shared_query)
+            expected = shared_query + layer.cross_fusion(torch.cat([
+                out_prev - shared_query,
+                out_curr - shared_query,
+            ], dim=-1))
+            self.assertTrue(torch.equal(fused, expected))
+            self.assertTrue(layer.residual_preserving_fusion_decoder)
+            self.assertIsNot(layer.cross_attn_prev, layer.cross_attn_curr)
+
+    def test_residual_preserving_fusion_requires_shared_query(self):
+        decoder, _, _ = _build_decoder(
+            device=self.device,
+            residual_preserving_fusion_decoder=True)
+        layer = decoder.layers[0]
+        out_prev = torch.randn(
+            2, decoder.num_queries, decoder.embed_dims,
+            device=self.device)
+        with self.assertRaisesRegex(ValueError, 'shared_query is required'):
+            layer._fuse_frame_features(out_prev, torch.randn_like(out_prev))
+
+    def test_residual_preserving_fusion_rejects_other_variants(self):
+        for other in (
+                dict(symmetric_pair_decoder=True),
+                dict(symmetric_feature_decoder=True),
+                dict(shared_attention_decoder=True),
+                dict(terminal_factorized_evidence_decoder=True),
+        ):
+            with self.assertRaisesRegex(ValueError, 'incompatible'):
+                _build_decoder(
+                    device=self.device,
+                    residual_preserving_fusion_decoder=True,
                     **other)
 
     def test_shared_routing_ties_only_sampling_policy(self):
