@@ -77,6 +77,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  cls_residual_scale: float = 0.1,
                  cls_residual_weights: Optional[List[float]] = None,
                  iterative_cls_residual: bool = False,
+                 iterative_cls_dn_absolute: bool = False,
+                 iterative_cls_detach_between_layers: bool = True,
                  bbox_angle_l1_weight: float = 0.05,
                  **kwargs) -> None:
         self.use_presence = bool(use_presence)
@@ -92,9 +94,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         self.cls_residual_scale = float(cls_residual_scale)
         self.cls_residual_weights_cfg = cls_residual_weights
         self.iterative_cls_residual = bool(iterative_cls_residual)
+        self.iterative_cls_dn_absolute = bool(iterative_cls_dn_absolute)
+        self.iterative_cls_detach_between_layers = bool(
+            iterative_cls_detach_between_layers)
         if self.iterative_cls_residual and not self.dual_cls:
             raise ValueError(
                 'iterative_cls_residual requires dual_cls=True')
+        if self.iterative_cls_dn_absolute and not self.iterative_cls_residual:
+            raise ValueError(
+                'iterative_cls_dn_absolute requires '
+                'iterative_cls_residual=True')
         if self.iterative_cls_residual and (
                 self.cls_proto_gate or self.cls_residual_adapter):
             raise ValueError(
@@ -297,13 +306,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 copy.deepcopy(residual_branch)
                 for _ in range(num_decoder_layers)
             ])
-            # The new heads replace the absolute decoder classifiers. Keep the
-            # old modules in the state dict for checkpoint compatibility, but
-            # do not leave unused trainable parameters in DDP.
-            for branch in self.cls_branches[:num_decoder_layers]:
-                branch.requires_grad_(False)
-            for branch in self.cls_branches_curr[:num_decoder_layers]:
-                branch.requires_grad_(False)
+            if not self.iterative_cls_dn_absolute:
+                # The new heads replace the absolute decoder classifiers.
+                # Keep the old modules in the state dict for checkpoint
+                # compatibility, but do not leave unused trainable parameters
+                # in DDP.  The DN-isolated variant instead trains these heads
+                # only on the denoising prefix.
+                for branch in self.cls_branches[:num_decoder_layers]:
+                    branch.requires_grad_(False)
+                for branch in self.cls_branches_curr[:num_decoder_layers]:
+                    branch.requires_grad_(False)
 
     def _sync_reg_branches_curr_from_prev(self) -> None:
         """Mirror prev reg weights onto curr (parallel branch init)."""
@@ -417,6 +429,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
 
         running_cls_prev = None
         running_cls_curr = None
+        num_dn = 0
         if self.iterative_cls_residual:
             if len(hidden_states) > len(
                     self.iterative_cls_residual_branches_prev):
@@ -427,16 +440,19 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                 initial_cls_prev, hidden_states_prev[0], dn_meta, 'prev')
             running_cls_curr = self._prepare_iterative_cls_base(
                 initial_cls_curr, hidden_states_curr[0], dn_meta, 'curr')
+            num_dn = hidden_states_prev[0].shape[1] - initial_cls_prev.shape[1]
 
         for layer_id, hidden_state in enumerate(hidden_states):
             hidden_prev = hidden_states_prev[layer_id]
             hidden_curr = hidden_states_curr[layer_id]
             # hidden_*: (bs, num_queries, embed_dims)
             if self.iterative_cls_residual:
-                cls_prev = running_cls_prev + (
-                    self.iterative_cls_residual_branches_prev[layer_id](
-                        hidden_prev))
-                running_cls_prev = cls_prev.detach()
+                cls_prev, running_cls_prev = self._iterative_cls_layer(
+                    running_cls_prev,
+                    hidden_prev,
+                    self.iterative_cls_residual_branches_prev[layer_id],
+                    self.cls_branches[layer_id],
+                    num_dn)
             else:
                 cls_prev = self.cls_branches[layer_id](hidden_prev)
                 cls_prev = self._apply_cls_logit_adapters(
@@ -444,10 +460,12 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             all_cls.append(cls_prev)
             if self.dual_cls:
                 if self.iterative_cls_residual:
-                    cls_curr = running_cls_curr + (
-                        self.iterative_cls_residual_branches_curr[layer_id](
-                            hidden_curr))
-                    running_cls_curr = cls_curr.detach()
+                    cls_curr, running_cls_curr = self._iterative_cls_layer(
+                        running_cls_curr,
+                        hidden_curr,
+                        self.iterative_cls_residual_branches_curr[layer_id],
+                        self.cls_branches_curr[layer_id],
+                        num_dn)
                 else:
                     cls_curr = self.cls_branches_curr[layer_id](hidden_curr)
                     cls_curr = self._apply_cls_logit_adapters(
@@ -525,6 +543,40 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             base = torch.cat((base.new_zeros(
                 base.shape[0], num_dn, base.shape[2]), base), dim=1)
         return base
+
+    def _iterative_cls_layer(
+            self, running_logits: Tensor, hidden_state: Tensor,
+            residual_branch: nn.Module, absolute_branch: nn.Module,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Refine normal logits while optionally isolating absolute DN cls.
+
+        Normal queries represent residual corrections to detached encoder
+        proposal logits.  DN queries have no aligned encoder proposal, so the
+        isolated mode predicts their logits with the original absolute
+        classifier instead of forcing one linear head to learn both absolute
+        DN logits and normal-query residuals.
+        """
+        if self.iterative_cls_dn_absolute and num_dn:
+            dn_logits = absolute_branch(hidden_state[:, :num_dn])
+            normal_logits = (
+                running_logits[:, num_dn:] +
+                residual_branch(hidden_state[:, num_dn:]))
+            cls_logits = torch.cat((dn_logits, normal_logits), dim=1)
+            next_normal = normal_logits
+            if self.iterative_cls_detach_between_layers:
+                next_normal = next_normal.detach()
+            next_running = torch.cat((
+                running_logits.new_zeros(
+                    running_logits.shape[0], num_dn,
+                    running_logits.shape[2]),
+                next_normal), dim=1)
+            return cls_logits, next_running
+
+        cls_logits = running_logits + residual_branch(hidden_state)
+        next_running = cls_logits
+        if self.iterative_cls_detach_between_layers:
+            next_running = next_running.detach()
+        return cls_logits, next_running
 
     def _filter_both_visible_gt(self, pair_gt: InstanceData) -> InstanceData:
         """Keep only GT tracks visible in both frames for the new pair task."""

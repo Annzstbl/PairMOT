@@ -886,6 +886,90 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
         self.assertIsNotNone(
             head.iterative_cls_residual_branches_prev[1].weight.grad)
 
+    def test_iterative_cls_residual_can_propagate_between_layers(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_detach_between_layers=False,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden = [torch.randn(1, 2, 32) for _ in range(2)]
+        refs = [torch.rand(1, 2, 5) for _ in range(2)]
+        initial = torch.randn(1, 2, 3, requires_grad=True)
+        cls_prev, _, _, _ = head.forward(
+            hidden,
+            refs,
+            refs,
+            initial_cls_prev=initial,
+            initial_cls_curr=initial)
+        cls_prev[-1].sum().backward()
+        self.assertIsNone(initial.grad)
+        self.assertGreater(
+            head.iterative_cls_residual_branches_prev[0].weight.grad
+            .abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.iterative_cls_residual_branches_prev[1].weight.grad
+            .abs().sum().item(), 0.0)
+
+    def test_iterative_cls_residual_isolates_dn_absolute_classifier(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_dn_absolute=True,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden = [torch.randn(1, 5, 32) for _ in range(2)]
+        refs = [torch.rand(1, 5, 5) for _ in range(2)]
+        initial_prev = torch.randn(1, 3, 3, requires_grad=True)
+        initial_curr = torch.randn(1, 3, 3, requires_grad=True)
+        dn_meta = dict(num_denoising_queries=2)
+
+        cls_prev, cls_curr, _, _ = head.forward(
+            hidden,
+            refs,
+            refs,
+            initial_cls_prev=initial_prev,
+            initial_cls_curr=initial_curr,
+            dn_meta=dn_meta)
+
+        for layer_id in range(2):
+            expected_dn_prev = head.cls_branches[layer_id](
+                hidden[layer_id][:, :2])
+            expected_dn_curr = head.cls_branches_curr[layer_id](
+                hidden[layer_id][:, :2])
+            self.assertTrue(torch.equal(
+                cls_prev[layer_id, :, :2], expected_dn_prev))
+            self.assertTrue(torch.equal(
+                cls_curr[layer_id, :, :2], expected_dn_curr))
+            self.assertTrue(torch.equal(
+                cls_prev[layer_id, :, 2:], initial_prev.detach()))
+            self.assertTrue(torch.equal(
+                cls_curr[layer_id, :, 2:], initial_curr.detach()))
+        self.assertTrue(all(
+            parameter.requires_grad
+            for branch in head.cls_branches[:2]
+            for parameter in branch.parameters()))
+
+        (cls_prev[-1, :, :2].sum() +
+         cls_curr[-1, :, :2].sum()).backward()
+        self.assertGreater(
+            head.cls_branches[1].weight.grad.abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.cls_branches_curr[1].weight.grad.abs().sum().item(), 0.0)
+
+    def test_iterative_cls_dn_absolute_requires_iterative_mode(self):
+        with self.assertRaisesRegex(ValueError, 'requires'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_dn_absolute=True,
+                train_cfg=_no_presence_train_cfg())
+
     def test_iterative_cls_residual_rejects_query_mismatch(self):
         head = _build_head(
             num_layers=2,
