@@ -1437,3 +1437,18 @@
   Traceback/OOM/NaN/NCCL/DDP 异常。进程组 PGID `2161450` 含 torchrun、2 个训练 rank 和
   4 个 data worker；一个由超时只读审计遗留的 bash PID `2162241` 已精确清理，训练 PGID
   保持不变。该实验据此登记为 `RUNNING`，下一完整节点为 e24/`val_track_0006`。
+
+## 2026-08-02 01:43 CST：0801_08/09 epoch-24 晚收敛复核
+
+- `0801_08 DN-isolated + layer-detach` e24 的 cls/det HOTA 为 `51.326/58.495`，相对
+  Encoder 同点 `-0.388/-1.024`。cls DetA 已从 e20 的 `-0.383` 收窄至 `-0.013`，det
+  AssA 为 `+0.219`；pair mAP/AP50 仍为 `-0.010344/-0.011295`，但 both-independent
+  AP50 已为 `+0.013104`。其 cls 差距继续恢复，det 差距略有反复，尚不能视为过门槛或收敛完成。
+- `0801_09 DN-isolated + end-to-end` e24 的 cls/det HOTA 为 `51.709/58.781`，相对
+  Encoder 仅 `-0.005/-0.738`；cls DetA 已为 `+0.095`，cls AssA 只差 `0.264`，det
+  DetA/AssA 分别差 `0.751/0.568`。pair mAP/AP50 为 `-0.009758/-0.011840`，
+  both-independent AP50 为 `+0.004938`。它从 e16 的 `-1.055/-1.387`、e20 的
+  `-0.671/-0.889` 连续恢复到当前结果，直接证明该 decoder 分支存在明显晚收敛。
+- e24 时 `0801_09` 的双 HOTA 比 `0801_08` 高 `0.383/0.286`，覆盖和 cls 关联也更强；
+  `0801_08` 仍保留 det AssA 与部分 both AP 优势，二者尚非严格支配关系。两项均已自动进入 e25，
+  因轨迹仍有有效恢复且未达到绝对目标，继续到后续四 epoch 评测点，不以 e24 的未过门槛直接否决。
