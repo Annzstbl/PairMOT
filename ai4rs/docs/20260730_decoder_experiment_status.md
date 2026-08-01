@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 09:21 CST
+更新时间：2026-08-01 10:23 CST
 
 ## 当前研究原则
 
@@ -13,7 +13,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... resume epoch 8` | `RUNNING` | 旧实验在 epoch 8 仅因 cls HOTA 低父模型 `0.117` 而按旧严格规则停止；det HOTA 高 `0.624`，AP 同步改善。现按放宽后的持久性规则续至 epoch 12，不改变结构、loss 或训练协议。参数仅增加 `122,592`（`+0.539%`），同机实测训练速度约下降 `2.3%`。 |
+| 178 GPU 0 | `0731_01 ... decoder_sharedattention_antisymmetricdetail ... resume epoch 8` | `STOPPED` | epoch 12 cls/det HOTA `48.465/55.436`，相对 Encoder 同点下降 `1.215/1.105`；双 DetA 与双 AssA 也均下降。checkpoint、检测、50 序列与 108 个 TrackEval 文件完整，10:22 精确停止。参数增量 `0.539%`、速度下降约 `2.3%`，失败来自效果而非效率。 |
 | 252 GPU 0,1 | `0731_05 ... decoder_sharedattention_envelopeddetail ... resume epoch 16` | `RUNNING` | e8 曾双超；e12 仅 det HOTA 低 `0.111`，e16 仅低 `0.084/0.380` 且 AP 未退化。按放宽后的持久性规则从原 epoch 16 续至 epoch 20；参数同样仅增加 `122,592`（`+0.539%`），不改变模型、loss 或协议。 |
 | 99 / 197 | 无 | `IDLE` | 不为占满资源启动低信息实验。 |
 

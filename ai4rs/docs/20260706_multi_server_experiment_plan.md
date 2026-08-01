@@ -1578,3 +1578,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 
 - 利用空闲 252 GPU0/1，从 `0731_05` 原 epoch 16 断点只续一个评估周期到 epoch 20。该轨迹参数增量仅 `0.539%`，e8 曾双超、e12/e16 仅窄幅未过且 AP 稳定，比重新训练或添加新模块具有更高信息/计算比。
 - epoch 20 若未同时超过 Encoder 同点 cls/det HOTA，则停止并否定继续长跑；不派生 scale、loss 权重、类别重权或更深 decoder。
+
+## 2026-08-01 10:23 CST：0731_01 epoch-12 持久性结论
+
+- `0731_01 shared-attention + antisymmetric detail` 从原 epoch 8 断点续到 epoch 12 后，
+  cls HOTA/DetA/AssA 为 `48.465/40.393/60.978`，det 为
+  `55.436/49.657/63.797`。相对 Encoder 同点分别为：cls
+  `-1.215/-0.967/-0.832`，det `-1.105/-0.688/-1.782`。
+- 同点 pair mAP/AP50 为 `0.271857/0.477335`，both-independent mAP/AP50 为
+  `0.310303/0.513735`。epoch 12 checkpoint、检测 metrics、50 序列、TrackEval
+  `async_done=1` 与 108 个评估文件完整。
+- e8 的 det HOTA 与 AP 优势没有形成中期双 HOTA 持续提升；10:22 精确终止
+  PGID `2522015`，178 GPU0 已释放。该结构不继续到 e16，也不派生 scale、额外
+  attention、附加 loss 或更复杂 decoder。继续等待 `0731_05` epoch 20 的独立补证。

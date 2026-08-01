@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 09:21 CST。
+更新时间：2026-08-01 10:23 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 | IDLE；`0731_28` e16 出现连续系统性退化，完整产物核验后于 03:47 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0801_01 terminal coupled diagonal factorized evidence` | STOPPED；e12 `47.158/55.516`，相对 Encoder 同点 `-2.522/-1.025`；e8/e12 连续未恢复检测覆盖，完整产物核验后于 06:46 停止 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0731_05 shared-attention + enveloped detail` | RUNNING；从 epoch 16 原断点恢复，09:20 到 epoch 17 iter 50；只续至 epoch 20 完整评估 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0731_01 shared-attention + antisymmetric detail` | RUNNING；从 epoch 8 原断点恢复，09:10 到 epoch 9 iter 50；计划只续至 epoch 12 完整评估 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0731_01 shared-attention + antisymmetric detail` | STOPPED；epoch 12 完整评估为 `48.465/55.436`，相对 Encoder 同点 `-1.215/-1.105`；完整产物核验后于 10:22 精确停止 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1258,3 +1258,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 
 - 该候选 e8 曾相对 Encoder 双超 `+0.072/+1.396`，e12/e16 仅出现窄幅 HOTA 差距且 AP 未系统性退化；按当前持久性规则从原 `epoch_16.pth` 补证一个评估点，而非新建复杂模型。
 - 参数增量为 `122,592`（`+0.539%`），沿用 252 GPU0/1、physical `2xb4` 和原优化轨迹。09:20 到 epoch 17 iter 50，`1.1663 s/iter`、loss `10.4376`、grad norm `61.8605`，总/DN/encoder losses 均有限，两卡各约 `19.4 GiB`，无训练异常。
+
+## 2026-08-01 10:23 CST：178 0731_01 epoch-12 收口
+
+- epoch 12 cls HOTA/DetA/AssA 为 `48.465/40.393/60.978`，det 为
+  `55.436/49.657/63.797`；相对 Encoder 同点 HOTA `49.680/56.541` 下降
+  `1.215/1.105`，双 DetA 与双 AssA 也均下降。
+- pair mAP/AP50 为 `0.271857/0.477335`，both-independent 为
+  `0.310303/0.513735`。checkpoint、检测 metrics、50 序列、TrackEval
+  `async_done=1` 与 108 个评估文件均已核验。
+- e8 的单侧 det/AP 优势没有保持为中期双 HOTA 增益。10:22 精确终止 PGID
+  `2522015`，目标进程全部退出且 178 GPU0 释放；不继续 e16，不从该结构派生参数扫描或复杂模块。
