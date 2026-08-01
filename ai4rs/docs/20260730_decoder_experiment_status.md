@@ -1308,3 +1308,41 @@
 - e4 仍只作为结构信号，重点检查 `0801_09` 已改善的 DetA/AP 是否保留、cls/det
   AssA 是否明显恢复；e8 判断持续性。最终成功标准不变：同一 checkpoint 的 cls/det
   HOTA 同时严格超过 Encoder `54.437/62.393`。
+
+## 2026-08-01 22:55 CST：目标口径更新与 epoch-12/16 复核
+
+- 新一轮持续探索明确以 `0727_01` 为模型基底；DN 等训练细节允许调整，但不得采用
+  class-aware routing、类别/样本 reweight 或显著增加主计算量的结构。成功门槛按权威归档值
+  执行：同一 checkpoint 的 cls/det HOTA 同时严格超过 `54.437/62.393`。decoder 可能慢收敛，
+  因此 e4/e8 只保留为诊断点，不再作为单独否决条件；后续去留依据更长轨迹、退化分解和资源
+  机会成本共同决定。本条规则覆盖本文较早记录中的 e4/e8 提前终止策略。
+- `0801_07 iterative cls residual` e12 为 `46.274/53.442`，相对 Encoder 同点
+  `-3.406/-3.099`；e16 恢复至 `49.482/56.340`，相对 Encoder 同点
+  `-1.609/-1.980`。e16 的 cls/det DetA 差值为 `-2.188/-2.776`，AssA 差值已收窄至
+  `-0.452/-0.738`；pair mAP/AP50 差值也由 e12 的 `-0.0394/-0.0557` 收窄至
+  `-0.0229/-0.0314`。由于 e12→e16 出现明确的全面恢复，不在 e16 停止，至少继续到 e24
+  检查晚收敛斜率。
+- `0801_08 DN-isolated + layer-detach` e12 为 `47.398/54.092`，相对 Encoder
+  `-2.282/-2.449`；`0801_09 DN-isolated + end-to-end` e12 为 `47.395/54.436`，
+  相对 Encoder `-2.285/-2.105`。两项当时的 DetA、AssA 与四项检测 AP 均低于 Encoder；
+  仍保留到至少 e16 完成评测，再结合 e12→e16 斜率判断是否释放其中的冗余资源。
+- `0801_10 terminal Encoder-anchored cls residual` e4 为 cls/det HOTA
+  `33.754/39.446`，相对 Encoder `-2.455/+0.693`；cls DetA/AssA 差值
+  `+0.308/-7.445`，det 为 `+2.010/-1.063`。它呈现覆盖提升但关联损失，且当前 197
+  受同机负载影响较慢；按新口径继续跨越 e8 观察，不以 e4 结果否决。
+
+## 2026-08-01 22:55 CST：下一低成本 decoder 已完成静态验证
+
+- `0801_11 terminal pair-common cls residual` 保留 parent decoder 的完整初始函数，只在最终层
+  normal query 上把同一个零初始化 `256→8` residual 同时加到 prev/curr logits；DN prefix 与
+  所有辅助层仍走原 absolute classifier。共享修正严格保持每一类别的 prev/curr logit 差，意图
+  只校正 pair-common 置信度而不直接扰动两帧身份判别。
+- 该结构不增加 attention、decoder 深度、回归分支、loss、类别路由、reweight 或 residual scale；
+  总参数从 `22,758,775` 增至 `22,760,831`，仅 `+2,056`（`+0.00903%`）。41 项 head 单测、
+  parent/DN/auxiliary 初始等价性、共享差分不变性、梯度与互斥检查、配置深拷贝、完整构建和 launcher
+  语法均通过。待快速 GPU 合理释放后执行真实数据 smoke，再决定 formal；当前不抢占或中断已有
+  长收敛实验。
+- 历史上最接近双增益的 `0731_05 shared-attention + enveloped detail` 已准备从 `epoch_20.pth`
+  原目录续跑至 72 epoch。其 e8 为 `+0.072/+1.396`，e12 为 `+0.491/-0.111`，e20 为
+  `+0.126/-0.431`；由于只差 det HOTA 且旧结论可能受短窗口影响，保留为释放 252 后的晚收敛
+  优先复核项，但不在 `0801_07` 正明显恢复时抢占该机器。
