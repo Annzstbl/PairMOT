@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 03:20 CST
+更新时间：2026-08-03 03:28 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12；03:19 位于 epoch 7 iter 550。 |
 | 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | e60 完整检测与 TrackEval 已收齐，绝对合并增益降至 `0.081`；继续 e64 作成熟平台确认，03:14 已进入 e61。 |
-| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。e4 checkpoint 已形成，03:19 全量验证到 1150/1354。 |
+| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐；表现为 DetA 近持平/略升但 AssA 明显下降，按晚收敛约束继续 e8/e12，03:23 已进入 e5。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -1918,3 +1918,19 @@
   5416 条记录、50 序列、TrackEval `async_done=1`、54 个评估文件与总计 108 个 raw 文件完整。
 - 训练已无缝进入 e61，保留 e64 作为成熟平台确认，不因 e60 单点停止；但当前证据不支持仅靠
   延长 `0801_09` 达到合并增益 `>1.5`，后续资源优先级转向已验证的结构候选。
+
+## 2026-08-03 03:28 CST：0803_02 epoch-4 完整诊断
+
+- e4 cls HOTA/DetA/AssA 为 `33.322/27.476/42.883`，det 为
+  `37.485/33.886/42.930`。相对同机制父线 `0801_09` e4，cls 分别为
+  `-0.984/-0.169/-1.724`，det 为 `-1.105/+0.247/-2.992`；相对 Encoder e4，det
+  DetA 提高 `1.432`，但 det AssA 下降 `4.536`。完整 shape 共享主要损伤关联，而不是同步
+  压低所有检测分量。
+- pair mAP/AP50 为 `0.146883/0.272219`，相对 Encoder e4 为
+  `-0.010370/-0.023915`；both-independent 为 `0.189566/0.338169`，相对 Encoder e4
+  为 `+0.005101/+0.015020`。相对 `0801_09` e4，pair 为 `+0.002760/-0.005274`，
+  both-independent 为 `+0.000007/-0.011471`，同样呈现单帧覆盖与配对质量分离。
+- checkpoint、5416 条记录、50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计 108 个
+  raw 文件完整；训练已进入 e5。e4 只作“`w/h/angle` 共同约束偏强”的结构诊断，继续 e8/e12
+  检查延迟恢复，不在 e4 停止。若成熟节点仍是 DetA→AssA 失配，已验证的 `0803_03` 仅角度
+  共享将作为更局部接替，而不是对 shape 共享做 scale/gate 调参。

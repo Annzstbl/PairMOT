@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 03:20 CST.
+Last updated: 2026-08-03 03:28 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1731,3 +1731,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   做覆盖/关联搬运，而不是向 `>1.5` 目标形成净增益。
 - 仍按既定承诺保留 e64 完整节点，不用 e60 单点直接终止；若 e64 继续平台或回落，则不再把纯
   epoch 延长作为主要探索手段，释放 GPU2/3 给经结构验证且正交的 decoder 候选。
+
+## 2026-08-03 03:28 CST：完整 shape 共享的首个归因点
+
+- `0803_02` e4 相对 `0801_09` e4 的 cls/det HOTA 为 `-0.984/-1.105`；det DetA 略升
+  `0.247`，但 det AssA 下降 `2.992`，cls AssA 也下降 `1.724`。检测侧 both-independent
+  mAP 高 `0.000007`，说明不是简单的检测器整体失效，而是跨帧 shape 约束当前干扰了关联。
+- 该证据支持把下一几何候选收缩到单一角度 residual，不支持继续给 `w/h/angle` 共享增加 gate、
+  scale 或 loss。原实验仍保留 e8/e12 延迟恢复窗；只有成熟轨迹继续显示相同失配，才在释放资源上
+  部署已经完成零参数与完整构建验证的 `0803_03`。

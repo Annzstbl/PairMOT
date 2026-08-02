@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 03:20 CST。
+更新时间：2026-08-03 03:28 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_01 fresh`（GPU0/1）；`0801_09 resume e56`（GPU2/3） | RUNNING；前者 03:19 位于 e7 iter 550，后者 e60 完整评估后已进入 e61 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e4 checkpoint 已形成，03:19 全量验证到 1150/1354 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e4 检测与完整 TrackEval 已收齐，03:23 已进入 e5，继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1398,3 +1398,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `-0.034/-0.029/+0.010`；pair 与 both-independent 的 mAP/AP50 也均轻微回落。
 - checkpoint、检测、50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计 108 个 raw
   文件完整。训练已进入 e61，保留到 e64 作成熟平台确认；当前不释放 GPU2/3。
+
+## 2026-08-03 03:28 CST：178 0803_02 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA 为 `33.322/27.476/42.883`，det 为
+  `37.485/33.886/42.930`。相对父线 e4，cls HOTA/DetA/AssA 为
+  `-0.984/-0.169/-1.724`，det 为 `-1.105/+0.247/-2.992`；完整 shape 共享目前主要伤害
+  关联，det 覆盖没有同步退化。
+- pair mAP/AP50 为 `0.146883/0.272219`，both-independent 为
+  `0.189566/0.338169`。checkpoint、检测、50 序列、TrackEval `async_done=1`、54 个 eval
+  文件与总计 108 个 raw 文件完整。训练已进入 e5，继续 e8/e12，不按 e4 释放 GPU0。
