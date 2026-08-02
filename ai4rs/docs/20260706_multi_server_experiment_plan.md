@@ -1694,3 +1694,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 若 `0803_01` 成熟节点未达到门槛，下一机制只从其 margin 保真/objectness 耦合证据派生一个
   单因素、低开销变体；不做无解释的参数扫描，并在新 formal 前重复配置深拷贝、完整构建、
   真实双卡 smoke、checkpoint 更新和 iter-50 五项门槛。
+
+## 2026-08-03：第三条正交几何主线
+
+- 178 GPU0 增加 `0803_02`：保持 `0801_09` 的 DN-isolated end-to-end 分类机制，只在每层
+  普通 query 的回归 residual 上共享两帧 `w/h/angle`，中心位移保持独立。它与 `0803_01`
+  的 objectness 耦合严格正交，且参数/state 增量为零。
+- 三条运行线先收集完整节点：`0803_01` e4/e8/e12、`0801_09` e60/e64、`0803_02`
+  e4/e8/e12。早期节点只用于 DetA/AssA/AP 轨迹诊断；除运行故障或明显系统性退化外，不以
+  e4/e8 直接否决 decoder。

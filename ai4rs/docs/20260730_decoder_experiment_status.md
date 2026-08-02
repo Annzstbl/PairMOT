@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-01 18:05 CST
+更新时间：2026-08-03 02:12 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0801_07 ... decoder_iterativeclsresidual ... fresh` | `RUNNING` | 普通 query 以 detached encoder proposal logits 为基底逐层学习分类残差；DN prefix 也沿用统一残差路径。既有投入保留到 e4，18:00 位于 epoch 3 iter 900，约 `1.08 s/iter`，loss/梯度有限。该实验给出统一路径对照，但 252 不再用于新结构首轮筛选。 |
-| 99 GPU 0,1 | `0801_08 ... decoder_iterativeclsdnisolated ... fresh` | `RUNNING` | 普通 query 保留逐层分类残差；DN prefix 改用已有绝对分类头，消除“普通 query 有 encoder 基底、DN query 无同语义基底”的冲突。相对 `0801_07` 不增加总参数、attention 或 loss。真实 smoke、checkpoint 双类分类头更新审计通过；18:04 iter 50 为约 `1.02 s/iter`、loss `21.3868`、grad norm `99.5376`，无异常。 |
-| 178 GPU 0 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... fresh` | `RUNNING` | 在 `0801_08` 的 DN 隔离上，仅允许最终 decoder 分类损失贯通早期残差层；encoder proposal 基底仍 detached。与 `0801_08` 参数量完全相同，构成严格梯度路由因子比较。真实 smoke 与 checkpoint 更新审计通过；18:04 iter 50 为约 `0.95 s/iter`、loss `21.0149`、grad norm `137.5518`，无异常；验证 loader 改为单进程仅规避 178 `/dev/shm` 外部占用，不改预测或指标。 |
-| 197 GPU 4,5 | 无 | `IDLE` | 保留给 e4/e8 出现明确优势后的确认实验，不启动第三个低信息候选。 |
+| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | 零参数、class-agnostic 的逐层 pair-shared objectness 投影；02:03 已进入 epoch 4，正式 loss、DN、encoder proposal loss 与梯度持续有限。 |
+| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | 保持原模型、optimizer、scheduler 与 EMA，从 e56 续训晚期上升轨迹；02:02 位于 epoch 58 iter 250，约 `1.35 s/iter`。 |
+| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。真实 smoke 与 checkpoint 更新审计通过；02:11 正式 iter 50 为 `0.9497 s/iter`、loss `21.0192`、grad norm `104.8574`。 |
+| 99 GPU 0,1 | 无 | `UNREACHABLE` | SSH 连接仍超时，不进行不可控启动。 |
+| 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
 ## 已完成或释放
 
@@ -1860,3 +1861,18 @@
   恢复后的 e57 iter 50 为 `1.3730 s/iter`、loss `8.6312`、grad norm `46.7629`；主、DN、
   Encoder loss 均有限，GPU2/3 各约 `19.4 GiB`。因此晚期续训正式状态为 `RUNNING`，首个
   新完整评测节点为 e60；与 0803_01 并行占用 252 四卡。
+
+## 2026-08-03 02:12 CST：0803_02 pair-shared shape 正式启动
+
+- 新候选在每层 decoder 的普通 query 中保留两帧独立的中心 `x/y` residual，只把
+  `w/h/angle` residual 替换为两帧均值；DN prefix 完全不改。该几何先验交换等变、
+  class-agnostic，不含 learned gate、reweight、额外 loss/attention/layer，参数和 state
+  相对 `0801_09` 均为零增量，完整模型仍为 `22,771,111` 参数。
+- 252 隔离 clone 的 3 项语义/梯度测试全部通过；178 单卡配置又通过配置深拷贝、完整模型构建、
+  真实数据 4-iter smoke 与 checkpoint 更新审计。正式训练于 178 GPU0 启动，唯一主 PGID
+  为 `2857661`；epoch 1 iter 50 为 `0.9497 s/iter`、loss `21.0192`、grad norm
+  `104.8574`，主、DN、encoder proposal loss 全部有限，GPU 约 `31.4 GiB`，无
+  Traceback/OOM/NaN。
+- 状态登记为 `RUNNING`，按 e4/e8/e12 及后续成熟轨迹连续评估；e4/e8 只作诊断，不作为直接
+  否决。最终门槛仍是同一 checkpoint 的 cls/det HOTA 均严格超过 `54.437/62.393` 且
+  总和严格大于 `118.330`。
