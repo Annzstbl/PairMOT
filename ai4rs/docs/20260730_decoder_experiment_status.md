@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 02:12 CST
+更新时间：2026-08-03 02:36 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | 零参数、class-agnostic 的逐层 pair-shared objectness 投影；02:03 已进入 epoch 4，正式 loss、DN、encoder proposal loss 与梯度持续有限。 |
+| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 checkpoint、检测与完整 TrackEval 已收齐；结果为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12，02:35 已进入 epoch 5。 |
 | 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | 保持原模型、optimizer、scheduler 与 EMA，从 e56 续训晚期上升轨迹；02:02 位于 epoch 58 iter 250，约 `1.35 s/iter`。 |
 | 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。真实 smoke 与 checkpoint 更新审计通过；02:11 正式 iter 50 为 `0.9497 s/iter`、loss `21.0192`、grad norm `104.8574`。 |
 | 99 GPU 0,1 | 无 | `UNREACHABLE` | SSH 连接仍超时，不进行不可控启动。 |
@@ -1876,3 +1876,18 @@
 - 状态登记为 `RUNNING`，按 e4/e8/e12 及后续成熟轨迹连续评估；e4/e8 只作诊断，不作为直接
   否决。最终门槛仍是同一 checkpoint 的 cls/det HOTA 均严格超过 `54.437/62.393` 且
   总和严格大于 `118.330`。
+
+## 2026-08-03 02:36 CST：0803_01 epoch-4 完整诊断
+
+- e4 同一 checkpoint 的 cls HOTA/DetA/AssA 为 `30.075/23.879/41.043`，det 为
+  `36.992/31.686/44.213`。相对 Encoder e4 的 cls `36.209/27.068/52.094` 与 det
+  `38.753/32.454/47.466`，HOTA 分别下降 `6.134/1.761`，DetA 下降
+  `3.189/0.768`，AssA 下降 `11.051/3.253`；六个跟踪分量全部下降。
+- pair mAP/AP50 为 `0.121391/0.234509`，相对 Encoder e4 下降
+  `0.035862/0.061625`；both-independent mAP/AP50 为 `0.160915/0.299571`，下降
+  `0.023550/0.023578`。相对同机制父线 `0801_09` e4，pair mAP/AP50 又下降
+  `0.022731/0.042984`，both-independent 下降 `0.028644/0.050069`。
+- checkpoint、5416 条检测记录、50 个序列、TrackEval `async_done=1`、28 个 CSV 与 54 个
+  原始评估文件均完整。该点说明 pair-shared objectness 当前造成检测与关联同步退化，不是
+  DetA/AssA 指标搬运；但 e4 只登记为早期负向证据，训练已进入 e5，继续到 e8/e12 检查
+  decoder 的延迟恢复，不作 e4 直接否决。

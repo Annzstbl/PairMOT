@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-01 18:05 CST。
+更新时间：2026-08-03 02:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -15,10 +15,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0801_08 iterative-cls DN-isolated decoder` | RUNNING；真实双卡 smoke 与 checkpoint 更新审计通过，18:04 formal epoch 1 iter 50 五项门槛通过，约 `1.02 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无 | IDLE；PairMOT GPU 4、5 保留给通过首轮门槛后的确认实验，不启动低信息重复变体 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0801_07 iterative-cls residual decoder` | RUNNING；既有双卡实验继续到首个 e4 评测，18:00 位于 epoch 3 iter 900；252 不再承担新候选首轮验证 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0801_09 iterative-cls DN-isolated E2E decoder` | RUNNING；真实单卡 smoke 与 checkpoint 更新审计通过，18:04 formal epoch 1 iter 50 五项门槛通过，约 `0.95 s/iter` | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0803_01 fresh`（GPU0/1）；`0801_09 resume e56`（GPU2/3） | RUNNING；前者 e4 完整评测后进入 e5，后者 02:35 位于 e59 iter 750 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_02 pair-shared shape refinement` | RUNNING；单卡真实 smoke 与正式 iter-50 门槛通过，02:36 位于 epoch 2 iter 700 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1372,3 +1372,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   为 `RUNNING`。
 - 当前并行布局为：252 GPU0/1 跑 `0803_01` fresh，252 GPU2/3 跑 `0801_09` e56 续训，
   178 GPU0 跑 `0803_02` fresh。197 GPU4/5 因异常慢暂不部署，99 SSH 仍不可达。
+
+## 2026-08-03 02:36 CST：0803_01 e4 完整评测
+
+- 252 GPU0/1 的 `0803_01` e4 checkpoint、检测、50 序列、TrackEval metrics、28 个 CSV 和
+  54 个原始评估文件均完整。cls/det HOTA 为 `30.075/36.992`，相对 Encoder e4 分别
+  `-6.134/-1.761`；双 DetA、双 AssA 与四项 AP 也全部下降。
+- 该结果只登记为早期系统性负向证据，不按 e4 直接停止。训练已恢复到 e5，继续保留 e8/e12
+  延迟收敛窗口；252 GPU2/3 的 `0801_09` e56 续训仍正常，02:35 位于 e59 iter 750。
+- 99 已通过正确的 SSH 端口恢复可达，但 GPU0/1 被外部计算占用，不抢占；资源状态从
+  `UNREACHABLE` 修正为 `REACHABLE/EXTERNALLY_OCCUPIED`。

@@ -1703,3 +1703,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 三条运行线先收集完整节点：`0803_01` e4/e8/e12、`0801_09` e60/e64、`0803_02`
   e4/e8/e12。早期节点只用于 DetA/AssA/AP 轨迹诊断；除运行故障或明显系统性退化外，不以
   e4/e8 直接否决 decoder。
+
+## 2026-08-03 02:36 CST：objectness 早期证据后的推进
+
+- `0803_01` e4 的 HOTA、DetA、AssA 和 AP 均系统性低于 Encoder 与 `0801_09` 父线，说明
+  强制两帧共享逐 query objectness 均值当前过度约束了置信度动态。该方向不再派生 scale、gate
+  或额外分类耦合，但原实验继续到 e8/e12，保留 decoder 晚收敛验证窗口。
+- 新结构优先等待正交的 `0803_02` 几何证据；若共享全部 `w/h/angle` 也表现为系统性覆盖下降，
+  下一候选只做更局部的几何不变量（优先角度或面积中的单一分量），仍保持零参数、非 class-aware、
+  无 reweight/额外 loss/attention/layer，并先做同协议真实 smoke。
