@@ -13,6 +13,7 @@ with read_base():
 
 
 model['decoder'].update(pair_shared_shape_refinement_decoder=True)
+model['bbox_head'].update(iterative_cls_pair_shared_objectness=False)
 
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_178/'
