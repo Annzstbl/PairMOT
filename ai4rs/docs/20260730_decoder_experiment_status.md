@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 05:32 CST
+更新时间：2026-08-03 05:57 CST
 
 ## 当前研究原则
 
@@ -15,8 +15,8 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_01` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
-| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；05:32 位于 e2，继续收集 e4/e8/e12。 |
-| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | e8 完整评估显示 AssA/AP 提升但 det DetA 下降；05:32 位于 e12，等待完整成熟节点。 |
+| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；05:57 位于 e3，继续收集 e4/e8/e12。 |
+| 178 GPU 0 | 无 | `IDLE` | `0803_02` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2004,3 +2004,18 @@
   与总计 108 个评估文件均核验完整。05:31 对精确进程组 PGID `3268273` 发送 TERM，全部成员
   退出，252 GPU0/1 均回到 `1 MiB/0%`。不再派生 objectness gate、scale、class-aware 或
   reweight 版本；资源保持空闲，先等 angle-only 的首个完整节点形成设计依据。
+
+## 2026-08-03 05:57 CST：0803_02 epoch-12 成熟节点并停止
+
+- e12 cls HOTA/DetA/AssA 为 `46.101/38.593/57.475`，det 为
+  `50.453/46.095/57.200`。相对 `0801_09` 父线 e12 的 cls/det HOTA 仍低
+  `1.294/3.983`；从本实验 e8 到 e12 虽继续恢复 `+3.449/+2.730`，但完整 shape 共享在
+  成熟节点仍显著压低 det HOTA，不能解释为 e4/e8 早期慢收敛。
+- e12 pair mAP/AP50 为 `0.233785/0.420219`，both-independent 为
+  `0.277695/0.473812`；相对本实验 e8 分别增加 `+0.015143/+0.032550` 与
+  `+0.015550/+0.030144`。AP 持续恢复但未转化为 HOTA，结合 det AssA 仅从 e8 增加
+  `1.631`、小于 DetA 的 `3.407`，说明共享 `w/h/angle` 没有形成足够的时序净收益。
+- `epoch_12.pth`、检测 metrics、5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV
+  与总计 108 个评估文件均核验完整。05:56 精确停止 PGID `2857661`，9 个进程成员全部退出，
+  178 GPU0 回到 `1 MiB/0%`。该分支不派生 gate、scale、class-aware 或 reweight；几何主线继续
+  由只共享角度且零参数的 `0803_03` 提供更局部的机制检验。

@@ -1789,3 +1789,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 完整产物核验后精确停止 PGID `3268273`，252 GPU0/1 释放。分类 objectness 分支关闭，
   不派生 gate、scale、class-aware 或 reweight；释放资源暂不填充，优先等待 `0803_03`
   angle-only 的 e4 轨迹，再决定是否需要零参数 terminal-only angle 接替。
+
+## 2026-08-03 05:57 CST：完整 shape 成熟证据关闭该分支
+
+- `0803_02` e12 cls/det HOTA 为 `46.101/50.453`，相对 `0801_09` 父线 e12 仍低
+  `1.294/3.983`；尽管 e8→e12 恢复 `3.449/2.730`，且 pair/both 的 mAP/AP50 全部继续
+  上升，恢复仍未转化为足够的跟踪净收益。该 e4/e8/e12 轨迹满足晚收敛观察要求。
+- 完整产物核验后精确停止 PGID `2857661`，178 GPU0 释放。完整 `w/h/angle` 共享不再派生
+  gate、scale 或调权版本；继续以 `0803_03` 单角度共享区分“角度噪声可抑制”与“逐层 reference
+  耦合本身有害”。若 angle-only e4 表现为 AssA 改善但 DetA 明显受损，才启用零参数末层-only
+  angle 后备；否则保持当前结构到 e8/e12，不提前占用释放资源。
