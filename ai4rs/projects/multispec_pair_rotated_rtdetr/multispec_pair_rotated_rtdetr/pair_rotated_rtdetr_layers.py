@@ -297,10 +297,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_pair_decoder: bool = False,
                  symmetric_position_decoder: bool = False,
                  symmetric_feature_decoder: bool = False,
-                 residual_preserving_fusion_decoder: bool = False,
-                 pair_shared_shape_refinement_decoder: bool = False,
-                 pair_shared_angle_refinement_decoder: bool = False,
-                 shared_routing_decoder: bool = False,
+                  residual_preserving_fusion_decoder: bool = False,
+                  pair_shared_shape_refinement_decoder: bool = False,
+                  pair_shared_angle_refinement_decoder: bool = False,
+                  pair_shared_periodic_angle_refinement_decoder: bool = False,
+                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
                  enveloped_detail_decoder: bool = False,
@@ -347,6 +348,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_shape_refinement_decoder)
         self.pair_shared_angle_refinement_decoder = bool(
             pair_shared_angle_refinement_decoder)
+        self.pair_shared_periodic_angle_refinement_decoder = bool(
+            pair_shared_periodic_angle_refinement_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -384,11 +387,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_factorized_center_motion_only)
         self.terminal_factorized_detail_only = bool(
             terminal_factorized_detail_only)
-        if (self.pair_shared_shape_refinement_decoder
-                and self.pair_shared_angle_refinement_decoder):
+        if sum((
+                self.pair_shared_shape_refinement_decoder,
+                self.pair_shared_angle_refinement_decoder,
+                self.pair_shared_periodic_angle_refinement_decoder,
+        )) > 1:
             raise ValueError(
-                'pair-shared shape and angle refinement decoders are '
-                'mutually exclusive')
+                'pair-shared shape, residual-angle, and periodic-angle '
+                'refinement decoders are mutually exclusive')
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
             raise ValueError(
@@ -1828,6 +1834,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = self._pair_shared_angle_residual(
                     tmp_prev, tmp_curr, num_dn)
+            elif self.pair_shared_periodic_angle_refinement_decoder:
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
 
             new_reference_prev = tmp_prev + inverse_sigmoid(
                 reference_prev, eps=1e-3)
@@ -1947,6 +1959,89 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             (normal_prev[..., :4], shared_angle), dim=-1)
         normal_curr = torch.cat(
             (normal_curr[..., :4], shared_angle), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_periodic_angle_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share normal-query angle increments in the periodic tangent space.
+
+        Rotated boxes use a pi-periodic orientation, represented here by a
+        normalized unit interval. Averaging raw regression logits distorts an
+        equal physical rotation near the sigmoid or angle-wrap boundaries.
+        This projection first decodes each frame's proposed angle, measures
+        its shortest circular increment from that frame's own reference, and
+        replaces the two increments by their circular midpoint. Each shared
+        increment is then re-encoded relative to its original frame reference.
+
+        Normal-query center, width, and height residuals stay independent.
+        The DN prefix is unchanged because it has no aligned-pair contract.
+        The operation is parameter-free, swap-equivariant away from the
+        unavoidable antipodal midpoint ambiguity, and class agnostic.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared periodic angle refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-shared periodic angle refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-shared periodic angle refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared periodic angle refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        reference_normal_prev = reference_prev[:, num_dn:]
+        reference_normal_curr = reference_curr[:, num_dn:]
+        reference_logit_prev = inverse_sigmoid(
+            reference_normal_prev, eps=1e-3)
+        reference_logit_curr = inverse_sigmoid(
+            reference_normal_curr, eps=1e-3)
+
+        proposed_angle_prev = (
+            normal_prev[..., 4:] + reference_logit_prev[..., 4:]).sigmoid()
+        proposed_angle_curr = (
+            normal_curr[..., 4:] + reference_logit_curr[..., 4:]).sigmoid()
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        delta_prev = wrap_period(
+            proposed_angle_prev - reference_normal_prev[..., 4:])
+        delta_curr = wrap_period(
+            proposed_angle_curr - reference_normal_curr[..., 4:])
+        shared_delta = wrap_period(
+            delta_prev + 0.5 * wrap_period(delta_curr - delta_prev))
+
+        target_angle_prev = torch.remainder(
+            reference_normal_prev[..., 4:] + shared_delta, 1.0)
+        target_angle_curr = torch.remainder(
+            reference_normal_curr[..., 4:] + shared_delta, 1.0)
+        shared_residual_prev = inverse_sigmoid(
+            target_angle_prev, eps=1e-3) - reference_logit_prev[..., 4:]
+        shared_residual_curr = inverse_sigmoid(
+            target_angle_curr, eps=1e-3) - reference_logit_curr[..., 4:]
+
+        normal_prev = torch.cat(
+            (normal_prev[..., :4], shared_residual_prev), dim=-1)
+        normal_curr = torch.cat(
+            (normal_curr[..., :4], shared_residual_curr), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (
