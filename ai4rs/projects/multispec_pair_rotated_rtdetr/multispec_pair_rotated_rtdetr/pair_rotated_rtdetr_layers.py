@@ -298,6 +298,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_position_decoder: bool = False,
                  symmetric_feature_decoder: bool = False,
                  residual_preserving_fusion_decoder: bool = False,
+                 pair_shared_shape_refinement_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -341,6 +342,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.symmetric_feature_decoder = bool(symmetric_feature_decoder)
         self.residual_preserving_fusion_decoder = bool(
             residual_preserving_fusion_decoder)
+        self.pair_shared_shape_refinement_decoder = bool(
+            pair_shared_shape_refinement_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -1809,6 +1812,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
 
+            if self.pair_shared_shape_refinement_decoder:
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = self._pair_shared_shape_residual(
+                    tmp_prev, tmp_curr, num_dn)
+
             new_reference_prev = tmp_prev + inverse_sigmoid(
                 reference_prev, eps=1e-3)
             new_reference_prev = new_reference_prev.sigmoid()
@@ -1863,3 +1871,37 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             return (hidden_states, references_prev, references_curr,
                     hidden_states_prev, hidden_states_curr)
         return hidden_states, references_prev, references_curr
+
+    @staticmethod
+    def _pair_shared_shape_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share normal-query shape refinement while preserving motion.
+
+        Center x/y residuals stay frame-specific. Width, height, and angle
+        residuals are replaced by their pair mean, which is swap-equivariant
+        and class-agnostic. The DN prefix is untouched because denoising
+        queries do not share the normal proposal alignment contract.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared shape refinement requires aligned residuals')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared shape refinement requires 5D box residuals')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        shared_shape = 0.5 * (
+            normal_prev[..., 2:] + normal_curr[..., 2:])
+        normal_prev = torch.cat((normal_prev[..., :2], shared_shape), dim=-1)
+        normal_curr = torch.cat((normal_curr[..., :2], shared_shape), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
