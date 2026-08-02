@@ -1779,3 +1779,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   避免 det DetA `-2.046` 的覆盖损失。e4/e8 只作轨迹诊断，继续至少 e12；任何新派生必须等待
   angle-only 的完整节点，且仍禁止 class-aware、reweight、额外 loss/attention/layer 或无依据
   scale/gate 扫描。
+
+## 2026-08-03 05:32 CST：objectness 成熟证据关闭该分支
+
+- `0803_01` e12 cls/det HOTA 为 `43.962/52.094`，相对父线 e12 仍低
+  `3.433/2.342`；e8 到 e12 已分别恢复 `4.754/5.735`，因此该判断满足 decoder 晚收敛约束，
+  不是以 e4/e8 直接否决。e12 pair mAP/AP50 为 `0.222812/0.393028`，both-independent 为
+  `0.265827/0.449310`，未形成可支持继续硬共享 objectness 的反证。
+- 完整产物核验后精确停止 PGID `3268273`，252 GPU0/1 释放。分类 objectness 分支关闭，
+  不派生 gate、scale、class-aware 或 reweight；释放资源暂不填充，优先等待 `0803_03`
+  angle-only 的 e4 轨迹，再决定是否需要零参数 terminal-only angle 接替。

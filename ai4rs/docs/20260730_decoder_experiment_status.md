@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 05:08 CST
+更新时间：2026-08-03 05:32 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e8 完整检测与 TrackEval 已收齐，仍明显低于 Encoder 与 `0801_09` 父线；不按 e8 直接否决，已进入 e9 并继续 e12。 |
-| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | e60 完整检测与 TrackEval 已收齐，绝对合并增益降至 `0.081`；继续 e64 作成熟平台确认，03:14 已进入 e61。 |
-| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐；表现为 DetA 近持平/略升但 AssA 明显下降，按晚收敛约束继续 e8/e12，03:23 已进入 e5。 |
+| 252 GPU 0,1 | 无 | `IDLE` | `0803_01` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
+| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；05:32 位于 e2，继续收集 e4/e8/e12。 |
+| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | e8 完整评估显示 AssA/AP 提升但 det DetA 下降；05:32 位于 e12，等待完整成熟节点。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -1990,3 +1990,17 @@
   `21.3894`、grad norm `130.3343`，双卡各约 19.2 GiB，五项启动门槛通过。该结构仅共享
   normal-query angle residual，x/y/w/h、分类、DN、loss、attention 和 decoder 深度不变；
   继续收集 e4/e8/e12 与成熟节点，不按 e4/e8 直接否决。
+
+## 2026-08-03 05:32 CST：0803_01 epoch-12 成熟节点并停止
+
+- e12 同一 checkpoint 的 cls HOTA/DetA/AssA 为 `43.962/35.877/57.193`，det 为
+  `52.094/46.748/60.144`。相对 `0801_09` 父线 e12，cls/det HOTA 仍低
+  `3.433/2.342`；相对 Encoder e12 仍低 `5.718/4.447`。从本实验 e8 到 e12，双 HOTA
+  已恢复 `+4.754/+5.735`，因此不是按 e8 过早否决，而是成熟节点仍呈系统性退化。
+- e12 pair mAP/AP50 为 `0.222812/0.393028`，both-independent 为
+  `0.265827/0.449310`；相对本实验 e8 分别恢复 `+0.025997/+0.041594` 与
+  `+0.029944/+0.041167`，但没有扭转 HOTA、DetA 与 AssA 同时落后父线的结论。
+- `epoch_12.pth`、检测 metrics、5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV
+  与总计 108 个评估文件均核验完整。05:31 对精确进程组 PGID `3268273` 发送 TERM，全部成员
+  退出，252 GPU0/1 均回到 `1 MiB/0%`。不再派生 objectness gate、scale、class-aware 或
+  reweight 版本；资源保持空闲，先等 angle-only 的首个完整节点形成设计依据。

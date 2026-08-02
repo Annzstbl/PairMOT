@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 05:08 CST。
+更新时间：2026-08-03 05:32 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_01 fresh`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | RUNNING；前者 e8 完整评估后继续 e12，后者已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e8 检测与完整 TrackEval 已收齐，继续 e12 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛，05:32 位于 e2；GPU0/1 已在 `0803_01` e12 完整产物封存后释放 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e8 检测与完整 TrackEval 已收齐，05:32 位于 e12，等待成熟节点评测 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1459,3 +1459,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - formal fresh 于 05:06 启动，PGID `3460950`。05:07 iter 50 为 `1.3920 s/iter`、loss
   `21.3894`、grad norm `130.3343`，双卡各约 19.2 GiB；进程、GPU、正式日志、正常训练迭代、
   有限总/DN/encoder loss 五项门槛全部通过。首批完整节点为 e4/e8/e12，不按 e4/e8 直接否决。
+
+## 2026-08-03 05:32 CST：252 0803_01 e12 完整评估并停止
+
+- e12 cls HOTA/DetA/AssA 为 `43.962/35.877/57.193`，det 为
+  `52.094/46.748/60.144`；相对 `0801_09` 父线 e12 的 cls/det HOTA 仍低
+  `3.433/2.342`，相对 Encoder e12 低 `5.718/4.447`。本实验从 e8 到 e12 的 HOTA 已恢复
+  `4.754/5.735`，故停止依据是成熟节点的结构性负向结果，不是 e4/e8 早停。
+- e12 pair mAP/AP50 `0.222812/0.393028`，both-independent `0.265827/0.449310`；checkpoint、
+  5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV 与 108 个评估文件完整。
+  05:31 精确停止 PGID `3268273`，全部成员退出，252 GPU0/1 释放。GPU2/3 的 `0803_03`
+  继续健康训练，05:32 位于 e2；不在 angle-only 首个完整节点前盲目占用释放资源。
