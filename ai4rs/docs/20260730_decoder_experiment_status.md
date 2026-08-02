@@ -1735,3 +1735,16 @@
   `CLS ABSOLUTE PASS / DET ABSOLUTE FAIL`，目标仍未完成。训练已进入 e49，继续到 e52；不得因
   单项只差 `0.302` 或同点增益较大而提前宣布成功。核验第 12 个检测/跟踪点及 `54` 个
   TrackEval 原始文件。
+
+## 2026-08-02 10:09 CST：0801_13 epoch-8 不作早停
+
+- `0801_13 terminal pair-differential objectness residual` e8 的 cls/det HOTA 为
+  `44.198/51.062`，相对 Encoder 同点为 `-1.071/+0.869`。cls DetA/AssA 为
+  `-2.724/+1.153`；det DetA/AssA 为 `-3.286/+6.680`：pair-differential 信号仍明显提高
+  关联，但当前检测覆盖下降，使 cls HOTA 暂时未通过同点门槛。
+- pair mAP/AP50 为 `-0.028485/-0.030045`，both-independent mAP/AP50 为
+  `-0.032269/-0.032924`，四项 AP 诊断同样指向覆盖恢复不足。第 2 个检测/跟踪评测点及
+  `54` 个 TrackEval 原始文件完整。
+- 该结果只登记为 `SAME-POINT/ABSOLUTE FAIL`，不作为 e8 直接否决：此前 `0801_11` 已在
+  e8→e12 明确恢复，而 decoder 的后期收敛是本轮必须保留的观察窗口。252 训练继续到 e12
+  及后续节点；是否收口将依据成熟节点轨迹、同机制支配关系和绝对目标，而非早期 epoch。
