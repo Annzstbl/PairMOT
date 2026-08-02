@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 04:58 CST
+更新时间：2026-08-03 05:08 CST
 
 ## 当前研究原则
 
@@ -1977,3 +1977,16 @@
 - e56/e60/e64 构成明确平台/回落证据，04:57 精确停止 PGID `3292233`；不再把纯 epoch 延长
   作为主要探索手段。释放的 252 GPU2/3 转给零参数、非 class-aware、无 reweight 的
   `0803_03 angle-only`。
+
+## 2026-08-03 05:08 CST：0803_03 angle-only 正式运行
+
+- 使用隔离 checkout `/data/users/litianhao01/PairMmot_angle_0803_03`，提交 `0989cfd`，避免
+  热更新 GPU0/1 的 `0803_01` 活跃仓库。目标 252 formal/smoke 配置 deepcopy、父/新模型完整
+  构建与参数/state 对照通过：`22,771,111` 参数、`711` 个 state tensor，均为零增量。
+- 真实双卡 4-iter smoke 的 loss `12.9387–20.2840`、grad norm `100.7381–109.7766`，
+  总/DN/encoder loss 全部有限；364 MB checkpoint 更新与分类/DN 语义检查通过，无数值或
+  DDP 错误。
+- formal fresh 于 05:06 启动，PGID `3460950`；iter 50 为 `1.3920 s/iter`、loss
+  `21.3894`、grad norm `130.3343`，双卡各约 19.2 GiB，五项启动门槛通过。该结构仅共享
+  normal-query angle residual，x/y/w/h、分类、DN、loss、attention 和 decoder 深度不变；
+  继续收集 e4/e8/e12 与成熟节点，不按 e4/e8 直接否决。

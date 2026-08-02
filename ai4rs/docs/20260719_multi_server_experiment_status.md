@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 04:58 CST。
+更新时间：2026-08-03 05:08 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_01 fresh`（GPU0/1） | RUNNING；e8 完整评估后继续 e12。`0801_09 resume e56` 已在 e64 完整评测后于 04:57 停止，GPU2/3 已释放；`0803_03 angle-only` 正在隔离部署 | `0803_03`（GPU2/3，smoke 后 formal） | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_01 fresh`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | RUNNING；前者 e8 完整评估后继续 e12，后者已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_02 pair-shared shape refinement` | RUNNING；e8 检测与完整 TrackEval 已收齐，继续 e12 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1443,3 +1443,19 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - e56/e60/e64 已充分证明纯续训进入平台。04:57 精确终止 PGID `3292233`，保留全部产物；
   GPU2/3 连续检查为空闲，下一步在独立 checkout 部署 `0803_03`，避免热更新 GPU0/1 正在使用的
   `0803_01` 活跃仓库。
+
+## 2026-08-03 05:08 CST：252 0803_03 angle-only 正式启动
+
+- 为避免热更新 GPU0/1 的活跃 `0803_01` 仓库，在
+  `/data/users/litianhao01/PairMmot_angle_0803_03` 建立隔离 checkout，并以 Git bundle
+  fast-forward 到提交 `0989cfd`；关键 launcher/config SHA-256 与本地一致，原活跃仓库保持
+  `bd1c329`。目标 formal/smoke 配置 deepcopy 和完整父/新模型构建通过：二者均为
+  `22,771,111` 参数、`711` 个 state tensor，增量为零。
+- GPU2/3 连续空闲后，真实双卡 4-iter smoke 完成。4 个迭代的 loss 为
+  `12.9387/19.2688/19.3129/20.2840`，grad norm 为
+  `102.8563/109.7766/100.7381/105.8495`；总、DN、encoder loss 有限，无 Traceback、OOM、
+  NaN、NCCL、DDP reduction 或 unused-parameter 错误，364 MB `iter_4.pth` 与 checkpoint
+  语义检查通过。
+- formal fresh 于 05:06 启动，PGID `3460950`。05:07 iter 50 为 `1.3920 s/iter`、loss
+  `21.3894`、grad norm `130.3343`，双卡各约 19.2 GiB；进程、GPU、正式日志、正常训练迭代、
+  有限总/DN/encoder loss 五项门槛全部通过。首批完整节点为 e4/e8/e12，不按 e4/e8 直接否决。

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 04:58 CST.
+Last updated: 2026-08-03 05:08 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1770,3 +1770,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - `0803_03` 在 252 使用独立 checkout，避免修改 GPU0/1 的活跃 `0803_01` 仓库。部署顺序固定为：
   远端提交/哈希核对、目标 formal 与 smoke 配置 `deepcopy`、完整父/新模型构建、GPU2/3 连续空闲、
   4-iter 真数据 DDP smoke、checkpoint/有限损失审计、formal iter-50 五项启动门槛。
+
+## 2026-08-03 05:08 CST：angle-only 启动后的推进规则
+
+- 上述隔离部署链已全部通过，`0803_03` formal PGID 为 `3460950`；iter 50 的时间/loss/grad norm
+  为 `1.3920/21.3894/130.3343`，总、DN、encoder loss 与双卡状态有限正常。
+- 与 `0803_02` 的比较重点固定为：angle-only 是否保留完整 shape 在 e8 的 AssA/AP 增益，同时
+  避免 det DetA `-2.046` 的覆盖损失。e4/e8 只作轨迹诊断，继续至少 e12；任何新派生必须等待
+  angle-only 的完整节点，且仍禁止 class-aware、reweight、额外 loss/attention/layer 或无依据
+  scale/gate 扫描。
