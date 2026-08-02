@@ -633,6 +633,51 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             memory_curr.grad is None
             or memory_curr.grad.abs().sum().item() == 0.0)
 
+    def test_frame_evidence_cls_is_orthogonal_to_periodic_angle(self):
+        periodic, periodic_reg_prev, periodic_reg_curr = _build_decoder(
+            num_layers=3,
+            pair_shared_periodic_angle_refinement_decoder=True,
+            device=self.device)
+        combined, combined_reg_prev, combined_reg_curr = _build_decoder(
+            num_layers=3,
+            pair_shared_periodic_angle_refinement_decoder=True,
+            frame_evidence_cls_decoder=True,
+            device=self.device)
+        combined.load_state_dict(periodic.state_dict())
+        self.assertEqual(
+            sum(parameter.numel() for parameter in periodic.parameters()),
+            sum(parameter.numel() for parameter in combined.parameters()))
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            2, num_value, periodic.embed_dims, self.device)
+        periodic_out = periodic(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=periodic_reg_prev,
+            reg_branches_curr=periodic_reg_curr)
+        combined_out = combined(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=combined_reg_prev,
+            reg_branches_curr=combined_reg_curr)
+
+        hidden, refs_prev, refs_curr = periodic_out
+        (combined_hidden, combined_refs_prev, combined_refs_curr,
+         evidence_prev, evidence_curr) = combined_out
+        for expected, actual in zip(hidden, combined_hidden):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_prev, combined_refs_prev):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_curr, combined_refs_curr):
+            self.assertTrue(torch.equal(expected, actual))
+        self.assertFalse(torch.equal(evidence_prev[0], evidence_curr[0]))
+
     def test_output_shapes_batch1(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)
         hidden, refs_prev, refs_curr, _, _ = self._forward(
