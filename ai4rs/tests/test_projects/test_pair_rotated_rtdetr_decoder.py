@@ -90,6 +90,8 @@ def _build_decoder(num_layers: int = 2,
                    pair_shared_angle_refinement_decoder: bool = False,
                    pair_shared_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_normalized_center_refinement_decoder:
+                   bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -157,6 +159,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_angle_refinement_decoder),
         pair_shared_periodic_angle_refinement_decoder=(
             pair_shared_periodic_angle_refinement_decoder),
+        pair_shared_normalized_center_refinement_decoder=(
+            pair_shared_normalized_center_refinement_decoder),
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -462,6 +466,98 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 device=self.device,
                 pair_shared_angle_refinement_decoder=True,
                 pair_shared_periodic_angle_refinement_decoder=True)
+
+    def test_normalized_center_residual_uses_reference_local_coordinates(self):
+        reference_prev = torch.tensor([[[0.4, 0.4, 0.2, 0.4, 0.5],
+                                        [0.3, 0.4, 0.2, 0.4, 0.5]]])
+        reference_curr = torch.tensor([[[0.6, 0.5, 0.4, 0.2, 0.5],
+                                        [0.7, 0.5, 0.4, 0.2, 0.5]]])
+        proposed_prev = reference_prev.clone()
+        proposed_curr = reference_curr.clone()
+        proposed_prev[:, 1:, :2] += torch.tensor([[[0.02, 0.08]]])
+        proposed_curr[:, 1:, :2] += torch.tensor([[[0.12, -0.02]]])
+        residual_prev = (
+            torch.logit(proposed_prev) - torch.logit(reference_prev))
+        residual_curr = (
+            torch.logit(proposed_curr) - torch.logit(reference_curr))
+        original_prev = residual_prev.clone()
+        original_curr = residual_curr.clone()
+
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_normalized_center_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, num_dn=1))
+        decoded_prev = (
+            projected_prev + torch.logit(reference_prev)).sigmoid()
+        decoded_curr = (
+            projected_curr + torch.logit(reference_curr)).sigmoid()
+
+        # Local deltas are [0.1, 0.2] and [0.3, -0.1], so their common
+        # local correction is [0.2, 0.05].
+        self.assertTrue(torch.equal(
+            projected_prev[:, :1], original_prev[:, :1]))
+        self.assertTrue(torch.equal(
+            projected_curr[:, :1], original_curr[:, :1]))
+        self.assertTrue(torch.equal(
+            projected_prev[:, 1:, 2:], original_prev[:, 1:, 2:]))
+        self.assertTrue(torch.equal(
+            projected_curr[:, 1:, 2:], original_curr[:, 1:, 2:]))
+        self.assertTrue(torch.allclose(
+            decoded_prev[:, 1:, :2], torch.tensor([[[0.34, 0.42]]]),
+            atol=1e-5, rtol=0.0))
+        self.assertTrue(torch.allclose(
+            decoded_curr[:, 1:, :2], torch.tensor([[[0.78, 0.51]]]),
+            atol=1e-5, rtol=0.0))
+
+    def test_normalized_center_residual_is_swap_equivariant_and_local(self):
+        reference_prev = torch.rand(2, 5, 5) * 0.8 + 0.1
+        reference_curr = torch.rand(2, 5, 5) * 0.8 + 0.1
+        prev = torch.randn(2, 5, 5, requires_grad=True)
+        curr = torch.randn(2, 5, 5, requires_grad=True)
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_normalized_center_residual(
+                prev, curr, reference_prev, reference_curr, num_dn=0))
+        swapped_curr, swapped_prev = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_normalized_center_residual(
+                curr, prev, reference_curr, reference_prev, num_dn=0))
+        self.assertTrue(torch.allclose(projected_prev, swapped_prev))
+        self.assertTrue(torch.allclose(projected_curr, swapped_curr))
+
+        projected_prev[..., :2].sum().backward()
+        self.assertGreater(curr.grad[..., :2].abs().sum().item(), 0.0)
+        self.assertEqual(curr.grad[..., 2:].abs().sum().item(), 0.0)
+
+    def test_normalized_center_refinement_is_parameter_free_and_exclusive(self):
+        parent, _, _ = _build_decoder(num_layers=3, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            pair_shared_normalized_center_refinement_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        _, refs_prev, refs_curr, _, _ = self._forward(
+            1,
+            decoder=projected,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                device=self.device,
+                pair_shared_shape_refinement_decoder=True,
+                pair_shared_normalized_center_refinement_decoder=True)
 
     def test_output_shapes_batch1(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)

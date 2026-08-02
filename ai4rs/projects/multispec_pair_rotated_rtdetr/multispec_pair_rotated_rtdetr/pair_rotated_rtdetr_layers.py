@@ -301,6 +301,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                   pair_shared_shape_refinement_decoder: bool = False,
                   pair_shared_angle_refinement_decoder: bool = False,
                   pair_shared_periodic_angle_refinement_decoder: bool = False,
+                  pair_shared_normalized_center_refinement_decoder:
+                  bool = False,
                   shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -350,6 +352,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_angle_refinement_decoder)
         self.pair_shared_periodic_angle_refinement_decoder = bool(
             pair_shared_periodic_angle_refinement_decoder)
+        self.pair_shared_normalized_center_refinement_decoder = bool(
+            pair_shared_normalized_center_refinement_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -391,9 +395,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.pair_shared_shape_refinement_decoder,
                 self.pair_shared_angle_refinement_decoder,
                 self.pair_shared_periodic_angle_refinement_decoder,
+                self.pair_shared_normalized_center_refinement_decoder,
         )) > 1:
             raise ValueError(
-                'pair-shared shape, residual-angle, and periodic-angle '
+                'pair-shared shape, residual-angle, periodic-angle, and '
+                'normalized-center '
                 'refinement decoders are mutually exclusive')
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
@@ -1840,6 +1846,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self._pair_shared_periodic_angle_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
+            elif self.pair_shared_normalized_center_refinement_decoder:
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_normalized_center_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
 
             new_reference_prev = tmp_prev + inverse_sigmoid(
                 reference_prev, eps=1e-3)
@@ -2042,6 +2054,90 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             (normal_prev[..., :4], shared_residual_prev), dim=-1)
         normal_curr = torch.cat(
             (normal_curr[..., :4], shared_residual_curr), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_normalized_center_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share center correction in each reference box's local frame.
+
+        Equal raw logits do not represent equal spatial corrections when the
+        two references have different centers or sizes. This projection first
+        decodes each proposed center, measures its displacement from the
+        frame-specific reference in units of that reference's width/height,
+        and averages only those normalized displacements. The shared local
+        correction is then mapped back through each frame's own reference.
+
+        Consequently, the correction remains anchored to each frame's own
+        reference motion and scale instead of collapsing the two centers.
+        Width, height, angle, and the DN prefix remain untouched. The
+        operation is parameter-free,
+        swap-equivariant, and class agnostic.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared normalized-center refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-shared normalized-center refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-shared normalized-center refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared normalized-center refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        reference_normal_prev = reference_prev[:, num_dn:]
+        reference_normal_curr = reference_curr[:, num_dn:]
+        reference_logit_prev = inverse_sigmoid(
+            reference_normal_prev, eps=1e-3)
+        reference_logit_curr = inverse_sigmoid(
+            reference_normal_curr, eps=1e-3)
+
+        proposed_center_prev = (
+            normal_prev[..., :2] + reference_logit_prev[..., :2]).sigmoid()
+        proposed_center_curr = (
+            normal_curr[..., :2] + reference_logit_curr[..., :2]).sigmoid()
+        reference_size_prev = reference_normal_prev[..., 2:4].clamp_min(1e-3)
+        reference_size_curr = reference_normal_curr[..., 2:4].clamp_min(1e-3)
+        local_delta_prev = (
+            proposed_center_prev - reference_normal_prev[..., :2]
+        ) / reference_size_prev
+        local_delta_curr = (
+            proposed_center_curr - reference_normal_curr[..., :2]
+        ) / reference_size_curr
+        shared_local_delta = 0.5 * (local_delta_prev + local_delta_curr)
+
+        target_center_prev = (
+            reference_normal_prev[..., :2]
+            + shared_local_delta * reference_size_prev).clamp(1e-3, 1 - 1e-3)
+        target_center_curr = (
+            reference_normal_curr[..., :2]
+            + shared_local_delta * reference_size_curr).clamp(1e-3, 1 - 1e-3)
+        shared_residual_prev = inverse_sigmoid(
+            target_center_prev, eps=1e-3) - reference_logit_prev[..., :2]
+        shared_residual_curr = inverse_sigmoid(
+            target_center_curr, eps=1e-3) - reference_logit_curr[..., :2]
+
+        normal_prev = torch.cat(
+            (shared_residual_prev, normal_prev[..., 2:]), dim=-1)
+        normal_curr = torch.cat(
+            (shared_residual_curr, normal_curr[..., 2:]), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (
