@@ -1847,3 +1847,16 @@
 - 同时准备在 197 以物理 `2x4`、全局 batch 8 从 `0801_09 epoch_56.pth` 恢复到 e60/e64；
   模型、优化器/EMA checkpoint 与科学 ID 不变。197 的正式续训必须等待对应双卡 4-iter
   portability smoke 真正完成；截至本记录，两 rank 正在慢速首次初始化，尚未登记为可续训。
+
+## 2026-08-03 01:38 CST：0801_09 恢复旁路通过
+
+- 197 portability smoke 最终完成 4 个真实 iteration，但该机异常慢：首 iter `154.7560 s`，
+  到第 4 iter 的滑动均值仍为 `80.0246 s/iter`；四步 total、DN、Encoder proposal loss 与
+  grad norm 均有限。由于速度比 252 同配置约慢两个数量级，不把正式续训部署到 197。
+- 252 GPU2/3 使用 `0803_01` 已验证配置并仅关闭
+  `iterative_cls_pair_shared_objectness`，得到与 `0801_09` 完全一致的模型语义；真实双卡
+  4-iter smoke 在约 60 秒内通过，checkpoint 中六个 iterative residual 头均有限且非零更新。
+- `0801_09 epoch_56.pth` 已在 252 的新 workdir 恢复 optimizer、scheduler、EMA 和 epoch 状态。
+  恢复后的 e57 iter 50 为 `1.3730 s/iter`、loss `8.6312`、grad norm `46.7629`；主、DN、
+  Encoder loss 均有限，GPU2/3 各约 `19.4 GiB`。因此晚期续训正式状态为 `RUNNING`，首个
+  新完整评测节点为 e60；与 0803_01 并行占用 252 四卡。
