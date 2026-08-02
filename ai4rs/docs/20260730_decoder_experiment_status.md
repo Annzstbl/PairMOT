@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 02:49 CST
+更新时间：2026-08-03 03:20 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 checkpoint、检测与完整 TrackEval 已收齐；结果为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12，02:40 位于 epoch 5 iter 600。 |
-| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | 保持原模型、optimizer、scheduler 与 EMA，从 e56 续训晚期上升轨迹；02:47 位于 epoch 60 iter 250，约 `1.33 s/iter`，等待 e60 完整评估。 |
-| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。02:47 进程与约 `31.5 GiB` 显存占用复核正常，等待 e4 完整评估。 |
+| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12；03:19 位于 epoch 7 iter 550。 |
+| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | e60 完整检测与 TrackEval 已收齐，绝对合并增益降至 `0.081`；继续 e64 作成熟平台确认，03:14 已进入 e61。 |
+| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。e4 checkpoint 已形成，03:19 全量验证到 1150/1354。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -1904,3 +1904,17 @@
 - commit `9d90733` 只保留在本地主线；252/178 活动仓库没有热更新。候选状态为 `PREPARED`，
   尚未启动、未占用 GPU。先等待 `0803_02` 完整节点判断共享 `w/h/angle` 的作用，再在授权资源
   释放后做真实数据 smoke 与正式 iter-50 五项门槛，避免无依据并行消耗。
+
+## 2026-08-03 03:20 CST：0801_09 epoch-60 成熟平台节点
+
+- e60 同一 checkpoint 的 cls/det HOTA 为 `54.489/62.422`，均仍严格超过 Encoder 最终绝对
+  基线 `54.437/62.393`，但绝对增量只有 `+0.052/+0.029`，合计 `0.081`；总 HOTA
+  `116.911`，距严格目标 `118.330` 仍差 `1.419`，并低于 e56 的合计增益 `0.279`。
+- cls HOTA/DetA/AssA 为 `54.489/44.611/68.680`，相对 e56 为
+  `-0.164/-0.391/+0.360`；det 为 `62.422/54.809/73.543`，相对 e56 为
+  `-0.034/-0.029/+0.010`。晚四个 epoch 主要把 cls 覆盖换成关联，没有形成净 HOTA 增益。
+- e60 pair mAP/AP50 为 `0.3147/0.5313`，both-independent 为 `0.3550/0.5690`；相对 e56
+  分别约 `-0.00083/-0.00118` 与 `-0.00073/-0.00096`，检测同样轻微进入平台。checkpoint、
+  5416 条记录、50 序列、TrackEval `async_done=1`、54 个评估文件与总计 108 个 raw 文件完整。
+- 训练已无缝进入 e61，保留 e64 作为成熟平台确认，不因 e60 单点停止；但当前证据不支持仅靠
+  延长 `0801_09` 达到合并增益 `>1.5`，后续资源优先级转向已验证的结构候选。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 02:49 CST。
+更新时间：2026-08-03 03:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_01 fresh`（GPU0/1）；`0801_09 resume e56`（GPU2/3） | RUNNING；前者 02:40 位于 e5 iter 600，后者 02:47 位于 e60 iter 250 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_02 pair-shared shape refinement` | RUNNING；单卡真实 smoke 与正式 iter-50 门槛通过，02:47 进程及约 `31.5 GiB` 显存占用正常 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_01 fresh`（GPU0/1）；`0801_09 resume e56`（GPU2/3） | RUNNING；前者 03:19 位于 e7 iter 550，后者 e60 完整评估后已进入 e61 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e4 checkpoint 已形成，03:19 全量验证到 1150/1354 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1390,3 +1390,11 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `22,771,111` 参数、参数/state 零增量。
 - 临时 clone 与 bundle 已在验证后清理；活动中的 252/178 仓库均未热更新。该候选当前仅为
   `PREPARED`，不属于排队任务；部署要等待 `0803_02` 完整节点与授权 GPU 释放。
+
+## 2026-08-03 03:20 CST：252 0801_09 e60 完整评估
+
+- e60 cls/det HOTA 为 `54.489/62.422`，绝对合并增益仅 `0.081`，总 HOTA `116.911`，
+  未达到 `>118.330`。相对 e56，cls HOTA/DetA/AssA 为 `-0.164/-0.391/+0.360`，det 为
+  `-0.034/-0.029/+0.010`；pair 与 both-independent 的 mAP/AP50 也均轻微回落。
+- checkpoint、检测、50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计 108 个 raw
+  文件完整。训练已进入 e61，保留到 e64 作成熟平台确认；当前不释放 GPU2/3。
