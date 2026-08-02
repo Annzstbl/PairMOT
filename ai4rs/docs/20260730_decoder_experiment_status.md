@@ -1709,3 +1709,16 @@
   both-independent mAP/AP50 为 `-0.015952/-0.001198`；两项 AP50 已接近持平，mAP 仍需恢复。
 - 该点未通过同点或绝对门槛，但 e8→e12 的 HOTA、DetA 与 AP50 均恢复，故继续到 e16；
   不在 e12 释放 197。评测核验第 3 个检测/跟踪点和 `54` 个 TrackEval 原始文件，训练已进入 e13。
+
+## 2026-08-02 08:55 CST：0801_13 epoch-4 首点
+
+- `0801_13 terminal pair-differential objectness residual` e4 的 cls/det HOTA 为
+  `36.904/42.377`，相对 Encoder 同点为 `+0.695/+3.624`，同一 checkpoint 双通过。cls
+  DetA/AssA 为 `+0.265/+1.569`；det DetA/AssA 为 `+1.030/+7.403`，四个 HOTA 分量全部
+  正增益，早期 det 提升不是覆盖/关联交换。
+- pair mAP/AP50 为 `-0.007057/+0.017851`，both-independent mAP/AP50 为
+  `-0.004754/+0.020362`；两项 AP50 提高，mAP 尚未同步。第 1 个检测/跟踪评测点及 `54` 个
+  TrackEval 原始文件完整。
+- 该点只证明 class-agnostic `-s/+s` 结构有早期有效信号；绝对值仍远低于最终目标，且
+  `0801_11` 已证明 e4 增益可能在 e8 反转。因此训练保持运行，继续 e8/e12 与后续晚收敛，
+  不按 e4 外推或宣布成功。
