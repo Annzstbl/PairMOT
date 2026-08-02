@@ -299,6 +299,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_feature_decoder: bool = False,
                  residual_preserving_fusion_decoder: bool = False,
                  pair_shared_shape_refinement_decoder: bool = False,
+                 pair_shared_angle_refinement_decoder: bool = False,
                  shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -344,6 +345,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             residual_preserving_fusion_decoder)
         self.pair_shared_shape_refinement_decoder = bool(
             pair_shared_shape_refinement_decoder)
+        self.pair_shared_angle_refinement_decoder = bool(
+            pair_shared_angle_refinement_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -381,6 +384,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             terminal_factorized_center_motion_only)
         self.terminal_factorized_detail_only = bool(
             terminal_factorized_detail_only)
+        if (self.pair_shared_shape_refinement_decoder
+                and self.pair_shared_angle_refinement_decoder):
+            raise ValueError(
+                'pair-shared shape and angle refinement decoders are '
+                'mutually exclusive')
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
             raise ValueError(
@@ -1816,6 +1824,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = self._pair_shared_shape_residual(
                     tmp_prev, tmp_curr, num_dn)
+            elif self.pair_shared_angle_refinement_decoder:
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = self._pair_shared_angle_residual(
+                    tmp_prev, tmp_curr, num_dn)
 
             new_reference_prev = tmp_prev + inverse_sigmoid(
                 reference_prev, eps=1e-3)
@@ -1899,6 +1911,42 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             normal_prev[..., 2:] + normal_curr[..., 2:])
         normal_prev = torch.cat((normal_prev[..., :2], shared_shape), dim=-1)
         normal_curr = torch.cat((normal_curr[..., :2], shared_shape), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_angle_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share only normal-query angle refinement across the pair.
+
+        Center, width, and height residuals remain frame-specific. Only the
+        angle residual is replaced by the pair mean, which suppresses noisy
+        orientation drift without constraining translation or scale. The DN
+        prefix stays untouched because it has no aligned-pair contract.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared angle refinement requires aligned residuals')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared angle refinement requires 5D box residuals')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        shared_angle = 0.5 * (
+            normal_prev[..., 4:] + normal_curr[..., 4:])
+        normal_prev = torch.cat(
+            (normal_prev[..., :4], shared_angle), dim=-1)
+        normal_curr = torch.cat(
+            (normal_curr[..., :4], shared_angle), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (

@@ -87,6 +87,7 @@ def _build_decoder(num_layers: int = 2,
                    symmetric_feature_decoder: bool = False,
                    residual_preserving_fusion_decoder: bool = False,
                    pair_shared_shape_refinement_decoder: bool = False,
+                   pair_shared_angle_refinement_decoder: bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -150,6 +151,8 @@ def _build_decoder(num_layers: int = 2,
             residual_preserving_fusion_decoder),
         pair_shared_shape_refinement_decoder=(
             pair_shared_shape_refinement_decoder),
+        pair_shared_angle_refinement_decoder=(
+            pair_shared_angle_refinement_decoder),
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -294,6 +297,74 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             curr_logit = torch.logit(curr_ref.clamp(1e-6, 1 - 1e-6))
             self.assertTrue(torch.isfinite(prev_logit).all())
             self.assertTrue(torch.isfinite(curr_logit).all())
+
+    def test_pair_shared_angle_residual_preserves_dn_and_non_angle_box(self):
+        prev = torch.tensor([[[1., 2., 3., 4., 5.],
+                              [6., 7., 8., 9., 10.],
+                              [11., 12., 13., 14., 15.]]])
+        curr = torch.tensor([[[-1., -2., -3., -4., -5.],
+                              [-6., -7., -8., -9., -10.],
+                              [-11., -12., -13., -14., -15.]]])
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_angle_residual(prev, curr, num_dn=1))
+
+        self.assertTrue(torch.equal(projected_prev[:, :1], prev[:, :1]))
+        self.assertTrue(torch.equal(projected_curr[:, :1], curr[:, :1]))
+        self.assertTrue(torch.equal(
+            projected_prev[:, 1:, :4], prev[:, 1:, :4]))
+        self.assertTrue(torch.equal(
+            projected_curr[:, 1:, :4], curr[:, 1:, :4]))
+        expected_angle = 0.5 * (prev[:, 1:, 4:] + curr[:, 1:, 4:])
+        self.assertTrue(torch.equal(
+            projected_prev[:, 1:, 4:], expected_angle))
+        self.assertTrue(torch.equal(
+            projected_curr[:, 1:, 4:], expected_angle))
+
+    def test_pair_shared_angle_residual_is_swap_equivariant_and_local(self):
+        prev = torch.randn(2, 5, 5, requires_grad=True)
+        curr = torch.randn(2, 5, 5, requires_grad=True)
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_angle_residual(prev, curr, num_dn=0))
+        swapped_curr, swapped_prev = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_angle_residual(curr, prev, num_dn=0))
+        self.assertTrue(torch.equal(projected_prev, swapped_prev))
+        self.assertTrue(torch.equal(projected_curr, swapped_curr))
+
+        projected_prev[..., 4:].sum().backward()
+        self.assertGreater(curr.grad[..., 4:].abs().sum().item(), 0.0)
+        self.assertEqual(curr.grad[..., :4].abs().sum().item(), 0.0)
+
+    def test_pair_shared_angle_refinement_is_parameter_free_and_exclusive(self):
+        parent, _, _ = _build_decoder(num_layers=3, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            pair_shared_angle_refinement_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        _, refs_prev, refs_curr, _, _ = self._forward(
+            1,
+            decoder=projected,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                device=self.device,
+                pair_shared_shape_refinement_decoder=True,
+                pair_shared_angle_refinement_decoder=True)
 
     def test_output_shapes_batch1(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)
