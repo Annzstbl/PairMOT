@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 03:28 CST.
+Last updated: 2026-08-03 04:08 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1740,3 +1740,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 该证据支持把下一几何候选收缩到单一角度 residual，不支持继续给 `w/h/angle` 共享增加 gate、
   scale 或 loss。原实验仍保留 e8/e12 延迟恢复窗；只有成熟轨迹继续显示相同失配，才在释放资源上
   部署已经完成零参数与完整构建验证的 `0803_03`。
+
+## 2026-08-03 04:08 CST：objectness 共享的 epoch-8 归因
+
+- `0803_01` e8 的 cls/det HOTA 为 `39.208/46.359`，相对 `0801_09` 父线 e8 仍低
+  `2.764/1.819`，相对 Encoder e8 低 `6.061/3.834`。cls/det DetA 相对父线低
+  `2.481/3.195`，AssA 也低 `3.763/0.293`，因此不是单纯 DetA/AssA 搬运。
+- pair 与 both-independent 的 mAP/AP50 相对 e4 均恢复约 `0.075–0.117`，直接证明不能用
+  e4 外推；但相对父线 e8 四项仍低 `0.0127–0.0357`。完整产物已核验，训练继续到 e12，
+  不按 e8 直接否决。
+- 分类侧不再派生 objectness 共享的 gate、scale、class-aware 或 reweight 版本；后续资源优先
+  用于 `0803_02` 成熟几何证据、`0801_09` e64 平台确认，以及已静态验证的零参数角度候选。

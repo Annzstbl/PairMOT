@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 03:28 CST
+更新时间：2026-08-03 04:08 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12；03:19 位于 epoch 7 iter 550。 |
+| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e8 完整检测与 TrackEval 已收齐，仍明显低于 Encoder 与 `0801_09` 父线；不按 e8 直接否决，已进入 e9 并继续 e12。 |
 | 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | e60 完整检测与 TrackEval 已收齐，绝对合并增益降至 `0.081`；继续 e64 作成熟平台确认，03:14 已进入 e61。 |
 | 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐；表现为 DetA 近持平/略升但 AssA 明显下降，按晚收敛约束继续 e8/e12，03:23 已进入 e5。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -1934,3 +1934,19 @@
   raw 文件完整；训练已进入 e5。e4 只作“`w/h/angle` 共同约束偏强”的结构诊断，继续 e8/e12
   检查延迟恢复，不在 e4 停止。若成熟节点仍是 DetA→AssA 失配，已验证的 `0803_03` 仅角度
   共享将作为更局部接替，而不是对 shape 共享做 scale/gate 调参。
+
+## 2026-08-03 04:08 CST：0803_01 epoch-8 完整诊断
+
+- e8 cls HOTA/DetA/AssA 为 `39.208/32.700/49.369`，det 为
+  `46.359/41.539/53.625`。相对 `0801_09` 父线 e8，cls 分别为
+  `-2.764/-2.481/-3.763`，det 为 `-1.819/-3.195/-0.293`；相对 Encoder e8 的
+  cls/det HOTA 为 `-6.061/-3.834`。逐层共享 objectness 在 e8 仍同时损伤覆盖与关联，
+  没有形成优于保留两帧独立分类 residual 的证据。
+- pair mAP/AP50 为 `0.196815/0.351435`，both-independent 为
+  `0.235883/0.408144`。相对本实验 e4 分别恢复 `+0.075424/+0.116926` 与
+  `+0.074968/+0.108573`，证明 e4 不能直接外推；但相对父线 e8 仍分别低
+  `0.012705/0.035744` 与 `0.014078/0.029665`，相对 Encoder 的四项差距更大。
+- checkpoint、5416 条检测记录、50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计
+  108 个 raw 文件完整。异步 TrackEval 因同机评测排队于 03:56 获得执行机会，385.2 秒正常
+  完成，不是卡死。训练已进入 e9，继续到 e12；e8 只用于确认 objectness 硬共享的负向机制，
+  不按早期节点停止，也不从该方向派生 scale、gate、class-aware 或 reweight 变体。
