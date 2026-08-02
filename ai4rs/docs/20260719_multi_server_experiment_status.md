@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 06:27 CST。
+更新时间：2026-08-03 06:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛，06:26 位于 e4 700/1038；GPU0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 真数据 smoke 与 formal iter-50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；按晚收敛约束继续 e8/e12，06:45 位于 e5 250/1038；GPU0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过，06:46 位于 e2 350/1038 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1496,3 +1496,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - formal fresh 06:25 启动，PGID `2893156`。iter 50 为 `0.9421 s/iter`、loss `21.0028`、
   grad norm `102.4835`；9 个成员、GPU0 约 31.4 GiB、正式日志与所有 loss group 均正常，五项
   门槛通过。首批完整节点仍为 e4/e8/e12，禁止把 e4/e8 当作直接否决点。
+
+## 2026-08-03 06:46 CST：252 0803_03 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA `31.076/24.972/41.528`，det
+  `37.040/31.623/44.375`；相对 `0801_09` 父线 e4 的 HOTA 约低 `3.230/1.550`，
+  DetA 低 `2.673/2.016`，AssA 低 `3.079/1.547`。早期覆盖和关联同时退化。
+- pair mAP/AP50 `0.127673/0.238560`，both-independent `0.170334/0.309608`，相对父线
+  四项约低 `0.016450/0.038933/0.019225/0.040032`。checkpoint、5416 条记录、50 序列、
+  TrackEval `async_done=1`、28 个 CSV 与 108 个评估文件完整。
+- 训练已进入 e5，按用户约束继续 e8/e12，不以 e4 停止；该结果只支持用 `0803_04` 区分
+  raw-logit 坐标失真与角度共享本身，不支持参数扫描或复杂化。

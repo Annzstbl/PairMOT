@@ -1812,3 +1812,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - formal PGID `2893156` 已在 178 GPU0 通过 iter-50 五项门槛；`0803_03` 同期继续在 252 GPU2/3
   到 e4/e8/e12。两项都不按 e4/e8 直接停止，先比较 HOTA、DetA、AssA 与 AP 的轨迹，再决定
   是否把共享收缩到 terminal-only 或继续周期表示。
+
+## 2026-08-03 06:46 CST：raw-logit angle e4 归因
+
+- `0803_03` e4 cls/det HOTA 为 `31.076/37.040`，相对 `0801_09` 父线低
+  `3.230/1.550`；双 DetA、双 AssA 与 pair/both 的 mAP/AP50 也全部下降。该结构在早期不是
+  覆盖与关联的交换，而是 raw-logit residual 硬共识同时伤害两者。
+- 完整 checkpoint、检测和 TrackEval 产物已核验；训练继续 e8/e12，不把 e4 当作直接否决点。
+  同时保留 `0803_04` 的 π 周期切空间圆周中点对照：若其 e4 显著恢复 DetA/AP，说明主要问题
+  是角度坐标；若两者都系统性退化，则后续候选转向 terminal-only 或取消逐层角度共识，仍不做
+  gate、scale、class-aware、reweight 或额外 loss/attention/layer。

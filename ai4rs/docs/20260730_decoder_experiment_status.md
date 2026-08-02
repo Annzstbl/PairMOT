@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 06:27 CST
+更新时间：2026-08-03 06:46 CST
 
 ## 当前研究原则
 
@@ -15,8 +15,8 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_01` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
-| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；06:26 位于 e4 700/1038，继续收集 e4/e8/e12。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、配置深拷贝、零参数完整构建与 retry1 真数据 smoke 通过；formal iter-50 五项门槛通过。 |
+| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；不按 e4 停止，06:45 位于 e5 250/1038，继续 e8/e12。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过；06:46 位于 e2 350/1038。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2037,3 +2037,17 @@
   `21.0028`、grad norm `102.4835`，DN/encoder loss 有限，GPU0 约 31.4 GiB，9 个进程成员
   存活，无 Traceback/OOM/NaN/DDP 错误，五项启动门槛全部通过。与 `0803_03` 并行比较的唯一
   结构变量是角度增量坐标：raw logit residual 均值对 π 周期切空间圆周中点。
+
+## 2026-08-03 06:46 CST：0803_03 raw-logit angle epoch-4 完整诊断
+
+- e4 cls HOTA/DetA/AssA 为 `31.076/24.972/41.528`，det 为
+  `37.040/31.623/44.375`。相对 `0801_09` 父线 e4，cls/det HOTA 约低
+  `3.230/1.550`，DetA 低 `2.673/2.016`，AssA 低 `3.079/1.547`；两种 HOTA 分量
+  同时下降，早期问题不是 DetA→AssA 搬运。
+- pair mAP/AP50 为 `0.127673/0.238560`，both-independent 为
+  `0.170334/0.309608`；相对父线 e4 分别约低 `0.016450/0.038933` 与
+  `0.019225/0.040032`，与 TrackEval 的覆盖警报一致。
+- `epoch_4.pth`、检测 metrics、5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV
+  与 108 个评估文件完整。该点只否定“raw-logit angle 共享有早期净收益”，不作为 decoder
+  直接淘汰点；训练已进入 e5，继续到 e8/e12。`0803_04` 的 π 周期切空间表示保留为严格
+  坐标对照，不从 e4 结果派生 scale、gate、class-aware 或 reweight 版本。
