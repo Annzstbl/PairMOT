@@ -1686,3 +1686,15 @@
   Encoder proposal loss 全部有限，双卡利用率约 `83%/81%`，各约 `19.2 GiB`，无致命信号。
   据此登记为 `RUNNING`，下一完整节点为 e4；最终成功门槛仍是同一 checkpoint 绝对
   `cls/det HOTA > 54.437/62.393`。
+
+## 2026-08-02 08:19 CST：0801_09 epoch-44 接近绝对门槛
+
+- `0801_09 DN-isolated + end-to-end` e44 的 cls/det HOTA 为 `54.415/61.737`，相对
+  Encoder 同点为 `+0.213/+0.545`，连续第二个成熟节点同点双通过。cls DetA/AssA 为
+  `+0.579/-0.507`；det DetA/AssA 均为正 `+0.603/+0.470`，det 增益已从 e40 的边缘
+  `+0.039` 扩大为稳定双分量增益。
+- pair mAP/AP50 为 `-0.002012/-0.001499`，both-independent mAP/AP50 为
+  `+0.002880/+0.010765`；pair 检测 AP 仍轻微低于父轨迹，但差距已小于 `0.0021`。
+- 相对最终严格绝对目标 `54.437/62.393`，该 checkpoint 只差 cls `0.022`、det `0.656`。
+  `54.415` 不做四舍五入达标处理，当前仍为 `SAME-POINT PASS / ABSOLUTE FAIL`。训练已进入
+  e45，继续到 e48；本次核验第 11 个检测/跟踪点及 `54` 个 TrackEval 原始文件。
