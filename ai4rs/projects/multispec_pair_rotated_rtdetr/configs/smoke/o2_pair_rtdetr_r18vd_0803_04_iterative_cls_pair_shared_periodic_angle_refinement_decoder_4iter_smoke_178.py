@@ -12,6 +12,7 @@ val_evaluator = None
 default_hooks['checkpoint'].update(
     by_epoch=False, interval=4, max_keep_ckpts=1,
     filename_tmpl='iter_{}.pth')
+default_hooks['logger'].update(interval=1)
 custom_hooks = [
     hook for hook in custom_hooks
     if hook.get('type') != 'AsyncPairTrackEvalHook'
@@ -19,4 +20,4 @@ custom_hooks = [
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_178/'
     'smoke_0803_04_iterative_cls_pair_shared_periodic_angle_'
-    'refinement_decoder_4iter')
+    'refinement_decoder_4iter_retry1')
