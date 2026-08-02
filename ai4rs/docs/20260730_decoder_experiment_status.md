@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 06:59 CST
+更新时间：2026-08-03 07:10 CST
 
 ## 当前研究原则
 
@@ -19,6 +19,9 @@
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过；06:46 位于 e2 350/1038。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
+
+已准备但未排队：178 的 `0803_06 iterative-cls frame-evidence decoder`。当前 GPU0 由
+`0803_04` 独占；`0803_06` 不创建等待进程、不抢占资源。
 
 ## 已完成或释放
 
@@ -2069,3 +2072,17 @@
   `102.6548`，两卡各约 19.2 GiB，进程组、日志与全部 loss group 正常，无
   Traceback/OOM/NaN/NCCL/DDP 错误，五项启动门槛通过。与 `0803_03/04` 同样收集
   e4/e8/e12 及成熟节点，不以 e4/e8 直接否决。
+
+## 2026-08-03 07:10 CST：0803_06 帧证据分类 decoder 已准备
+
+- 代码审计确认 `0801_09` 的两帧 iterative classification residual head 在每层都读取同一个
+  融合后 decoder state；两帧已有的 prev/curr cross-attention evidence 虽已计算，却没有进入
+  各自分类 residual。`0803_06` 只把这两份既有帧证据分别送回对应分类 head；共享 recurrent
+  query、全部框回归、reference 更新、DN、loss 和训练协议保持父路径。
+- 结构不新增参数、attention、loss、decoder 层、class-aware 路由或 score reweight。178 隔离
+  checkout `/data1/users/litianhao01/PairMOT_framecls_0803_06` 固定在提交 `fd790e9`，活动中的
+  `0803_04` 仓库未热更新。
+- 2 项针对性测试与完整 131 项 decoder 回归通过；配置深拷贝、launcher 语法及完整模型构建通过：
+  `22,771,111` 参数、参数增量 `0`、711 个 state tensor。状态为 `PREPARED`，尚未运行真数据
+  smoke、未创建 formal workdir、未排队且不占 GPU；等待 `0803_04` 完整节点和资源决策后再执行
+  真数据 smoke 与 formal iter-50 五门槛。

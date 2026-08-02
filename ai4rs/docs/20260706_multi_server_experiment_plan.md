@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 06:59 CST.
+Last updated: 2026-08-03 07:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1836,3 +1836,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 当前三条结构对照分别检验 raw-logit angle、π 周期 angle 与 reference-local center 共识；均保留
   e4/e8/e12 和成熟节点观察窗口。最终只接受同一 checkpoint 的 cls/det HOTA 严格超过
   `54.437/62.393` 且总和严格大于 `118.330`。
+
+## 2026-08-03 07:10 CST：准备帧证据分类路径
+
+- 在几何三路继续训练期间，对分类路径做正交审计：父结构两帧 iterative classification head
+  每层读取相同融合 state，而已经计算的两帧 cross-attention evidence 没有回到各自分类 residual。
+  `0803_06` 只修正这一信息路由，保留共享 recurrent query、全部框更新、reference、DN 与 loss。
+- 该设计参数/state 增量为零，不增加 attention、decoder 深度或损失，不使用类别感知路由和
+  score reweight。2 项定向测试、131 项完整 decoder 回归、配置深拷贝、launcher 语法和完整构建
+  已在 178 隔离 checkout 通过；模型为 `22,771,111` 参数、711 个 state tensor。
+- 候选保持 `PREPARED` 而非 `QUEUED`。不抢占正在 178 GPU0 运行的 `0803_04`，也不热更新其
+  活跃仓库；待完整节点释放授权资源后，才依次进行真数据 smoke、checkpoint 语义审计和 formal
+  iter-50 五门槛。若启动，仍收集 e4/e8/e12 与成熟节点，不以 e4/e8 单点直接否决。

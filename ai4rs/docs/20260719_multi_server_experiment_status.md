@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 06:59 CST。
+更新时间：2026-08-03 07:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_05` 的 129 项回归、零增量完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`；`0803_03` e4 完整负向但按晚收敛约束继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过，06:46 位于 e2 350/1038 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过，06:46 位于 e2 350/1038 | `0803_06 frame-evidence cls` 为 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1520,3 +1520,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - formal fresh 于 06:57 启动，PGID `3549855`；iter50 为 `1.1465 s/iter`、loss `21.3848`、
   grad norm `102.6548`，两卡各约 19.2 GiB，正式进程、有限总/DN/Encoder loss、资源占用与错误
   扫描五项门槛全部通过。继续收集 e4/e8/e12，不按 e4/e8 单点停止。
+
+## 2026-08-03 07:10 CST：178 0803_06 frame-evidence classification 已准备
+
+- 对 `0801_09` 的分类作用路径审计表明，两帧 iterative classification residual head 读取同一
+  融合后 state，而每层已经存在的 prev/curr cross-attention evidence 没有进入对应分类 head。
+  `0803_06` 将既有帧证据分别送入对应帧分类 residual；共享 recurrent query、框回归、reference、
+  DN、loss 与训练协议不变。
+- 新路径不增加参数、attention、loss、层数、class-aware 信号或 reweight。178 隔离 checkout
+  `/data1/users/litianhao01/PairMOT_framecls_0803_06` 为干净提交 `fd790e9`；2 项定向测试、完整
+  131 项 decoder 回归、配置深拷贝、launcher 语法和完整构建均通过，构建结果为
+  `22,771,111` 参数、参数增量 `0`、711 个 state tensor。
+- 当前仅为 `PREPARED`：没有等待进程、未运行真数据 smoke、未建立正式 workdir、未占用 GPU。
+  178 GPU0 的 `0803_04` 保持原仓库原进程运行；待其完整节点与资源决策后，再按真实 smoke、
+  checkpoint 语义检查和 formal iter-50 五门槛顺序部署。
