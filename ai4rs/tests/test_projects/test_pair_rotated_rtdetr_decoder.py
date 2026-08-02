@@ -92,6 +92,7 @@ def _build_decoder(num_layers: int = 2,
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
                    bool = False,
+                   frame_evidence_cls_decoder: bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -161,6 +162,7 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_periodic_angle_refinement_decoder),
         pair_shared_normalized_center_refinement_decoder=(
             pair_shared_normalized_center_refinement_decoder),
+        frame_evidence_cls_decoder=frame_evidence_cls_decoder,
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -558,6 +560,78 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 device=self.device,
                 pair_shared_shape_refinement_decoder=True,
                 pair_shared_normalized_center_refinement_decoder=True)
+
+    def test_frame_evidence_cls_preserves_recurrent_decoder_and_references(self):
+        parent, parent_reg_prev, parent_reg_curr = _build_decoder(
+            num_layers=3, device=self.device)
+        routed, routed_reg_prev, routed_reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            frame_evidence_cls_decoder=True)
+        routed.load_state_dict(parent.state_dict())
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in routed.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in routed.state_dict().items()})
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            2, num_value, parent.embed_dims, self.device)
+        parent_out = parent(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=parent_reg_prev,
+            reg_branches_curr=parent_reg_curr)
+        routed_out = routed(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=routed_reg_prev,
+            reg_branches_curr=routed_reg_curr)
+
+        self.assertEqual(len(parent_out), 3)
+        self.assertEqual(len(routed_out), 5)
+        hidden, refs_prev, refs_curr = parent_out
+        (routed_hidden, routed_refs_prev, routed_refs_curr,
+         evidence_prev, evidence_curr) = routed_out
+        for expected, actual in zip(hidden, routed_hidden):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_prev, routed_refs_prev):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_curr, routed_refs_curr):
+            self.assertTrue(torch.equal(expected, actual))
+        self.assertEqual(len(evidence_prev), 3)
+        self.assertEqual(len(evidence_curr), 3)
+        self.assertFalse(torch.equal(evidence_prev[0], evidence_curr[0]))
+        self.assertFalse(torch.equal(evidence_prev[0], routed_hidden[0]))
+
+    def test_frame_evidence_cls_first_layer_keeps_frame_local_gradient(self):
+        decoder, reg_prev, reg_curr = _build_decoder(
+            frame_evidence_cls_decoder=True, device=self.device)
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        _, _, _, evidence_prev, _ = decoder(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=reg_prev,
+            reg_branches_curr=reg_curr)
+        evidence_prev[0].sum().backward()
+        self.assertGreater(memory_prev.grad.abs().sum().item(), 0.0)
+        self.assertTrue(
+            memory_curr.grad is None
+            or memory_curr.grad.abs().sum().item() == 0.0)
 
     def test_output_shapes_batch1(self):
         decoder, reg_prev, reg_curr = _build_decoder(device=self.device)

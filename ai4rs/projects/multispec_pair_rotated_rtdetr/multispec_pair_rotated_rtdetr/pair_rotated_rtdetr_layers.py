@@ -303,6 +303,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                   pair_shared_periodic_angle_refinement_decoder: bool = False,
                   pair_shared_normalized_center_refinement_decoder:
                   bool = False,
+                  frame_evidence_cls_decoder: bool = False,
                   shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
@@ -354,6 +355,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_periodic_angle_refinement_decoder)
         self.pair_shared_normalized_center_refinement_decoder = bool(
             pair_shared_normalized_center_refinement_decoder)
+        self.frame_evidence_cls_decoder = bool(
+            frame_evidence_cls_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -1491,7 +1494,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     or self._terminal_enveloped_detail_enabled
                     or self._common_evidence_bypass_enabled
                     or
-                    self.terminal_classification_common_evidence_decoder)
+                    self.terminal_classification_common_evidence_decoder
+                    or self.frame_evidence_cls_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -1521,7 +1525,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         lid, frame_evidence_prev, frame_evidence_curr)
 
                 layer_output = self.norm(query)
-                if self.dual_output_adapter:
+                if self.frame_evidence_cls_decoder:
+                    # The recurrent query and both iterative references stay
+                    # on the parent shared path. Classification alone sees
+                    # each frame's already-computed cross-attention evidence,
+                    # recovering visibility-specific information without an
+                    # adapter, extra attention, or an additional parameter.
+                    layer_output_prev = frame_evidence_prev
+                    layer_output_curr = frame_evidence_curr
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.dual_output_adapter:
                     adapter_input = (
                         layer_output.detach()
                         if self.dual_output_detach_adapter_input
@@ -1885,7 +1899,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 hidden_states_curr.append(layer_output_curr)
             else:
                 hidden_states.append(layer_output)
-                if (self.dual_output_adapter
+                if (self.frame_evidence_cls_decoder
+                        or self.dual_output_adapter
                         or self.antisymmetric_detail_decoder
                         or self.enveloped_detail_decoder
                         or self.classification_enveloped_detail_decoder
@@ -1898,6 +1913,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             references_curr.append(new_reference_curr)
 
         if (self.tristate_decoder
+                or self.frame_evidence_cls_decoder
                 or self.dual_output_adapter
                 or self.antisymmetric_detail_decoder
                 or self.enveloped_detail_decoder
