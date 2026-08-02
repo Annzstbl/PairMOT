@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 04:08 CST.
+Last updated: 2026-08-03 04:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1751,3 +1751,22 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   不按 e8 直接否决。
 - 分类侧不再派生 objectness 共享的 gate、scale、class-aware 或 reweight 版本；后续资源优先
   用于 `0803_02` 成熟几何证据、`0801_09` e64 平台确认，以及已静态验证的零参数角度候选。
+
+## 2026-08-03 04:43 CST：shape e8 后的几何决策
+
+- `0803_02` e8 相对 `0801_09` e8 的 cls/det HOTA 为 `+0.680/-0.455`，双 HOTA 总和净增
+  `+0.225`；双 AssA 提高 `1.271/1.651`，但 det DetA 降低 `2.046`。pair 与
+  both-independent 的 mAP/AP50 四项全部转为正增益，说明 e4 的关联损伤能够恢复，原实验继续
+  e12，不以 e8 直接否决。
+- 结构归因进一步收敛：完整 `w/h/angle` 共享的关联收益真实存在，但 `w/h` 硬约束压低 det
+  覆盖。下一候选仍为零参数 `0803_03 angle-only`，保持 x/y/w/h、分类与 DN 独立；优先等待
+  `0801_09` e64 完整评测释放 252 GPU2/3，再做目标配置 deepcopy、完整构建、真实双卡 smoke
+  与 formal iter-50 五项门槛。
+
+## 2026-08-03 04:58 CST：e64 关闭纯续训分支并切换 angle-only
+
+- `0801_09` e64 为 `54.326/62.572`，总和 `116.898`，严格目标差 `1.432`；检测 AP 也较 e60
+  回落。完整产物核验后已停止 PGID `3292233`，252 GPU2/3 释放，不再继续 e68/e72 纯续训。
+- `0803_03` 在 252 使用独立 checkout，避免修改 GPU0/1 的活跃 `0803_01` 仓库。部署顺序固定为：
+  远端提交/哈希核对、目标 formal 与 smoke 配置 `deepcopy`、完整父/新模型构建、GPU2/3 连续空闲、
+  4-iter 真数据 DDP smoke、checkpoint/有限损失审计、formal iter-50 五项启动门槛。

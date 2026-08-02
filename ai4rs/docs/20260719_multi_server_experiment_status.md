@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 04:08 CST。
+更新时间：2026-08-03 04:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_01 fresh`（GPU0/1）；`0801_09 resume e56`（GPU2/3） | RUNNING；前者 e8 完整评估后已进入 e9 并继续 e12，后者 e60 完整评估后继续 e64 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e4 检测与完整 TrackEval 已收齐，03:23 已进入 e5，继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_01 fresh`（GPU0/1） | RUNNING；e8 完整评估后继续 e12。`0801_09 resume e56` 已在 e64 完整评测后于 04:57 停止，GPU2/3 已释放；`0803_03 angle-only` 正在隔离部署 | `0803_03`（GPU2/3，smoke 后 formal） | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_02 pair-shared shape refinement` | RUNNING；e8 检测与完整 TrackEval 已收齐，继续 e12 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1420,3 +1420,26 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计 108 个 raw 文件完整。
 - 训练已进入 e9，并按 decoder 晚收敛约束继续 e12；不以 e8 直接停止。当前证据只用于否定
   继续派生 objectness 硬共享变体，下一结构优先级仍由正交几何线和成熟节点共同决定。
+
+## 2026-08-03 04:43 CST：178 0803_02 e8 完整评估
+
+- e8 cls HOTA/DetA/AssA 为 `42.652/35.433/54.403`，det 为
+  `47.723/42.688/55.569`。相对 `0801_09` 父线 e8，cls HOTA 提高 `0.680`，det HOTA
+  降低 `0.455`；双 AssA 提高 `1.271/1.651`，但 det DetA 降低 `2.046`。
+- pair mAP/AP50 `0.218642/0.387668`、both-independent `0.262145/0.443668`，四项均高于
+  父线 e8。checkpoint、检测、50 序列、TrackEval `async_done=1`、54 个 eval 文件与总计
+  108 个 raw 文件完整；训练已进入 e9 并继续 e12，178 GPU0 不释放。
+- 完整 shape 共享在 e8 已恢复检测 AP 并改善关联，但 `w/h` 共享仍损伤 det 覆盖；因此保留
+  `0803_03` angle-only 为资源释放后的下一候选，不做 gate、scale、class-aware 或 reweight 派生。
+
+## 2026-08-03 04:58 CST：252 0801_09 e64 平台确认并停止
+
+- e64 同一 checkpoint 的 cls HOTA/DetA/AssA 为 `54.326/44.326/68.761`，det 为
+  `62.572/54.840/73.891`。cls 低于严格 Encoder 基线 `0.111`；总和 `116.898`，相对基线
+  合并增益仅 `0.068`，远低于要求的 `>1.5`。
+- pair mAP/AP50 为 `0.313163/0.528518`，both-independent 为
+  `0.352795/0.564884`，均较 e60 回落。epoch-64 checkpoint、50 序列、5416 条记录、
+  TrackEval `async_done=1`、54 个 eval 文件和总计 108 个 raw 文件完整。
+- e56/e60/e64 已充分证明纯续训进入平台。04:57 精确终止 PGID `3292233`，保留全部产物；
+  GPU2/3 连续检查为空闲，下一步在独立 checkout 部署 `0803_03`，避免热更新 GPU0/1 正在使用的
+  `0803_01` 活跃仓库。

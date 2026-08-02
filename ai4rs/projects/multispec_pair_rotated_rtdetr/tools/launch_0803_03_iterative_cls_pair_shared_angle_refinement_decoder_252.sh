@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO=/data/users/litianhao01/PairMmot/ai4rs
+REPO=${PAIRMOT_REPO:-/data/users/litianhao01/PairMmot/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0803_03_iterative_cls_pair_shared_angle_refinement_decoder_252.py
 WORK_DIR=/data4/litianhao/PairMmot/workdir_252/0803_03_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedanglerefinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh
 
