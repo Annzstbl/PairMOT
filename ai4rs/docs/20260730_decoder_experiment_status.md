@@ -1797,3 +1797,28 @@
   同机制的 end-to-end 版本严格支配，后续不再视为主候选。
 - 99 SSH 直连再次在 `ConnectTimeout=20` 的 TCP 连接阶段超时，无法核验精确 PGID；因此不使用
   非受控方式强停。训练和全部产物暂时保留，待管理通道恢复后再安全释放 99。
+
+## 2026-08-02 12:32 CST：0801_09 epoch-56 严格绝对双通过（目标完成）
+
+- `0801_09 DN-isolated + end-to-end iterative cls residual` e56 的同一 checkpoint 得到
+  cls/det HOTA `54.653/62.456`，严格超过 Encoder 最终绝对门槛 `54.437/62.393`，绝对增量
+  为 `+0.216/+0.063`。这不是四舍五入通过；e52 的 det `62.388` 仍按低 `0.005` 记为失败，
+  只有 e56 首次满足双绝对门槛。
+- 相对 Encoder e56 同点，cls/det HOTA 为 `+0.013/+0.546`；cls DetA/AssA 为
+  `+0.073/-0.487`，det DetA/AssA 为 `+0.691/+0.341`。pair mAP/AP50 为
+  `+0.000543/-0.000571`，both-independent mAP/AP50 为 `+0.003767/+0.008041`。第 14 个
+  检测/跟踪节点、同点 AP 和 `54` 个 TrackEval 原始文件全部完成。
+- 该 decoder 只增加 6 个逐层双帧 `256→8` 零初始化分类 residual 头，共 `12,336` 参数
+  （`+0.0542%`，完整模型 `22,771,111`）；旧分类头冻结并等量替换，可训练参数净增为零。
+  它不增加 decoder 层、attention、loss、class reweight、prototype/class-aware gate 或主矩阵
+  计算；DN 使用绝对分类语义隔离，最终 decoder loss 对普通 query 的早期 residual 保持端到端
+  梯度，Encoder proposal 基底仍 detached。
+- 178 本机和 252 跨节点使用两个 Python 环境独立复读，均得到完全相同的指标、目录映射、
+  `RAW_FILES=54` 和 `HOTA_GATE PASS`。`last_checkpoint` 精确指向 `epoch_56.pth`；文件大小
+  `441,830,836` bytes，SHA256 为
+  `d64df7628ac2fb200663f28067b6679a85a31482fc92eae494d12b48aeb352ab`。检测指标来自
+  `val_det/epoch_55/metrics.json`，跟踪指标来自 `val_track_eval/val_track_0014/metrics.json`。
+- 达标后对 178/197/252 的训练进程组 `2597803/1985233/2451495` 分别发送 TERM，并逐一确认
+  进程组退出；178 和 252 实验卡均为 `0%/1 MiB`。197 上本实验 GPU 进程已退出，GPU0/1
+  随即由外部用户进程 `1949805/1949806` 占用；只保留已启动的 e20 CPU 异步 TrackEval 自行
+  收尾。99 因 SSH 连接超时仍无法受控停止。所有实验 checkpoint、检测和 TrackEval 产物保留。
