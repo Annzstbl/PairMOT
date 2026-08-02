@@ -1343,3 +1343,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 178 GPU0 已释放。当前有效训练保留为 197 `0801_04 symmetric-position` 与
   252 `0801_06 symmetric-position + residual-preserving fusion`；等待它们的 e8/e4
   证据后再决定是否利用 178/99 启动下一项，避免无证据并行消耗。
+
+## 2026-08-03 01:20 CST：严格合并增益目标下的资源状态
+
+- 当前成功门槛为同点 cls/det HOTA 均超过 `54.437/62.393`，且绝对增量和严格大于
+  `1.5`（总 HOTA 严格大于 `118.330`）。`0801_09` e56 总增益仅 `0.279`，需继续探索。
+- 252 GPU0/1：`0803_01` 零参数 pair-shared objectness iterative decoder 已通过真实双卡
+  smoke 与正式 iter-50 门槛，formal 已到 e1 iter 600，状态 `RUNNING`。GPU2/3 保留空闲。
+- 197 GPU4/5：正在执行 `0801_09` 的 2x4 portability smoke；因该机 Python/model 首次初始化
+  很慢，尚未完成 4 iter，故还没有从 epoch 56 启动正式续训。GPU0–3 当前空闲但不纳入本任务。
+- 178 GPU0 被外部作业占用；99 SSH 仍不可用。所有启动均使用提交 `bd1c329`，未在存活训练中
+  热更新代码。

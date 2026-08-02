@@ -1680,3 +1680,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 后续只保留 position symmetry 与 shared-query residual-preserving fusion 这条零参数、
   近零开销路线。是否启动下一候选必须等待 `0801_04` e8 或 `0801_06` e4 的机制证据；
   不因 178/99 空闲而填充低信息量实验。
+
+## 2026-08-03：decoder 合并增益 >1.5 推进计划
+
+- 最终只接受同一 checkpoint 的 cls/det HOTA 分别严格大于 `54.437/62.393`，且两项绝对
+  增量之和严格大于 `1.5`；任意单项失败或总 HOTA 不严格大于 `118.330` 均继续实验。
+- 第一并行主线是在 252 训练 `0803_01`：逐层对两帧 classification residual 做零参数、
+  类置换等变的 objectness 均值投影，保留各帧全部类别 margin 与 DN 绝对分类语义。
+- 第二并行主线是在 197 从 `0801_09` e56 恢复同一优化轨迹到 e60/e64 及以后，用于判断
+  当前最佳结构是否仍有晚期上升空间；物理设备改为 2x4，但全局 batch 保持 8。
+- 两条主线均不以 e4/e8 直接否决。评测继续使用 cls/det HOTA 主门槛、DetA/AssA 归因和 AP
+  退化诊断；不引入 class-aware 模块、reweight、scale sweep、更深 decoder 或额外 attention/loss。
+- 若 `0803_01` 成熟节点未达到门槛，下一机制只从其 margin 保真/objectness 耦合证据派生一个
+  单因素、低开销变体；不做无解释的参数扫描，并在新 formal 前重复配置深拷贝、完整构建、
+  真实双卡 smoke、checkpoint 更新和 iter-50 五项门槛。

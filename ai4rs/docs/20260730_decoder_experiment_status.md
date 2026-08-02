@@ -1822,3 +1822,28 @@
   进程组退出；178 和 252 实验卡均为 `0%/1 MiB`。197 上本实验 GPU 进程已退出，GPU0/1
   随即由外部用户进程 `1949805/1949806` 占用；只保留已启动的 e20 CPU 异步 TrackEval 自行
   收尾。99 因 SSH 连接超时仍无法受控停止。所有实验 checkpoint、检测和 TrackEval 产物保留。
+
+## 2026-08-03 01:20 CST：目标提高并启动 0803_01
+
+- 新的严格门槛改为同一 checkpoint 的 cls/det HOTA 均分别超过 Encoder 绝对基线
+  `54.437/62.393`，并且两项绝对增量之和严格大于 `1.5`，等价于
+  `cls HOTA + det HOTA > 118.330`。此前 `0801_09` e56 的 `54.653/62.456` 只提高
+  `0.216+0.063=0.279`，因此只是新一轮基底候选，不再视为当前目标完成。
+- 晚期补评显示 `0801_08 layer-detach` e60/e64/e68/e72 均未使 det 同点通过；e72 为
+  `54.309/61.618`。`0801_11 terminal pair-common cls residual` e20 为
+  `51.488/58.972`，绝对值仍远低于门槛。两者均不是按 e4/e8 早停，而是依据完整晚期轨迹
+  与更强同机制版本支配关系降级。
+- 新实验 `0803_01 iterative pair-shared objectness` 保留每帧独立分类 residual 的全部类别
+  margin，只把每个 query 的 residual 类均值替换成两帧均值：
+  `r'_p=r_p-mean(r_p)+(mean(r_p)+mean(r_c))/2`，curr 对称。该运算不使用类别身份、学习权重、
+  reweight 或额外 loss/attention/layer；模型参数和 state tensor 相对 `0801_09` 均零增量。
+  DN prefix 继续使用原绝对分类头，Encoder proposal 基底继续 detached，逐层梯度保持端到端。
+- 提交 `bd1c329` 已同步到 252/197。252 Linux 环境新增 3 项语义/梯度测试全部通过；完整模型
+  为 `22,771,111` 参数，delta 为 `0`。252 双卡真实数据 4-iter smoke 正常完成，total、DN、
+  Encoder proposal loss 和 grad norm 全部有限，checkpoint 中六个 residual 头均得到非零更新。
+- 252 formal 已超过 e1 iter 600：iter 600 为 `1.2027 s/iter`、loss `15.0387`、grad norm
+  `42.2699`，双卡各约 `19.2 GiB` 且持续满载，无 Traceback/OOM/NaN/NCCL。正式 iter-50
+  启动门槛已通过，状态为 `RUNNING`；不会使用 e4/e8 直接否决，按成熟轨迹持续评测。
+- 同时准备在 197 以物理 `2x4`、全局 batch 8 从 `0801_09 epoch_56.pth` 恢复到 e60/e64；
+  模型、优化器/EMA checkpoint 与科学 ID 不变。197 的正式续训必须等待对应双卡 4-iter
+  portability smoke 真正完成；截至本记录，两 rank 正在慢速首次初始化，尚未登记为可续训。
