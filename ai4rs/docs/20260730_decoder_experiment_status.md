@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 07:10 CST
+更新时间：2026-08-03 07:46 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | 零参数局部坐标中心共识；129 项 decoder 回归、完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`。 |
 | 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；不按 e4 停止，06:45 位于 e5 250/1038，继续 e8/e12。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过；06:46 位于 e2 350/1038。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐；相对父线 e4 双 HOTA `+1.718/+5.198`，继续 e8/e12，07:43 已进入 e5。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2086,3 +2086,20 @@
   `22,771,111` 参数、参数增量 `0`、711 个 state tensor。状态为 `PREPARED`，尚未运行真数据
   smoke、未创建 formal workdir、未排队且不占 GPU；等待 `0803_04` 完整节点和资源决策后再执行
   真数据 smoke 与 formal iter-50 五门槛。
+
+## 2026-08-03 07:46 CST：0803_04 周期角度 epoch-4 完整诊断
+
+- 同一 e4 checkpoint 的 cls HOTA/DetA/AssA 为 `36.024/29.194/46.643`，det 为
+  `43.788/34.870/57.251`。相对 `0803_03` raw-logit angle e4，双 HOTA 提高
+  `+4.948/+6.748`，双 DetA 提高 `+4.222/+3.247`，双 AssA 提高 `+5.115/+12.876`；
+  证明 π 周期切空间圆周中点不是等价重写，而是显著修复了角度坐标失真。
+- 相对同机制父线 `0801_09` e4，cls/det HOTA 为 `+1.718/+5.198`，DetA 为
+  `+1.549/+1.231`，AssA 为 `+2.036/+11.329`。相对 Encoder e4 则为 HOTA
+  `-0.185/+5.035`、DetA `+2.126/+2.416`、AssA `-5.451/+9.785`：det 已强正向，cls
+  仍受早期关联缺口限制，因此不能把 e4 写成目标达成，也不能在该点停止。
+- pair mAP/AP50 为 `0.1634/0.3034`，both-independent 为 `0.2103/0.3774`；相对
+  `0803_03` 分别提高 `0.035727/0.064840` 与 `0.039966/0.067792`，相对 Encoder e4
+  也分别提高约 `0.006147/0.007266` 与 `0.025835/0.054251`。检测恢复与 TrackEval 一致。
+- `epoch_4.pth` 为 369,971,828 bytes；5416 条检测、50 序列、TrackEval
+  `async_done=1`、28 个 CSV 与 108 个评估文件完整。训练已自然进入 e5，继续 e8/e12 和成熟
+  节点，不以 e4 直接决策停止。178 继续由本实验占用；`0803_06` 保持 `PREPARED`、未排队。

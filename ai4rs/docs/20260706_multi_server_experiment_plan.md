@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 07:10 CST.
+Last updated: 2026-08-03 07:46 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1848,3 +1848,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 候选保持 `PREPARED` 而非 `QUEUED`。不抢占正在 178 GPU0 运行的 `0803_04`，也不热更新其
   活跃仓库；待完整节点释放授权资源后，才依次进行真数据 smoke、checkpoint 语义审计和 formal
   iter-50 五门槛。若启动，仍收集 e4/e8/e12 与成熟节点，不以 e4/e8 单点直接否决。
+
+## 2026-08-03 07:46 CST：周期角度 e4 后的资源决策
+
+- `0803_04` e4 的 cls/det HOTA 为 `36.024/43.788`，相对 raw-logit `0803_03` 提高
+  `4.948/6.748`，相对父线 `0801_09` 提高 `1.718/5.198`。DetA、AssA 与四项 AP 也全面高于
+  raw-logit 对照，证明正确的 π 周期坐标是实质设计变量，而非表示细节。
+- 相对 Encoder e4，det HOTA 已高 `5.035`，但 cls HOTA 仍低 `0.185`；cls DetA 高
+  `2.126` 而 AssA 低 `5.451`。这形成明确的晚收敛观察问题：周期角度能否在保持覆盖优势时恢复
+  cls 关联。因此 `0803_04` 保持 178 GPU0 到 e8/e12，不在 e4 释放或停止。
+- 99 GPU0/1 仍被外部任务占用，GPU2 未授权；197 GPU4/5 虽空闲但 formal 吞吐约
+  `80 s/iter`；252 四卡由 `0803_03/05` 使用。`0803_06` 保持 `PREPARED`、不排队、不抢占，
+  待首个合适授权资源释放后再执行真数据 smoke 和 formal 五门槛。

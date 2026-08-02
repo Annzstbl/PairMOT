@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 07:10 CST。
+更新时间：2026-08-03 07:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_05` 的 129 项回归、零增量完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`；`0803_03` e4 完整负向但按晚收敛约束继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过，06:46 位于 e2 350/1038 | `0803_06 frame-evidence cls` 为 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`，07:43 已进入 e5，继续 e8/e12 | `0803_06 frame-evidence cls` 为 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1534,3 +1534,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 当前仅为 `PREPARED`：没有等待进程、未运行真数据 smoke、未建立正式 workdir、未占用 GPU。
   178 GPU0 的 `0803_04` 保持原仓库原进程运行；待其完整节点与资源决策后，再按真实 smoke、
   checkpoint 语义检查和 formal iter-50 五门槛顺序部署。
+
+## 2026-08-03 07:46 CST：178 0803_04 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA 为 `36.024/29.194/46.643`，det 为
+  `43.788/34.870/57.251`。相对 `0803_03` raw-logit angle e4，双 HOTA
+  `+4.948/+6.748`、双 DetA `+4.222/+3.247`、双 AssA `+5.115/+12.876`；π 周期
+  切空间显著修复 raw-logit 共享的坐标问题。
+- 相对父线 `0801_09` e4，HOTA 为 `+1.718/+5.198`、DetA 为 `+1.549/+1.231`、AssA
+  为 `+2.036/+11.329`。相对 Encoder e4，HOTA 为 `-0.185/+5.035`：det 强正向，但 cls
+  仍有早期关联缺口，故继续到 e8/e12，不把 e4 当作停止或最终通过节点。
+- pair mAP/AP50 `0.1634/0.3034`，both-independent `0.2103/0.3774`；`epoch_4.pth`
+  369,971,828 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV 与 108 个
+  评估文件完整。07:43 训练已进入 e5；178 不释放，`0803_06` 继续 `PREPARED`、未排队。
