@@ -79,6 +79,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  iterative_cls_residual: bool = False,
                  iterative_cls_dn_absolute: bool = False,
                  iterative_cls_detach_between_layers: bool = True,
+                 iterative_cls_pair_shared_objectness: bool = False,
                  terminal_encoder_cls_residual: bool = False,
                  terminal_pair_common_cls_residual: bool = False,
                  terminal_pair_common_objectness_residual: bool = False,
@@ -101,6 +102,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         self.iterative_cls_dn_absolute = bool(iterative_cls_dn_absolute)
         self.iterative_cls_detach_between_layers = bool(
             iterative_cls_detach_between_layers)
+        self.iterative_cls_pair_shared_objectness = bool(
+            iterative_cls_pair_shared_objectness)
         self.terminal_encoder_cls_residual = bool(
             terminal_encoder_cls_residual)
         self.terminal_pair_common_cls_residual = bool(
@@ -141,6 +144,16 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             raise ValueError(
                 'iterative_cls_dn_absolute requires '
                 'iterative_cls_residual=True')
+        if (self.iterative_cls_pair_shared_objectness
+                and not self.iterative_cls_residual):
+            raise ValueError(
+                'iterative_cls_pair_shared_objectness requires '
+                'iterative_cls_residual=True')
+        if (self.iterative_cls_pair_shared_objectness
+                and not self.iterative_cls_dn_absolute):
+            raise ValueError(
+                'iterative_cls_pair_shared_objectness requires '
+                'iterative_cls_dn_absolute=True')
         if (self.iterative_cls_residual
                 or self.terminal_encoder_cls_residual
                 or self.terminal_pair_common_cls_residual
@@ -585,12 +598,25 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             hidden_curr = hidden_states_curr[layer_id]
             # hidden_*: (bs, num_queries, embed_dims)
             if self.iterative_cls_residual:
-                cls_prev, running_cls_prev = self._iterative_cls_layer(
-                    running_cls_prev,
-                    hidden_prev,
-                    self.iterative_cls_residual_branches_prev[layer_id],
-                    self.cls_branches[layer_id],
-                    num_dn)
+                if self.iterative_cls_pair_shared_objectness:
+                    (cls_prev, cls_curr, running_cls_prev,
+                     running_cls_curr) = self._iterative_cls_pair_layer(
+                         running_cls_prev,
+                         running_cls_curr,
+                         hidden_prev,
+                         hidden_curr,
+                         self.iterative_cls_residual_branches_prev[layer_id],
+                         self.iterative_cls_residual_branches_curr[layer_id],
+                         self.cls_branches[layer_id],
+                         self.cls_branches_curr[layer_id],
+                         num_dn)
+                else:
+                    cls_prev, running_cls_prev = self._iterative_cls_layer(
+                        running_cls_prev,
+                        hidden_prev,
+                        self.iterative_cls_residual_branches_prev[layer_id],
+                        self.cls_branches[layer_id],
+                        num_dn)
             elif (self.terminal_encoder_cls_residual
                   and layer_id == len(hidden_states) - 1):
                 cls_prev = self._terminal_encoder_cls_layer(
@@ -644,12 +670,13 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             all_cls.append(cls_prev)
             if self.dual_cls:
                 if self.iterative_cls_residual:
-                    cls_curr, running_cls_curr = self._iterative_cls_layer(
-                        running_cls_curr,
-                        hidden_curr,
-                        self.iterative_cls_residual_branches_curr[layer_id],
-                        self.cls_branches_curr[layer_id],
-                        num_dn)
+                    if not self.iterative_cls_pair_shared_objectness:
+                        cls_curr, running_cls_curr = self._iterative_cls_layer(
+                            running_cls_curr,
+                            hidden_curr,
+                            self.iterative_cls_residual_branches_curr[layer_id],
+                            self.cls_branches_curr[layer_id],
+                            num_dn)
                 elif (self.terminal_encoder_cls_residual
                       and layer_id == len(hidden_states) - 1):
                     cls_curr = self._terminal_encoder_cls_layer(
@@ -799,6 +826,56 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
         if self.iterative_cls_detach_between_layers:
             next_running = next_running.detach()
         return cls_logits, next_running
+
+    def _iterative_cls_pair_layer(
+            self, running_prev: Tensor, running_curr: Tensor,
+            hidden_prev: Tensor, hidden_curr: Tensor,
+            residual_branch_prev: nn.Module, residual_branch_curr: nn.Module,
+            absolute_branch_prev: nn.Module, absolute_branch_curr: nn.Module,
+            num_dn: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        """Refine a pair while sharing only its class-agnostic objectness.
+
+        Each frame keeps its independently predicted class-margin residual.
+        We replace only the residual mean over classes by the pair mean.  This
+        is permutation-equivariant in the class dimension, adds no parameters,
+        and couples the two frames without using a class identity or a learned
+        weighting operation.  DN logits remain on their original absolute
+        classifiers because they have no aligned encoder-proposal base.
+        """
+        normal_prev = hidden_prev[:, num_dn:]
+        normal_curr = hidden_curr[:, num_dn:]
+        residual_prev = residual_branch_prev(normal_prev)
+        residual_curr = residual_branch_curr(normal_curr)
+        objectness_prev = residual_prev.mean(dim=-1, keepdim=True)
+        objectness_curr = residual_curr.mean(dim=-1, keepdim=True)
+        shared_objectness = 0.5 * (objectness_prev + objectness_curr)
+        residual_prev = residual_prev - objectness_prev + shared_objectness
+        residual_curr = residual_curr - objectness_curr + shared_objectness
+
+        logits_prev = running_prev[:, num_dn:] + residual_prev
+        logits_curr = running_curr[:, num_dn:] + residual_curr
+        if num_dn:
+            dn_prev = absolute_branch_prev(hidden_prev[:, :num_dn])
+            dn_curr = absolute_branch_curr(hidden_curr[:, :num_dn])
+            cls_prev = torch.cat((dn_prev, logits_prev), dim=1)
+            cls_curr = torch.cat((dn_curr, logits_curr), dim=1)
+        else:
+            cls_prev = logits_prev
+            cls_curr = logits_curr
+
+        next_prev = logits_prev
+        next_curr = logits_curr
+        if self.iterative_cls_detach_between_layers:
+            next_prev = next_prev.detach()
+            next_curr = next_curr.detach()
+        if num_dn:
+            zeros_prev = running_prev.new_zeros(
+                running_prev.shape[0], num_dn, running_prev.shape[2])
+            zeros_curr = running_curr.new_zeros(
+                running_curr.shape[0], num_dn, running_curr.shape[2])
+            next_prev = torch.cat((zeros_prev, next_prev), dim=1)
+            next_curr = torch.cat((zeros_curr, next_curr), dim=1)
+        return cls_prev, cls_curr, next_prev, next_curr
 
     def _filter_both_visible_gt(self, pair_gt: InstanceData) -> InstanceData:
         """Keep only GT tracks visible in both frames for the new pair task."""

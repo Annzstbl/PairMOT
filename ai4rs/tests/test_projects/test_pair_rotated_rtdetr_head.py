@@ -1272,6 +1272,105 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
                 iterative_cls_dn_absolute=True,
                 train_cfg=_no_presence_train_cfg())
 
+    def test_pair_shared_objectness_requires_dn_isolated_iterative_mode(self):
+        with self.assertRaisesRegex(ValueError, 'iterative_cls_residual'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_pair_shared_objectness=True,
+                train_cfg=_no_presence_train_cfg())
+        with self.assertRaisesRegex(ValueError, 'dn_absolute'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_residual=True,
+                iterative_cls_pair_shared_objectness=True,
+                train_cfg=_no_presence_train_cfg())
+
+    def test_pair_shared_objectness_preserves_margins_and_isolates_dn(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_dn_absolute=True,
+            iterative_cls_pair_shared_objectness=True,
+            iterative_cls_detach_between_layers=False,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        with torch.no_grad():
+            prev_branch = head.iterative_cls_residual_branches_prev[0]
+            curr_branch = head.iterative_cls_residual_branches_curr[0]
+            prev_branch.weight.zero_()
+            curr_branch.weight.zero_()
+            prev_branch.bias.copy_(torch.tensor([1.0, 2.0, 4.0]))
+            curr_branch.bias.copy_(torch.tensor([-2.0, 1.0, 5.0]))
+
+        hidden_prev = torch.randn(1, 4, 32)
+        hidden_curr = torch.randn(1, 4, 32)
+        running_prev = torch.zeros(1, 4, 3)
+        running_curr = torch.zeros(1, 4, 3)
+        cls_prev, cls_curr, _, _ = head._iterative_cls_pair_layer(
+            running_prev,
+            running_curr,
+            hidden_prev,
+            hidden_curr,
+            prev_branch,
+            curr_branch,
+            head.cls_branches[0],
+            head.cls_branches_curr[0],
+            num_dn=2)
+
+        self.assertTrue(torch.equal(
+            cls_prev[:, :2], head.cls_branches[0](hidden_prev[:, :2])))
+        self.assertTrue(torch.equal(
+            cls_curr[:, :2],
+            head.cls_branches_curr[0](hidden_curr[:, :2])))
+        prev_normal = cls_prev[:, 2:]
+        curr_normal = cls_curr[:, 2:]
+        self.assertTrue(torch.allclose(
+            prev_normal[..., 0] - prev_normal[..., 2],
+            torch.full((1, 2), -3.0)))
+        self.assertTrue(torch.allclose(
+            curr_normal[..., 0] - curr_normal[..., 2],
+            torch.full((1, 2), -7.0)))
+        self.assertTrue(torch.allclose(
+            prev_normal.mean(dim=-1), curr_normal.mean(dim=-1)))
+
+    def test_pair_shared_objectness_couples_gradients_between_frames(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_dn_absolute=True,
+            iterative_cls_pair_shared_objectness=True,
+            iterative_cls_detach_between_layers=False,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        hidden_prev = [torch.randn(1, 3, 32) for _ in range(2)]
+        hidden_curr = [torch.randn(1, 3, 32) for _ in range(2)]
+        refs = [torch.rand(1, 3, 5) for _ in range(2)]
+        initial_prev = torch.randn(1, 3, 3)
+        initial_curr = torch.randn(1, 3, 3)
+        cls_prev, _, _, _ = head.forward(
+            hidden_prev,
+            refs,
+            refs,
+            hidden_states_prev=hidden_prev,
+            hidden_states_curr=hidden_curr,
+            initial_cls_prev=initial_prev,
+            initial_cls_curr=initial_curr)
+        cls_prev[-1].sum().backward()
+        self.assertGreater(
+            head.iterative_cls_residual_branches_curr[0].weight.grad
+            .abs().sum().item(), 0.0)
+        self.assertGreater(
+            head.iterative_cls_residual_branches_curr[1].weight.grad
+            .abs().sum().item(), 0.0)
+
     def test_iterative_cls_residual_rejects_query_mismatch(self):
         head = _build_head(
             num_layers=2,
