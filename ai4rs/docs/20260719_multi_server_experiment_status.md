@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 06:46 CST。
+更新时间：2026-08-03 06:59 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；按晚收敛约束继续 e8/e12，06:45 位于 e5 250/1038；GPU0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_05` 的 129 项回归、零增量完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`；`0803_03` e4 完整负向但按晚收敛约束继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过，06:46 位于 e2 350/1038 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1507,3 +1507,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   TrackEval `async_done=1`、28 个 CSV 与 108 个评估文件完整。
 - 训练已进入 e5，按用户约束继续 e8/e12，不以 e4 停止；该结果只支持用 `0803_04` 区分
   raw-logit 坐标失真与角度共享本身，不支持参数扫描或复杂化。
+
+## 2026-08-03 06:59 CST：252 0803_05 normalized-center 正式启动
+
+- `0803_05` 只改变普通 query 的中心 refinement 坐标：解码候选中心后，以各自 reference 的
+  `w/h` 表示局部归一化增量，求两帧共同校正并映回各自 reference；尺寸、角度、分类、DN、loss、
+  attention 和 decoder 层数不变。结构为零参数、class-agnostic、无 reweight，使用隔离 checkout，
+  未热更新 GPU2/3 活跃的 `0803_03` 仓库。
+- 3 项定向测试与 129 项 decoder 回归通过；完整父/新模型均为 `22,771,111` 参数、711 个 state
+  tensor。双卡真数据 smoke 四步 loss/grad 均有限，364,473,270-byte checkpoint 与 DN 隔离语义
+  检查通过，结束后 GPU0/1 回收。
+- formal fresh 于 06:57 启动，PGID `3549855`；iter50 为 `1.1465 s/iter`、loss `21.3848`、
+  grad norm `102.6548`，两卡各约 19.2 GiB，正式进程、有限总/DN/Encoder loss、资源占用与错误
+  扫描五项门槛全部通过。继续收集 e4/e8/e12，不按 e4/e8 单点停止。

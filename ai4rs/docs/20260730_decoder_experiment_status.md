@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 06:46 CST
+更新时间：2026-08-03 06:59 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | 无 | `IDLE` | `0803_01` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
+| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | 零参数局部坐标中心共识；129 项 decoder 回归、完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`。 |
 | 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；不按 e4 停止，06:45 位于 e5 250/1038，继续 e8/e12。 |
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、零参数完整构建、retry1 smoke 与 formal 五门槛通过；06:46 位于 e2 350/1038。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2051,3 +2051,21 @@
   与 108 个评估文件完整。该点只否定“raw-logit angle 共享有早期净收益”，不作为 decoder
   直接淘汰点；训练已进入 e5，继续到 e8/e12。`0803_04` 的 π 周期切空间表示保留为严格
   坐标对照，不从 e4 结果派生 scale、gate、class-aware 或 reweight 版本。
+
+## 2026-08-03 06:59 CST：0803_05 参考框局部坐标中心共识正式运行
+
+- 现有实验已证明分类 objectness、完整 `w/h/angle` 与 angle-only 的硬共享均会在早期损伤覆盖；
+  新候选转向此前未约束的中心校正，并避免直接平均 raw logits。每层普通 query 先解码两帧候选
+  中心，分别以各自 reference 的 `w/h` 将中心增量归一化，在局部坐标中取共同校正，再映回各自
+  reference。`w/h/angle`、分类、DN、loss、attention 与 decoder 深度均不变。
+- 该投影零参数、交换等变、class-agnostic，不含 reweight 或类别路由。252 隔离 checkout
+  `/data/users/litianhao01/PairMmot_center_0803_05` 使用提交 `aa40da7`；3 项定向测试与完整
+  129 项 decoder 回归通过，父/新完整模型参数和 state 均一致（`22,771,111` 参数、711 tensors）。
+- 真数据双卡 4-iter smoke 的 loss 为
+  `12.8954/19.1886/19.1859/19.8717`，grad norm 为
+  `91.1080/90.8830/82.2923/83.7991`；总、DN、Encoder losses 均有限，364,473,270-byte
+  checkpoint 与分类/DN 语义检查通过，短测后 GPU0/1 回收。
+- formal fresh PGID `3549855`；epoch 1 iter50 为 `1.1465 s/iter`、loss `21.3848`、grad norm
+  `102.6548`，两卡各约 19.2 GiB，进程组、日志与全部 loss group 正常，无
+  Traceback/OOM/NaN/NCCL/DDP 错误，五项启动门槛通过。与 `0803_03/04` 同样收集
+  e4/e8/e12 及成熟节点，不以 e4/e8 直接否决。

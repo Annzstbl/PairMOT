@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 05:08 CST.
+Last updated: 2026-08-03 06:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1822,3 +1822,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   同时保留 `0803_04` 的 π 周期切空间圆周中点对照：若其 e4 显著恢复 DetA/AP，说明主要问题
   是角度坐标；若两者都系统性退化，则后续候选转向 terminal-only 或取消逐层角度共识，仍不做
   gate、scale、class-aware、reweight 或额外 loss/attention/layer。
+
+## 2026-08-03 06:59 CST：中心局部坐标主线接替空闲资源
+
+- `0803_03` 的 e4 说明 raw-logit angle 共识同时伤害 DetA、AssA 与 AP；但按晚收敛约束继续
+  e8/e12。为避免只围绕角度派生 scale/gate，252 GPU0/1 的正交候选改为 `0803_05`：普通 query
+  的中心校正先按各帧 reference `w/h` 归一化，在 reference 局部坐标取共同增量，再分别映回；
+  `w/h/angle`、分类、DN、loss 与 decoder 主计算不变。
+- 该设计零参数、class-agnostic、无 reweight；3 项新不变量测试、完整 129 项 decoder 回归、配置
+  深拷贝、父/新完整构建、252 双卡真数据 4-iter smoke 与 checkpoint 语义检查已通过。正式 fresh
+  PGID `3549855` 的 iter50 时间/loss/grad 为 `1.1465/21.3848/102.6548`，总、DN、Encoder loss
+  有限且两卡约 19.2 GiB，无致命错误。
+- 当前三条结构对照分别检验 raw-logit angle、π 周期 angle 与 reference-local center 共识；均保留
+  e4/e8/e12 和成熟节点观察窗口。最终只接受同一 checkpoint 的 cls/det HOTA 严格超过
+  `54.437/62.393` 且总和严格大于 `118.330`。
