@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 07:46 CST
+更新时间：2026-08-03 07:54 CST
 
 ## 当前研究原则
 
@@ -21,7 +21,8 @@
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
 已准备但未排队：178 的 `0803_06 iterative-cls frame-evidence decoder`。当前 GPU0 由
-`0803_04` 独占；`0803_06` 不创建等待进程、不抢占资源。
+`0803_04` 独占；另有 `0803_07 frame-evidence + periodic-angle` 零参数组合候选完成目标环境
+静态验证。两者都不创建等待进程、不抢占资源。
 
 ## 已完成或释放
 
@@ -2103,3 +2104,19 @@
 - `epoch_4.pth` 为 369,971,828 bytes；5416 条检测、50 序列、TrackEval
   `async_done=1`、28 个 CSV 与 108 个评估文件完整。训练已自然进入 e5，继续 e8/e12 和成熟
   节点，不以 e4 直接决策停止。178 继续由本实验占用；`0803_06` 保持 `PREPARED`、未排队。
+
+## 2026-08-03 07:54 CST：0803_07 正交组合候选已准备
+
+- `0803_04` e4 表明 π 周期角度共识能同时恢复 DetA、AssA 与 AP，但 cls 相对 Encoder e4 仍有
+  `0.185` HOTA 缺口；`0803_06` 则针对分类 head 丢弃已有帧特异 cross-attention evidence。
+  `0803_07` 将两者组合：分类只读取各自帧证据，回归只对普通 query 的 angle residual 做周期
+  切空间圆周中点；共享 recurrent query、x/y/w/h、DN、loss 与 decoder 主路径均不变。
+- 两个开关在代码路径上严格正交：帧证据路由发生于分类输入，周期角度投影发生于随后生成的框
+  residual。新增组合不变量测试证明，在相同权重与输入下，组合版本的 shared hidden state 和全部
+  periodic references 与纯 `0803_04` 逐元素相同，同时输出两帧不同的分类 evidence。
+- 178 隔离 checkout `/data1/users/litianhao01/PairMOT_framecls_0803_06` 固定在提交 `ee36e33`；
+  组合定向测试 1/1、完整 132 项 decoder 回归、配置深拷贝、两份 launcher 语法和完整模型构建
+  均通过。完整模型为 `22,771,111` 参数、参数增量 `0`、711 个 state tensor。
+- 状态仅为 `PREPARED`：未运行真数据 smoke、未建立 formal workdir、未排队、不占 GPU。
+  活动 `0803_04` 仓库仍为提交 `9fb501a` 且 9 个进程成员存活。待 `0803_04` e8/e12 与资源释放后，
+  再在 `0803_06` 单因素和 `0803_07` 联合候选间依据成熟轨迹选择部署顺序。

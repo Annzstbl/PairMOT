@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 07:46 CST.
+Last updated: 2026-08-03 07:54 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1860,3 +1860,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 99 GPU0/1 仍被外部任务占用，GPU2 未授权；197 GPU4/5 虽空闲但 formal 吞吐约
   `80 s/iter`；252 四卡由 `0803_03/05` 使用。`0803_06` 保持 `PREPARED`、不排队、不抢占，
   待首个合适授权资源释放后再执行真数据 smoke 和 formal 五门槛。
+
+## 2026-08-03 07:54 CST：准备周期角度与帧证据联合候选
+
+- e4 归因给出互补缺口：`0803_04` 的周期角度显著提高 det 与检测 AP，但 cls 仍受早期关联缺口
+  限制；`0803_06` 恰好只恢复被共享 state 丢弃的帧特异分类证据。`0803_07` 把两项零参数路由
+  组合，框回归和分类的信息路径不交叉，不增加 attention、loss、层、class-aware 信号或 reweight。
+- 组合不变量测试、完整 132 项 decoder 回归、配置深拷贝、完整构建与 launcher 语法已在 178
+  隔离 checkout 通过；参数/state 与父模型相同。活动 `0803_04` 仓库和进程未修改。
+- `0803_07` 与 `0803_06` 均保持 `PREPARED`。先读取 `0803_04` e8/e12 是否保持周期坐标收益；
+  若保持，联合候选优先用于冲击最终同点双超目标，单因素 `0803_06` 保留为分类归因对照。任何正式
+  启动仍必须先通过目标 GPU 真数据 smoke、checkpoint 语义审计和 iter-50 五门槛。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 07:46 CST。
+更新时间：2026-08-03 07:54 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_05` 的 129 项回归、零增量完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`；`0803_03` e4 完整负向但按晚收敛约束继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`，07:43 已进入 e5，继续 e8/e12 | `0803_06 frame-evidence cls` 为 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`，07:43 已进入 e5，继续 e8/e12 | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED，均未排队 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1547,3 +1547,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - pair mAP/AP50 `0.1634/0.3034`，both-independent `0.2103/0.3774`；`epoch_4.pth`
   369,971,828 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、28 个 CSV 与 108 个
   评估文件完整。07:43 训练已进入 e5；178 不释放，`0803_06` 继续 `PREPARED`、未排队。
+
+## 2026-08-03 07:54 CST：178 0803_07 组合候选已准备
+
+- `0803_07` 正交组合两个零参数机制：分类 head 使用各帧已有 cross-attention evidence；普通 query
+  的 angle residual 使用 π 周期切空间圆周中点。共享 recurrent query、x/y/w/h、DN、loss、
+  attention 数量与 decoder 深度不变；无 class-aware 路由或 score reweight。
+- 组合不变量测试证明，在相同权重/输入下，shared hidden state 与全部 periodic references 和
+  `0803_04` 逐元素一致，只有返回给分类 head 的 prev/curr evidence 分离。目标环境 1 项定向测试、
+  完整 132 项 decoder 回归、配置深拷贝、launcher 语法和完整构建全部通过：`22,771,111`
+  参数、参数增量 `0`、711 个 state tensor。
+- 隔离 checkout 为 `/data1/users/litianhao01/PairMOT_framecls_0803_06`，提交 `ee36e33`；活动训练
+  仓库仍为 `9fb501a`，未热更新且 PGID `2893156` 的 9 个成员存活。该候选仅 `PREPARED`，没有
+  smoke、formal workdir、等待进程或 GPU 占用；部署顺序等待 `0803_04` e8/e12 成熟证据。
