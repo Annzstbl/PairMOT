@@ -1799,3 +1799,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   gate、scale 或调权版本；继续以 `0803_03` 单角度共享区分“角度噪声可抑制”与“逐层 reference
   耦合本身有害”。若 angle-only e4 表现为 AssA 改善但 DetA 明显受损，才启用零参数末层-only
   angle 后备；否则保持当前结构到 e8/e12，不提前占用释放资源。
+
+## 2026-08-03 06:27 CST：周期切空间角度共识并行验证
+
+- 利用完整 shape e12 已确认的几何约束代价，在 178 启动 `0803_04`：普通 query 每层仅共享
+  π 周期切空间中的角度增量圆周中点，而非 `0803_03` 的 raw logit residual 算术均值。
+  两者均保持 x/y/w/h、分类和 DN 独立，参数/state 增量为零；这是一项坐标语义对照，不是
+  residual scale、gate 或超参数扫描。
+- 3 项定向测试、126 项完整 decoder 回归、配置深拷贝和父/新模型完整构建通过。首次 smoke
+  因 logger 间隔不产生 4-iter loss/grad 证据，未计为通过；retry1 逐 iter 日志、有限总/DN/
+  encoder loss、有限 grad、364,504,628-byte checkpoint 与语义检查全部通过。
+- formal PGID `2893156` 已在 178 GPU0 通过 iter-50 五项门槛；`0803_03` 同期继续在 252 GPU2/3
+  到 e4/e8/e12。两项都不按 e4/e8 直接停止，先比较 HOTA、DetA、AssA 与 AP 的轨迹，再决定
+  是否把共享收缩到 terminal-only 或继续周期表示。

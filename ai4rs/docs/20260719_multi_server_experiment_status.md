@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 05:57 CST。
+更新时间：2026-08-03 06:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛，05:57 位于 e3；GPU0/1 已在 `0803_01` e12 完整产物封存后释放 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无 | IDLE；`0803_02` e12 checkpoint、检测和完整 TrackEval 封存后于 05:56 停止，GPU0 已释放 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_03 angle-only`（GPU2/3） | RUNNING；已通过隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛，06:26 位于 e4 700/1038；GPU0/1 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；126 项回归、零参数完整构建、retry1 真数据 smoke 与 formal iter-50 五项门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1482,3 +1482,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   28 个 CSV 与 108 个评估文件完整。05:56 精确停止 PGID `2857661`，9 个成员全部退出，
   178 GPU0 为 `1 MiB/0%`。不派生完整 shape 的 gate/scale 版本，继续等待 `0803_03`
   angle-only 的 e4/e8/e12 局部几何证据。
+
+## 2026-08-03 06:27 CST：178 0803_04 周期角度共识正式启动
+
+- `0803_04` 将普通 query 的两帧角度更新解释为 π 周期切空间增量，以圆周中点共享更新，再分别
+  相对原 reference 编码；x/y/w/h、分类与 DN 不变。该结构零参数、class-agnostic、无 reweight、
+  新 loss/attention/layer，和 `0803_03` 的 raw-logit residual 均值构成坐标语义对照。
+- 178 上 3 项定向测试和完整 126 项 decoder 回归通过；配置深拷贝与父/新完整构建证明均为
+  `22,771,111` 参数、711 个 state tensor。首次 smoke 因 4 iter 小于 logger interval 50 而
+  缺 loss/grad 日志，只保留为不充分短测；retry1 逐 iter 记录的 loss
+  `21.3730/20.6351/20.9249/21.2029`、grad norm
+  `61.5507/73.7742/81.8450/75.9738`，DN/encoder loss 与 checkpoint 检查全部通过。
+- formal fresh 06:25 启动，PGID `2893156`。iter 50 为 `0.9421 s/iter`、loss `21.0028`、
+  grad norm `102.4835`；9 个成员、GPU0 约 31.4 GiB、正式日志与所有 loss group 均正常，五项
+  门槛通过。首批完整节点仍为 e4/e8/e12，禁止把 e4/e8 当作直接否决点。

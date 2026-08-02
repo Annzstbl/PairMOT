@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 05:57 CST
+更新时间：2026-08-03 06:27 CST
 
 ## 当前研究原则
 
@@ -15,8 +15,8 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_01` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
-| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；05:57 位于 e3，继续收集 e4/e8/e12。 |
-| 178 GPU 0 | 无 | `IDLE` | `0803_02` 已在 e12 完整检测与 TrackEval 后停止；checkpoint 与全部评估产物保留。 |
+| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | 隔离 checkout、真实双卡 smoke 与 formal iter-50 五项门槛通过；06:26 位于 e4 700/1038，继续收集 e4/e8/e12。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | 126 项回归、配置深拷贝、零参数完整构建与 retry1 真数据 smoke 通过；formal iter-50 五项门槛通过。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2019,3 +2019,21 @@
   与总计 108 个评估文件均核验完整。05:56 精确停止 PGID `2857661`，9 个进程成员全部退出，
   178 GPU0 回到 `1 MiB/0%`。该分支不派生 gate、scale、class-aware 或 reweight；几何主线继续
   由只共享角度且零参数的 `0803_03` 提供更局部的机制检验。
+
+## 2026-08-03 06:27 CST：0803_04 周期切空间角度共识正式运行
+
+- 新结构不在 sigmoid/logit 坐标直接平均回归 residual，而是先把每帧候选角度相对各自
+  reference 的最短增量映射到 π 周期切空间，以圆周中点形成共享增量，再相对每帧原 reference
+  重新编码。普通 query 的 x/y/w/h、分类与 DN prefix 均保持独立；结构交换等变、class-agnostic，
+  无 reweight、loss、attention、decoder 层或可训练参数。
+- 178 目标环境的 3 项定向测试与完整 126 项 decoder 回归通过；正式/短测配置深拷贝、父/新
+  完整模型构建通过，二者均为 `22,771,111` 参数、711 个 state tensor，增量严格为零。第一次
+  4-iter smoke 生成 checkpoint 但 logger 间隔 50，不能证明有限 loss/grad，故保留为不充分短测；
+  retry1 改为逐迭代记录后重新 fresh 执行。
+- retry1 四次 loss 为 `21.3730/20.6351/20.9249/21.2029`，grad norm 为
+  `61.5507/73.7742/81.8450/75.9738`，总、DN、encoder loss 均有限；364,504,628-byte
+  checkpoint 与 iterative-classification/DN-absolute 语义检查通过，GPU0 随后释放。
+- formal fresh 于 06:25 启动，PGID `2893156`；iter 50 为 `0.9421 s/iter`、loss
+  `21.0028`、grad norm `102.4835`，DN/encoder loss 有限，GPU0 约 31.4 GiB，9 个进程成员
+  存活，无 Traceback/OOM/NaN/DDP 错误，五项启动门槛全部通过。与 `0803_03` 并行比较的唯一
+  结构变量是角度增量坐标：raw logit residual 均值对 π 周期切空间圆周中点。
