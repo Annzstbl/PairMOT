@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-01 12:32 CST.
+Last updated: 2026-08-03 02:49 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1712,3 +1712,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 新结构优先等待正交的 `0803_02` 几何证据；若共享全部 `w/h/angle` 也表现为系统性覆盖下降，
   下一候选只做更局部的几何不变量（优先角度或面积中的单一分量），仍保持零参数、非 class-aware、
   无 reweight/额外 loss/attention/layer，并先做同协议真实 smoke。
+
+## 2026-08-03 02:49 CST：局部角度不变量后备方案
+
+- `0803_03` 已按上述归因实现为只共享 angle residual；`x/y/w/h`、分类 residual 和 DN prefix
+  均保持父模型语义。它不引入参数、state、主矩阵计算、loss、attention、class-aware 信号或
+  reweight，且保持帧交换等变。
+- 252 隔离环境的 3 项语义/梯度测试、配置深拷贝和完整模型构建均通过；父/新模型同为
+  `22,771,111` 参数和 `711` 个 state tensor。候选保持 `PREPARED`，不热更新活动仓库。
+- 决策顺序不变：先读 `0803_02` e4/e8/e12 与成熟节点的 DetA/AssA/AP；若完整 shape 共享
+  出现覆盖损失而 angle 局部先验仍有机制依据，则在释放的授权资源上先跑真实 4-iter smoke，
+  通过 checkpoint 更新与 iter-50 五项门槛后再正式训练。

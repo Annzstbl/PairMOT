@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 02:36 CST
+更新时间：2026-08-03 02:49 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 checkpoint、检测与完整 TrackEval 已收齐；结果为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12，02:35 已进入 epoch 5。 |
-| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | 保持原模型、optimizer、scheduler 与 EMA，从 e56 续训晚期上升轨迹；02:02 位于 epoch 58 iter 250，约 `1.35 s/iter`。 |
-| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。真实 smoke 与 checkpoint 更新审计通过；02:11 正式 iter 50 为 `0.9497 s/iter`、loss `21.0192`、grad norm `104.8574`。 |
-| 99 GPU 0,1 | 无 | `UNREACHABLE` | SSH 连接仍超时，不进行不可控启动。 |
+| 252 GPU 0,1 | `0803_01 ... iterativeclspairsharedobjectness ... fresh` | `RUNNING` | e4 checkpoint、检测与完整 TrackEval 已收齐；结果为明显早期系统性退化，但按 decoder 晚收敛约束继续 e8/e12，02:40 位于 epoch 5 iter 600。 |
+| 252 GPU 2,3 | `0801_09 ... decoder_iterativeclsdnisolatede2e ... resume e56` | `RUNNING` | 保持原模型、optimizer、scheduler 与 EMA，从 e56 续训晚期上升轨迹；02:47 位于 epoch 60 iter 250，约 `1.33 s/iter`，等待 e60 完整评估。 |
+| 178 GPU 0 | `0803_02 ... iterativecls pair-shared-shape ... fresh` | `RUNNING` | 每层普通 query 保留独立中心位移，仅共享两帧 w/h/angle residual；零参数、交换等变、class-agnostic。02:47 进程与约 `31.5 GiB` 显存占用复核正常，等待 e4 完整评估。 |
+| 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
 ## 已完成或释放
@@ -1891,3 +1891,16 @@
   原始评估文件均完整。该点说明 pair-shared objectness 当前造成检测与关联同步退化，不是
   DetA/AssA 指标搬运；但 e4 只登记为早期负向证据，训练已进入 e5，继续到 e8/e12 检查
   decoder 的延迟恢复，不作 e4 直接否决。
+
+## 2026-08-03 02:49 CST：0803_03 仅角度共享候选完成隔离验证
+
+- 基于 `0803_01` 的分类/objectness 耦合同步损伤检测与关联，不再派生任何分类耦合、scale
+  或 gate。后备候选 `0803_03` 收缩为最局部的几何先验：每层普通 query 仅把两帧 angle
+  residual 替换为均值，`x/y/w/h`、全部分类 residual 与 DN prefix 均保持独立。
+- 该操作交换等变、class-agnostic，不含 reweight、额外 loss/attention/layer 或可训练权重。
+  252 临时隔离 clone 的 3 项定向测试全部通过，覆盖 DN/非角度维逐位保持、交换等变、梯度
+  只跨帧流入 angle，以及与完整 shape 共享互斥。配置深拷贝与完整父/新模型构建通过：两者
+  均为 `22,771,111` 参数、`711` 个 state tensor，参数与 state 增量均为零。
+- commit `9d90733` 只保留在本地主线；252/178 活动仓库没有热更新。候选状态为 `PREPARED`，
+  尚未启动、未占用 GPU。先等待 `0803_02` 完整节点判断共享 `w/h/angle` 的作用，再在授权资源
+  释放后做真实数据 smoke 与正式 iter-50 五项门槛，避免无依据并行消耗。
