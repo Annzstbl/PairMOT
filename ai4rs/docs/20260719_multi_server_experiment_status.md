@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 14:05 CST。
+更新时间：2026-08-03 14:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e4 cls/det HOTA `30.698/38.350`；`0803_07` e8 为 `41.380/47.515`，继续 e12；PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无 | IDLE；`0803_04` e24 cls/det HOTA `50.133/55.346` 后精确停止，GPU0 已释放 | `0803_09 log-size tangent + periodic-angle` 优先进入 smoke/formal；`0803_08` 保持 PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；真数据 smoke 与 formal iter50 五门槛通过，PGID `2971994` | `0803_08 common-preserving frame-detail + periodic-angle` 保持 PREPARED；`0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1754,3 +1754,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 严格最终阈值仍差 `4.304/7.047`。完整节点核验后精确终止 PGID `2893156`，9 个成员全部退出，
   178 GPU0 回到 `1 MiB/0%`；e24 断点保留可恢复。下一步优先用 `0803_09` 的 reference-local
   log-size tangent 补充已验证的 periodic-angle，直接检验检测几何平台。
+
+## 2026-08-03 14:12 CST：178 0803_09 正式运行
+
+- 隔离 checkout 固定 `35e18f1c`。真数据 4-step smoke loss
+  `21.3700/20.6566/20.9046/21.1935`、grad
+  `117.3254/104.8011/100.5948/101.3451`，全部有限；364,505,012-byte checkpoint
+  完整，语义检查确认 iterative classification residual 与 DN absolute heads 已训练。
+- fresh formal PGID `2971994`；真实 iter50 为 `0.9750 s/iter`、loss `21.0017`、grad
+  `109.5454`。9 个进程成员存活，GPU0 驻留约 31.4 GiB，无 OOM/Traceback/NCCL/non-finite，
+  provenance 与目标 workdir 正确，formal 五门槛通过。
+- 状态为 `RUNNING`。该结构零参数、class-agnostic、无 reweight，只在 normal query 上组合
+  reference-local log-size tangent 与 π-periodic angle tangent；下一完整判定点为 e4/e8/e12，
+  不按早期节点单独否决。

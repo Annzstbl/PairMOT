@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 14:05 CST
+更新时间：2026-08-03 14:12 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e4 cls/det HOTA `30.698/38.350`；完整评测后继续 e8/e12，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `41.380/47.515`，成熟差距仍在，继续 e12；PGID `3694870`。 |
-| 178 GPU 0 | 无 | `IDLE` | `0803_04` e24 为 `50.133/55.346` 后精确停止；GPU0 已释放给 `0803_09` smoke/formal。 |
+| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -24,9 +24,9 @@
 实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
 不热更新活动仓库。
 
-已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle` 与
-`0803_09 log-size tangent + periodic-angle`。两者只完成隔离目标环境的测试与构建，不创建
-smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
+已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle`。它只完成
+隔离目标环境的测试与构建，不创建 smoke/formal workdir。`0803_09 log-size tangent +
+periodic-angle` 已在 `0803_04` e24 平台确认并释放后接管 GPU0。
 
 ## 已完成或释放
 
@@ -2325,3 +2325,14 @@ smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
 - 严格阈值仍差 `4.304/7.047`。精确停止 PGID `2893156` 后 9 个成员全部退出，GPU0 为
   `1 MiB/0%`；e24 checkpoint 保留。下一步在 178 启动零参数 `0803_09 log-size tangent +
   periodic-angle`，检验宽高乘法几何能否突破 det 平台。
+
+## 2026-08-03 14:12 CST：0803_09 log-size tangent + periodic-angle 正式启动
+
+- 隔离 checkout `/data1/users/litianhao01/PairMOT_logshape_0803_09` 固定 `35e18f1c`。真数据
+  4-step smoke loss `21.3700/20.6566/20.9046/21.1935`，grad
+  `117.3254/104.8011/100.5948/101.3451`，全部有限；364,505,012-byte checkpoint 与
+  iterative-cls/DN 语义检查通过。
+- fresh formal PGID `2971994`；iter50 `0.9750 s/iter`、loss `21.0017`、grad `109.5454`，
+  9 个成员存活，GPU0 约 31.4 GiB，错误扫描、provenance 与目标 workdir 五门槛通过。
+- 状态为 `RUNNING`，继续 e4/e8/e12。结构零参数、class-agnostic、无 reweight，不增加 attention
+  或 decoder 深度；normal query 只对宽高采用 reference-local log 比例共识并保留周期角度共识。

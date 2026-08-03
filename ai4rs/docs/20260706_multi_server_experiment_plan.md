@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 14:05 CST.
+Last updated: 2026-08-03 14:12 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2012,3 +2012,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 178 下一任务选择 `0803_09 log-size tangent + periodic-angle`：只补宽高的 reference-local
   乘法几何共识，不改变中心、分类、DN、loss、attention 或深度。先走真数据 smoke 与 formal
   iter50 五门槛；`0803_08` 保持 PREPARED，等待 `0803_06/07` e12 的分类成熟归因。
+
+## 2026-08-03 14:12 CST：log-size tangent 正式启动
+
+- 178 隔离 checkout `35e18f1c` 的真数据 4-step smoke 已通过：四步 loss/grad 全部有限，
+  364,505,012-byte checkpoint 与 iterative-cls/DN 语义检查完整。
+- fresh formal PGID `2971994`；真实 iter50 为 `0.9750 s/iter`、loss `21.0017`、grad
+  `109.5454`，9 个成员、GPU0 约 31.4 GiB 驻留、错误扫描和提交来源五门槛均通过。
+- `0803_09` 状态提升为 `RUNNING`。继续收集 e4/e8/e12；它只改变宽高与角度的几何坐标共识，
+  不引入参数、类别感知、重加权、额外 attention 或 decoder 深度。
