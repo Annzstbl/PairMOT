@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 11:22 CST。
+更新时间：2026-08-03 11:31 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_07 frame-evidence + periodic-angle`（GPU2/3） | RUNNING；smoke 与 formal iter50 五门槛通过，PGID `3694870`；GPU0/1 已从 `0803_05` 释放 | `0803_06 frame-evidence cls` 正在准备 GPU0/1 双卡版本；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`，继续更成熟节点 | `0803_06 frame-evidence cls` 为 PREPARED；`0803_07` 已在 252 RUNNING | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` smoke 与 formal iter50 五门槛通过，PGID `3765372`；`0803_07` PGID `3694870` | 无；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e16 cls/det HOTA `48.474/55.272`，e12→e16 `+0.561/+0.015`，继续 e20 | 无；`0803_06/07` 已在 252 RUNNING | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1667,3 +1667,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。
 - 精确 PGID `3549855` 经配置路径预检后终止，23 个成员全部退出；GPU0/1 为 1 MiB/0%，
   GPU2/3 上 `0803_07` 继续运行。GPU0/1 转入 `0803_06 frame-evidence-cls` 双卡准备。
+
+## 2026-08-03 11:31 CST：252 0803_06 启动与 178 0803_04 e16
+
+- `0803_06` 隔离 checkout 固定提交 `0585d9a`；132 项回归、2 个 subtests、父/新完整构建通过，
+  两者均为 `22,771,111` 参数和 711 state tensors，增量为零。真数据 smoke 四步 loss/grad 有限，
+  checkpoint 与分类/DN 语义检查通过。
+- `0803_06` formal fresh PGID `3765372`；iter50 为 `1.2946 s/iter`、loss `21.4356`、
+  grad norm `109.5840`，7 个进程成员、GPU0/1 各约 19.2 GiB、正式日志、真实迭代、有限 loss 与
+  错误扫描五门槛通过，状态为 `RUNNING`。
+- `0803_04` e16 cls HOTA/DetA/AssA `48.474/40.377/60.513`，det
+  `55.272/49.385/64.188`；e12→e16 双 HOTA `+0.561/+0.015`。pair mAP/AP50
+  `0.2628/0.4523`，both-independent `0.3057/0.5042`；checkpoint 与 50/28/108 产物完整。
+  PGID `2893156` 继续 e20，不能用单个趋平区间否定 decoder 的延迟收敛。

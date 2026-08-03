@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 11:22 CST.
+Last updated: 2026-08-03 11:31 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1934,3 +1934,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   是否独立贡献；保持 x/y/w/h/angle、共享 recurrent query、DN、loss 与 decoder 深度不变，不引入
   class-aware 或 reweight。必须依次通过目标环境全构建、完整回归、真数据双卡 smoke、checkpoint
   语义审计与 formal iter-50 五门槛，再收集 e4/e8/e12 和成熟节点。
+
+## 2026-08-03 11:31 CST：frame-evidence 单因素运行与 periodic-angle 延长
+
+- `0803_06` 已在 252 GPU0/1 完成目标环境 132 项回归、零参数全构建、真数据双卡 smoke 和
+  checkpoint 语义审计；formal PGID `3765372` 的 iter50 时间/loss/grad norm 为
+  `1.2946/21.4356/109.5840`，五门槛通过。按 e4/e8/e12 和成熟节点协议收集轨迹。
+- `0803_04` e16 为 `48.474/55.272`，e12→e16 为 `+0.561/+0.015`；检测侧单区间趋平，
+  分类侧仍有缓慢增长。由于该机制此前在 e8/e12 均为正向且 decoder 可能延迟收敛，继续 e20，
+  再判断平台是否持续；严格目标仍是同 checkpoint 双超 `54.437/62.393` 且合并增益 `>1.5`。

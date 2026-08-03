@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 11:22 CST
+更新时间：2026-08-03 11:31 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,15 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | 无 | `IDLE/PREPARING` | `0803_05` 已在 e12 完整评估后精确停止；正在准备零参数 `0803_06 frame-evidence-cls` 双卡归因分支。 |
+| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | 132 项回归、零参数全构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | 真数据 smoke 与 formal iter50 五门槛通过，PGID `3694870`；接替 e12 成熟负向后停止的 `0803_03`。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`；继续 e16 与成熟节点。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e16 cls/det HOTA `48.474/55.272`；e12→e16 为 `+0.561/+0.015`，继续 e20 检验单区间平台。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
-已准备但未排队：178 的 `0803_06 iterative-cls frame-evidence decoder`。当前 GPU0 由
-`0803_04` 独占；另有 `0803_07 frame-evidence + periodic-angle` 零参数组合候选完成目标环境
-静态验证。两者都不创建等待进程、不抢占资源。
+`0803_06 iterative-cls frame-evidence decoder` 已从 178 的单卡预案迁移为 252 GPU0/1 双卡正式
+实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
+不热更新活动仓库。
 
 ## 已完成或释放
 
@@ -2217,3 +2217,24 @@
 - 11:18 对精确 PGID `3549855` 做配置路径预检后发送 TERM，23 个成员全部退出；GPU0/1 回落至
   1 MiB，GPU2/3 上的 `0803_07` 未受影响。归一化中心共识收口为成熟负向，空闲双卡转给零参数
   `0803_06 frame-evidence-cls` 单因素归因。
+
+## 2026-08-03 11:31 CST：0803_06 frame-evidence-cls 正式运行
+
+- 新建 252 GPU0/1 双卡配置及 smoke/formal 启动器；隔离 checkout
+  `/data/users/litianhao01/PairMmot_framecls_0803_06` 固定在提交 `0585d9a`。132 项 decoder 回归与
+  2 个 subtests 通过；父/新模型均为 `22,771,111` 参数、711 state tensors，参数增量严格为零。
+- 真数据 4-iter smoke loss `12.9405/19.3125/19.1891/20.0475`，grad norm
+  `102.9508/90.0784/88.7070/84.7921`；总、DN、Encoder loss 有限，364,473,270-byte
+  checkpoint 与 iterative-cls/DN-absolute 语义检查通过。
+- formal fresh PGID `3765372`；iter50 为 `1.2946 s/iter`、loss `21.4356`、grad norm
+  `109.5840`，7 个进程成员存活，GPU0/1 各约 19.2 GiB，五项门槛通过。继续 e4/e8/e12 与成熟节点。
+
+## 2026-08-03 11:31 CST：0803_04 periodic-angle epoch-16
+
+- e16 cls HOTA/DetA/AssA `48.474/40.377/60.513`，det
+  `55.272/49.385/64.188`；相对 e12 双 HOTA为 `+0.561/+0.015`，cls 仍缓慢上升，det 在单个
+  四 epoch 区间接近平台，但尚不能由一个区间判定长期收敛结束。
+- pair mAP/AP50 `0.2628/0.4523`，both-independent `0.3057/0.5042`；386,622,452-byte
+  checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 相对严格最终阈值仍低 `5.963/7.121`，目标未达到。PGID `2893156` 继续至 e20，检验 det 平台
+  是否持续及 cls 的延迟关联增益；不因单个 e12→e16 区间收窄就停止正向分支。
