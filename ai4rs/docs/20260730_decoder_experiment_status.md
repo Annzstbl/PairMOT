@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 19:36 CST
+更新时间：2026-08-03 20:28 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.399/39.251`，相对 Encoder `-3.810/+0.498`；继续 e8/e12，PGID `4053545`。 |
-| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.688/47.811`，相对 Encoder 同点 `-4.581/-2.382`；按晚收敛约束继续 e12，PGID `3940521`。 |
+| 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/LONG_TRAJECTORY` | e16 `50.732/57.218`；相对原始 decoder 同点 `+0.696/+0.285`，继续 e20/e24 及后期收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
@@ -2554,3 +2554,18 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - fresh formal 精确 PGID `53708`；iter50 `1.4287 s/iter`、loss `21.3917`、grad
   `120.7769`，7 个进程，GPU4/5 各 19,226 MiB，错误扫描干净，HEAD/config/workdir 一致，
   五门槛通过。状态 `RUNNING`，首个完整判断点为 e4。
+
+## 2026-08-03 20:28 CST：0803_08 成熟停止并由 0803_12 接替
+
+- 0803_08 e12 cls HOTA/DetA/AssA `44.177/36.085/57.044`，det
+  `52.763/46.795/61.568`；相对 Encoder 同点低 `5.503/3.778`，相对 periodic-angle 低
+  `3.736/2.494`，相对原始 decoder 低 `3.218/1.673`。e8→e12 相对差距继续恶化。
+- pair mAP/AP50 `0.2245/0.3954`、both-independent `0.2653/0.4479`；381,032,310-byte
+  checkpoint、5416 条记录、50 序列、28 CSV、108 个非空文件完整。依据 e4/e8/e12 三节点
+  成熟负向轨迹精确 TERM PGID `3940521`，23→0，GPU2/3 为 `0%/1 MiB`。
+- 新增零参数 `0803_12 progressive geometric consensus`：首层自由，倒数第二层只共享
+  log-area 与周期角，末层共享完整 log-size 与周期角；无 class-aware、reweight、额外层或 attention。
+  目标单测 `1 passed/138 deselected`，模型 22,771,111 参数、零增量、711 state tensors。
+- 4-iter DDP smoke 四步 loss/grad 全有限，364,502,134-byte checkpoint、错误扫描与语义检查
+  通过。fresh formal PGID `4189798`；iter50 `1.2941 s/iter`、loss `21.3858`、grad
+  `113.3648`，7 个进程、GPU2/3 各 19,192 MiB，五门槛通过，状态 `RUNNING`。
