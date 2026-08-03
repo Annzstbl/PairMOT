@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 01:45 CST。
+更新时间：2026-08-04 01:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e4 `30.813/36.985`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；PGID `123974` | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -113,6 +113,15 @@
   381,093,940-byte checkpoint、50 序列、28 CSV、108 非空文件及 `async_done=1` 完整。
 - terminal-only 几何仍保持对原始 decoder 的双正收益，但优势正在衰减；按 decoder 晚收敛约束
   保持 PGID `3062903` 到 e16，检验是否会像全层几何分支一样反转，不提前释放 178 单卡。
+
+## 2026-08-04 01:55 CST：0803_19 terminal full-tangent 已准备
+
+- 新候选只在最终 normal-query 输出统一三种自然几何坐标：中心在各帧 reference-local 坐标中、
+  尺寸在 log-ratio 空间中、角度在 π 周期切空间中取双帧平均；早中层递归 reference、分类与 DN
+  保持逐帧独立。结构零参数、class-agnostic、无 reweight、新 attention/layer/loss。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalfulltangent_0803_19` 固定 `dc0e958`；
+  终层三投影各调用一次的定向测试、两个启动器 Bash 语法和零状态增量整模比较通过：模型
+  22,771,111 参数、增量 0、711 状态张量。当前 `PREPARED`，未创建 workdir、未占 GPU。
 
 ## 99 本机
 

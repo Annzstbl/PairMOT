@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 01:45 CST
+更新时间：2026-08-04 01:55 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；按慢收敛约束继续 e12。PGID `123974`。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E16` | e12 `48.289/54.539`，相对原始 decoder 同点 `+0.894/+0.103`；继续 e16。后继 `0803_15/16` PREPARED，不额外占卡。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E16` | e12 `48.289/54.539`，相对原始 decoder 同点 `+0.894/+0.103`；继续 e16。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `30.813/36.985`，继续 e8/e12；之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18 terminal geometry + semantic margins`。 |
 
@@ -116,6 +116,18 @@
 - 与原始 decoder 的双正优势从 e8 合计 `+3.935` 收窄到 e12 `+0.997`，说明 terminal-only
   投影减轻了早期过约束但尚未证明后期不反转。遵守慢收敛约束，178 保持 PGID `3062903`
   继续 e16；只有完成 e16 全量评估后再决定是否释放给 `0803_15/16`。
+
+## 2026-08-04 01:55 CST：0803_19 terminal full-tangent geometry 已准备
+
+- 既有 symmetric-feature/shared-attention 轨迹在 e8 系统性损伤 DetA/AP，因此不再共享 decoder
+  hidden 或 attention。新候选改为只在最终 normal-query box 输出做自然坐标投影：中心使用
+  reference-local 位移，尺寸使用 log-ratio，角度使用 π 周期切空间；三者均只平均一次。
+- 早中层递归 reference、分类 residual、DN、loss 和 attention 路径不变；结构零参数、
+  class-agnostic、无 reweight 或额外计算层。它是 `0803_13` terminal size/angle 的中心扩展，
+  也为 `0803_16` center-only 提供组合对照。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalfulltangent_0803_19` 固定 `dc0e958`；
+  定向测试 `1 passed`，两个 launcher Bash 语法通过，完整父/新模型均为 22,771,111 参数、
+  711 状态张量、增量 0。状态 `PREPARED`，未建 smoke/formal workdir、未占 GPU。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

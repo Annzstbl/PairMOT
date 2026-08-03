@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 01:45 CST.
+Last updated: 2026-08-04 01:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -76,6 +76,15 @@ per-frame objectness mean, recurrent references, and DN independent. Its 197
 two-GPU config and full model comparison passed at 22,771,111 parameters and
 711 state tensors. It is prepared after 0803_11 epoch 12 and currently uses no
 GPU. Server 252 remains reserved for the fixed GPU0/1 mature confirmation only.
+
+Experiment 0803_19 is a parameter-free terminal full-tangent geometry
+successor. At only the final normal-query output it averages center correction
+in each frame's reference-local coordinates, size correction in log-ratio
+coordinates, and orientation in the pi-periodic tangent space. Earlier
+recurrent references, classification, and DN remain independent. The isolated
+178 checkout at `dc0e958` passed the targeted final-layer call-count test, both
+launcher syntax checks, and a full zero-state-delta model comparison at
+22,771,111 parameters and 711 tensors. It is PREPARED and consumes no GPU.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
