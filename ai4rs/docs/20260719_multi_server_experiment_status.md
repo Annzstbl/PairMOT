@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 14:29 CST。
+更新时间：2026-08-03 15:01 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；e8 cls/det HOTA 分别为 `40.922/46.854`、`41.380/47.515`，均继续 e12；PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1） | RUNNING；e8 cls/det HOTA `40.922/46.854`，继续 e12，PGID `3765372`；GPU2/3 已释放 | `0803_08 common-preserving frame-detail + periodic-angle` 进入双卡部署准备；`0803_07` e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；真数据 smoke 与 formal iter50 五门槛通过，PGID `2971994` | `0803_08 common-preserving frame-detail + periodic-angle` 保持 PREPARED；`0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1778,3 +1778,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   128933 条检测、50 序列、28 CSV 与 108 个非空文件完整。
 - PGID `3765372` 的 23 个成员已进入 e9。单因素与联合分支在 e8 都显著负于 periodic-angle，
   direct frame-evidence 路由的结构性负向结论一致；仍继续 e12 完成慢收敛审计。
+
+## 2026-08-03 15:01 CST：252 0803_07 e12 成熟负向并释放
+
+- e12 cls HOTA/DetA/AssA `43.504/34.301/58.469`，det
+  `51.168/44.130/61.359`；e8→e12 双 HOTA `+2.124/+3.653`，但相对 periodic-angle
+  单因素同点仍低 `4.409/4.089`，相对 Encoder 同点低 `6.176/5.373`。
+- pair mAP/AP50 `0.2034/0.3683`，both-independent `0.2430/0.4213`；相对 periodic-angle
+  同点分别低 `0.0543/0.0712` 和 `0.0593/0.0746`。381,031,670-byte checkpoint、
+  143610 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- e4/e8/e12 三点证明 direct frame-evidence 分类路由为成熟负向。精确终止 PGID `3694870`，
+  23 个成员全部退出，GPU2/3 回到 `1 MiB/0%`；e12 断点保留。空闲双卡转给精确保留
+  shared classification midpoint 的 `0803_08`。

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 14:29 CST.
+Last updated: 2026-08-03 15:01 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2032,3 +2032,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   已核验，PGID `3765372` 已进入 e9。
 - 继续 e12 后再释放 GPU0/1。单因素与组合的 e8 证据共同排除继续扩展 direct frame-evidence
   变体；分类侧下一实验固定为保留 shared midpoint 的 `0803_08`。
+
+## 2026-08-03 15:01 CST：frame-evidence 联合分支 e12 收口
+
+- `0803_07` e12 cls/det HOTA `43.504/51.168`，相对 periodic-angle 同点为
+  `-4.409/-4.089`，相对 Encoder 同点为 `-6.176/-5.373`。e8→e12 虽继续增长，成熟差距
+  仍显著；四项 AP 相对 periodic-angle 同点也下降 `0.0543/0.0712/0.0593/0.0746`。
+- 381,031,670-byte checkpoint、143610 条检测、50 序列、28 CSV 与 108 个非空文件完整后，
+  精确停止 PGID `3694870`，23 个成员全部退出，GPU2/3 已释放，e12 断点保留。
+- direct frame-evidence 路由完成 e4/e8/e12 成熟负向审计。GPU2/3 下一任务固定为 `0803_08`：
+  保留 shared 分类 midpoint，仅注入 swap-odd 帧细节；先补 252 双卡配置、目标构建、真数据 smoke
+  与 formal iter50 五门槛。

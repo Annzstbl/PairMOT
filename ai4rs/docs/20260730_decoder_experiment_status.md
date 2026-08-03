@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 14:29 CST
+更新时间：2026-08-03 15:01 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e8 cls/det HOTA `40.922/46.854`；成熟负向仍在，继续 e12，PGID `3765372`。 |
-| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `41.380/47.515`，成熟差距仍在，继续 e12；PGID `3694870`。 |
+| 252 GPU 2,3 | 无 | `IDLE/PREPARING 0803_08` | `0803_07` e12 为 `43.504/51.168` 后成熟负向停止；GPU2/3 已释放。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
@@ -2347,3 +2347,14 @@ periodic-angle` 已在 `0803_04` e24 平台确认并释放后接管 GPU0。
   检测、50 序列、28 CSV 与 108 个非空文件完整。
 - PGID `3765372` 的 23 个成员已进入 e9，继续 e12。单因素和组合的 e8 证据一致，不再扩展
   direct frame-evidence 路由；下一分类候选只保留 `0803_08` 的 exact shared midpoint。
+
+## 2026-08-03 15:01 CST：0803_07 frame-evidence-cls + periodic-angle epoch-12
+
+- e12 cls HOTA/DetA/AssA `43.504/34.301/58.469`，det
+  `51.168/44.130/61.359`；相对 periodic-angle 同点为 `-4.409/-4.089`，相对 Encoder
+  同点为 `-6.176/-5.373`。e4/e8/e12 三点成熟轨迹均不支持 direct frame-evidence 路由。
+- pair mAP/AP50 `0.2034/0.3683`，both-independent `0.2430/0.4213`；相对 periodic-angle
+  同点分别下降 `0.0543/0.0712` 和 `0.0593/0.0746`。381,031,670-byte checkpoint、143610 条
+  检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 精确停止 PGID `3694870` 后 23 个成员全部退出，GPU2/3 为 `1 MiB/0%`；e12 checkpoint
+  保留。下一步部署 `0803_08 common-preserving frame-detail + periodic-angle` 双卡候选。
