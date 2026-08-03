@@ -2391,3 +2391,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   50 序列、28 CSV 与 108 个非空文件完整。
 - 单因素比 `0803_07` 联合分支 e12 高 `2.248/1.782` HOTA，表明组合存在负交互；单因素自身
   缺口继续快速收窄。PGID `3765372` 已进入 e13，继续 e16，不以 e12 直接否决。
+
+## 2026-08-03 16:22 CST：0803_10 shared log-area + periodic-angle 完成准备
+
+- 新 decoder 只共享 normal query 的各向同性对数面积增量，同时原样保留两帧各自的对数纵横比
+  增量；尺寸仍相对各自 reference 解码，角度沿用 pi-periodic tangent 共识。中心、分类、DN、
+  loss、attention 数和 decoder 深度不变，结构 class-agnostic、无 reweight。
+- 178 隔离 checkout `/data1/users/litianhao01/PairMOT_logarea_0803_10_repo` 固定 `8998142`；
+  137 项完整 decoder 回归通过。目标配置完整构建为 `22,771,111` 参数、711 state tensors，
+  参数增量严格为零；4-iter smoke 配置深拷贝与 launcher 语法检查通过。
+- 状态为 `PREPARED/WAITING_GPU`。不抢占正在训练的 `0803_09`；先看其 e8/e12 是否保持
+  log-size 全共享的正增益，再决定在下一块合法空闲 GPU 上启动 `0803_10` smoke/formal。
