@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 17:33 CST。
+更新时间：2026-08-03 17:49 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无 | UNREACHABLE；0803_10 bundle 与旧提交隔离 clone 保留，未 fetch/占卡 | 等网络恢复后续接 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | 无 | SSH_RECOVERED/GPU_UNAVAILABLE；`nvidia-smi` 5 秒超时，0803_10 bundle 与旧提交隔离 clone 保留，未 fetch/占卡 | 等 GPU 查询恢复后续接 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_10 shared log-area + periodic-angle`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `4053545/3940521`；0803_10 formal iter50 五门槛通过 | `0803_06` e16 成熟收口且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；e8 `46.170/53.539`，相对 Encoder 同点 `+0.901/+3.346`；PGID `2971994` | `0803_11` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -1890,3 +1890,9 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   四步 loss/grad 全有限，364,501,942-byte checkpoint 与语义检查通过。
 - fresh formal PGID `4053545`；iter50 `1.2074 s/iter`、loss `21.3965`、grad `114.6571`，
   GPU0/1 各约 19.2 GiB，五门槛通过。状态 `RUNNING`，e4/e8/e12 均设置完整性监控口径。
+
+## 2026-08-03 17:49 CST：197 SSH 恢复但 GPU 查询仍不可用
+
+- SSH 可返回主机时间；隔离仓库仍为 HEAD `2024222`，两份 0803_10 bundle 完整保留。
+- `nvidia-smi` 在显式 5 秒边界内无响应并返回超时码 `124`，故未 fetch、未构建、未占卡；等待
+  GPU 子系统恢复后再执行受控续接，当前不影响 178/252 的三条正式实验。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 17:33 CST
+更新时间：2026-08-03 17:49 CST
 
 ## 当前研究原则
 
@@ -18,7 +18,7 @@
 | 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | e4 `32.065/39.067` 为负向结构信号，但继续 e8/e12；PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | e8 `46.170/53.539`，相对 Encoder 同点 `+0.901/+3.346`，继续长收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
-| 197 GPU 4,5 | 无 | `UNREACHABLE/RECOVERABLE_PREP` | bundle 与旧提交隔离 clone 保留；未 fetch、未占 GPU。 |
+| 197 GPU 4,5 | 无 | `SSH_RECOVERED/GPU_UNAVAILABLE` | SSH 已恢复；`nvidia-smi` 连续 5 秒超时，旧提交隔离 clone 与 bundle 保留，未 fetch、未占 GPU。 |
 
 `0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
 `0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。
@@ -2480,3 +2480,10 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - formal PGID `4053545`；iter50 `1.2074 s/iter`、loss `21.3965`、grad `114.6571`，7 个
   成员、GPU0/1 各约 19.2 GiB，错误扫描、资源、进程组、provenance 与 workdir 五门槛通过。
   状态 `RUNNING`，已建立 e4 `val_track_0001` 监控，后续不以 e4/e8 直接否决。
+
+## 2026-08-03 17:49 CST：197 部分恢复审计
+
+- 197 SSH 已恢复并返回主机时间；隔离仓库仍为旧 HEAD `2024222`，113,797,579-byte 主 bundle
+  与 2,560-byte 补丁 bundle 均在原位。
+- GPU 管理查询经显式 5 秒边界仍以 `124` 超时，不能验证空闲卡、显存或训练进程；因此不宣称
+  GPU 可用，也不在该机启动 smoke/formal。状态从网络不可达收窄为 SSH 可达、GPU 子系统不可用。
