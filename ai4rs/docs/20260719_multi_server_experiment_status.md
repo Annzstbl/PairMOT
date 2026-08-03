@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 06:05 CST。
+更新时间：2026-08-04 06:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E12；e8 `39.478/46.483`，继续成熟判定，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E28+；e24 相对原 decoder 联合 `+1.673`，e25 iter50 五门槛通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E4+；log-domain 数值修复后的 smoke 与 formal iter50 五门槛通过，PGID `3151184` | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E4+；log-domain 数值修复后的 smoke 与 formal iter50 五门槛通过，PGID `3151184` | `0803_24 transported shape tangent` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2289,3 +2289,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   各分量均有限。
 - 因而 log-domain 尺度解码修复已获得真实训练覆盖证据；保持 PGID `3151184` 继续 e4/e8/e12，
   不改动运行仓库，也不把尚未产生的性能评测提前记为成功。
+
+## 2026-08-04 06:20 CST：178 保守后继 0803_24 已准备
+
+- 0803_24 只对终层 normal queries 的 log-width/log-height/周期角切向量做传输：保留 pair-common
+  更新，并把 frame detail 投影到前序 reference 已建立的相对尺寸/角度变换；中心 residual 原样逐帧
+  保留。它针对 0803_13 e24 的 det 小幅落后，同时避免 0803_23 的中心传输与跨维投影。
+- 该结构零参数、帧交换等变、class-agnostic，无 reweight、新层、attention、loss 或额外主矩阵乘法。
+  4 项定向测试、配置深拷贝、两份启动器语法和整模构建通过；模型仍为 `22,771,111` 参数、
+  增量 0、711 tensors。178 隔离仓库为
+  `/data1/users/litianhao01/PairMOT_terminaltransportshape_0803_24`，clean HEAD `d470f96e`。
+- 当前状态仅 `PREPARED/NO_GPU`，未创建 smoke/formal workdir；继续让 0803_23 独占 178 的一张卡，
+  后续是否启动由现有完整 e12/e28 证据决定。

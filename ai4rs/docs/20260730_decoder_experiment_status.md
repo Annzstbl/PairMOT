@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 06:05 CST
+更新时间：2026-08-04 06:20 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E28+` | e24 `52.841/59.322`，相对原始 decoder `+1.132/+0.541`、合计 `+1.673`；从只读源 checkpoint 恢复到 252 自有 workdir，e25 iter50 五门槛通过，PGID `419164`。 |
-| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E4+` | 首次 fresh 的尺度 `exp` 反向溢出风险已审计并停止；log-domain 等价修复的 smoke 与 formal iter50 通过，PGID `3151184`，继续 e4/e8/e12。GPU0 只是当前分配。 |
+| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E4+` | 首次 fresh 的尺度 `exp` 反向溢出风险已审计并停止；log-domain 等价修复的 smoke 与 formal iter50 通过，PGID `3151184`，继续 e4/e8/e12。`0803_24 transported shape tangent` 为 PREPARED/NO_GPU；GPU0 只是当前分配。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E12` | e8 `39.478/46.483`，相对原始 decoder同点 `-2.494/-1.695`；e4→e8明显恢复但仍双负，按慢收敛约束继续 e12，PGID `1357909`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
 
@@ -3017,3 +3017,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   encoder proposal 所有记录分量均有限。
 - 数值修复获得正式数据长于 smoke 的直接证据，PGID `3151184` 继续 e4/e8/e12。该结论只确认
   实现有效性，尚无权替代完整 HOTA/AP 评测或最终目标审计。
+
+## 2026-08-04 06:20 CST：0803_24 transported shape tangent 已准备
+
+- 新候选只在最终 normal queries 的 log-size/周期角三维切空间保留 pair-common 更新，并把 detail
+  投影到 detached 前序相对尺寸/角度变换；中心 residual 完全逐帧保留。它是 0803_13 的保守传输
+  版本，也是 0803_23 去掉中心传输与跨维投影后的正交对照。
+- 4 项定向测试覆盖终层单次调用、中心逐元素保持、既有 shape detail 投影、交换等变、DN 前缀和
+  极小 reference 有限梯度；配置深拷贝、两份 launcher 语法和整模构建通过。参数
+  `22,771,111`、增量 0、711 tensors，无 class-aware、reweight、新层、attention 或 loss。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminaltransportshape_0803_24` 固定 clean HEAD
+  `d470f96e`。状态 `PREPARED/NO_GPU`，未创建 smoke/formal workdir，不抢占 0803_23；是否启动
+  等待现有 e12/e28 完整闭环。

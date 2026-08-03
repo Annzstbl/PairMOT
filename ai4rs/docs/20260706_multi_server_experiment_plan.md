@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 06:05 CST.
+Last updated: 2026-08-04 06:20 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2525,3 +2525,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   分量全有限。
 - 数值修复因此不再只由定向单测和四步 smoke 支撑；178 保持该 fresh 轨迹到 e4/e8/e12，性能
   判断仍等待完整 checkpoint、检测和 TrackEval，不能把数值有效等同于性能达标。
+
+## 2026-08-04 06:20 CST：准备 transported shape-tangent 隔离对照
+
+- 0803_24 是 0803_13 与 0803_23 之间的保守结构：中心完全保留逐帧 residual，只在终层
+  log-size/周期角三维切空间保留 pair-common 更新，并沿 detached 前序相对 shape transform 传输
+  detail。它检验 det 瓶颈是否来自绝对平均抹去既有相对尺寸/角度，而不引入中心耦合。
+- 该操作零参数、交换等变、class-agnostic，无 reweight、新层、attention、loss 或额外主矩阵乘法。
+  4 项定向测试、配置深拷贝、launcher `bash -n` 和零状态整模构建通过：`22,771,111` 参数、
+  增量 0、711 tensors。178 隔离提交 `d470f96e` clean。
+- 状态为 `PREPARED/NO_GPU`，不创建 workdir、不抢占 0803_23；现有 e12/e28 结果到齐后再决定它
+  与 0803_21/22 的优先级，252 仍只承担成熟 0803_13 长轨迹。
