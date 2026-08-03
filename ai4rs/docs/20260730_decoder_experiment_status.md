@@ -2402,3 +2402,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   参数增量严格为零；4-iter smoke 配置深拷贝与 launcher 语法检查通过。
 - 状态为 `PREPARED/WAITING_GPU`。不抢占正在训练的 `0803_09`；先看其 e8/e12 是否保持
   log-size 全共享的正增益，再决定在下一块合法空闲 GPU 上启动 `0803_10` smoke/formal。
+
+## 2026-08-03 16:41 CST：0803_09 log-size tangent + periodic-angle epoch-8
+
+- e8 cls HOTA/DetA/AssA `46.170/38.770/57.150`，det
+  `53.539/47.234/63.398`；相对 periodic-angle 同点双 HOTA `+0.583/+0.624`，合计
+  `+1.207`；相对 Encoder e8 为 `+0.901/+3.346`。
+- pair mAP/AP50 `0.2470/0.4398`，both-independent `0.2926/0.4984`；相对
+  periodic-angle 同点四项仍全正：`+0.0047/+0.0156/+0.0009/+0.0062`。优势较 e4 收窄，
+  但 HOTA、DetA 与 AP 方向一致，不能在 e8 否决。
+- 375,564,404-byte checkpoint、153665 条检测、50 序列、28 CSV 与 108 个非空文件完整；
+  异步 TrackEval 正常结束。相对严格最终阈值仍差 `8.267/8.854`，PGID `2971994` 已恢复 e9，
+  继续 e12 并建立 `val_track_0003` 完整性监控。
