@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:09 CST.
+Last updated: 2026-08-03 23:12 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,8 @@ Current per-server status dashboard:
 ## Server Status
 
 Authorized experiment GPUs are fixed: 99 uses GPU0/1, 197 uses GPU4/5, 178 uses GPU0, and 252 uses GPU0/1. Idle GPUs outside these exact sets are not available to this plan. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 2026-08-03 23:12 CST, the live allocation matches that boundary. The 99 lane remains blocked because external work occupies GPU0 even though GPU1 is idle; `0803_14` waits for the complete GPU0/1 pair. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

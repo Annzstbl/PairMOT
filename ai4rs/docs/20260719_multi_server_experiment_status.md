@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:09 CST。
+更新时间：2026-08-03 23:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | 无 PairMOT 任务 | REACHABLE/PAIR_BLOCKED；GPU0 外部占用、GPU1 空闲，GPU2 未授权，不抢占 | `0803_14 terminal log-area` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | `0803_14 terminal log-area` PREPARED，迁移到 99 队列 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING；PGID `3062903`；smoke 与 formal iter50 五门槛通过 | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -29,6 +29,11 @@
 - `0803_12` 启动器默认卡号已改为 GPU0/1，并增加显式 `PAIRMOT_RESUME=1` 恢复路径；恢复后须重新通过进程、显存、正式日志、iter50 和有限损失五门槛。
 - `0803_14` PGID `77558` 的 7 个成员此前已停止，GPU0/1 释放且无正式 epoch checkpoint；smoke 与 iter50 证据保留，改排 99 GPU0/1，不与 252 的唯一授权双卡任务并行。
 - 23:07 在固定 GPU0/1 启动恢复会话，PGID `123974`；23:08 正式日志到 epoch5 iter50，GPU0/1 各约 19.4 GiB，GPU2/3 各 1 MiB，loss `11.9163`、grad norm `31.7400`，DN 与 encoder proposal loss 均有限，错误扫描为空，状态恢复为 `RUNNING/TO_E12`。
+
+## 2026-08-03 23:12 CST：0803_13 epoch 4 与资源实测
+
+- 0803_13 e4 全量 TrackEval 完成：cls HOTA/DetA/AssA `32.849/26.682/43.921`，det `37.319/34.948/41.243`；相对 Encoder e4 HOTA `-3.360/-1.434`。检测诊断为 pair mAP/AP50 `0.1399/0.2613`、both-independent `0.1881/0.3391`。按 decoder 晚收敛约束继续 e8/e12。
+- 四机实测与授权一致：252 只占 GPU0/1；178 只占 GPU0；197 只占 GPU4/5；99 GPU0 为外部进程、GPU1 空闲，尚不构成完整双卡窗口。未授权的空闲 GPU 均不使用。
 
 ## 99 本机
 
