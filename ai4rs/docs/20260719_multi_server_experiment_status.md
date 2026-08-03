@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 19:22 CST。
+更新时间：2026-08-03 19:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无 | SSH_RECOVERED/GPU_UNAVAILABLE；`nvidia-smi` 5 秒超时，0803_10 bundle 与旧提交隔离 clone 保留，未 fetch/占卡 | 等 GPU 查询恢复后续接 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING；PGID `53708`，formal iter50 五门槛通过；GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_10 shared log-area + periodic-angle`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING/TO_E12；PGID `4053545/3940521`；0803_10 e4 `32.399/39.251` | `0803_11` PREPARED_FOR_GPU2/3 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING/LONG_TRAJECTORY；e16 `50.732/57.218`，相对原始 decoder 同点 `+0.696/+0.285`；PGID `2971994` | `0803_11` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -1933,3 +1933,10 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   periodic-angle 同点 `+2.258/+1.946`。
 - pair mAP/AP50 `0.2789/0.4860`、both-independent `0.3251/0.5393`；checkpoint 与
   50/28/108 产物完整。对强父线联合优势收窄至 `0.981`，但保持双侧领先，继续 e20/e24。
+
+## 2026-08-03 19:36 CST：197 0803_11 接管 GPU4/5
+
+- GPU 查询恢复后，隔离提交 `38ae0d4` 的 4-iter DDP smoke 数值、364,473,447-byte checkpoint、
+  错误扫描与语义检查通过；GPU4/5 随后释放为 1 MiB。
+- fresh formal PGID `53708`；iter50 `1.4287 s/iter`、loss `21.3917`、grad `120.7769`，
+  7 个进程、双卡各 19,226 MiB，provenance 与 workdir 精确一致。状态 `RUNNING`，等待 e4。

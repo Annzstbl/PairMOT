@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 19:22 CST
+更新时间：2026-08-03 19:36 CST
 
 ## 当前研究原则
 
@@ -18,7 +18,7 @@
 | 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.688/47.811`，相对 Encoder 同点 `-4.581/-2.382`；按晚收敛约束继续 e12，PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/LONG_TRAJECTORY` | e16 `50.732/57.218`；相对原始 decoder 同点 `+0.696/+0.285`，继续 e20/e24 及后期收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
-| 197 GPU 4,5 | 无 | `SSH_RECOVERED/GPU_UNAVAILABLE` | SSH 已恢复；`nvidia-smi` 连续 5 秒超时，旧提交隔离 clone 与 bundle 保留，未 fetch、未占 GPU。 |
+| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
 
 `0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
 `0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。
@@ -2542,3 +2542,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 386,613,748-byte checkpoint、5416 条记录、50 序列、28 CSV、108 个非空文件完整；异步
   评估 253.1 秒结束。对原始 decoder 的优势较 e12 收窄，但仍为双侧领先；原始 decoder 到
   e40/e56 才双超，故继续 e20/e24 并观察成熟期优势，不在 e16 截断。
+
+## 2026-08-03 19:36 CST：197 恢复并启动 0803_11 formal
+
+- 低频复查确认 `nvidia-smi` 恢复；GPU0/1 有外部负载，GPU2--5 空闲。197 隔离 checkout
+  `/data/users/litianhao/PairMOT_lategeom_0803_11_197` 固定提交 `38ae0d4`，未修改任何活动仓库。
+- GPU4/5 真实 4-iter DDP smoke loss `12.9516/19.2974/19.3485/20.0987`、grad
+  `108.6312/136.9732/114.6392/107.1473` 全有限；364,473,447-byte checkpoint、错误扫描与
+  iterative-cls residual/DN absolute 语义检查通过。总 wall 110.4 秒含初始化与 checkpoint 检查，
+  不再出现此前约 80 秒/iter 的 GPU 异常。
+- fresh formal 精确 PGID `53708`；iter50 `1.4287 s/iter`、loss `21.3917`、grad
+  `120.7769`，7 个进程，GPU4/5 各 19,226 MiB，错误扫描干净，HEAD/config/workdir 一致，
+  五门槛通过。状态 `RUNNING`，首个完整判断点为 e4。
