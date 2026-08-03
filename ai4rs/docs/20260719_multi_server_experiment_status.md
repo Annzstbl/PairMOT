@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 09:10 CST。
+更新时间：2026-08-03 10:17 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_03` e8 完整结果为 `40.644/47.265`，继续 e12；`0803_05` e4 完整结果为 `31.737/37.202`，继续 e8/e12 | `0803_07 frame-evidence + periodic-angle` 双卡版 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e8 cls/det HOTA `45.587/52.915`，相对 Encoder 同点 `+0.318/+2.722`，09:02 已进入 e9 450/1038，继续 e12 与成熟节点 | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED；`0803_07` 已提升为下一优先候选 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_05` e8 为 `39.525/45.114`，继续 e12；`0803_07` smoke 与 formal iter50 五门槛通过，PGID `3694870` | 无；`0803_03` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`，继续更成熟节点 | `0803_06 frame-evidence cls` 为 PREPARED；`0803_07` 已在 252 RUNNING | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1614,3 +1614,46 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 完整 decoder 回归 `132 passed`，另有 2 个 subtests 通过；formal/smoke launcher 的 `bash -n`
   均通过。当前状态仍为 `PREPARED`：没有真数据 smoke、formal workdir、等待进程或 GPU 占用；
   待 `0803_03` e12 完整收口并释放 GPU2/3 后再执行 smoke 与 formal 五门槛。
+
+## 2026-08-03 09:58 CST：252 0803_03 e12 收口并停止
+
+- e12 cls HOTA/DetA/AssA 为 `43.687/35.906/55.761`，det 为
+  `51.887/46.564/59.976`。相对自身 e8，双 HOTA 继续恢复 `+3.043/+4.622`，说明
+  e4/e8 等待是必要的；但相对父线 e12 仍低 `3.708/2.549`，相对 Encoder e12 仍低
+  `5.993/4.654`，完整 e4/e8/e12 轨迹已形成成熟系统性负向证据。
+- pair mAP/AP50 为 `0.2209/0.4002`，both-independent 为 `0.2618/0.4528`；
+  `epoch_12.pth` 为 381,042,678 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、
+  28 CSV 与 108 个非空文件完整。
+- 09:58 精确终止 PGID `3460950`，23 个成员全部退出，GPU2/3 回到 `1 MiB/0%`；所有产物保留。
+  资源转给 e8 已强正向的周期角度与帧证据联合候选 `0803_07`。
+
+## 2026-08-03 09:55 CST：252 0803_05 e8 完整评估
+
+- e8 cls HOTA/DetA/AssA 为 `39.525/32.693/50.508`，det 为
+  `45.114/40.486/51.873`；相对自身 e4，双 HOTA 恢复 `+7.788/+7.912`，继续证明
+  decoder 的晚收敛，但相对 raw-angle e8 低 `1.119/2.151`，相对父线 e8 低
+  `2.447/3.064`。
+- pair mAP/AP50 为 `0.1849/0.3383`，both-independent 为 `0.2299/0.4011`；
+  375,526,262-byte checkpoint、5416 条记录、50 序列、TrackEval `async_done=1`、28 CSV
+  与 108 个非空文件完整。训练继续 e12，不按 e8 停止。
+
+## 2026-08-03 10:05 CST：252 0803_07 正式启动
+
+- 真数据双卡 4-iter smoke 的 loss 为 `12.9405/19.2554/19.2316/20.1093`，grad norm 为
+  `103.2723/94.9056/82.0348/79.9432`；总、DN、Encoder loss 有限，364,473,334-byte
+  checkpoint 写入，iterative classification residual 与 DN absolute 语义 checker 通过，GPU 回收。
+- formal fresh PGID `3694870`；iter 50 为 `1.2858 s/iter`、loss `21.4228`、grad norm
+  `119.3820`，总/DN/Encoder loss 有限。进程、GPU2/3 各约 19.2 GiB、正式日志、真实迭代、
+  有限 loss 与错误扫描五项门槛通过，状态为 `RUNNING`；继续收集 e4/e8/e12 与成熟节点。
+
+## 2026-08-03 10:17 CST：178 0803_04 periodic-angle e12 完整评估
+
+- e12 cls HOTA/DetA/AssA 为 `47.913/39.775/60.546`，det 为
+  `55.257/49.050/64.762`；相对 e8，双 HOTA 再升 `+2.326/+2.342`、双 DetA
+  `+1.365/+2.479`、双 AssA `+4.269/+2.046`，没有出现 e8 后回落或平台。
+- 相对父线 `0801_09` e12，双 HOTA 仍为 `+0.518/+0.821`；相对 Encoder e12 则低
+  `1.767/1.284`。周期角度机制在 e8/e12 都显著优于父线，但尚未达到严格最终阈值，继续更成熟
+  checkpoint，不能在 e12 停止。
+- pair mAP/AP50 为 `0.2577/0.4395`，both-independent 为 `0.3023/0.4959`；
+  `epoch_12.pth` 为 381,090,228 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、
+  28 CSV 与 108 个非空文件完整。PGID `2893156` 保持运行。

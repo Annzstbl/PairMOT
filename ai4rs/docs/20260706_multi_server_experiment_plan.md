@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 09:10 CST.
+Last updated: 2026-08-03 10:17 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1902,3 +1902,23 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   增量为零。132 项 decoder 回归、2 个 subtests、配置深拷贝和两份 launcher 语法全部通过。
 - 保持 `PREPARED` 而非 `QUEUED/RUNNING`。GPU2/3 仍由 `0803_03` 占用；不抢占、不热更新，
   资源释放后才执行真数据 DDP smoke、checkpoint 语义检查与 formal iter-50 五门槛。
+
+## 2026-08-03 10:08 CST：raw-angle 收口并切换联合候选
+
+- `0803_03` e12 cls/det HOTA 为 `43.687/51.887`，虽比自身 e8 恢复
+  `3.043/4.622`，但相对父线 e12 仍低 `3.708/2.549`。完整 e4/e8/e12 轨迹足以否定
+  raw-logit angle 共识，09:58 停止并释放 GPU2/3；结论不是 e4/e8 早停。
+- `0803_05` e8 为 `39.525/45.114`，相对 e4 恢复 `7.788/7.912`，但仍低于父线，
+  保持到 e12，不提前停止。
+- `0803_07` 已接替 GPU2/3：真数据 DDP smoke 四步 loss/grad 全部有限、checkpoint 语义通过；
+  formal PGID `3694870` 的 iter50 时间/loss/grad norm 为 `1.2858/21.4228/119.3820`，
+  五项门槛通过。下一步按同一完整评估协议持续到 e4/e8/e12 和成熟节点。
+
+## 2026-08-03 10:17 CST：periodic-angle e12 继续长跑
+
+- `0803_04` e12 cls/det HOTA 为 `47.913/55.257`，相对 e8 再提高
+  `2.326/2.342`，相对父线 e12 仍提高 `0.518/0.821`；pair mAP/AP50 与
+  both-independent 也继续升至 `0.2577/0.4395` 和 `0.3023/0.4959`。
+- 相对 Encoder e12 尚低 `1.767/1.284`，故不把父线正增益误写成严格目标完成；同时因 e8→e12
+  仍持续上升，不在 e12 释放 178。继续收集 e16 及后续成熟节点，与 252 的 `0803_07` 联合候选
+  并行比较分类帧证据是否能补足 cls 收敛缺口。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 09:10 CST
+更新时间：2026-08-03 10:17 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | e4 cls/det HOTA `31.737/37.202`，完整 TrackEval 已收齐；继续 e8/e12，PGID `3549855`。 |
-| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `40.644/47.265`，相对自身 e4 恢复 `+9.568/+10.225` 但仍低于父线；继续 e12，PGID `3460950`。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `45.587/52.915`，相对 Encoder 同点 `+0.318/+2.722`；继续 e12 与成熟节点。 |
+| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | e8 cls/det HOTA `39.525/45.114`，继续 e12，PGID `3549855`。 |
+| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | 真数据 smoke 与 formal iter50 五门槛通过，PGID `3694870`；接替 e12 成熟负向后停止的 `0803_03`。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`；继续 e16 与成熟节点。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2167,3 +2167,40 @@
 - 状态为 `PREPARED`。没有真数据 smoke、formal workdir、队列或 GPU 占用；等待
   `0803_03` e12 后释放 GPU2/3，再按真实 DDP smoke → checkpoint 语义审计 → formal iter-50
   五门槛顺序启动。
+
+## 2026-08-03 09:58 CST：0803_03 raw-angle epoch-12 收口
+
+- e12 cls HOTA/DetA/AssA `43.687/35.906/55.761`，det
+  `51.887/46.564/59.976`。e8→e12 双 HOTA 继续恢复 `3.043/4.622`，但相对父线
+  e12 仍低 `3.708/2.549`、相对 Encoder e12 仍低 `5.993/4.654`；成熟负向结论来自
+  e4/e8/e12 完整轨迹，不是早停。
+- pair mAP/AP50 `0.2209/0.4002`、both-independent `0.2618/0.4528`；checkpoint、
+  5416 条检测、50 序列、TrackEval `async_done=1`、28 CSV 与 108 个非空文件完整。
+  09:58 终止 PGID `3460950`，23 个成员退出，GPU2/3 释放给 `0803_07`。
+
+## 2026-08-03 09:55 CST：0803_05 normalized-center epoch-8
+
+- e8 cls HOTA/DetA/AssA `39.525/32.693/50.508`，det
+  `45.114/40.486/51.873`；相对自身 e4 双 HOTA 恢复 `7.788/7.912`，相对父线 e8
+  仍低 `2.447/3.064`。pair mAP/AP50 `0.1849/0.3383`、both-independent
+  `0.2299/0.4011`，50/28/108 完整；继续 e12，不按 e8 停止。
+
+## 2026-08-03 10:05 CST：0803_07 252 双卡正式运行
+
+- 4-iter smoke loss `12.9405/19.2554/19.2316/20.1093`，grad norm
+  `103.2723/94.9056/82.0348/79.9432`；总、DN、Encoder loss、checkpoint 更新与
+  iterative-cls/DN-absolute 语义 checker 全部通过。
+- formal fresh PGID `3694870`；iter50 时间/loss/grad norm 为
+  `1.2858 s/iter`、`21.4228`、`119.3820`，GPU2/3 各约 19.2 GiB，进程、资源、
+  正式日志、真实迭代、有限 loss 和错误扫描五项门槛通过。继续 e4/e8/e12 与成熟节点。
+
+## 2026-08-03 10:17 CST：0803_04 periodic-angle epoch-12
+
+- e12 cls HOTA/DetA/AssA `47.913/39.775/60.546`，det
+  `55.257/49.050/64.762`；相对 e8 双 HOTA `+2.326/+2.342`，相对父线 e12
+  `+0.518/+0.821`，周期角度机制保持稳定正增益且未平台。
+- 相对 Encoder e12 双 HOTA 仍低 `1.767/1.284`，尚未达到严格目标。pair mAP/AP50
+  `0.2577/0.4395`、both-independent `0.3023/0.4959`；checkpoint、5416 条检测、
+  50 序列、TrackEval `async_done=1`、28 CSV 和 108 个非空文件完整。
+- PGID `2893156` 继续运行到 e16 与更成熟节点；不因 e12 尚未超过 Encoder 而停止，重点观察
+  后续 cls 关联是否延迟追上，并与 252 `0803_07` 的帧证据分类路径形成正交对照。
