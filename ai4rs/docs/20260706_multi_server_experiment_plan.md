@@ -2483,3 +2483,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 0803_15 只保留 terminal periodic-angle，共享调用一次，不动尺寸/面积；它与 0803_13/14
   形成“角度 / 角度+面积 / 角度+完整尺度”的最终层结构递进。
 - 单测和零参数构建通过，排队在 178；只有当前 0803_13 成熟释放后才进入 smoke/formal。
+
+## 2026-08-04 05:19 CST：几何与语义 margin 组合的早期读数
+
+- 0803_18 e4 为 cls/det HOTA `30.440/38.288`，相对单独 terminal geometry 的 0803_13
+  同点为 `-2.409/+0.969`；分类收敛被明显推迟，det 则略有改善。
+- AP 与完整 TrackEval 已闭环，但 e4 不作为 decoder 的否决点；197 继续 e8/e12，以中期
+  是否回补 cls 且保留 det 判断 semantic margins 能否与终层几何互补。若成熟仍双负，优先
+  切换已准备的 transported semantic geometry，而不增加层数、attention 或 loss。

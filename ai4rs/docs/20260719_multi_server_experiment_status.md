@@ -18,7 +18,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E8+；e4 `32.203/37.822` 仅作早期读数，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；固定 GPU0/1 释放，0803_13 2x4 端口及真实 smoke 已通过 | `0803_13` 若 e24 继续双正，则从 epoch24 迁入成熟长轨迹 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E24；e20 `51.791/58.526`，相对原始 decoder `+0.948/+0.493`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent`、`0803_23 transported tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -2247,3 +2247,12 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - terminal-angle 只在最终输出共享周期角，其他 box 分量与所有 recurrent reference 逐帧独立；
   目标单测及零参数全模型构建通过。
 - 隔离提交 `d181a98` 等待 0803_13 成熟判定，不额外占用 GPU。
+
+## 2026-08-04 05:19 CST：197 0803_18 epoch 4
+
+- e4 cls HOTA/DetA/AssA `30.440/24.784/40.480`，det
+  `38.288/33.547/44.847`；相对原始 decoder 同点 `-3.866/-0.302`，相对 Encoder 同点
+  `-5.769/-0.465`。
+- pair mAP/AP50 `0.125500/0.238364`、both-independent
+  `0.169556/0.314817`；checkpoint、5416 条检测、50 序列、28 CSV、108 文件及异步完成
+  标志完整。PGID `387859` 继续 e8/e12，不按 e4 直接停止。

@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | 无 | `IDLE/PREPARED_0803_13_MIGRATION` | 固定 GPU0/1 释放；0803_13 的严格同模型 2x4 端口与真实 smoke 已通过，仅当 178 e24 继续双正才从该断点承接成熟长轨迹。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `51.791/58.526`，相对原始 decoder 同点 `+0.948/+0.493`、合计 `+1.441`；双正扩大，继续 e24。后继 `0803_15/16/19/23` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `32.203/37.822` 为早期负向读数，继续 e8/e12；PGID `1357909`。后继 `0803_21 transport margins` PREPARED；GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。后继 `0803_22 geometry + transported margins` 正在隔离准备，`0803_20 full tangent + shared margins` 为后备。 |
+| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -2950,3 +2950,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   调用 1 次，完整构建 22,771,111 参数、零增量、711 state tensors。
 - 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalangle_0803_15` 固定 `d181a98`；状态
   `PREPARED/WAITING_178_AFTER_0803_13`，不抢占当前 formal。
+
+## 2026-08-04 05:19 CST：0803_18 epoch-4 完整评估
+
+- cls HOTA/DetA/AssA `30.440/24.784/40.480`，det
+  `38.288/33.547/44.847`；相对原始 decoder e4 HOTA `-3.866/-0.302`，相对 Encoder
+  e4 为 `-5.769/-0.465`。与单独 terminal geometry 的 `0803_13` e4 相比为
+  `-2.409/+0.969`，说明 shared semantic margins 在早期牺牲分类、略抬高 det。
+- pair mAP/AP50 `0.125500/0.238364`，both-independent
+  `0.169556/0.314817`；369,966,375-byte checkpoint、5416 条检测、50 序列、28 CSV、
+  108 个评测文件和 `async_done=1` 均完整。
+- e4 只登记为慢收敛信号，不作直接否决。197 当前两卡继续同一 formal 到 e8/e12，e8
+  监控使用 `epoch_8.pth`、`val_det/epoch_07` 与 `val_track_0002`；资源序号仍仅为当前分配，
+  只有 252 固定 GPU0/1。
