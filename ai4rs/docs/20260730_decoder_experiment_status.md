@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 07:20 CST
+更新时间：2026-08-04 07:29 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
 | 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`、相对 Encoder `+0.133/+5.986`；完整评测通过，PGID `3151184` 继续 e8/e12。`0803_24` 为 PREPARED/NO_GPU。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_17 e12 成熟双负后停止；0803_21 smoke 与 formal iter50 五门槛通过，PGID `1384944`。GPU1/2 只是当前分配，GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
+| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，PGID `387859` 继续 e8/e12；`0803_24 transported shape tangent` 的 197 双卡版已 PREPARED/NO_GPU，实际启动时动态选择空闲卡。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3070,3 +3070,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `async_done=1` 完整。修复后的正式轨迹到 e5 仍无非有限匹配告警。
 - 这是当前最强的早期结构信号，但 e4 不作为最终通过依据。178 当前 GPU0、PGID `3151184`
   保持同一 fresh 轨迹继续 e8/e12；GPU 序号只是动态分配，178 只固定总计 1 卡。
+
+## 2026-08-04 07:29 CST：0803_24 补齐 197 动态双卡后继
+
+- 0803_23 e4 表明 transported tangent 明显优于 terminal mean geometry。为在 0803_18 成熟后并行
+  分离“中心传输”和“形状传输”的贡献，给既有 `0803_24 transported shape tangent` 补齐 197
+  的 2xb4 formal/smoke 配置和安全启动器；它不含语义 margins，因此也能隔离 0803_18 的早期
+  分类损失来源。
+- 197 隔离仓库 `/data/users/litianhao/PairMOT_terminaltransportshape_0803_24_197` 固定 clean
+  HEAD `44395ea`。完整构建为 `22,771,111` 参数、增量 0、711 状态张量；配置为 batch 4、
+  72 epochs，formal/smoke 启动器语法通过。
+- 两个启动器要求显式传入当时两张空闲 GPU，未写死 197 序号。状态为 `PREPARED/NO_GPU`，
+  未创建 smoke/formal workdir，不抢占当前 `0803_18`；是否启动等待 e12 与 0803_23 e8 闭环。
