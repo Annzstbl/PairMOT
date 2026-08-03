@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 20:32 CST
+更新时间：2026-08-03 20:35 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.399/39.251`，相对 Encoder `-3.810/+0.498`；继续 e8/e12，PGID `4053545`。 |
+| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.567/48.238`，相对 Encoder `-3.702/-1.955`；继续 e12，PGID `4053545`。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `49.781/57.217`，已落后原始 decoder 同点 `1.062/0.816`；保留到 e24 作成熟确认，PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2578,3 +2578,12 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - pair mAP/AP50 `0.2732/0.4751`、both-independent `0.3152/0.5221`；392,131,764-byte
   checkpoint、50 序列、28 CSV、108 个非空文件及异步完成证据齐全。
 - 不以该单点立即停止；保持 PGID `2971994` 到 e24，结合 e12→e16→e20 的连续趋势作成熟判定。
+
+## 2026-08-03 20:35 CST：0803_10 epoch 8 完整评估
+
+- e8 cls HOTA/DetA/AssA `41.567/34.618/52.385`，det HOTA/DetA/AssA
+  `48.238/43.861/54.777`；相对 Encoder 同点
+  `-3.702/-1.955`，相对 periodic-angle 同点 `-4.020/-4.677`。e4 的 det 单侧微增未保持。
+- pair mAP/AP50 `0.1986/0.3565`、both-independent `0.2430/0.4191`；375,538,358-byte
+  checkpoint、50 序列、28 CSV、108 个非空文件与异步完成指标齐全。
+- 面积共享目前双侧落后，但按晚收敛约束继续到 e12，不以 e8 直接否决。
