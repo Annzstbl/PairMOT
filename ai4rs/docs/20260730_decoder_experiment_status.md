@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 18:35 CST
+更新时间：2026-08-03 18:45 CST
 
 ## 当前研究原则
 
@@ -2509,3 +2509,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 375,532,918-byte checkpoint、5416 条记录、50 序列、28 CSV、108 个非空文件完整，异步
   评估 408.8 秒正常结束。遵守不以 e4/e8 直接否决的约束，继续 e12；e12 后再按完整三节点
   轨迹判断是否释放 GPU2/3 给已准备的 0803_11。
+
+## 2026-08-03 18:45 CST：0803_11 252 双卡隔离准备
+
+- 新增 252 `2xb4` formal/smoke 配置和双卡 launcher，提交 `e09efb9`；默认 GPU2/3，端口
+  `29857/29858`，workdir 与 178 单卡预案严格隔离。
+- 252 新 checkout `/data/users/litianhao01/PairMmot_lategeom_0803_11_252` 固定 HEAD
+  `e09efb9`。首次构建暴露登录环境残留 `PYTHONPATH` 指向活动主仓库；未改动模型或活动仓库，
+  显式固定隔离导入根后重跑通过。
+- 真实隔离导入路径已核验；full build 为 22,771,111 参数、相对父线零增量、711 state tensors，
+  4-iter 配置有效。后两层投影单测 `1 passed/137 deselected`；当前只做静态准备，不占 GPU，
+  等 0803_08 e12 成熟判定后再执行 DDP smoke。

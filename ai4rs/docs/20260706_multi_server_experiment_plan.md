@@ -2152,3 +2152,10 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `-4.899/-5.104`；分类细节注入暂未表现为正交增益。
 - 不按 e8 直接停止；继续 e12 并检查三节点差距斜率。若 e12 仍被 Encoder 与 periodic-angle
   双侧稳定支配，再精确停止并由零参数 0803_11 late geometric consensus 接替 GPU2/3。
+
+## 2026-08-03 18:45 CST：0803_11 双卡接替路径就绪
+
+- 252 隔离仓库、2xb4 formal/smoke 配置和 launcher 已准备；显式隔离导入后零参数全构建及目标
+  单测通过，当前不占 GPU。
+- 仅在 0803_08 e12 完整产物确认且成熟负向后执行接替；先做真实 DDP smoke 与 checkpoint
+  语义检查，再按 iter50 五门槛宣称 formal 运行。
