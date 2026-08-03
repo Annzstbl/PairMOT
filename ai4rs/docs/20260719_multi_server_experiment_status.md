@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:22 CST。
+更新时间：2026-08-03 23:28 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；PGID `1327092`，smoke 与 formal iter50 五门槛通过；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -45,6 +45,11 @@
 - 99 隔离仓库 `/data/users/wangying01/lth/PairMOT_terminalarea_0803_14_99` 固定提交 `ed7823d`。正式与 smoke 配置完成 99 数据/GMC/TrackEval 路径迁移并通过加载、深拷贝、Bash 语法和零参数构建检查。
 - GPU1/2 真数据 smoke 完成：loss `12.9438/19.3917/19.5249/21.1545`，grad norm `106.5528/91.3914/80.1813/83.8108`，642 个浮点 checkpoint 张量全有限。
 - formal PGID `1327092` 在 epoch1 iter50 为 `0.9957 s/iter`、loss `21.4082`、grad norm `149.8043`；GPU1/2 各约 19.2 GiB，错误扫描为空，五门槛通过。GPU0 的外部进程保持不动。
+
+## 2026-08-03 23:28 CST：178 后续候选 0803_16 已设计
+
+- `0803_16 terminal normalized-center` 仅在最终输出共享 reference-local 中心增量，保留早中层递归 reference 与尺寸、角度、分类、DN 的逐帧自由度；零参数、非 class-aware、无 reweight 或额外计算层。
+- 178 formal/smoke 配置与零增量检查已加入本地隔离提交候选；排在 `0803_15 terminal angle-only` 之后。当前只做静态/远端 CPU 构建验证，不占用 `0803_13` 的一张 GPU。
 
 ## 99 本机
 

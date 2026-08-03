@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:22 CST.
+Last updated: 2026-08-03 23:28 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -16,6 +16,8 @@ Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have cou
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
 At 23:22 CST, `0803_14` completed the 99 GPU1/2 smoke and reached formal iter50 with all five launch gates satisfied. It now runs to e4/e8/e12 on the faster 99 lane while 252 retains only the mature `0803_12` trajectory on fixed GPU0/1.
+
+Experiment 0803_16 is the next orthogonal terminal projection: share only the final reference-local center displacement, leaving size and angle independent. It is parameter-free and queued after 0803_15 on the one-GPU 178 lane; preparation and CPU/build checks do not consume the active GPU allocation.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

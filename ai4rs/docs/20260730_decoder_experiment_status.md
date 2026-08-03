@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:22 CST
+更新时间：2026-08-03 23:28 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`，相对 Encoder `-3.360/-1.434`；按晚收敛规则继续 e8/e12，PGID `3062903`。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`；后继 `0803_15 terminal-angle` 与 `0803_16 terminal-center` 依次 PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | 99 smoke 与 formal iter50 五门槛通过；PGID `1327092`，等待 e4/e8/e12，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
@@ -26,6 +26,12 @@
 - 新增 99 端正式/四步 smoke 配置与安全启动器，训练/验证数据、GMC、TrackEval 和 workdir 均改为 99 路径；两配置加载和深拷贝通过。隔离仓库固定提交 `ed7823d`，零参数构建仍为 `22,771,111` 参数、增量 0、711 个状态张量。
 - 真数据 DDP smoke 四次 loss `12.9438/19.3917/19.5249/21.1545`，grad norm `106.5528/91.3914/80.1813/83.8108`；DN 与 encoder loss 全有限，`iter_4.pth` 中 642 个浮点张量全有限，错误扫描为空。
 - formal fresh 于 23:20 启动，PGID `1327092`；23:21 到 epoch1 iter50：`0.9957 s/iter`、loss `21.4082`、grad norm `149.8043`，GPU1/2 各约 19.2 GiB，进程、显存、正式日志、iter50、有限数值五门槛全部通过，状态为 `RUNNING/TO_E12`。
+
+## 2026-08-03 23:28 CST：0803_16 terminal normalized-center 已设计
+
+- 只在最后一层输出执行中心共识：先把两帧各自的候选中心位移除以对应 reference 的宽高，得到 reference-local 位移，再共享该局部中心增量并映射回各自 reference。所有递归 reference、宽高、角度、分类和 DN 保持原路径。
+- 该投影零参数、swap-equivariant、class-agnostic，无 reweight、额外 loss、attention 或 decoder 层；与 `0803_15 terminal angle-only` 构成“中心 vs 角度”的正交终层对照。
+- 新增 178 1xb8 formal/smoke 配置、零状态增量构建检查和只调用一次终层投影的定向测试；状态 `PREPARED/WAITING_AFTER_0803_15`，不占用正在运行的 GPU。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
