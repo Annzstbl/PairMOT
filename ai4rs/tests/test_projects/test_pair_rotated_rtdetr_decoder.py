@@ -106,6 +106,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_full_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_tangent_refinement_decoder:
+                    bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
@@ -195,6 +197,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_normalized_center_refinement_decoder),
         pair_shared_terminal_full_tangent_refinement_decoder=(
             pair_shared_terminal_full_tangent_refinement_decoder),
+        pair_shared_terminal_transport_tangent_refinement_decoder=(
+            pair_shared_terminal_transport_tangent_refinement_decoder),
         pair_shared_progressive_log_shape_periodic_angle_refinement_decoder=(
             pair_shared_progressive_log_shape_periodic_angle_refinement_decoder),
         pair_shared_normalized_center_refinement_decoder=(
@@ -903,6 +907,86 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                     True),
                 pair_shared_terminal_full_tangent_refinement_decoder=True,
                 device=self.device)
+
+    def test_transport_tangent_preserves_only_established_detail(self):
+        reference_prev = torch.tensor([[[
+            0.40, 0.40, 0.20, 0.30, 0.45]]], device=self.device)
+        reference_curr = torch.tensor([[[
+            0.44, 0.40, 0.20, 0.30, 0.45]]], device=self.device)
+
+        # Construct terminal updates in natural tangent coordinates. The
+        # pair's established transform is pure horizontal translation, so
+        # only horizontal frame detail may survive the projection.
+        tangent_prev = torch.tensor([[[
+            0.10, -0.20, 0.05, -0.04, 0.03]]], device=self.device)
+        tangent_curr = torch.tensor([[[
+            0.30, 0.40, -0.07, 0.08, -0.01]]], device=self.device)
+
+        def encode(tangent, reference):
+            reference_logit = torch.logit(
+                reference.clamp(1e-3, 1 - 1e-3))
+            target = torch.cat((
+                reference[..., :2]
+                + tangent[..., :2] * reference[..., 2:4],
+                reference[..., 2:4] * torch.exp(tangent[..., 2:4]),
+                torch.remainder(
+                    reference[..., 4:] + tangent[..., 4:], 1.0)), dim=-1)
+            return torch.logit(
+                target.clamp(1e-3, 1 - 1e-3)) - reference_logit
+
+        residual_prev = encode(tangent_prev, reference_prev)
+        residual_curr = encode(tangent_curr, reference_curr)
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_full_tangent_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, 0))
+
+        def decode(residual, reference):
+            proposed = (
+                residual
+                + torch.logit(reference.clamp(1e-3, 1 - 1e-3))).sigmoid()
+            return torch.cat((
+                (proposed[..., :2] - reference[..., :2])
+                / reference[..., 2:4],
+                torch.log(proposed[..., 2:4] / reference[..., 2:4]),
+                torch.remainder(
+                    proposed[..., 4:] - reference[..., 4:] + 0.5,
+                    1.0) - 0.5), dim=-1)
+
+        output_prev = decode(projected_prev, reference_prev)
+        output_curr = decode(projected_curr, reference_curr)
+        output_common = 0.5 * (output_prev + output_curr)
+        output_detail = 0.5 * (output_curr - output_prev)
+        expected_common = 0.5 * (tangent_prev + tangent_curr)
+        expected_detail = torch.zeros_like(output_detail)
+        expected_detail[..., :1] = 0.5 * (
+            tangent_curr[..., :1] - tangent_prev[..., :1])
+        self.assertTrue(torch.allclose(
+            output_common, expected_common, atol=1e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            output_detail, expected_detail, atol=1e-5, rtol=1e-5))
+
+    def test_transport_tangent_is_swap_equivariant_and_preserves_dn(self):
+        torch.manual_seed(23)
+        reference_prev = torch.rand(2, 5, 5, device=self.device) * 0.6 + 0.2
+        reference_curr = torch.rand(2, 5, 5, device=self.device) * 0.6 + 0.2
+        residual_prev = torch.randn(2, 5, 5, device=self.device) * 0.2
+        residual_curr = torch.randn(2, 5, 5, device=self.device) * 0.2
+        projected = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_full_tangent_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, 2))
+        swapped = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_full_tangent_residual(
+                residual_curr, residual_prev,
+                reference_curr, reference_prev, 2))
+        self.assertTrue(torch.equal(projected[0][:, :2], residual_prev[:, :2]))
+        self.assertTrue(torch.equal(projected[1][:, :2], residual_curr[:, :2]))
+        self.assertTrue(torch.allclose(projected[0], swapped[1]))
+        self.assertTrue(torch.allclose(projected[1], swapped[0]))
 
     def test_normalized_center_residual_uses_reference_local_coordinates(self):
         reference_prev = torch.tensor([[[0.4, 0.4, 0.2, 0.4, 0.5],
