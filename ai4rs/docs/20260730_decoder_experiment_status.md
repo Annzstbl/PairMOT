@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 22:11 CST
+更新时间：2026-08-03 22:13 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `77558`，等待 e4/e8/e12。 |
-| 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
+| 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.057/38.097`，相对 Encoder `-4.152/-0.656`；继续 e8/e12，PGID `4189798`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
@@ -2636,3 +2636,11 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - fresh formal PGID `77558`；iter50 `1.2555 s/iter`、loss `21.3640`、grad `102.0121`，
   7 个进程、双卡各 19,192 MiB，错误扫描、HEAD/config/workdir 五门槛通过。
 - 状态 `RUNNING`，先收 e4/e8/e12；不以 e4/e8 直接否决。
+
+## 2026-08-03 22:13 CST：0803_12 epoch 4 完整评估
+
+- e4 cls HOTA/DetA/AssA `32.057/25.684/42.947`，det `38.097/32.294/45.679`；相对
+  Encoder 同点 `-4.152/-0.656`。分类早期偏慢，det 接近但未越过。
+- pair mAP/AP50 `0.1351/0.2517`、both-independent `0.1783/0.3199`；369,972,406-byte
+  checkpoint、50 序列、28 CSV、108 个非空文件完整。
+- 保持 PGID `4189798` 继续 e8/e12；不以 e4 直接否决渐进投影。
