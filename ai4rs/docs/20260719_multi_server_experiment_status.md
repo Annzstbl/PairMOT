@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 20:44 CST。
+更新时间：2026-08-03 21:48 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING；PGID `53708`，formal iter50 五门槛通过；GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_10 shared log-area + periodic-angle`（GPU0/1）；`0803_12 progressive log-shape + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `4053545/4189798`；0803_10 e8 `41.567/48.238`，继续 e12 | `0803_08` e12 成熟停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING/TO_E24；e20 `49.781/57.217`，相对原始 decoder 同点 `-1.062/-0.816`；PGID `2971994` | `0803_13 terminal geometry` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` smoke | SMOKE_RUNNING；PGID `3061443`；0803_09 e24 `50.256/57.489` 成熟停止 | 0803_13 formal 待 smoke | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1970,3 +1970,11 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   attention/layer、class-agnostic、无 reweight。
 - 隔离提交 `1b7f904` 的目标单测及全模型构建通过：22,771,111 参数、零增量、711 state
   tensors。等待 0803_09 e24 成熟确认并释放 GPU0 后执行真数据 smoke。
+
+## 2026-08-03 21:48 CST：178 从 0803_09 切换至 0803_13 smoke
+
+- 0803_09 e24 cls/det HOTA `50.256/57.489`，相对原始 decoder 同点 `-1.453/-1.292`；
+  checkpoint、50 序列、28 CSV、108 个非空产物完整。四个中后期节点确认后精确停止 PGID
+  `2971994`，成员 `9→0`，GPU0 释放且 e24 checkpoint 保留。
+- 隔离提交 `1b7f904` 的 0803_13 四步真数据 smoke 已启动，PGID `3061443`；等待完整
+  loss/grad/checkpoint/错误扫描后再决定 formal。

@@ -2209,3 +2209,10 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 0803_13 将 log-size/periodic-angle 共识缩到最终输出层一次；前三层逐帧 reference 和后续
   attention 不受配对投影影响，用于直接检验 0803_09 后期回落是否源于约束污染状态传播。
 - 单测与零参数全构建通过，排队在 178；0803_09 e24 完成前不抢占，释放后先 smoke 再 formal。
+
+## 2026-08-03 21:48 CST：全层尺度成熟收口，terminal-only 接替
+
+- 0803_09 e24 `50.256/57.489`，相对原始 decoder 同点 `-1.453/-1.292`；结合 e12→e24
+  连续轨迹，停止全层尺度共识，保留完整 e24 断点并释放 178 GPU0。
+- 0803_13 已进入四步真数据 smoke；只有 loss/grad 全有限、checkpoint 完整、错误扫描与
+  结构语义通过后才启动 fresh formal，并同样保留到 e12 以上评估慢收敛。

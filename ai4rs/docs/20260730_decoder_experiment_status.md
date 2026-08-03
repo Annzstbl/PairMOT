@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 20:44 CST
+更新时间：2026-08-03 21:48 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.567/48.238`，相对 Encoder `-3.702/-1.955`；继续 e12，PGID `4053545`。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
-| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `49.781/57.217`，已落后原始 decoder 同点 `1.062/0.816`；保留到 e24 作成熟确认，PGID `2971994`。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... smoke` | `SMOKE_RUNNING` | 0803_09 e24 成熟停止；0803_13 零参数候选 PGID `3061443` 正在四步真数据验证。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
 
@@ -2596,3 +2596,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   log-size/angle 各只调用一次，互斥检查和有限值检查通过。
 - 隔离仓库 `/data1/users/litianhao01/PairMOT_terminal_0803_13` 固定提交 `1b7f904`；完整构建
   22,771,111 参数、零增量、711 state tensors。状态 `PREPARED/WAITING_178_AFTER_0803_09`。
+
+## 2026-08-03 21:48 CST：0803_09 epoch 24 成熟停止并切换 smoke
+
+- e24 cls HOTA/DetA/AssA `50.256/42.210/61.971`，det `57.489/50.920/67.374`；相对
+  原始 decoder 同点 `51.709/58.781` 为 `-1.453/-1.292`。e12 双正、e16 收窄、e20 反转、
+  e24 继续双负，确认全层 log-size 共识后期过约束。
+- pair mAP/AP50 `0.2742/0.4787`、both-independent `0.3165/0.5268`；397,650,228-byte
+  checkpoint、50 序列、28 CSV、108 个非空文件齐全。精确 TERM PGID `2971994`，成员
+  `9→0`，GPU0 `0%/1 MiB`，断点保留。
+- 0803_13 随后在隔离提交 `1b7f904` 启动四步真数据 smoke，PGID `3061443`；只在最终输出
+  层施加尺度/周期角共识，等待 loss/grad/checkpoint/语义四项验证。
