@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 01:55 CST.
+Last updated: 2026-08-04 01:57 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -62,6 +62,12 @@ Encoder and the terminal full-size 0803_13 at the same point. Its checkpoint,
 AP diagnostics, 50 sequences, 28 CSV files, and 108 evaluation files are
 complete. This is recorded as early evidence only; 99 GPU1/2 continues to
 epoch 8 and 12 without touching the external process on GPU0.
+
+At epoch 8, 0803_14 reached `41.384/47.315`, below the original decoder by
+`0.588/0.863` and below terminal full-size 0803_13 by `3.618/1.768`. Pair
+mAP/AP50 `0.206968/0.367917` and both-independent `0.251401/0.427578` are also
+lower. The 99 lane nevertheless continues this decoder to epoch 12 before the
+mature decision, then gives priority to the prepared 0803_17 semantic branch.
 
 To avoid blocking the semantic branch behind the strong long-running 178
 trajectory, 0803_17 now has a zero-state-delta 99 two-GPU port at isolated

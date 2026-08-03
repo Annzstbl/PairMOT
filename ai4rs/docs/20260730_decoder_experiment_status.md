@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 01:55 CST
+更新时间：2026-08-04 01:57 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；按慢收敛约束继续 e12。PGID `123974`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E16` | e12 `48.289/54.539`，相对原始 decoder 同点 `+0.894/+0.103`；继续 e16。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `30.813/36.985`，继续 e8/e12；之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；继续 e12，之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18 terminal geometry + semantic margins`。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -128,6 +128,17 @@
 - 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalfulltangent_0803_19` 固定 `dc0e958`；
   定向测试 `1 passed`，两个 launcher Bash 语法通过，完整父/新模型均为 22,771,111 参数、
   711 状态张量、增量 0。状态 `PREPARED`，未建 smoke/formal workdir、未占 GPU。
+
+## 2026-08-04 01:57 CST：0803_14 epoch 8 完整评估
+
+- e8 cls HOTA/DetA/AssA `41.384/34.365/52.257`，det `47.315/42.578/54.312`；相对原始
+  `0801_09` decoder 同点 `41.972/48.178` 为 `-0.588/-0.863`，相对 terminal full-size
+  `0803_13` 同点低 `3.618/1.768`。相对 Encoder 同点仍低 `3.885/2.878`。
+- pair mAP/AP50 `0.206968/0.367917`、both-independent `0.251401/0.427578`，四项均低于
+  0803_13；375,534,774-byte checkpoint、50 序列、28 CSV、108 非空文件和
+  `async_done=1` 完整。
+- 保留逐帧纵横比、只共享面积没有形成终层几何的正增益，但不以 e8 直接否决；99 GPU1/2
+  保持 PGID `1327092` 到 e12，成熟判定后优先切换 `0803_17 semantic margins`。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

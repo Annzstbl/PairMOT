@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 01:55 CST。
+更新时间：2026-08-04 01:57 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e4 `30.813/36.985`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；PGID `123974` | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
@@ -122,6 +122,15 @@
 - 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalfulltangent_0803_19` 固定 `dc0e958`；
   终层三投影各调用一次的定向测试、两个启动器 Bash 语法和零状态增量整模比较通过：模型
   22,771,111 参数、增量 0、711 状态张量。当前 `PREPARED`，未创建 workdir、未占 GPU。
+
+## 2026-08-04 01:57 CST：99 0803_14 epoch 8
+
+- cls HOTA/DetA/AssA `41.384/34.365/52.257`，det `47.315/42.578/54.312`；相对原始
+  decoder 同点 `41.972/48.178` 为 `-0.588/-0.863`，相对 0803_13 同点低 `3.618/1.768`。
+- pair mAP/AP50 `0.206968/0.367917`、both-independent `0.251401/0.427578`；
+  375,534,774-byte checkpoint、50 序列、28 CSV、108 非空文件和 `async_done=1` 完整。
+- 终层只共享面积未复现完整 log-size 的收益；仍按慢收敛约束保持 PGID `1327092` 到 e12，
+  GPU0 外部任务不动。e12 成熟后若仍弱，释放当前两卡给已准备的 `0803_17`。
 
 ## 99 本机
 
