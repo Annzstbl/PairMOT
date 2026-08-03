@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 07:54 CST.
+Last updated: 2026-08-03 08:31 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1871,3 +1871,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - `0803_07` 与 `0803_06` 均保持 `PREPARED`。先读取 `0803_04` e8/e12 是否保持周期坐标收益；
   若保持，联合候选优先用于冲击最终同点双超目标，单因素 `0803_06` 保留为分类归因对照。任何正式
   启动仍必须先通过目标 GPU 真数据 smoke、checkpoint 语义审计和 iter-50 五门槛。
+
+## 2026-08-03 08:31 CST：raw-angle e8 与 normalized-center e4 决策
+
+- `0803_03` e8 cls/det HOTA 为 `40.644/47.265`，相对自身 e4 分别恢复
+  `+9.568/+10.225`，确认 decoder 的明显晚收敛；但相对父线 e8 仍低
+  `1.328/0.913`，所以不在 e8 停止，也不从 raw-logit 路径派生 gate、scale 或 reweight。
+- `0803_05` e4 cls/det HOTA 为 `31.737/37.202`，相对 raw-angle e4 仅提高
+  `0.661/0.162`，且 det AssA 下降 `0.712`。保持到 e8/e12，用成熟轨迹判断局部中心坐标
+  是否只是早期等价扰动。
+- 两个节点的 checkpoint、5416 条检测记录、50 序列、异步 TrackEval、28 CSV 与 108 个
+  非空评估文件均完整。252 的两条任务继续运行；178 的 `0803_04` 已进入 e8，下一决策优先读取
+  其周期角度收益是否延续，再决定先部署 `0803_07` 联合候选还是 `0803_06` 分类归因候选。

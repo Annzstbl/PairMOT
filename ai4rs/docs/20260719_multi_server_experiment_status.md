@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 07:54 CST。
+更新时间：2026-08-03 08:31 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,8 +17,8 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_05` 的 129 项回归、零增量完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`；`0803_03` e4 完整负向但按晚收敛约束继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`，07:43 已进入 e5，继续 e8/e12 | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED，均未排队 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_03` e8 完整结果为 `40.644/47.265`，相对自身 e4 大幅恢复但仍低于父线，继续 e12；`0803_05` e4 完整结果为 `31.737/37.202`，继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`；08:28 已进入 e8，继续完整保存、检测和 TrackEval | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED，均未排队 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1560,3 +1560,29 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 隔离 checkout 为 `/data1/users/litianhao01/PairMOT_framecls_0803_06`，提交 `ee36e33`；活动训练
   仓库仍为 `9fb501a`，未热更新且 PGID `2893156` 的 9 个成员存活。该候选仅 `PREPARED`，没有
   smoke、formal workdir、等待进程或 GPU 占用；部署顺序等待 `0803_04` e8/e12 成熟证据。
+
+## 2026-08-03 08:22 CST：252 0803_03 raw-angle e8 完整评估
+
+- e8 cls HOTA/DetA/AssA 为 `40.644/33.308/52.868`，det 为
+  `47.265/43.143/53.748`。相对自身 e4，双 HOTA 恢复 `+9.568/+10.225`、双 DetA
+  恢复 `+8.336/+11.520`、双 AssA 恢复 `+11.340/+9.373`，直接证明不能用 e4
+  否决 decoder；训练继续 e12。
+- 相对同机制父线 `0801_09` e8，cls/det HOTA 仍低 `1.328/0.913`，DetA 低
+  `1.873/1.591`，AssA 低 `0.264/0.170`。raw-logit angle 共识在 e8 已接近父线，
+  但尚未形成任何超过严格 Encoder 的证据。
+- pair mAP/AP50 为 `0.1899/0.3504`，both-independent 为 `0.2340/0.4138`。
+  `epoch_8.pth` 为 375,537,846 bytes；5416 条记录、50 序列、TrackEval
+  `async_done=1`、28 个 CSV 与 108 个非空评估文件完整。训练已无缝进入 e9，PGID
+  `3460950` 保持运行。
+
+## 2026-08-03 08:28 CST：252 0803_05 normalized-center e4 完整评估
+
+- e4 cls HOTA/DetA/AssA 为 `31.737/25.308/42.669`，det 为
+  `37.202/32.484/43.663`。相对 raw-angle `0803_03` e4，双 HOTA 仅
+  `+0.661/+0.162`；cls DetA/AssA 与 det DetA 略增，但 det AssA 下降 `0.712`，
+  尚无中心局部坐标共识的明确早期优势。
+- 相对 `0801_09` 父线 e4，cls/det HOTA 仍低 `2.569/1.388`。pair mAP/AP50 为
+  `0.1266/0.2417`，both-independent 为 `0.1684/0.3118`；5416 条记录、50 序列、
+  TrackEval `async_done=1`、28 个 CSV 与 108 个非空文件完整。
+- 训练已进入 e5，PGID `3549855` 保持运行。该结果只登记为 e4 归因，不作为停止理由；
+  继续收集 e8/e12，避免把 decoder 慢收敛误判为结构失败。

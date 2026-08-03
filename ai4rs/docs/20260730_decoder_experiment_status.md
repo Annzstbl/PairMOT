@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 07:54 CST
+更新时间：2026-08-03 08:31 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | 零参数局部坐标中心共识；129 项 decoder 回归、完整构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3549855`。 |
-| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐，HOTA/DetA/AssA/AP 均负向；不按 e4 停止，06:45 位于 e5 250/1038，继续 e8/e12。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e4 检测与完整 TrackEval 已收齐；相对父线 e4 双 HOTA `+1.718/+5.198`，继续 e8/e12，07:43 已进入 e5。 |
+| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | e4 cls/det HOTA `31.737/37.202`，完整 TrackEval 已收齐；继续 e8/e12，PGID `3549855`。 |
+| 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `40.644/47.265`，相对自身 e4 恢复 `+9.568/+10.225` 但仍低于父线；继续 e12，PGID `3460950`。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e4 相对父线双 HOTA `+1.718/+5.198`；08:28 已进入 e8，等待完整保存、检测和 TrackEval。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2120,3 +2120,24 @@
 - 状态仅为 `PREPARED`：未运行真数据 smoke、未建立 formal workdir、未排队、不占 GPU。
   活动 `0803_04` 仓库仍为提交 `9fb501a` 且 9 个进程成员存活。待 `0803_04` e8/e12 与资源释放后，
   再在 `0803_06` 单因素和 `0803_07` 联合候选间依据成熟轨迹选择部署顺序。
+
+## 2026-08-03 08:22 CST：0803_03 raw-logit angle epoch-8 完整诊断
+
+- e8 cls HOTA/DetA/AssA 为 `40.644/33.308/52.868`，det 为
+  `47.265/43.143/53.748`。相对自身 e4，HOTA 恢复 `+9.568/+10.225`、DetA
+  恢复 `+8.336/+11.520`、AssA 恢复 `+11.340/+9.373`，证明 e4 不能直接外推
+  decoder 的成熟性能。
+- 相对 `0801_09` 父线 e8，cls/det HOTA 仍低 `1.328/0.913`，DetA 低
+  `1.873/1.591`，AssA 低 `0.264/0.170`；raw-logit 共识已全面接近父线，但尚未带来净收益。
+- pair mAP/AP50 `0.1899/0.3504`、both-independent `0.2340/0.4138`；checkpoint、
+  5416 条检测、50 序列、TrackEval `async_done=1`、28 CSV 和 108 个非空文件完整。
+  训练继续 e12，不在 e8 早停。
+
+## 2026-08-03 08:28 CST：0803_05 normalized-center epoch-4 完整诊断
+
+- e4 cls HOTA/DetA/AssA 为 `31.737/25.308/42.669`，det 为
+  `37.202/32.484/43.663`。相对 raw-angle e4，双 HOTA 只提高 `0.661/0.162`，
+  det AssA 反而降低 `0.712`；相对父线 e4 双 HOTA 仍低 `2.569/1.388`。
+- pair mAP/AP50 `0.1266/0.2417`、both-independent `0.1684/0.3118`；checkpoint、
+  5416 条检测、50 序列、TrackEval `async_done=1`、28 CSV 与 108 个非空文件完整。
+  该节点仅用于早期归因，训练继续 e8/e12，不据 e4 否决局部中心坐标共识。
