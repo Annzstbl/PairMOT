@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 22:13 CST
+更新时间：2026-08-03 22:29 CST
 
 ## 当前研究原则
 
@@ -18,7 +18,7 @@
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.057/38.097`，相对 Encoder `-4.152/-0.656`；继续 e8/e12，PGID `4189798`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
-| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
+| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
 `0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
 `0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。
@@ -2644,3 +2644,11 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - pair mAP/AP50 `0.1351/0.2517`、both-independent `0.1783/0.3199`；369,972,406-byte
   checkpoint、50 序列、28 CSV、108 个非空文件完整。
 - 保持 PGID `4189798` 继续 e8/e12；不以 e4 直接否决渐进投影。
+
+## 2026-08-03 22:29 CST：0803_11 epoch 4 完整评估
+
+- e4 cls HOTA/DetA/AssA `31.540/25.303/42.259`，det `38.185/32.746/45.734`；相对
+  Encoder 同点 `-4.669/-0.568`。分类早期偏慢，det 接近 Encoder。
+- pair mAP/AP50 `0.1279/0.2455`、both-independent `0.1709/0.3172`；369,965,543-byte
+  checkpoint、50 序列、28 CSV、108 个非空文件完整。197 TrackEval 用时 711.3 秒。
+- 保持 PGID `53708` 继续 e8/e12；不以 e4 直接否决晚层投影。

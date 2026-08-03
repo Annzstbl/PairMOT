@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 22:13 CST。
+更新时间：2026-08-03 22:29 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,7 +16,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING；PGID `53708`，formal iter50 五门槛通过；GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_14 terminal log-area + periodic-angle`（GPU0/1）；`0803_12 progressive log-shape + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `77558/4189798`；0803_12 e4 `32.057/38.097` | 0803_10 e12 成熟停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING；PGID `3062903`；smoke 与 formal iter50 五门槛通过 | 无 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -2004,3 +2004,9 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - e4 cls/det HOTA `32.057/38.097`，相对 Encoder 同点 `-4.152/-0.656`；checkpoint、50
   序列、28 CSV、108 个非空文件完整。
 - 保持 formal PGID `4189798` 继续 e8/e12，不按 e4 直接停止。
+
+## 2026-08-03 22:29 CST：197 0803_11 epoch 4
+
+- e4 cls/det HOTA `31.540/38.185`，相对 Encoder 同点 `-4.669/-0.568`；checkpoint、50
+  序列、28 CSV、108 个非空文件完整，TrackEval 用时 711.3 秒。
+- 保持 formal PGID `53708` 继续 e8/e12，不按 e4 直接停止。
