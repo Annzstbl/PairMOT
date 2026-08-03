@@ -2437,3 +2437,11 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   语法均通过。
 - 状态为 `PREPARED/WAITING_GPU`。与 `0803_10` 一起等待合法空闲 GPU；部署优先级由
   `0803_09` e12 的增益衰减和 AssA 分解决定。
+
+## 2026-08-03 17:05 CST：0803_10 完成 252 双卡部署准备
+
+- 新增 252 2x4 formal/smoke 配置与 GPU0/1 默认 launcher；可通过受控环境变量切换到另一对合法
+  空闲卡。隔离 checkout `/data/users/litianhao01/PairMmot_logarea_0803_10_252` 固定
+  `1f0147c`，未更新正在训练的 `0803_06/08` 仓库。
+- 252 目标配置深拷贝、launcher 语法和完整模型构建通过：`22,771,111` 参数、711 state tensors、
+  参数增量 0。状态为 `PREPARED/WAITING_GPU`；四卡仍被 06/08 合法占用，未启动 smoke。

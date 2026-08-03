@@ -1858,3 +1858,10 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   无重加权且不增加 attention/深度。
 - 定向层数测试、138 项完整回归、目标配置深拷贝、launcher 语法和完整模型构建全部通过；
   父/新模型均为 `22,771,111` 参数、711 state tensors。状态 `PREPARED/WAITING_GPU`。
+
+## 2026-08-03 17:05 CST：252 0803_10 双卡候选已落盘
+
+- 隔离 checkout `/data/users/litianhao01/PairMmot_logarea_0803_10_252` 固定 `1f0147c`；252
+  formal/smoke 配置、脚本语法和目标全模型构建通过，参数增量为零。
+- 当前 GPU0/1 与 GPU2/3 分别由 `0803_06/08` 占用，未抢占、未启动。任一成熟负向实验释放双卡后，
+  可直接按真数据 4-iter smoke、checkpoint 语义检查、formal iter50 五门槛部署。
