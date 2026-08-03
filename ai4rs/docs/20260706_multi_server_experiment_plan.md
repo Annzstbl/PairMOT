@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 11:45 CST.
+Last updated: 2026-08-03 11:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1954,3 +1954,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   精确等于共享 `layer_output`，差值仅来自已有 frame evidence 的反对称部分；框回归、reference、
   DN、loss、attention 和 decoder 深度不变，零参数、class-agnostic、无 reweight。先完成实现与
   不变量测试，待活动实验成熟节点释放资源后再决定是否启动。
+
+## 2026-08-03 11:52 CST：common-preserving frame-detail 静态门槛
+
+- `0803_08` 已实现 `shared ± half(frame_prev-frame_curr)` 分类路由，并与 periodic-angle 正交组合。
+  133 项测试证明 shared hidden/reference 不变、分类 midpoint 精确保留、swap-odd detail 生效且 direct
+  路由互斥；父/新模型同为 `22,771,111` 参数和 711 state tensors，增量严格为零。
+- 178 隔离 checkout `8dd19d8` 完成配置深拷贝、完整构建和 launcher 语法检查，状态为
+  `PREPARED`。当前不做真数据 smoke 或排队，避免抢占仍需 e20 验证延迟收敛的 `0803_04`。

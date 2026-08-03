@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 11:45 CST
+更新时间：2026-08-03 11:52 CST
 
 ## 当前研究原则
 
@@ -23,6 +23,9 @@
 `0803_06 iterative-cls frame-evidence decoder` 已从 178 的单卡预案迁移为 252 GPU0/1 双卡正式
 实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
 不热更新活动仓库。
+
+已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle`。它只完成隔离
+目标环境的测试与构建，不创建 smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
 
 ## 已完成或释放
 
@@ -2251,3 +2254,15 @@
 - PGID `3694870` 已进入 e5，继续 e8/e12，不能以 e4 直接淘汰。下一结构候选不再用原始帧证据
   替换共享分类状态，而保留共享状态作为精确 pair midpoint，仅注入两帧证据相对均值的 swap-odd
   细节；零参数、class-agnostic、无 reweight，先静态准备、不抢占三条活动训练。
+
+## 2026-08-03 11:52 CST：0803_08 common-preserving frame-detail 已准备
+
+- 两帧分类输入定义为 `shared ± 0.5 * (frame_prev - frame_curr)`；因此算术平均精确回到共享
+  `layer_output`，差值严格 swap-odd。框回归、reference 更新、共享 recurrent query、DN、loss、
+  attention 数量和 decoder 深度与 periodic-angle 单因素一致；结构零参数、class-agnostic、无 reweight。
+- 新增不变量测试覆盖：父/新共享 hidden 与全部 references 逐元素一致、两帧分类输入 midpoint 等于
+  shared hidden、帧输入确实不同、与 direct frame-evidence 路由互斥。178 隔离 checkout
+  `/data1/users/litianhao01/PairMOT_framedetail_0803_08` 固定在提交 `8dd19d8`。
+- 该环境无 `pytest` 包，首次验证在导入前退出；改用同一测试文件的标准库入口后 133 项完整测试通过。
+  父/新完整模型均为 `22,771,111` 参数、711 state tensors，参数增量为零；配置、launcher 和
+  4-iter smoke 设置通过。状态为 `PREPARED`：未运行真数据 smoke、未建 formal workdir、不占 GPU。
