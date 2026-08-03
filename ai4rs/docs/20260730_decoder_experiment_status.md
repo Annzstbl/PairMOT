@@ -2425,3 +2425,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 369,968,886-byte checkpoint、95613 条检测、50 序列、28 CSV 与 108 个非空文件完整；异步
   TrackEval 正常结束。PGID `3940521` 的 23 个成员继续运行，已建立 e8 `val_track_0002`
   完整性监控；该负向 e4 只降低优先级，不作为直接停止理由。
+
+## 2026-08-03 17:00 CST：0803_11 late geometric consensus 完成准备
+
+- 新候选保留第一层逐帧独立几何，只在 decoder 最后两层执行 reference-local log-size 共识与
+  pi-periodic angle tangent 共识，目标是保留早层帧特异探索并减少每层强约束造成的后期增益衰减。
+  中心、分类、DN、loss、attention 和深度不变，结构 class-agnostic、无 reweight。
+- 178 隔离 checkout `/data1/users/litianhao01/PairMOT_lategeom_0803_11_repo` 固定 `4c58c57`；
+  定向测试确认 4 层测试模型只调用最后两层投影，138 项完整 decoder 回归通过。目标模型为
+  `22,771,111` 参数、711 state tensors，参数增量为零；配置深拷贝、全模型构建与 launcher
+  语法均通过。
+- 状态为 `PREPARED/WAITING_GPU`。与 `0803_10` 一起等待合法空闲 GPU；部署优先级由
+  `0803_09` e12 的增益衰减和 AssA 分解决定。

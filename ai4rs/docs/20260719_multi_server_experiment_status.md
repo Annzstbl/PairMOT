@@ -1850,3 +1850,11 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `0.1721/0.3160`，四项 AP 相对 periodic-angle 均为负。
 - 369,968,886-byte checkpoint、95613 条检测、50 序列、28 CSV 与 108 个非空文件完整。
   PGID `3940521` 保持运行并继续 e8/e12，不以 e4 直接否决；e8 监控已建立。
+
+## 2026-08-03 17:00 CST：178 0803_11 已准备
+
+- 隔离 checkout `/data1/users/litianhao01/PairMOT_lategeom_0803_11_repo` 固定 `4c58c57`；仅在
+  decoder 最后两层施加 log-size 与周期角度共识，第一层保持逐帧独立。结构零参数、非类别感知、
+  无重加权且不增加 attention/深度。
+- 定向层数测试、138 项完整回归、目标配置深拷贝、launcher 语法和完整模型构建全部通过；
+  父/新模型均为 `22,771,111` 参数、711 state tensors。状态 `PREPARED/WAITING_GPU`。
