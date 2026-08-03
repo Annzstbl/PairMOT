@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 02:10 CST
+更新时间：2026-08-04 03:00 CST
 
 ## 当前研究原则
 
@@ -15,9 +15,9 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E16` | e12 `48.289/54.539`，相对原始 decoder 同点 `+0.894/+0.103`；继续 e16。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；继续 e12，之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18`，`0803_20 full tangent + semantic margins` 作为后备。 |
+| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。`0803_20 full tangent + semantic margins` 作为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -159,6 +159,41 @@
 - 197 隔离仓库 `/data/users/litianhao/PairMOT_terminalfulltangentmargin_0803_20_197` 固定
   `f179249`；两个 launcher Bash 语法和完整父/新模型比较通过，均为 22,771,111 参数、
   711 状态张量、增量 0。状态 `PREPARED`，排在 0803_18 之后且未占 GPU。
+
+## 2026-08-04 02:50 CST：0803_11 epoch 12 成熟停止
+
+- e12 cls HOTA/DetA/AssA `45.409/37.139/57.863`，det `50.665/45.754/57.944`；相对原始
+  decoder 同点 `47.395/54.436` 为 `-1.986/-3.771`，相对 Encoder 同点 `49.680/56.541`
+  为 `-4.271/-5.876`。e4/e8/e12 三个完整节点持续双负。
+- pair mAP/AP50 `0.225726/0.405185`、both-independent `0.270304/0.461162`；
+  381,030,375-byte checkpoint、50 序列、28 CSV、108 个非空文件与 `async_done=1` 完整。
+- 依据成熟三节点证据精确 TERM PGID `53708`，成员 `23→0`；GPU4/5 回到 `1 MiB`，断点保留。
+  该停止不是 e4/e8 早停，释放的 197 两卡转给已准备的 0803_18。
+
+## 2026-08-04 02:58 CST：0803_18 smoke 通过并正式运行
+
+- 0803_18 在最终 normal queries 组合终层 log-size/π 周期角几何共识与 centered semantic-margin
+  共识；保留中心、每帧 class mean、递归 reference 和 DN absolute 路径。结构零参数、类别置换
+  等变、无 class-aware/reweight、新 attention 或层。
+- 首次空闲检查包装器因把 GPU CSV `1,0` 作为单值解析而在创建 workdir 前退出，未占 GPU；修正
+  为逐卡查询后连续两次确认 GPU4/5 为 `1 MiB/0%`。真实四步 DDP smoke loss
+  `12.9355/19.5166/19.6231/21.1658`、grad `106.2062/125.5042/105.4083/99.3739`；checkpoint
+  642 个浮点张量、iterative-cls residual 和 DN absolute 语义均有限，错误扫描为空。
+- 隔离仓库 `/data/users/litianhao/PairMOT_terminalgeommargin_0803_18_197` 固定 clean HEAD
+  `ac02fc2`。fresh formal screen `387856.pm_0803_18_formal_197`、PGID `387859`；iter50
+  `1.7440 s/iter`、loss `21.3900`、grad `107.1625`，DN/encoder loss 全有限，7 个进程，
+  GPU4/5 各约 19.2 GiB，错误扫描、资源、进程组、provenance 与 workdir 五门槛通过。
+  状态 `RUNNING`，继续完整 e4/e8/e12 及更晚节点，不以 e4/e8 直接否决。
+
+## 2026-08-04 03:00 CST：0803_13 epoch 16 保持双正
+
+- e16 cls/det HOTA `50.415/57.456`，相对原始 decoder 同点 `50.036/56.933` 仍提高
+  `+0.379/+0.523`，合计 `+0.902`；相对 Encoder 同点 `51.091/58.320` 尚低
+  `0.676/0.864`，未达到最终门槛。
+- pair mAP/AP50 `0.275158/0.486134`、both-independent `0.320648/0.537430`；
+  386,615,796-byte checkpoint、50 序列、28 CSV、108 个非空文件与异步完成证据齐全。
+- 虽然对原始 decoder 的联合优势较 e8/e12 收窄，但 e16 仍为双正且绝对值继续上升；保持
+  178 单卡 PGID `3062903` 到 e20，按成熟后期轨迹复核，不为后继候选提前终止。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

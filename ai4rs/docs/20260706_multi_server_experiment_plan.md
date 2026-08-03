@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 02:10 CST.
+Last updated: 2026-08-04 03:00 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -108,6 +108,33 @@ all recurrent references, and DN semantics. The isolated 197 checkout at
 `f179249` passed both launcher syntax checks and the full parent/new model
 comparison at 22,771,111 parameters, zero state delta, and 711 tensors. It is
 PREPARED behind 0803_18 and consumes no GPU.
+
+Experiment 0803_11 completed epoch 12 at `45.409/50.665` cls/det HOTA,
+below the original decoder at the same checkpoint by `1.986/3.771` and below
+Encoder by `4.271/5.876`. Its epoch-4/8/12 trajectory, AP diagnostics,
+381,030,375-byte checkpoint, 50 sequences, 28 CSV files, 108 evaluation files,
+and async completion were verified before exact PGID `53708` was terminated
+(`23 -> 0`). This mature three-node stop released 197 GPU4/5; it was not an
+epoch-4/8 rejection.
+
+Experiment 0803_18 then passed a real four-iteration two-GPU smoke on 197.
+The first free-GPU wrapper had exited before workdir creation because of a CSV
+parser bug; after switching to per-GPU queries, two consecutive checks proved
+GPU4/5 free and the corrected smoke produced finite loss, gradient, DN,
+iterative-classification, and checkpoint values. The clean isolated checkout
+at `ac02fc2` started fresh formal PGID `387859`; epoch-1 iter50 was
+`1.7440 s/iter`, loss `21.3900`, and gradient norm `107.1625`, with seven
+processes, about 19.2 GiB on each selected GPU, no fatal errors, and all five
+formal gates satisfied. It is RUNNING to e4/e8/e12 and later evidence.
+
+Experiment 0803_13 completed epoch 16 at `50.415/57.456`, still a dual
+`+0.379/+0.523` gain over the original decoder at the same checkpoint. Pair
+mAP/AP50 are `0.275158/0.486134` and both-independent mAP/AP50 are
+`0.320648/0.537430`; the checkpoint, 50 sequences, 28 CSV files, 108 evaluation
+files, and async completion are verified. The gain is smaller than at epochs
+8 and 12 but remains dual-positive while absolute HOTA continues to rise, so
+the one-GPU 178 lane remains assigned through epoch 20 rather than being
+preempted by a prepared successor.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
