@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:40 CST.
+Last updated: 2026-08-03 23:43 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -22,6 +22,8 @@ Experiment 0803_16 is the next orthogonal terminal projection: share only the fi
 The isolated 0803_16 checkout at commit `c05cd21` passed its terminal-only call-count test and full model build: 22,771,111 parameters, zero parameter delta, and 711 state tensors. It remains PREPARED and consumes no GPU until the earlier 178 candidates finish.
 
 Safe single-GPU smoke and formal launchers are now prepared for both 0803_15 and 0803_16. They create no workdir or GPU process during preparation; after the active 178 run releases its one-card allocation, each successor must pass a fresh real-data smoke before formal launch.
+
+Both prepared 178 checkouts are clean at launch-provenance commit `e9f56dc`; the active 0803_13 checkout was not updated.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

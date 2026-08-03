@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:40 CST。
+更新时间：2026-08-03 23:43 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -55,6 +55,7 @@
 
 - `0803_15/16` 的单卡 smoke/formal 启动器已加入并通过 Bash 语法检查；均含安全 Conda 激活、fresh 目录、防错误扫描以及 checkpoint 分类语义和全浮点有限性检查。
 - 当前没有启动任何后继 workdir；GPU0 继续只运行 `0803_13`。资源释放后先执行 `0803_15` smoke，五门槛通过才允许 formal。
+- `/data1/users/litianhao01/PairMOT_terminalangle_0803_15` 与 `/data1/users/litianhao01/PairMOT_terminalcenter_0803_16` 均已在无活动进程时快进到 clean 提交 `e9f56dc`，远端四个启动器再次通过 Bash 语法检查。
 
 ## 99 本机
 

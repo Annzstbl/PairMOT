@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:40 CST
+更新时间：2026-08-03 23:43 CST
 
 ## 当前研究原则
 
@@ -37,6 +37,7 @@
 
 - 两项均新增 178 单卡 formal/smoke 安全启动器：Conda `nounset` 防护、目标 GPU 环境变量、fresh workdir、真实 GMC/预训练检查、错误扫描、iterative-cls/DN 审计和全浮点 checkpoint 有限性审计。
 - 四个启动器 Bash 语法通过；仅完成准备，不创建 workdir、不占 GPU。178 释放后按 `0803_15` 再 `0803_16` 的顺序执行真实 smoke→formal 五门槛。
+- 两个隔离仓库均已安全快进到启动提交 `e9f56dc` 并保持 clean；未触碰正在运行的 `0803_13` 仓库。后续 formal provenance 以 `e9f56dc` 为准。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
