@@ -4,12 +4,14 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 15:57 CST.
+Last updated: 2026-08-03 23:06 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+Authorized experiment GPUs are fixed: 99 uses GPU0/1, 197 uses GPU4/5, 178 uses GPU0, and 252 uses GPU0/1. Idle GPUs outside these exact sets are not available to this plan. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

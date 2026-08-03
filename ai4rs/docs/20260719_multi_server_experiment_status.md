@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 22:31 CST。
+更新时间：2026-08-03 23:06 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -13,13 +13,21 @@
 
 ## 当前资源总览
 
+授权边界固定为：252 GPU0/1（2 卡、且为最慢资源）、99 GPU0/1（2 卡）、178 GPU0（1 卡）、197 GPU4/5（2 卡）。任何空闲但未授权的物理卡都不用于本轮实验；每台机器同一时间最多一项实验。
+
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_14 terminal log-area + periodic-angle`（GPU0/1）；`0803_12 progressive log-shape + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `77558/4189798`；0803_12 e4 `32.057/38.097` | 0803_10 e12 成熟停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RESTARTING/TO_E12；误用 GPU2/3 的 PGID `4189798` 已精确停止，从 `epoch_4.pth` 在 GPU0/1 恢复 | `0803_14 terminal log-area` PREPARED，迁移到 99 队列 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING；PGID `3062903`；smoke 与 formal iter50 五门槛通过 | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-03 23:06 CST：资源边界纠正
+
+- 用户明确 252 只可使用 GPU0/1。原 `0803_12` PGID `4189798` 在 GPU2/3 的 23 个成员已全部退出，四卡显存均回落到 1 MiB；中断发生在 epoch 7，最近可恢复正式断点为 `epoch_4.pth`。
+- `0803_12` 启动器默认卡号已改为 GPU0/1，并增加显式 `PAIRMOT_RESUME=1` 恢复路径；恢复后须重新通过进程、显存、正式日志、iter50 和有限损失五门槛。
+- `0803_14` PGID `77558` 的 7 个成员此前已停止，GPU0/1 释放且无正式 epoch checkpoint；smoke 与 iter50 证据保留，改排 99 GPU0/1，不与 252 的唯一授权双卡任务并行。
 
 ## 99 本机
 

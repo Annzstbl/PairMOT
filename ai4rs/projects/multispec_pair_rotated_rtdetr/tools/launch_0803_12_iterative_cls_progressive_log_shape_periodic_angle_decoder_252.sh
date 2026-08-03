@@ -15,17 +15,27 @@ PYTHON_ROOT=${CONDA_PREFIX}/bin
 
 trap 'status=$?; echo "[$(date "+%F %T")] formal 0803_12 on 252 failed: status=${status} command=${BASH_COMMAND}" >> "${WORK_DIR}/launch.log"; exit "${status}"' ERR
 
-test ! -e "${WORK_DIR}"
-mkdir -p "${WORK_DIR}"
+RESUME=${PAIRMOT_RESUME:-0}
+if [[ "${RESUME}" == 1 ]]; then
+    test -d "${WORK_DIR}"
+    test -f "${WORK_DIR}/last_checkpoint"
+else
+    test ! -e "${WORK_DIR}"
+    mkdir -p "${WORK_DIR}"
+fi
 cd "${REPO}"
 test -f /data4/litianhao/PairMmot/pretrained_weights/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/pair_coco_adapted_pretrain.pth
 test -d /data/users/litianhao01/PairMmot/workdir/aux/gmc_cache/hsmot_train_gap1
 test -d /data/users/litianhao01/PairMmot/workdir/aux/gmc_cache/hsmot_test_gap1
-export CUDA_VISIBLE_DEVICES=${PAIRMOT_CUDA_VISIBLE_DEVICES:-2,3}
+export CUDA_VISIBLE_DEVICES=${PAIRMOT_CUDA_VISIBLE_DEVICES:-0,1}
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
 unset PYTORCH_CUDA_ALLOC_CONF CUBLAS_WORKSPACE_CONFIG TORCH_DISTRIBUTED_DEBUG
 
-echo "[$(date '+%F %T')] fresh formal 0803_12 commit $(git rev-parse --short HEAD)" >> "${WORK_DIR}/launch.log"
+TRAIN_ARGS=(tools/train.py "${CONFIG}" --launcher pytorch --work-dir "${WORK_DIR}")
+if [[ "${RESUME}" == 1 ]]; then
+    TRAIN_ARGS+=(--resume)
+fi
+echo "[$(date '+%F %T')] formal 0803_12 resume=${RESUME} GPUs=${CUDA_VISIBLE_DEVICES} commit $(git rev-parse --short HEAD)" >> "${WORK_DIR}/launch.log"
 exec "${PYTHON_ROOT}/torchrun" --nproc_per_node=2 --master_port=29861 \
-    tools/train.py "${CONFIG}" --launcher pytorch --work-dir "${WORK_DIR}" \
+    "${TRAIN_ARGS[@]}" \
     >> "${WORK_DIR}/launch.log" 2>&1

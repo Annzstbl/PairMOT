@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 22:31 CST
+更新时间：2026-08-03 23:06 CST
 
 ## 当前研究原则
 
@@ -8,17 +8,18 @@
 - decoder 目标是同时超过 `0727_01` 的 cls HOTA 54.437 和 det HOTA 62.393。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
-- 调度采用“快服务器首轮、慢服务器确认”：99/178/197 负责新结构快速筛选，252 只延续已投入实验或复验明确候选；同一时间只并行严格正交、能回答不同机制问题的候选。
+- 固定资源边界为：252 仅 GPU0/1、99 仅 GPU0/1、178 仅 GPU0、197 仅 GPU4/5；每台机器同一时间至多运行一项占满该授权的实验。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
 
 ## 运行中
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `77558`，等待 e4/e8/e12。 |
-| 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.057/38.097`，相对 Encoder `-4.152/-0.656`；继续 e8/e12，PGID `4189798`。 |
+| 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RESTARTING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，待 iter50 五门槛复核后转回 RUNNING。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
+
+`0803_14 terminal log-area` 已停止：PGID `77558` 的 7 个成员归零，252 GPU0/1 已释放，正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留，改为等待 99 GPU0/1 释放后重新启动。252 不再使用 GPU2/3。
 
 `0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
 `0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。
