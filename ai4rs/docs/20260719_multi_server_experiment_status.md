@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 06:20 CST。
+更新时间：2026-08-04 06:53 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E12；e8 `39.478/46.483`，继续成熟判定，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_21 terminal transported margins`（当前 GPU1/2） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1384944`；GPU0 外部占用且不抢占 | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E28+；e24 相对原 decoder 联合 `+1.673`，e25 iter50 五门槛通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E4+；log-domain 数值修复后的 smoke 与 formal iter50 五门槛通过，PGID `3151184` | `0803_24 transported shape tangent` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -2301,3 +2301,20 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `/data1/users/litianhao01/PairMOT_terminaltransportshape_0803_24`，clean HEAD `d470f96e`。
 - 当前状态仅 `PREPARED/NO_GPU`，未创建 smoke/formal workdir；继续让 0803_23 独占 178 的一张卡，
   后续是否启动由现有完整 e12/e28 证据决定。
+
+## 2026-08-04 06:53 CST：99 0803_17 e12 停止并切换 0803_21
+
+- 0803_17 e12 cls HOTA/DetA/AssA `45.597/38.179/56.731`，det
+  `52.020/47.161/59.329`；相对原始 decoder e12 `47.395/54.436` 为
+  `-1.798/-2.416`，相对 Encoder e12 `49.680/56.541` 为 `-4.083/-4.521`。
+  pair mAP/AP50 `0.238097/0.417747`，both-independent `0.282968/0.475183`。
+- 381,044,662-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。e4/e8/e12 三节点持续双负后停止 PGID `1357909`；现有成员为 0，GPU1/2
+  回落到 `10 MiB/0%`，GPU0 外部任务不变。这是成熟三节点判定，不是 e4/e8 早停。
+- 0803_21 随后在 GPU1/2 完成四步 DDP smoke：loss
+  `12.9371/19.5029/19.6174/21.1605`，grad
+  `102.8686/100.6335/94.7345/94.9512`；DN/encoder 有限，364,502,646-byte checkpoint
+  的 642 个浮点 tensor 全有限，iterative-cls/DN 语义通过。
+- 两次空闲检查后 fresh formal screen `1384942.pm_0803_21_formal_99`、PGID `1384944` 启动；
+  iter50 `0.9814 s/iter`、loss `21.3915`、grad `104.8633`，总、DN、encoder proposal
+  全有限，GPU1/2 各约 19.2 GiB，无致命错误，五门槛通过。状态 `RUNNING`，继续 e4/e8/e12。

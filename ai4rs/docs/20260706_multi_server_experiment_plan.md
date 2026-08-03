@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 06:20 CST.
+Last updated: 2026-08-04 06:53 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2536,3 +2536,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   增量 0、711 tensors。178 隔离提交 `d470f96e` clean。
 - 状态为 `PREPARED/NO_GPU`，不创建 workdir、不抢占 0803_23；现有 e12/e28 结果到齐后再决定它
   与 0803_21/22 的优先级，252 仍只承担成熟 0803_13 长轨迹。
+
+## 2026-08-04 06:53 CST：semantic margin 成熟双负，transported margin 接替
+
+- 0803_17 e12 为 cls/det HOTA `45.597/52.020`，相对原始 decoder 同点
+  `-1.798/-2.416`，相对 Encoder 同点 `-4.083/-4.521`；pair mAP/AP50
+  `0.238097/0.417747`，both-independent `0.282968/0.475183`。checkpoint、5416 条检测、
+  50 序列、28 CSV、108 文件和异步完成标志齐全。
+- e4/e8/e12 三个完整节点持续双负，因此精确停止 PGID `1357909` 并释放 GPU1/2；该决策满足
+  慢收敛观察窗口，不是早期 epoch 否决。GPU0 外部任务完全不动。
+- 0803_21 以沿前序 class-ranking 方向传输终层 centered-margin detail 替代完全平均。真实双卡
+  四步 smoke 的 loss/grad、DN/Encoder 分量和 642 个 checkpoint 浮点 tensor 全有限；fresh
+  formal PGID `1384944` 的 iter50 为 `0.9814 s/iter`、loss/grad `21.3915/104.8633`，五门槛
+  通过。继续收集 e4/e8/e12，不把当前数值稳定等同于性能成功。
