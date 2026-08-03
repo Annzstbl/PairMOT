@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:43 CST.
+Last updated: 2026-08-03 23:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -24,6 +24,14 @@ The isolated 0803_16 checkout at commit `c05cd21` passed its terminal-only call-
 Safe single-GPU smoke and formal launchers are now prepared for both 0803_15 and 0803_16. They create no workdir or GPU process during preparation; after the active 178 run releases its one-card allocation, each successor must pass a fresh real-data smoke before formal launch.
 
 Both prepared 178 checkouts are clean at launch-provenance commit `e9f56dc`; the active 0803_13 checkout was not updated.
+
+Experiment 0803_17 is a third zero-parameter 178 successor. At only the final
+iterative classification layer it preserves each frame's residual class mean
+and averages only the centered class-margin direction. It is class-permutation
+equivariant, keeps DN and all box paths independent, and adds no reweighting,
+attention, or layer. The isolated `e245127` checkout passed three targeted
+tests and a full model comparison at 22,771,111 parameters, zero delta, and 711
+state tensors. It remains PREPARED after 0803_15/16 and consumes no GPU.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

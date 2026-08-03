@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:43 CST。
+更新时间：2026-08-03 23:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；PGID `1327092`，smoke 与 formal iter50 五门槛通过；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -56,6 +56,17 @@
 - `0803_15/16` 的单卡 smoke/formal 启动器已加入并通过 Bash 语法检查；均含安全 Conda 激活、fresh 目录、防错误扫描以及 checkpoint 分类语义和全浮点有限性检查。
 - 当前没有启动任何后继 workdir；GPU0 继续只运行 `0803_13`。资源释放后先执行 `0803_15` smoke，五门槛通过才允许 formal。
 - `/data1/users/litianhao01/PairMOT_terminalangle_0803_15` 与 `/data1/users/litianhao01/PairMOT_terminalcenter_0803_16` 均已在无活动进程时快进到 clean 提交 `e9f56dc`，远端四个启动器再次通过 Bash 语法检查。
+
+## 2026-08-03 23:52 CST：178 第三后继 0803_17 已准备
+
+- `0803_17 terminal semantic margins` 保留每帧分类残差的 class mean，只在最终层平均双帧
+  centered class margins；DN、早中层分类递推和 box 路径不变。结构为零参数、类别置换等变，
+  无 class-aware、reweight、额外 attention/layer。
+- 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalmargin_0803_17` 固定 `e245127`；远端来源
+  核验、3 项定向测试、整模构建和两个启动器语法检查通过，模型 `22,771,111` 参数、增量 0、
+  711 状态张量。状态 `PREPARED`，排在 `0803_15/16` 后且未占 GPU。
+- 23:50 四机仍各只运行既有合法分配；252 固定 GPU0/1，其余三机只遵守 2/1/2 卡总量，
+  未抢占任何外部进程。
 
 ## 99 本机
 

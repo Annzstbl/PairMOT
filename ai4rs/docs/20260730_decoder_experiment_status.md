@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:43 CST
+更新时间：2026-08-03 23:52 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`；后继 `0803_15 terminal-angle` 与 `0803_16 terminal-center` 依次 PREPARED，不额外占卡。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`；后继 `0803_15 terminal-angle`、`0803_16 terminal-center`、`0803_17 terminal semantic margins` 依次 PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | 99 smoke 与 formal iter50 五门槛通过；PGID `1327092`，等待 e4/e8/e12，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
@@ -38,6 +38,22 @@
 - 两项均新增 178 单卡 formal/smoke 安全启动器：Conda `nounset` 防护、目标 GPU 环境变量、fresh workdir、真实 GMC/预训练检查、错误扫描、iterative-cls/DN 审计和全浮点 checkpoint 有限性审计。
 - 四个启动器 Bash 语法通过；仅完成准备，不创建 workdir、不占 GPU。178 释放后按 `0803_15` 再 `0803_16` 的顺序执行真实 smoke→formal 五门槛。
 - 两个隔离仓库均已安全快进到启动提交 `e9f56dc` 并保持 clean；未触碰正在运行的 `0803_13` 仓库。后续 formal provenance 以 `e9f56dc` 为准。
+
+## 2026-08-03 23:52 CST：0803_17 terminal semantic-margin consensus 已准备
+
+- 新候选仅在迭代分类的最后一层作用于 normal queries：分别保留两帧分类残差的 class mean，
+  只把去均值后的 class-margin 方向替换为双帧平均。前序 decoder 层、每帧 objectness 均值、
+  DN absolute 分类与全部框回归保持原路径。
+- 该运算零参数、class-permutation-equivariant，不使用类别身份、class-aware 逻辑、reweight、
+  新 attention 或 decoder 层。定向测试确认两帧均值精确保持、终层 centered margins 一致、
+  DN 隔离以及跨帧梯度只发生在终层。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminalmargin_0803_17` 固定提交 `e245127`；
+  远端目标源码核验、3 项定向测试、配置/整模构建均通过：`22,771,111` 参数、增量 0、711 个
+  状态张量。formal/smoke 启动器 Bash 语法通过，状态 `PREPARED/WAITING_AFTER_0803_16`，
+  未创建 workdir、未占用 GPU。
+- 23:50 实测四条 formal 数值均有限：99 `0803_14` 到 e2 iter850，252 `0803_12` 恢复线到
+  e7 iter250，178 `0803_13` 到 e7 iter950，197 `0803_11` 到 e8 iter100；继续等待完整
+  checkpoint、检测和 TrackEval 后再做资源切换。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
