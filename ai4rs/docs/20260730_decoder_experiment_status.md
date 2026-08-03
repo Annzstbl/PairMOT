@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 20:35 CST
+更新时间：2026-08-03 20:44 CST
 
 ## 当前研究原则
 
@@ -2587,3 +2587,12 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - pair mAP/AP50 `0.1986/0.3565`、both-independent `0.2430/0.4191`；375,538,358-byte
   checkpoint、50 序列、28 CSV、108 个非空文件与异步完成指标齐全。
 - 面积共享目前双侧落后，但按晚收敛约束继续到 e12，不以 e8 直接否决。
+
+## 2026-08-03 20:44 CST：0803_13 terminal geometry 已准备
+
+- 新增 terminal-only log-size + periodic-angle 共识：前三层 reference 更新完全逐帧独立，只在
+  最终输出层投影一次，因此配对几何约束不再反馈到后续 cross-attention。
+- 结构为零参数、class-agnostic、无 reweight、无新增层或 attention；目标单测通过，确认
+  log-size/angle 各只调用一次，互斥检查和有限值检查通过。
+- 隔离仓库 `/data1/users/litianhao01/PairMOT_terminal_0803_13` 固定提交 `1b7f904`；完整构建
+  22,771,111 参数、零增量、711 state tensors。状态 `PREPARED/WAITING_178_AFTER_0803_09`。
