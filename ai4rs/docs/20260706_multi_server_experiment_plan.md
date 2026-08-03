@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 13:22 CST.
+Last updated: 2026-08-03 14:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2001,3 +2001,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   非空文件完整，PGID `3694870` 已进入 e9。
 - 继续 e12，不以 e8 早停；若 e12 仍维持同方向缺口，则释放 GPU2/3，优先部署精确保留
   shared midpoint 的 `0803_08`。direct frame-evidence 路由不再扩展新变体。
+
+## 2026-08-03 14:05 CST：periodic-angle e24 平台与 178 切换
+
+- `0803_04` e24 cls/det HOTA 为 `50.133/55.346`，相对 e20 为 `+0.687/-0.051`；检测
+  DetA 仍升而 AssA 下滑，四项 AP 仍小幅增加。该节点证明周期角度的分类延迟收益继续存在，
+  同时检测 HOTA 已进入平台，不能仅靠延长训练达到严格最终阈值。
+- 397,682,100-byte checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整后，
+  精确停止 PGID `2893156`，9 个成员全部退出，GPU0 已释放；e24 保留为可恢复断点。
+- 178 下一任务选择 `0803_09 log-size tangent + periodic-angle`：只补宽高的 reference-local
+  乘法几何共识，不改变中心、分类、DN、loss、attention 或深度。先走真数据 smoke 与 formal
+  iter50 五门槛；`0803_08` 保持 PREPARED，等待 `0803_06/07` e12 的分类成熟归因。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 13:22 CST
+更新时间：2026-08-03 14:05 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e4 cls/det HOTA `30.698/38.350`；完整评测后继续 e8/e12，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `41.380/47.515`，成熟差距仍在，继续 e12；PGID `3694870`。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e20 cls/det HOTA `49.446/55.397`；e16→e20 为 `+0.972/+0.125`，继续 e24。 |
+| 178 GPU 0 | 无 | `IDLE` | `0803_04` e24 为 `50.133/55.346` 后精确停止；GPU0 已释放给 `0803_09` smoke/formal。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2313,3 +2313,15 @@ smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
   检测、50 序列、28 CSV 与 108 个非空文件完整，异步评测正常完成。
 - PGID `3694870` 的 23 个成员已进入 e9，继续 e12 后再释放。该结果不支持扩展 direct
   frame-evidence 路由，下一分类结构只考虑精确保留公共 midpoint 的 `0803_08`。
+
+## 2026-08-03 14:05 CST：0803_04 periodic-angle epoch-24 与资源释放
+
+- e24 cls HOTA/DetA/AssA `50.133/41.785/62.533`，det
+  `55.346/50.198/63.103`；相对 e20 双 HOTA `+0.687/-0.051`。cls 延迟收益仍在，但 det 的
+  DetA 增加 `0.245`、AssA 下降 `0.484`，检测 HOTA 已平台。
+- pair mAP/AP50 `0.2754/0.4742`，both-independent `0.3181/0.5229`；相对 e20 分别提高
+  `0.0048/0.0084` 和 `0.0049/0.0075`。397,682,100-byte checkpoint、5416 条检测、
+  50 序列、28 CSV 与 108 个非空文件完整。
+- 严格阈值仍差 `4.304/7.047`。精确停止 PGID `2893156` 后 9 个成员全部退出，GPU0 为
+  `1 MiB/0%`；e24 checkpoint 保留。下一步在 178 启动零参数 `0803_09 log-size tangent +
+  periodic-angle`，检验宽高乘法几何能否突破 det 平台。

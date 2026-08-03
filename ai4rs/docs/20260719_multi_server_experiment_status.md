@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 13:22 CST。
+更新时间：2026-08-03 14:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e4 cls/det HOTA `30.698/38.350`；`0803_07` e8 为 `41.380/47.515`，继续 e12；PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e20 cls/det HOTA `49.446/55.397`，e16→e20 `+0.972/+0.125`，继续 e24 | `0803_08 common-preserving frame-detail + periodic-angle`、`0803_09 log-size tangent + periodic-angle` 为 PREPARED；无等待进程 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | 无 | IDLE；`0803_04` e24 cls/det HOTA `50.133/55.346` 后精确停止，GPU0 已释放 | `0803_09 log-size tangent + periodic-angle` 优先进入 smoke/formal；`0803_08` 保持 PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1742,3 +1742,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   127426 条检测、50 序列、28 CSV 与 108 个非空评测文件完整。
 - PGID `3694870` 的 23 个成员已进入 e9。继续到 e12 以完成慢收敛审计；e8 结果强化
   `0803_08` 必须保留 shared classification midpoint 的设计依据，不再准备 direct 路由变体。
+
+## 2026-08-03 14:05 CST：178 0803_04 e24 平台确认并释放
+
+- e24 cls HOTA/DetA/AssA `50.133/41.785/62.533`，det
+  `55.346/50.198/63.103`；相对 e20 双 HOTA `+0.687/-0.051`。cls DetA/AssA 仍同时增长，
+  det DetA `+0.245` 但 AssA `-0.484`，确认分类延迟收敛仍在、检测 HOTA 已平台。
+- pair mAP/AP50 `0.2754/0.4742`，both-independent `0.3181/0.5229`，相对 e20 四项仍升
+  `0.0048/0.0084` 和 `0.0049/0.0075`。397,682,100-byte checkpoint、5416 条检测、
+  50 序列、28 CSV 与 108 个非空评测文件完整。
+- 严格最终阈值仍差 `4.304/7.047`。完整节点核验后精确终止 PGID `2893156`，9 个成员全部退出，
+  178 GPU0 回到 `1 MiB/0%`；e24 断点保留可恢复。下一步优先用 `0803_09` 的 reference-local
+  log-size tangent 补充已验证的 periodic-angle，直接检验检测几何平台。
