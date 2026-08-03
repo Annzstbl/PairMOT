@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:26 CST.
+Last updated: 2026-08-04 03:27 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -179,8 +179,11 @@ counterpart to 0803_18, preserving center, per-frame residual class means,
 recurrent references, and DN while adding no parameters, class-aware routing,
 reweighting, attention, layer, or loss. The 197 formal/smoke configs,
 zero-state build audit, and safe launchers pass local Python and Bash syntax
-checks. It is PREPARED_LOCAL with no remote workdir or GPU use and will not
-preempt the active 0803_18 trajectory.
+checks. The isolated 197 checkout at `41c08d8` also passed the three targeted
+transport-margin tests, config load/deepcopy, remote launcher syntax, and the
+full parent/new model comparison at 22,771,111 parameters, zero state delta,
+and 711 tensors. It is PREPARED with no smoke/formal workdir or GPU use and
+will not preempt the active 0803_18 trajectory.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

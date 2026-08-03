@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:26 CST
+更新时间：2026-08-04 03:27 CST
 
 ## 当前研究原则
 
@@ -243,8 +243,11 @@
   置换/帧交换等变，无 class-aware、reweight、新 attention/layer/loss。相对 0803_18 只增加少量
   centered reduction 与点积，计算量近零变化。
 - 已预留全局 ID `0803_22`，新增 197 2xb4 formal/smoke 配置、零状态构建审计和安全启动器；
-  本地 Python 语法与 launcher `bash -n` 通过。当前 `PREPARED_LOCAL/NO_GPU`，未同步远端、
-  未建 workdir，不抢占运行中的 0803_18。
+  本地 Python 语法与 launcher `bash -n` 通过。
+- 197 隔离 checkout `/data/users/litianhao/PairMOT_terminalgeomtransport_0803_22_197` 固定 clean
+  HEAD `41c08d8`；3 项 transported-margin 定向测试、正式/smoke 配置加载与深拷贝、远端 launcher
+  语法以及父/新整模零状态比较通过：`22,771,111` 参数、增量 0、711 状态张量。状态
+  `PREPARED/NO_GPU`；未建 smoke/formal workdir，不抢占运行中的 0803_18。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
