@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 20:28 CST。
+更新时间：2026-08-03 20:32 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING；PGID `53708`，formal iter50 五门槛通过；GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_10 shared log-area + periodic-angle`（GPU0/1）；`0803_12 progressive log-shape + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `4053545/4189798`；0803_12 formal iter50 五门槛通过 | `0803_08` e12 成熟停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING/LONG_TRAJECTORY；e16 `50.732/57.218`，相对原始 decoder 同点 `+0.696/+0.285`；PGID `2971994` | `0803_11` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING/TO_E24；e20 `49.781/57.217`，相对原始 decoder 同点 `-1.062/-0.816`；PGID `2971994` | `0803_11` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1950,3 +1950,10 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   零参数全构建、DDP smoke 与 checkpoint 语义检查通过。
 - fresh formal PGID `4189798`；iter50 `1.2941 s/iter`、loss `21.3858`、grad `113.3648`，
   7 个进程、GPU2/3 各 19,192 MiB，provenance/workdir/错误扫描通过。状态 `RUNNING`。
+
+## 2026-08-03 20:32 CST：178 0803_09 epoch 20
+
+- e20 cls/det HOTA `49.781/57.217`，相对 e16 `-0.951/-0.001`，相对原始 decoder 同点
+  `-1.062/-0.816`；e12 的双侧优势到 e16 收窄并在 e20 反转。
+- checkpoint、50 序列、28 CSV、108 个非空文件与 det/track 指标完整；保留训练至 e24 作
+  连续成熟趋势确认，不按单个中期节点直接否决。

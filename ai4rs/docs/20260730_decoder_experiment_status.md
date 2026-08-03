@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 20:28 CST
+更新时间：2026-08-03 20:32 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.399/39.251`，相对 Encoder `-3.810/+0.498`；继续 e8/e12，PGID `4053545`。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
-| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/LONG_TRAJECTORY` | e16 `50.732/57.218`；相对原始 decoder 同点 `+0.696/+0.285`，继续 e20/e24 及后期收敛；PGID `2971994`。 |
+| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `49.781/57.217`，已落后原始 decoder 同点 `1.062/0.816`；保留到 e24 作成熟确认，PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
 
@@ -2569,3 +2569,12 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 4-iter DDP smoke 四步 loss/grad 全有限，364,502,134-byte checkpoint、错误扫描与语义检查
   通过。fresh formal PGID `4189798`；iter50 `1.2941 s/iter`、loss `21.3858`、grad
   `113.3648`，7 个进程、GPU2/3 各 19,192 MiB，五门槛通过，状态 `RUNNING`。
+
+## 2026-08-03 20:32 CST：0803_09 epoch 20 后期回落
+
+- e20 cls HOTA/DetA/AssA `49.781/41.730/61.763`，det `57.217/50.699/67.029`；相对 e16
+  为 `-0.951/-0.001`，相对原始 decoder 同点为 `-1.062/-0.816`，全层 log-size 共识的
+  e12 优势已在后期反转。
+- pair mAP/AP50 `0.2732/0.4751`、both-independent `0.3152/0.5221`；392,131,764-byte
+  checkpoint、50 序列、28 CSV、108 个非空文件及异步完成证据齐全。
+- 不以该单点立即停止；保持 PGID `2971994` 到 e24，结合 e12→e16→e20 的连续趋势作成熟判定。
