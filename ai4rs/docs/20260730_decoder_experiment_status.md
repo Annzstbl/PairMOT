@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 15:01 CST
+更新时间：2026-08-03 15:10 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e8 cls/det HOTA `40.922/46.854`；成熟负向仍在，继续 e12，PGID `3765372`。 |
-| 252 GPU 2,3 | 无 | `IDLE/PREPARING 0803_08` | `0803_07` e12 为 `43.504/51.168` 后成熟负向停止；GPU2/3 已释放。 |
+| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | 135 项测试、零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
@@ -24,9 +24,9 @@
 实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
 不热更新活动仓库。
 
-已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle`。它只完成
-隔离目标环境的测试与构建，不创建 smoke/formal workdir。`0803_09 log-size tangent +
-periodic-angle` 已在 `0803_04` e24 平台确认并释放后接管 GPU0。
+`0803_08 common-preserving frame-detail + periodic-angle` 已从 178 单卡静态候选迁移为 252
+GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_04` e24 平台确认
+并释放后接管 178 GPU0。两者均使用隔离 checkout，不热更新活动仓库。
 
 ## 已完成或释放
 
@@ -2358,3 +2358,14 @@ periodic-angle` 已在 `0803_04` e24 平台确认并释放后接管 GPU0。
   检测、50 序列、28 CSV 与 108 个非空文件完整。
 - 精确停止 PGID `3694870` 后 23 个成员全部退出，GPU2/3 为 `1 MiB/0%`；e12 checkpoint
   保留。下一步部署 `0803_08 common-preserving frame-detail + periodic-angle` 双卡候选。
+
+## 2026-08-03 15:10 CST：0803_08 common-preserving frame-detail 双卡正式启动
+
+- 252 隔离 checkout `/data/users/litianhao01/PairMmot_framedetail_0803_08` 固定 `08356f9`。
+  135 项回归、2 个 subtest、launcher 语法与目标配置构建通过；父/新模型均为 `22,771,111`
+  参数、711 state tensors，增量为零。
+- 首次全构建受继承 `PYTHONPATH` 污染而解析到旧 registry 类，未进入训练；清空路径并验证目标类
+  来源后通过。真数据 DDP smoke loss `12.9402/19.2481/19.2302/20.1285`，grad
+  `103.2465/94.2024/82.7476/82.7848`，checkpoint 与 iterative-cls/DN 语义检查通过。
+- fresh formal PGID `3940521`；iter50 `1.2866 s/iter`、loss `21.4134`、grad `109.5162`，
+  7 个成员、GPU2/3 各约 19.2 GiB，五门槛通过。状态为 `RUNNING`，继续 e4/e8/e12。

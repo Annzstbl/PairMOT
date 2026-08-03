@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 15:01 CST.
+Last updated: 2026-08-03 15:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2043,3 +2043,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - direct frame-evidence 路由完成 e4/e8/e12 成熟负向审计。GPU2/3 下一任务固定为 `0803_08`：
   保留 shared 分类 midpoint，仅注入 swap-odd 帧细节；先补 252 双卡配置、目标构建、真数据 smoke
   与 formal iter50 五门槛。
+
+## 2026-08-03 15:10 CST：common-preserving frame-detail 双卡启动
+
+- 新增 252 2×4 配置与 GPU2/3 smoke/formal launcher，隔离 checkout 固定 `08356f9`。135 项
+  decoder 测试、2 个 subtest、脚本语法、目标配置深拷贝与完整构建通过；零参数、711 state tensors。
+- 首次构建继承了旧仓库 `PYTHONPATH`，registry 类来源不正确，未进入训练；清空污染路径并校验
+  target import 后构建通过。真数据 4-step DDP smoke loss/grad 全部有限，checkpoint 与语义检查完整。
+- fresh formal PGID `3940521`；iter50 `1.2866 s/iter`、loss `21.4134`、grad `109.5162`，
+  7 个成员、GPU2/3 各约 19.2 GiB、错误扫描与 provenance 五门槛通过。状态为 `RUNNING`，
+  继续 e4/e8/e12，直接检验保留 shared midpoint 后的 swap-odd 分类细节是否避免成熟负迁移。
