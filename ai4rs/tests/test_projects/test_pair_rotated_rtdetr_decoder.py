@@ -92,6 +92,8 @@ def _build_decoder(num_layers: int = 2,
                    bool = False,
                    pair_shared_log_size_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_log_area_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_normalized_center_refinement_decoder:
                    bool = False,
                    frame_evidence_cls_decoder: bool = False,
@@ -165,6 +167,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_periodic_angle_refinement_decoder),
         pair_shared_log_size_periodic_angle_refinement_decoder=(
             pair_shared_log_size_periodic_angle_refinement_decoder),
+        pair_shared_log_area_periodic_angle_refinement_decoder=(
+            pair_shared_log_area_periodic_angle_refinement_decoder),
         pair_shared_normalized_center_refinement_decoder=(
             pair_shared_normalized_center_refinement_decoder),
         frame_evidence_cls_decoder=frame_evidence_cls_decoder,
@@ -540,6 +544,76 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             _build_decoder(
                 pair_shared_periodic_angle_refinement_decoder=True,
                 pair_shared_log_size_periodic_angle_refinement_decoder=True,
+                device=self.device)
+
+    def test_log_area_residual_preserves_aspect_increment(self):
+        reference_prev = torch.rand(2, 4, 5) * 0.5 + 0.2
+        reference_curr = torch.rand(2, 4, 5) * 0.5 + 0.2
+        prev = 0.15 * torch.randn(2, 4, 5)
+        curr = 0.15 * torch.randn(2, 4, 5)
+        original_prev = prev.clone()
+        original_curr = curr.clone()
+        proposed_prev = (prev + torch.logit(reference_prev)).sigmoid()
+        proposed_curr = (curr + torch.logit(reference_curr)).sigmoid()
+        original_delta_prev = torch.log(
+            proposed_prev[:, 1:, 2:4] / reference_prev[:, 1:, 2:4])
+        original_delta_curr = torch.log(
+            proposed_curr[:, 1:, 2:4] / reference_curr[:, 1:, 2:4])
+
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_shared_log_area_residual(
+                prev, curr, reference_prev, reference_curr, num_dn=1))
+        decoded_prev = (
+            projected_prev + torch.logit(reference_prev)).sigmoid()
+        decoded_curr = (
+            projected_curr + torch.logit(reference_curr)).sigmoid()
+        delta_prev = torch.log(
+            decoded_prev[:, 1:, 2:4] / reference_prev[:, 1:, 2:4])
+        delta_curr = torch.log(
+            decoded_curr[:, 1:, 2:4] / reference_curr[:, 1:, 2:4])
+        area_prev = 0.5 * delta_prev.sum(dim=-1)
+        area_curr = 0.5 * delta_curr.sum(dim=-1)
+        aspect_prev = 0.5 * (delta_prev[..., 0] - delta_prev[..., 1])
+        aspect_curr = 0.5 * (delta_curr[..., 0] - delta_curr[..., 1])
+        original_aspect_prev = 0.5 * (
+            original_delta_prev[..., 0] - original_delta_prev[..., 1])
+        original_aspect_curr = 0.5 * (
+            original_delta_curr[..., 0] - original_delta_curr[..., 1])
+
+        self.assertTrue(torch.equal(
+            projected_prev[:, :1], original_prev[:, :1]))
+        self.assertTrue(torch.equal(
+            projected_curr[:, :1], original_curr[:, :1]))
+        torch.testing.assert_close(area_prev, area_curr, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close(
+            aspect_prev, original_aspect_prev, atol=2e-5, rtol=2e-5)
+        torch.testing.assert_close(
+            aspect_curr, original_aspect_curr, atol=2e-5, rtol=2e-5)
+
+    def test_log_area_periodic_angle_is_parameter_free_and_exclusive(self):
+        parent, _, _ = _build_decoder(num_layers=3, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            pair_shared_log_area_periodic_angle_refinement_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+        _, refs_prev, refs_curr, _, _ = self._forward(
+            1, decoder=projected,
+            reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_log_size_periodic_angle_refinement_decoder=True,
+                pair_shared_log_area_periodic_angle_refinement_decoder=True,
                 device=self.device)
 
     def test_normalized_center_residual_uses_reference_local_coordinates(self):
