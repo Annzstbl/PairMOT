@@ -317,6 +317,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     bool = False,
                     pair_shared_terminal_full_tangent_refinement_decoder:
                     bool = False,
+                   pair_shared_terminal_transport_shape_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
@@ -392,6 +394,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_terminal_normalized_center_refinement_decoder)
         self.pair_shared_terminal_full_tangent_refinement_decoder = bool(
             pair_shared_terminal_full_tangent_refinement_decoder)
+        self.pair_shared_terminal_transport_shape_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_shape_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
         self.pair_shared_progressive_log_shape_periodic_angle_refinement_decoder = (
@@ -458,6 +463,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_full_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_shape_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
                 self.
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder,
@@ -469,7 +476,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'late-log-size-periodic-angle, terminal-log-size-periodic-'
                 'angle, terminal-log-area-periodic-angle, terminal-periodic-'
                 'angle, terminal-normalized-center, terminal-full-tangent, '
-                'progressive-log-shape-'
+                'terminal-transport-shape-tangent, terminal-transport-'
+                'tangent, progressive-log-shape-'
                 'periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
@@ -2030,6 +2038,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif (
                     self.
+                    pair_shared_terminal_transport_shape_tangent_refinement_decoder
+                    and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (
+                    self.
                     pair_shared_terminal_transport_tangent_refinement_decoder
                     and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -2506,6 +2523,108 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             (shared_residual_prev, normal_prev[..., 2:]), dim=-1)
         normal_curr = torch.cat(
             (shared_residual_curr, normal_curr[..., 2:]), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_shape_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport terminal size/angle detail along established shape motion.
+
+        Center residuals remain exactly frame-specific. Size and angle updates
+        are represented by log-width, log-height, and shortest pi-periodic
+        angle tangents. Their common component is retained, while their detail
+        is projected onto the detached relative size/angle transform already
+        accumulated in the input references. This isolates the conservative
+        terminal geometry of the log-size/periodic-angle decoder from center
+        transport and suppresses only transverse shape jitter.
+
+        The projection is parameter-free, swap-equivariant, class agnostic,
+        and leaves the DN prefix unchanged.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-transport shape-tangent refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-transport shape-tangent refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-transport shape-tangent refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-transport shape-tangent refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        tangent_prev = torch.cat((
+            torch.log(proposed_prev[..., 2:4].clamp_min(1e-6) / size_prev),
+            wrap_period(proposed_prev[..., 4:] - ref_prev[..., 4:])),
+            dim=-1)
+        tangent_curr = torch.cat((
+            torch.log(proposed_curr[..., 2:4].clamp_min(1e-6) / size_curr),
+            wrap_period(proposed_curr[..., 4:] - ref_curr[..., 4:])),
+            dim=-1)
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        transport = torch.cat((
+            torch.log(size_curr / size_prev),
+            wrap_period(ref_curr[..., 4:] - ref_prev[..., 4:])),
+            dim=-1).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail_tangent * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_shape(tangent: Tensor, reference: Tensor,
+                         reference_logit: Tensor,
+                         reference_size: Tensor,
+                         original_residual: Tensor) -> Tensor:
+            target_log_size = (
+                torch.log(reference_size) + tangent[..., :2]).clamp(
+                    min=-13.815510557964274,
+                    max=-1.0000005000003334e-6)
+            target_size = torch.exp(target_log_size)
+            target_angle = torch.remainder(
+                reference[..., 4:] + tangent[..., 2:], 1.0)
+            target_shape = torch.cat((target_size, target_angle), dim=-1)
+            shape_residual = (
+                inverse_sigmoid(target_shape, eps=1e-3)
+                - reference_logit[..., 2:])
+            return torch.cat(
+                (original_residual[..., :2], shape_residual), dim=-1)
+
+        normal_prev = encode_shape(
+            tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
+        normal_curr = encode_shape(
+            tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
         if not num_dn:
             return normal_prev, normal_curr
         return (
