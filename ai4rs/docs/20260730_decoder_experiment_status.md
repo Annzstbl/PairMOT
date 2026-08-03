@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 12:46 CST
+更新时间：2026-08-03 13:04 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | 132 项回归、零参数全构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3765372`。 |
+| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e4 cls/det HOTA `30.698/38.350`；完整评测后继续 e8/e12，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，不按 e4 停止；PGID `3694870`。 |
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e20 cls/det HOTA `49.446/55.397`；e16→e20 为 `+0.972/+0.125`，继续 e24。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2290,3 +2290,14 @@ smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
   50 序列、28 CSV 与 108 个非空文件完整。
 - 相对严格最终阈值仍低 `4.991/6.996`，目标未达到。PGID `2893156` 已自然进入 e21，继续 e24；
   同时保留 `0803_09` 作为 det 平台的零参数尺寸几何补充，不抢占当前正向长跑。
+
+## 2026-08-03 13:04 CST：0803_06 frame-evidence-cls epoch-4
+
+- e4 cls HOTA/DetA/AssA `30.698/24.130/41.666`，det
+  `38.350/30.533/49.530`；相对 periodic-angle 单因素 e4 为 `-5.326/-5.438`，相对
+  Encoder e4 为 `-5.511/-0.403`。直接帧证据分类路径在早期同时降低 DetA 与 AssA。
+- pair mAP/AP50 `0.1200/0.2291`，both-independent `0.1621/0.3011`；369,968,182-byte
+  checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整，异步 TrackEval 正常结束。
+- PGID `3765372` 的 23 个成员已进入 e5。该实验与 `0803_07` 都继续 e8/e12，不以 e4 早停；
+  当前因果证据降低 direct frame-evidence 路由优先级，并提高精确保留 shared midpoint 的
+  `0803_08 common-preserving frame-detail` 优先级。

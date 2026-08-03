@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 12:46 CST.
+Last updated: 2026-08-03 13:04 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1980,3 +1980,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - cls 的覆盖与关联均继续增长，说明 decoder 延迟收敛确实存在；det 增长已很小但 DetA 仍升，不能
   在 e20 终止整个正向分支。继续 e24，严格目标仍未达到。若 e24 det 仍平台，则优先用已经 PREPARED
   的 `0803_09` 测试 log-size 几何补益，而 `0803_08` 由 `0803_06/07` 的分类归因决定是否部署。
+
+## 2026-08-03 13:04 CST：frame-evidence 单因素 e4 归因
+
+- `0803_06` e4 cls/det HOTA 为 `30.698/38.350`，相对 periodic-angle 单因素 e4 为
+  `-5.326/-5.438`；pair mAP/AP50 与 both-independent 为 `0.1200/0.2291` 和
+  `0.1621/0.3011`。checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件与异步完成
+  标志均完整，PGID `3765372` 的 23 个成员已进入 e5。
+- 单因素和组合分支在 e4 的检测 AP 几乎一致，且均显著弱于 periodic-angle，支持早期损失来自
+  direct frame-evidence 分类路由本身，而非周期角度交互。仍继续两项到 e8/e12，以排除 decoder
+  延迟收敛；若成熟节点仍负向，分类候选只保留公共 midpoint 并注入 swap-odd detail 的 `0803_08`。

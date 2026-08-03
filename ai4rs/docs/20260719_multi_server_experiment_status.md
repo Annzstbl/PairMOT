@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 12:46 CST。
+更新时间：2026-08-03 13:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` PGID `3765372`；`0803_07` e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，PGID `3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e4 cls/det HOTA `30.698/38.350`，`0803_07` e4 为 `32.535/38.723`；两项均继续 e8/e12，PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e20 cls/det HOTA `49.446/55.397`，e16→e20 `+0.972/+0.125`，继续 e24 | `0803_08 common-preserving frame-detail + periodic-angle`、`0803_09 log-size tangent + periodic-angle` 为 PREPARED；无等待进程 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1718,3 +1718,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - pair mAP/AP50 `0.2706/0.4658`，both-independent `0.3132/0.5154`，四项相对 e16
   均继续提高。checkpoint 392,152,244 bytes，50/28/108 产物完整。
 - PGID `2893156` 已进入 e21，继续 e24；严格最终阈值尚差 `4.991/6.996`，状态仍为 `RUNNING`。
+
+## 2026-08-03 13:04 CST：252 0803_06 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA `30.698/24.130/41.666`，det
+  `38.350/30.533/49.530`；相对 periodic-angle 单因素 `0803_04` e4，双 HOTA
+  `-5.326/-5.438`，相对 Encoder e4 为 `-5.511/-0.403`。直接以帧特异 cross-attention
+  evidence 替换共享分类状态在早期同时伤害覆盖与关联。
+- pair mAP/AP50 `0.1200/0.2291`，both-independent `0.1621/0.3011`。369,968,182-byte
+  checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空评估文件完整；异步评测已明确结束。
+- PGID `3765372` 的 23 个进程成员仍存活并已进入 e5。遵循 decoder 可能慢收敛的约束，继续
+  e8/e12，不以 e4 停止；该节点只把后续候选优先级转向保留 shared midpoint 的 `0803_08`，
+  不支持直接 frame-evidence 路由。
