@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 00:27 CST.
+Last updated: 2026-08-04 00:42 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -39,6 +39,13 @@ the same epoch. All four AP diagnostics also improved, and the checkpoint,
 50 sequences, 28 CSV files, 108 non-empty evaluation files, and async TrackEval
 completion were verified. The 178 lane therefore remains on 0803_13 through
 epoch 12 and later confirmation; prepared successors do not preempt it.
+
+The complete epoch-8 results for 0803_11 and 0803_12 are respectively
+`40.377/45.730` and `40.430/46.542` cls/det HOTA. Both are below the original
+decoder and all four AP diagnostics are also lower, while terminal-only
+0803_13 dominates both. They nevertheless continue to epoch 12 because epoch
+8 is not a direct decoder rejection point. No additional late-two-layer or
+progressive-geometry descendants will be prepared from these weak branches.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

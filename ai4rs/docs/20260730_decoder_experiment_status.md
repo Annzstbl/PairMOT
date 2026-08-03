@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 00:27 CST
+更新时间：2026-08-04 00:42 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
+| 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；按慢收敛约束继续 e12。PGID `123974`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `45.002/49.083`，相对原始 decoder 同点 `+3.030/+0.905`；继续 e12。后继 `0803_15/16/17` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | 99 smoke 与 formal iter50 五门槛通过；PGID `1327092`，等待 e4/e8/e12，GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
+| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448`；按慢收敛约束继续 e12。PGID `53708`。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -66,6 +66,19 @@
 - 375,568,500-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
   `async_done=1` 完整。terminal-only 尺度/周期角在 e8 对强父线形成双正交增益，保持 PGID
   `3062903` 继续 e12，并观察该优势是否避免全层 `0803_09` 在 e16 后的衰减；不释放 178。
+
+## 2026-08-04 00:42 CST：0803_11/12 epoch 8 完整评估
+
+- `0803_11 late geometry` e8 cls HOTA/DetA/AssA `40.377/32.826/52.463`，det
+  `45.730/40.871/52.928`；相对原始 decoder 同点 HOTA `-1.595/-2.448`。pair mAP/AP50
+  `0.185399/0.329767`、both-independent `0.230288/0.393352`，四项同样低于父线。
+- `0803_12 progressive geometry` e8 cls `40.430/33.681/51.565`，det
+  `46.542/42.862/52.411`；相对原始 decoder 同点 HOTA `-1.542/-1.636`。pair mAP/AP50
+  `0.192018/0.355406`、both-independent `0.237795/0.421425`，四项也均低于父线。
+- 两项各自的 epoch8 checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件和
+  `async_done=1` 完整；它们均被 terminal-only `0803_13` 同点双侧明显支配，但遵守不能用 e8
+  直接否决 decoder 的约束，197 与 252 固定 GPU0/1 继续 e12。结构派生优先级停止扩展
+  “最后两层/渐进几何”，新候选集中到 terminal-only 与语义方向。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
