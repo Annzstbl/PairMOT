@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:16 CST.
+Last updated: 2026-08-04 03:21 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -162,9 +162,14 @@ established class-ranking trajectory, and suppresses a new transverse terminal
 class switch. It is parameter-free, class-permutation and frame-swap
 equivariant, leaves DN absolute logits unchanged, and adds only reductions and
 dot products. The 99 formal/smoke configs, zero-state build audit, and safe
-launchers have passed local syntax checks. It remains PREPARED_LOCAL with no
-remote workdir or GPU use until isolated target tests complete and 0803_17
-reaches a mature resource decision.
+launchers passed local syntax checks. The isolated 99 checkout at `a7b37ef`
+then passed three targeted unittest cases, config load/deepcopy, both remote
+launcher syntax checks, and the full parent/new comparison at 22,771,111
+parameters, zero state delta, and 711 tensors. The first test command found
+that the existing py310 environment has no pytest; no package was installed,
+and the same test methods were run through the standard unittest loader. It is
+PREPARED with no smoke/formal workdir or GPU use until 0803_17 reaches a
+mature resource decision.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

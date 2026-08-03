@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:16 CST
+更新时间：2026-08-04 03:21 CST
 
 ## 当前研究原则
 
@@ -227,8 +227,12 @@
   分类及早中层梯度路径保持不变。运算零参数、类别置换等变、frame-swap 等变，无 class identity、
   class-aware、reweight、新 attention/layer/loss，仅增加少量点积。
 - 已预留全局 ID `0803_21`，新增 99 2xb4 formal/smoke 配置、构建审计与安全启动器；本地语法和
-  launcher `bash -n` 通过。当前为 `PREPARED_LOCAL/NO_GPU`，尚未同步远端、未建 workdir，
-  不触碰运行中的 0803_17；下一步在隔离 checkout 做定向测试、配置深拷贝和零状态增量整模验证。
+  launcher `bash -n` 通过，不触碰运行中的 0803_17。
+- 99 隔离 checkout `/data/users/wangying01/lth/PairMOT_terminaltransport_0803_21_99` 已固定 clean
+  HEAD `a7b37ef`。首次定向测试命令发现既有 py310 环境未安装 pytest，未修改环境；改用标准
+  unittest 加载同一测试文件后 3 项定向测试全部通过。正式/smoke 配置加载与深拷贝、远端两个
+  launcher `bash -n`、父/新整模比较均通过：`22,771,111` 参数、增量 0、711 状态张量。
+  状态为 `PREPARED/NO_GPU`；未创建 smoke/formal workdir，等待 0803_17 成熟资源决策。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
