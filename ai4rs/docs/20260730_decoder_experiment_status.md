@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 18:00 CST
+更新时间：2026-08-03 18:35 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4053545`。 |
-| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | e4 `32.065/39.067` 为负向结构信号，但继续 e8/e12；PGID `3940521`。 |
+| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.688/47.811`，相对 Encoder 同点 `-4.581/-2.382`；按晚收敛约束继续 e12，PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/LONG_TRAJECTORY` | e12 `49.206/56.275`；相对原始 decoder 同点 `+1.811/+1.839`、相对 periodic-angle `+1.293/+1.018`，继续 e16 及后期收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `SSH_RECOVERED/GPU_UNAVAILABLE` | SSH 已恢复；`nvidia-smi` 连续 5 秒超时，旧提交隔离 clone 与 bundle 保留，未 fetch、未占 GPU。 |
@@ -2498,3 +2498,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 381,087,092-byte checkpoint、5416 条记录、50 序列、28 CSV、108 个非空评估文件与
   `async_done=1` 完整。该结构是在同模型原始 decoder 上形成强正交增益，且原始 decoder 要到
   e40/e56 才完成双超；因此明确保留长轨迹，继续 e16/e24/e40，不以 e12 未过最终阈值停止。
+
+## 2026-08-03 18:35 CST：0803_08 epoch 8 完整评估
+
+- cls HOTA/DetA/AssA `40.688/33.752/51.391`，det `47.811/42.903/55.164`；相对 Encoder
+  同点 `45.269/50.193` 低 `4.581/2.382`，相对 periodic-angle 同点 `45.587/52.915`
+  低 `4.899/5.104`。
+- e4 到 e8 仍增长 `8.623/8.744`，但结构差距未收窄；pair mAP/AP50 `0.1995/0.3624`、
+  both-independent `0.2402/0.4175`，也明显低于 periodic-angle e8。
+- 375,532,918-byte checkpoint、5416 条记录、50 序列、28 CSV、108 个非空文件完整，异步
+  评估 408.8 秒正常结束。遵守不以 e4/e8 直接否决的约束，继续 e12；e12 后再按完整三节点
+  轨迹判断是否释放 GPU2/3 给已准备的 0803_11。
