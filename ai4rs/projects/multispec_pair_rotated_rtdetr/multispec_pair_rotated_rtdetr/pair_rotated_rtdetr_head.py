@@ -81,6 +81,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                  iterative_cls_detach_between_layers: bool = True,
                  iterative_cls_pair_shared_objectness: bool = False,
                  iterative_cls_terminal_shared_margins: bool = False,
+                 iterative_cls_terminal_transport_margins: bool = False,
                  terminal_encoder_cls_residual: bool = False,
                  terminal_pair_common_cls_residual: bool = False,
                  terminal_pair_common_objectness_residual: bool = False,
@@ -107,6 +108,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             iterative_cls_pair_shared_objectness)
         self.iterative_cls_terminal_shared_margins = bool(
             iterative_cls_terminal_shared_margins)
+        self.iterative_cls_terminal_transport_margins = bool(
+            iterative_cls_terminal_transport_margins)
         self.terminal_encoder_cls_residual = bool(
             terminal_encoder_cls_residual)
         self.terminal_pair_common_cls_residual = bool(
@@ -167,8 +170,20 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             raise ValueError(
                 'iterative_cls_terminal_shared_margins requires '
                 'iterative_cls_dn_absolute=True')
-        if (self.iterative_cls_pair_shared_objectness
-                and self.iterative_cls_terminal_shared_margins):
+        if (self.iterative_cls_terminal_transport_margins
+                and not self.iterative_cls_residual):
+            raise ValueError(
+                'iterative_cls_terminal_transport_margins requires '
+                'iterative_cls_residual=True')
+        if (self.iterative_cls_terminal_transport_margins
+                and not self.iterative_cls_dn_absolute):
+            raise ValueError(
+                'iterative_cls_terminal_transport_margins requires '
+                'iterative_cls_dn_absolute=True')
+        if sum((
+                self.iterative_cls_pair_shared_objectness,
+                self.iterative_cls_terminal_shared_margins,
+                self.iterative_cls_terminal_transport_margins)) > 1:
             raise ValueError(
                 'iterative pair classification consensus modes are '
                 'mutually exclusive')
@@ -615,7 +630,8 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
             hidden_prev = hidden_states_prev[layer_id]
             hidden_curr = hidden_states_curr[layer_id]
             terminal_iterative_pair = (
-                self.iterative_cls_terminal_shared_margins
+                (self.iterative_cls_terminal_shared_margins
+                 or self.iterative_cls_terminal_transport_margins)
                 and layer_id == len(hidden_states) - 1)
             # hidden_*: (bs, num_queries, embed_dims)
             if self.iterative_cls_residual:
@@ -632,9 +648,14 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                          self.cls_branches_curr[layer_id],
                          num_dn)
                 elif terminal_iterative_pair:
+                    if self.iterative_cls_terminal_transport_margins:
+                        terminal_margin_layer = (
+                            self._iterative_cls_terminal_transport_margin_layer)
+                    else:
+                        terminal_margin_layer = (
+                            self._iterative_cls_terminal_margin_layer)
                     (cls_prev, cls_curr, running_cls_prev,
-                     running_cls_curr) = (
-                         self._iterative_cls_terminal_margin_layer(
+                     running_cls_curr) = terminal_margin_layer(
                              running_cls_prev,
                              running_cls_curr,
                              hidden_prev,
@@ -645,7 +666,7 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
                                  layer_id],
                              self.cls_branches[layer_id],
                              self.cls_branches_curr[layer_id],
-                             num_dn))
+                             num_dn)
                 else:
                     cls_prev, running_cls_prev = self._iterative_cls_layer(
                         running_cls_prev,
@@ -941,6 +962,82 @@ class PairRotatedRTDETRHead(RotatedRTDETRHead):
 
         logits_prev = running_prev[:, num_dn:] + residual_prev
         logits_curr = running_curr[:, num_dn:] + residual_curr
+        if num_dn:
+            dn_prev = absolute_branch_prev(hidden_prev[:, :num_dn])
+            dn_curr = absolute_branch_curr(hidden_curr[:, :num_dn])
+            cls_prev = torch.cat((dn_prev, logits_prev), dim=1)
+            cls_curr = torch.cat((dn_curr, logits_curr), dim=1)
+        else:
+            cls_prev = logits_prev
+            cls_curr = logits_curr
+
+        next_prev = logits_prev
+        next_curr = logits_curr
+        if self.iterative_cls_detach_between_layers:
+            next_prev = next_prev.detach()
+            next_curr = next_curr.detach()
+        if num_dn:
+            zeros_prev = running_prev.new_zeros(
+                running_prev.shape[0], num_dn, running_prev.shape[2])
+            zeros_curr = running_curr.new_zeros(
+                running_curr.shape[0], num_dn, running_curr.shape[2])
+            next_prev = torch.cat((zeros_prev, next_prev), dim=1)
+            next_curr = torch.cat((zeros_curr, next_curr), dim=1)
+        return cls_prev, cls_curr, next_prev, next_curr
+
+    def _iterative_cls_terminal_transport_margin_layer(
+            self, running_prev: Tensor, running_curr: Tensor,
+            hidden_prev: Tensor, hidden_curr: Tensor,
+            residual_branch_prev: nn.Module, residual_branch_curr: nn.Module,
+            absolute_branch_prev: nn.Module, absolute_branch_curr: nn.Module,
+            num_dn: int) -> Tuple[Tensor, Tensor, Tensor, Tensor]:
+        """Keep only temporally transported terminal class-margin detail.
+
+        A direct pair average removes every frame-specific class-margin
+        increment, including a stable change already accumulated by earlier
+        decoder layers.  This projection instead decomposes the terminal
+        residuals into their pair common/detail components and retains only
+        the detail parallel to the detached centered difference of the
+        running logits.  Thus the terminal layer may continue an established
+        class-ranking trajectory but cannot introduce a new transverse class
+        switch.  Each frame's residual class mean and the pair residual mean
+        are preserved exactly.
+
+        The operation is parameter free, class-permutation equivariant, and
+        swap equivariant.  DN logits stay on their absolute classifiers.  The
+        detached transport direction avoids a new terminal gradient shortcut
+        into earlier decoder layers.
+        """
+        normal_prev = hidden_prev[:, num_dn:]
+        normal_curr = hidden_curr[:, num_dn:]
+        residual_prev = residual_branch_prev(normal_prev)
+        residual_curr = residual_branch_curr(normal_curr)
+
+        objectness_prev = residual_prev.mean(dim=-1, keepdim=True)
+        objectness_curr = residual_curr.mean(dim=-1, keepdim=True)
+        margin_prev = residual_prev - objectness_prev
+        margin_curr = residual_curr - objectness_curr
+        common_margin = 0.5 * (margin_prev + margin_curr)
+        detail_margin = 0.5 * (margin_curr - margin_prev)
+
+        running_normal_prev = running_prev[:, num_dn:]
+        running_normal_curr = running_curr[:, num_dn:]
+        running_margin_prev = running_normal_prev - running_normal_prev.mean(
+            dim=-1, keepdim=True)
+        running_margin_curr = running_normal_curr - running_normal_curr.mean(
+            dim=-1, keepdim=True)
+        transport = (0.5 * (
+            running_margin_curr - running_margin_prev)).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = (
+            transport * (detail_margin * transport).sum(
+                dim=-1, keepdim=True) / transport_energy)
+
+        residual_prev = objectness_prev + common_margin - transported_detail
+        residual_curr = objectness_curr + common_margin + transported_detail
+        logits_prev = running_normal_prev + residual_prev
+        logits_curr = running_normal_curr + residual_curr
         if num_dn:
             dn_prev = absolute_branch_prev(hidden_prev[:, :num_dn])
             dn_curr = absolute_branch_curr(hidden_curr[:, :num_dn])

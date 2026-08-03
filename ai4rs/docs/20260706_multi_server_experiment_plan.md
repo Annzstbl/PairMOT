@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:10 CST.
+Last updated: 2026-08-04 03:16 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -152,6 +152,19 @@ formal PGID `1357909`; epoch-1 iter50 was `0.9994 s/iter`, loss `21.3978`, and
 gradient norm `110.7768`, with seven processes, about 19.2 GiB per selected
 GPU, no fatal errors, and all five formal gates satisfied. It is RUNNING to
 e4/e8/e12 and later evidence without binding GPU indices as a general 99 rule.
+
+Global experiment ID 0803_21 is reserved for terminal transported semantic
+margins. Instead of deleting all frame-specific terminal class-margin detail,
+it projects that detail onto the detached centered difference of the running
+pair logits accumulated by earlier decoder layers. This preserves each frame's
+residual class mean and the pair residual mean, permits only an already
+established class-ranking trajectory, and suppresses a new transverse terminal
+class switch. It is parameter-free, class-permutation and frame-swap
+equivariant, leaves DN absolute logits unchanged, and adds only reductions and
+dot products. The 99 formal/smoke configs, zero-state build audit, and safe
+launchers have passed local syntax checks. It remains PREPARED_LOCAL with no
+remote workdir or GPU use until isolated target tests complete and 0803_17
+reaches a mature resource decision.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

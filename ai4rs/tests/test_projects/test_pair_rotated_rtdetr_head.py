@@ -1315,6 +1315,35 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
                 iterative_cls_pair_shared_objectness=True,
                 iterative_cls_terminal_shared_margins=True,
                 train_cfg=_no_presence_train_cfg())
+
+    def test_terminal_transport_margins_requires_dn_isolated_iterative_mode(
+            self):
+        with self.assertRaisesRegex(ValueError, 'iterative_cls_residual'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_terminal_transport_margins=True,
+                train_cfg=_no_presence_train_cfg())
+        with self.assertRaisesRegex(ValueError, 'dn_absolute'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_residual=True,
+                iterative_cls_terminal_transport_margins=True,
+                train_cfg=_no_presence_train_cfg())
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_head(
+                num_layers=3,
+                use_presence=False,
+                dual_cls=True,
+                iterative_cls_residual=True,
+                iterative_cls_dn_absolute=True,
+                iterative_cls_terminal_shared_margins=True,
+                iterative_cls_terminal_transport_margins=True,
+                train_cfg=_no_presence_train_cfg())
+
     def test_pair_shared_objectness_preserves_margins_and_isolates_dn(self):
         head = _build_head(
             num_layers=3,
@@ -1477,6 +1506,128 @@ class TestPairRotatedRTDETRHeadForward(unittest.TestCase):
         self.assertGreater(
             head.iterative_cls_residual_branches_curr[1].weight.grad
             .abs().sum().item(), 0.0)
+
+    def test_terminal_transport_margins_preserves_means_and_transport(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_dn_absolute=True,
+            iterative_cls_terminal_transport_margins=True,
+            iterative_cls_detach_between_layers=False,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        with torch.no_grad():
+            prev_branch = head.iterative_cls_residual_branches_prev[-1]
+            curr_branch = head.iterative_cls_residual_branches_curr[-1]
+            prev_branch.weight.zero_()
+            curr_branch.weight.zero_()
+            prev_branch.bias.copy_(torch.tensor([1.0, 2.0, 6.0]))
+            curr_branch.bias.copy_(torch.tensor([-3.0, 1.0, 2.0]))
+
+        hidden_prev = torch.randn(1, 4, 32)
+        hidden_curr = torch.randn(1, 4, 32)
+        running_prev = torch.zeros(1, 4, 3)
+        running_curr = torch.zeros(1, 4, 3)
+        running_prev[:, 2:] = torch.tensor([2.0, 0.0, -2.0])
+        running_curr[:, 2:] = torch.tensor([-2.0, 0.0, 2.0])
+        cls_prev, cls_curr, _, _ = (
+            head._iterative_cls_terminal_transport_margin_layer(
+                running_prev,
+                running_curr,
+                hidden_prev,
+                hidden_curr,
+                prev_branch,
+                curr_branch,
+                head.cls_branches[-1],
+                head.cls_branches_curr[-1],
+                num_dn=2))
+
+        self.assertTrue(torch.equal(
+            cls_prev[:, :2], head.cls_branches[-1](hidden_prev[:, :2])))
+        self.assertTrue(torch.equal(
+            cls_curr[:, :2],
+            head.cls_branches_curr[-1](hidden_curr[:, :2])))
+        residual_prev = cls_prev[:, 2:] - running_prev[:, 2:]
+        residual_curr = cls_curr[:, 2:] - running_curr[:, 2:]
+        self.assertTrue(torch.allclose(
+            residual_prev.mean(dim=-1), torch.full((1, 2), 3.0)))
+        self.assertTrue(torch.allclose(
+            residual_curr.mean(dim=-1), torch.zeros(1, 2)))
+
+        input_prev = prev_branch(hidden_prev[:, 2:])
+        input_curr = curr_branch(hidden_curr[:, 2:])
+        input_common = 0.5 * (
+            input_prev - input_prev.mean(dim=-1, keepdim=True)
+            + input_curr - input_curr.mean(dim=-1, keepdim=True))
+        output_margin_prev = residual_prev - residual_prev.mean(
+            dim=-1, keepdim=True)
+        output_margin_curr = residual_curr - residual_curr.mean(
+            dim=-1, keepdim=True)
+        self.assertTrue(torch.allclose(
+            0.5 * (output_margin_prev + output_margin_curr), input_common))
+        transport = 0.5 * (
+            running_curr[:, 2:] - running_prev[:, 2:])
+        output_detail = 0.5 * (
+            output_margin_curr - output_margin_prev)
+        projection = transport * (
+            (output_detail * transport).sum(dim=-1, keepdim=True)
+            / transport.square().sum(dim=-1, keepdim=True))
+        self.assertTrue(torch.allclose(output_detail, projection))
+
+    def test_terminal_transport_margins_is_permutation_equivariant(self):
+        head = _build_head(
+            num_layers=3,
+            use_presence=False,
+            dual_cls=True,
+            iterative_cls_residual=True,
+            iterative_cls_dn_absolute=True,
+            iterative_cls_terminal_transport_margins=True,
+            iterative_cls_detach_between_layers=False,
+            train_cfg=_no_presence_train_cfg())
+        head.init_weights()
+        prev_branch = head.iterative_cls_residual_branches_prev[-1]
+        curr_branch = head.iterative_cls_residual_branches_curr[-1]
+        hidden_prev = torch.randn(1, 3, 32)
+        hidden_curr = torch.randn(1, 3, 32)
+        running_prev = torch.randn(1, 3, 3)
+        running_curr = torch.randn(1, 3, 3)
+        permutation = torch.tensor([2, 0, 1])
+
+        original = head._iterative_cls_terminal_transport_margin_layer(
+            running_prev,
+            running_curr,
+            hidden_prev,
+            hidden_curr,
+            prev_branch,
+            curr_branch,
+            head.cls_branches[-1],
+            head.cls_branches_curr[-1],
+            num_dn=0)[:2]
+        with torch.no_grad():
+            prev_weight = prev_branch.weight.clone()
+            prev_bias = prev_branch.bias.clone()
+            curr_weight = curr_branch.weight.clone()
+            curr_bias = curr_branch.bias.clone()
+            prev_branch.weight.copy_(prev_weight[permutation])
+            prev_branch.bias.copy_(prev_bias[permutation])
+            curr_branch.weight.copy_(curr_weight[permutation])
+            curr_branch.bias.copy_(curr_bias[permutation])
+        permuted = head._iterative_cls_terminal_transport_margin_layer(
+            running_prev[..., permutation],
+            running_curr[..., permutation],
+            hidden_prev,
+            hidden_curr,
+            prev_branch,
+            curr_branch,
+            head.cls_branches[-1],
+            head.cls_branches_curr[-1],
+            num_dn=0)[:2]
+        self.assertTrue(torch.allclose(
+            permuted[0], original[0][..., permutation]))
+        self.assertTrue(torch.allclose(
+            permuted[1], original[1][..., permutation]))
 
     def test_iterative_cls_residual_rejects_query_mismatch(self):
         head = _build_head(

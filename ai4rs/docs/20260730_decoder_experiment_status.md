@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:10 CST
+更新时间：2026-08-04 03:16 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。后继 `0803_21 transport margins` 正在隔离准备；GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。`0803_20 full tangent + semantic margins` 作为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -216,6 +216,19 @@
   PGID `1357909`；iter50 `0.9994 s/iter`、loss `21.3978`、grad `110.7768`，DN/encoder loss
   全有限，7 个进程，GPU1/2 各约 19.2 GiB，五门槛通过。状态 `RUNNING`，已建立 e4 完整评估
   监控并继续 e8/e12 及后期节点，不以 e4/e8 直接否决。
+
+## 2026-08-04 03:16 CST：预留 0803_21 terminal transported margins
+
+- 直接终层 margin 平均会删除全部帧差，包括早中层已稳定积累的类别排序变化。0803_21 将终层
+  centered-margin 残差分成 pair common/detail，只保留 detail 在“前序累计 logits 的双帧
+  centered difference”方向上的投影；允许延续已建立的类别排序轨迹，但禁止终层新引入横向
+  class switch。
+- 前序 transport 方向显式 detach；每帧 residual class mean、pair residual mean、DN absolute
+  分类及早中层梯度路径保持不变。运算零参数、类别置换等变、frame-swap 等变，无 class identity、
+  class-aware、reweight、新 attention/layer/loss，仅增加少量点积。
+- 已预留全局 ID `0803_21`，新增 99 2xb4 formal/smoke 配置、构建审计与安全启动器；本地语法和
+  launcher `bash -n` 通过。当前为 `PREPARED_LOCAL/NO_GPU`，尚未同步远端、未建 workdir，
+  不触碰运行中的 0803_17；下一步在隔离 checkout 做定向测试、配置深拷贝和零状态增量整模验证。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

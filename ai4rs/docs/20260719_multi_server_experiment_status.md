@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 03:10 CST。
+更新时间：2026-08-04 03:16 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING；0803_14 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `1357909`；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING；0803_14 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED_LOCAL/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_20 full tangent + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E20；e16 `50.415/57.456`，相对原始 decoder `+0.379/+0.523`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
@@ -190,6 +190,15 @@
 - fresh formal 固定 clean HEAD `ac02fc2`，screen `1357907.pm_0803_17_formal_99`、PGID
   `1357909`；iter50 `0.9994 s/iter`、loss `21.3978`、grad `110.7768`，7 个进程，GPU1/2
   各约 19.2 GiB，五门槛通过。状态 `RUNNING`，收集 e4/e8/e12 及后期节点。
+
+## 2026-08-04 03:16 CST：99 后继 0803_21 已预留
+
+- 新结构只保留终层 centered class-margin detail 在前序累计 class-ranking 双帧差方向上的投影；
+  transport detach，保留每帧 class mean、pair mean 和 DN absolute 路径。零参数、类别置换/帧交换
+  等变，无 class-aware、reweight 或额外层。
+- 99 formal/smoke 配置、构建审计和安全启动器已完成本地语法检查，状态
+  `PREPARED_LOCAL/NO_GPU`；尚未同步或创建 workdir，等待隔离远端定向测试和零增量整模验证，
+  不抢占当前 0803_17。
 
 ## 99 本机
 
