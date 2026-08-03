@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO=${PAIRMOT_REPO:-/data/users/litianhao01/PairMmot_logarea_0803_10_252/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/smoke/o2_pair_rtdetr_r18vd_0803_10_iterative_cls_log_area_periodic_angle_decoder_4iter_smoke_252.py
-WORK_DIR=/data4/litianhao/PairMmot/workdir_252/smoke_0803_10_iterative_cls_log_area_periodic_angle_4iter
+WORK_DIR=/data4/litianhao/PairMmot/workdir_252/smoke_0803_10_iterative_cls_log_area_periodic_angle_4iter_retry1
 
 set +u
 source /data/users/litianhao01/anaconda3/etc/profile.d/conda.sh
@@ -19,7 +19,7 @@ test ! -e "${WORK_DIR}"
 mkdir -p "${WORK_DIR}"
 cd "${REPO}"
 test -f /data4/litianhao/PairMmot/pretrained_weights/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/pair_coco_adapted_pretrain.pth
-test -d /data/users/litianhao01/PairMOT/workdir/aux/gmc_cache/hsmot_train_gap1
+test -d /data/users/litianhao01/PairMmot/workdir/aux/gmc_cache/hsmot_train_gap1
 export CUDA_VISIBLE_DEVICES=${PAIRMOT_CUDA_VISIBLE_DEVICES:-0,1}
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
 unset PYTORCH_CUDA_ALLOC_CONF CUBLAS_WORKSPACE_CONFIG TORCH_DISTRIBUTED_DEBUG
