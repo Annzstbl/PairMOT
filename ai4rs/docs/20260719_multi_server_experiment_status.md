@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 06:53 CST。
+更新时间：2026-08-04 07:09 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_21 terminal transported margins`（当前 GPU1/2） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1384944`；GPU0 外部占用且不抢占 | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E28+；e24 相对原 decoder 联合 `+1.673`，e25 iter50 五门槛通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
+| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E32+；e28 `53.114/59.729`，相对原 decoder `+0.937/+0.449`，完整评测通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E4+；log-domain 数值修复后的 smoke 与 formal iter50 五门槛通过，PGID `3151184` | `0803_24 transported shape tangent` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
