@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 01:57 CST.
+Last updated: 2026-08-04 02:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -56,6 +56,15 @@ decoder and all four AP diagnostics are also lower, while terminal-only
 0803_13 dominates both. They nevertheless continue to epoch 12 because epoch
 8 is not a direct decoder rejection point. No additional late-two-layer or
 progressive-geometry descendants will be prepared from these weak branches.
+
+Experiment 0803_12 completed its mature epoch-12 evaluation at
+`45.677/52.131`, below the original decoder at the same checkpoint by
+`1.718/2.305`. Together with its complete epoch-4 and epoch-8 results, this is
+a three-node negative trajectory rather than an early rejection. After the
+381,003,318-byte checkpoint, AP diagnostics, 50 sequences, 28 CSV files, 108
+evaluation files, and async completion were verified, exact PGID `123974` was
+terminated (`23 -> 0`). All four 252 GPUs returned to 1 MiB; the slowest lane
+is now idle and reserved for later mature confirmation.
 
 Experiment 0803_14 reached epoch 4 at `30.813/36.985` cls/det HOTA, below both
 Encoder and the terminal full-size 0803_13 at the same point. Its checkpoint,

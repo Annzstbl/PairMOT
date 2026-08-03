@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 01:57 CST。
+更新时间：2026-08-04 02:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；PGID `123974` | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -131,6 +131,16 @@
   375,534,774-byte checkpoint、50 序列、28 CSV、108 非空文件和 `async_done=1` 完整。
 - 终层只共享面积未复现完整 log-size 的收益；仍按慢收敛约束保持 PGID `1327092` 到 e12，
   GPU0 外部任务不动。e12 成熟后若仍弱，释放当前两卡给已准备的 `0803_17`。
+
+## 2026-08-04 02:05 CST：252 0803_12 epoch 12 成熟停止
+
+- cls HOTA/DetA/AssA `45.677/36.931/59.103`，det `52.131/46.532/60.474`；相对原始
+  decoder 同点 `47.395/54.436` 为 `-1.718/-2.305`，相对 Encoder 同点低 `4.003/4.410`。
+- pair mAP/AP50 `0.227110/0.412989`、both-independent `0.269190/0.466195`；
+  381,003,318-byte checkpoint、50 序列、28 CSV、108 非空文件和 `async_done=1` 完整。
+- e4/e8/e12 三个完整节点构成持续双负成熟轨迹。核验后精确 TERM PGID `123974`，成员
+  `23→0`；252 GPU0/1/2/3 均回落到 `1 MiB/0%`。252 作为最慢资源保持空闲，只等待后续
+  已在快速通道证明的成熟候选，不用于新结构筛选。
 
 ## 99 本机
 
