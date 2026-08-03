@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 05:41 CST
+更新时间：2026-08-04 05:55 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E28+` | e24 `52.841/59.322`，相对原始 decoder `+1.132/+0.541`、合计 `+1.673`；从只读源 checkpoint 恢复到 252 自有 workdir，e25 iter50 五门槛通过，PGID `419164`。 |
-| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... fresh` | `RUNNING/TO_E4+` | 0803_13 e24 成熟迁往 252 后，零参数 transported-tangent 的真实 smoke 与 formal iter50 通过；PGID `3144617`，继续 e4/e8/e12。GPU0 只是当前分配，不是固定序号。 |
+| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E4+` | 首次 fresh 的尺度 `exp` 反向溢出风险已审计并停止；log-domain 等价修复的 smoke 与 formal iter50 通过，PGID `3151184`，继续 e4/e8/e12。GPU0 只是当前分配。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E12` | e8 `39.478/46.483`，相对原始 decoder同点 `-2.494/-1.695`；e4→e8明显恢复但仍双负，按慢收敛约束继续 e12，PGID `1357909`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
 
@@ -2990,3 +2990,22 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   tensor 全有限，iterative-cls/DN 语义通过。fresh formal PGID `3144617` 在 iter50 为
   `0.9593 s/iter`、loss `21.0341`、grad `100.6837`，总、DN、encoder 全有限；零参数、
   class-agnostic、无 reweight/额外层/attention/loss，继续 e4/e8/e12。
+
+## 2026-08-04 05:55 CST：0803_23 数值审计与 finite-fresh 重启
+
+- 首次 formal 在 epoch1 iter350 出现 1 次 `assign_gd_curr` 非有限匹配代价保护，而 0803_13
+  父轨迹 24 epochs 同类警告为 0。退化小框构造进一步证明：当 reference 尺寸约 `1e-4` 时，
+  旧的 `reference_size * exp(transported_scale_tangent)` 前向虽会被 clamp 成有限值，反向梯度
+  却会因 `inf*0` 全部成为 NaN。
+- 该问题属于实现数值无效，不是 e4/e8 性能否决。旧 PGID `3144617` 在 epoch1 iter650 精确
+  停止，成员 `9→0`，无正式 epoch checkpoint；GPU0 连续三次 `1 MiB/0%`。旧 workdir 仅保留
+  审计，不纳入性能表。
+- 提交 `6072e76`（178 隔离仓库 `e2b399b2`）把尺度目标改为 log-domain 先 clamp 再 exp；
+  数学目标与原最终尺寸 clamp 等价，不增加参数、层、attention、loss 或显著计算。三项定向测试
+  全通过，包括旧实现可复现 NaN 的极小 reference 有限前向/反向用例；整模仍为
+  `22,771,111` 参数、零增量、711 tensors。
+- 修复版四步真实 smoke loss `21.3727/20.6766/20.9629/21.2487`，grad
+  `60.7448/68.9937/72.3075/108.7309`；364,506,484-byte checkpoint 的 642 个浮点 tensor
+  全有限，无非有限匹配代价。新的 `_finite_fresh` formal PGID `3151184` 在 iter50 为
+  `0.9841 s/iter`、loss `21.0123`、grad `105.5777`，总、DN、encoder 有限且同类警告为 0；
+  五项启动门槛重新通过。

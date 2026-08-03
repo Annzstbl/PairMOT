@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 05:41 CST。
+更新时间：2026-08-04 05:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E12；e8 `39.478/46.483`，继续成熟判定，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E28+；e24 相对原 decoder 联合 `+1.673`，e25 iter50 五门槛通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent`（当前 GPU0） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `3144617` | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E4+；log-domain 数值修复后的 smoke 与 formal iter50 五门槛通过，PGID `3151184` | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2269,3 +2269,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 178 当前 GPU0 完成 0803_23 四步 smoke 与 formal iter50；正式 `0.9593 s/iter`、loss/grad
   `21.0341/100.6837`，PGID `3144617` 五门槛通过。该 GPU 序号仅为当前选择，178 仍只受
   单卡总量约束。
+
+## 2026-08-04 05:55 CST：178 0803_23 数值修复后 fresh 重启
+
+- 首次 formal 在 e1 iter350 出现候选特有的非有限匹配代价保护；极小 reference 定向构造确认
+  旧尺度 `exp` 会产生有限前向但 NaN 反向。旧 PGID `3144617` 于 iter650 精确停止，成员
+  `9→0`，无 epoch checkpoint，不纳入性能结果。
+- log-domain 先 clamp 再 exp 的等价修复提交在 178 为 `e2b399b2`；3 项定向测试、零参数整模
+  构建、启动器语法和真实 smoke 通过。修复版 smoke 四步总 loss/grad 有限，642 个 checkpoint
+  浮点 tensor 有限且无同类警告。
+- `_finite_fresh` formal PGID `3151184` 在 iter50 为 `0.9841 s/iter`、loss/grad
+  `21.0123/105.5777`，DN/encoder 有限、同类警告为 0，五门槛通过。当前只占 178 一张 GPU0；
+  GPU0 仍只是当前选择而非固定授权。

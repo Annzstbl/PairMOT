@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 05:41 CST.
+Last updated: 2026-08-04 05:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2506,3 +2506,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 99 的 shared semantic margins e8 `39.478/46.483` 仍低于原 decoder，但 e4→e8恢复明显，
   按慢收敛规则看到 e12；197 的 geometry+margin 同样继续。三条快线分别承担 transported
   tangent、semantic margin、geometry+margin 的正交筛选，252 只承接成熟曲线。
+
+## 2026-08-04 05:55 CST：transported tangent 数值语义闭环
+
+- 0803_23 首次 fresh 暴露的不是性能差距，而是极小 reference 下先 exp 再 clamp 会留下 NaN
+  反向梯度。该无效尝试在 e1 iter650、无 epoch checkpoint 时停止，不等待 e4，也不进入任何
+  性能比较；这不违反 decoder 不按 e4/e8 早停的约束。
+- 修复仅把尺寸解码改写为数学等价的 log-domain clamp→exp，保持 transported-tangent 几何、
+  零参数、class-agnostic、无 reweight 和计算深度不变。退化小框梯度测试、交换等变/DN 测试、
+  零增量整模检查与真实 smoke 均通过。
+- 新 `_finite_fresh` formal 已重新通过 iter50 五门槛并进入 e4/e8/e12。后续只使用该目录的
+  checkpoint 和 TrackEval；旧目录仅作为错误签名与修复证据保留。
