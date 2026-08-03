@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 07:32 CST
+更新时间：2026-08-04 07:44 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
-| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`、相对 Encoder `+0.133/+5.986`；完整评测通过，PGID `3151184` 继续 e8/e12。`0803_24` 为 PREPARED/NO_GPU。 |
+| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`；PGID `3151184` 继续 e8/e12。`0803_24 shape-only`、`0803_25 center-only` 均 PREPARED/NO_GPU。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_17 e12 成熟双负后停止；0803_21 smoke 与 formal iter50 五门槛通过，PGID `1384944`。GPU1/2 只是当前分配，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `42.014/47.865`，相对原始 decoder `+0.042/-0.313`；遵守晚收敛约束继续 e12，PGID `387859`。`0803_24` 双卡版 PREPARED/NO_GPU。 |
 
@@ -3095,3 +3095,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - shared semantic margin 的早期分类损失从 e4 已明显恢复，但 e8 仍未形成可靠增益。按 decoder
   晚收敛约束保持 PGID `387859` 继续 e12，不用 e8 直接否决；`0803_24` 保持 PREPARED，
   不并发抢占 197 当前两卡。
+
+## 2026-08-04 07:44 CST：0803_25 transported center tangent 已准备
+
+- 0803_23 full tangent e4 的 det 大幅提升可能来自中心运动、形状运动或二者跨维投影。新增
+  center-only 正交候选：仅在最后 normal-query 层把局部中心更新的 pair detail 投影到 detached
+  前序相对平移方向；宽高、角度、分类、DN 与递归 reference 都保持逐帧原样。
+- 该投影零参数、交换等变、class-agnostic，无 reweight、新层、attention 或 loss。三项定向
+  测试覆盖终层单次调用与互斥、形状 residual 精确保留及既有平移 detail、交换等变/DN 保留/
+  有限反向，全部通过；完整构建为 `22,771,111` 参数、增量 0、711 状态张量。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminaltransportcenter_0803_25` 固定 clean
+  HEAD `09a0d2f`；1xb8、72 epochs 配置与 formal/smoke 启动器通过。启动器要求显式传入当时
+  一张空闲 GPU，不固定序号。状态 `PREPARED/NO_GPU`，排在正在运行的 0803_23 与 shape-only
+  0803_24 之后。
