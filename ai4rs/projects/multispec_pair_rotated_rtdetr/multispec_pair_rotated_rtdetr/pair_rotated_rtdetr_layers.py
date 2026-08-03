@@ -305,6 +305,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_log_area_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_late_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_normalized_center_refinement_decoder:
                    bool = False,
                    frame_evidence_cls_decoder: bool = False,
@@ -362,6 +364,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_log_size_periodic_angle_refinement_decoder)
         self.pair_shared_log_area_periodic_angle_refinement_decoder = bool(
             pair_shared_log_area_periodic_angle_refinement_decoder)
+        self.pair_shared_late_log_size_periodic_angle_refinement_decoder = (
+            bool(pair_shared_late_log_size_periodic_angle_refinement_decoder))
         self.pair_shared_normalized_center_refinement_decoder = bool(
             pair_shared_normalized_center_refinement_decoder)
         self.frame_evidence_cls_decoder = bool(
@@ -410,11 +414,14 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.pair_shared_periodic_angle_refinement_decoder,
                 self.pair_shared_log_size_periodic_angle_refinement_decoder,
                 self.pair_shared_log_area_periodic_angle_refinement_decoder,
+                self.
+                pair_shared_late_log_size_periodic_angle_refinement_decoder,
                 self.pair_shared_normalized_center_refinement_decoder,
         )) > 1:
             raise ValueError(
                 'pair-shared shape, residual-angle, periodic-angle, '
-                'log-size-periodic-angle, log-area-periodic-angle, and '
+                'log-size-periodic-angle, log-area-periodic-angle, '
+                'late-log-size-periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
         if (self.frame_evidence_cls_decoder
@@ -1903,6 +1910,17 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             elif self.pair_shared_log_area_periodic_angle_refinement_decoder:
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = self._pair_shared_log_area_residual(
+                    tmp_prev, tmp_curr, reference_prev, reference_curr,
+                    num_dn)
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (self.
+                  pair_shared_late_log_size_periodic_angle_refinement_decoder
+                  and lid >= max(self.num_layers - 2, 0)):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = self._pair_shared_log_size_residual(
                     tmp_prev, tmp_curr, reference_prev, reference_curr,
                     num_dn)
                 tmp_prev, tmp_curr = (
