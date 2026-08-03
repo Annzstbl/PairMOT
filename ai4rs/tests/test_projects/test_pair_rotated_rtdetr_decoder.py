@@ -990,6 +990,40 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertTrue(torch.allclose(
             projected[1], swapped[0], atol=1e-6, rtol=1e-5))
 
+    def test_transport_tangent_tiny_references_have_finite_gradients(self):
+        reference_prev = torch.tensor([[[
+            0.5000, 0.5000, 1.0e-4, 1.0e-4, 0.5000]]],
+            device=self.device)
+        reference_curr = torch.tensor([[[
+            0.5001, 0.5000, 1.1e-4, 1.0e-4, 0.5000]]],
+            device=self.device)
+        target_prev = torch.tensor([[[
+            0.1000, 0.5000, 0.2000, 0.2000, 0.5000]]],
+            device=self.device)
+        target_curr = torch.tensor([[[
+            0.9000, 0.5000, 0.2000, 0.2000, 0.5000]]],
+            device=self.device)
+
+        residual_prev = (
+            torch.logit(target_prev.clamp(1e-6, 1 - 1e-6))
+            - torch.logit(reference_prev.clamp(1e-6, 1 - 1e-6))
+        ).requires_grad_()
+        residual_curr = (
+            torch.logit(target_curr.clamp(1e-6, 1 - 1e-6))
+            - torch.logit(reference_curr.clamp(1e-6, 1 - 1e-6))
+        ).requires_grad_()
+        projected_prev, projected_curr = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_full_tangent_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, 0))
+        (projected_prev.sum() + projected_curr.sum()).backward()
+
+        self.assertTrue(torch.isfinite(projected_prev).all())
+        self.assertTrue(torch.isfinite(projected_curr).all())
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
     def test_normalized_center_residual_uses_reference_local_coordinates(self):
         reference_prev = torch.tensor([[[0.4, 0.4, 0.2, 0.4, 0.5],
                                         [0.3, 0.4, 0.2, 0.4, 0.5]]])

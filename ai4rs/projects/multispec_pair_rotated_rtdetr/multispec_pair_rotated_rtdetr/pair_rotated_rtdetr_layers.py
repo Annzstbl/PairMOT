@@ -2600,9 +2600,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 reference[..., :2]
                 + tangent[..., :2] * reference_size).clamp(
                     1e-3, 1 - 1e-3)
-            target_size = (
-                reference_size * torch.exp(tangent[..., 2:4])).clamp(
-                    1e-6, 1 - 1e-6)
+            # Clamp in log space before exponentiation. This is equivalent to
+            # clamping the decoded size, but avoids exp overflow and the
+            # resulting inf*0 NaN gradient when a tiny reference's large
+            # center tangent projects onto a scale dimension.
+            target_log_size = (
+                torch.log(reference_size) + tangent[..., 2:4]).clamp(
+                    min=-13.815510557964274,
+                    max=-1.0000005000003334e-6)
+            target_size = torch.exp(target_log_size)
             target_angle = torch.remainder(
                 reference[..., 4:] + tangent[..., 4:], 1.0)
             target = torch.cat(
