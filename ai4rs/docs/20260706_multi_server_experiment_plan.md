@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 11:52 CST.
+Last updated: 2026-08-03 12:02 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1962,3 +1962,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   路由互斥；父/新模型同为 `22,771,111` 参数和 711 state tensors，增量严格为零。
 - 178 隔离 checkout `8dd19d8` 完成配置深拷贝、完整构建和 launcher 语法检查，状态为
   `PREPARED`。当前不做真数据 smoke 或排队，避免抢占仍需 e20 验证延迟收敛的 `0803_04`。
+
+## 2026-08-03 12:02 CST：log-size tangent 几何候选静态门槛
+
+- `0803_09` 将候选宽高相对各自 reference 的乘法变化表示成 log 增量，再共享其均值；角度继续
+  使用 periodic tangent midpoint。该设计保留帧间中心运动与分类独立性，避免 `0803_02` 将尺寸和
+  raw-angle 一起平均造成的坐标混杂。
+- 135 项完整测试、配置深拷贝、父/新全模型零参数构建和 launcher 语法通过；状态为
+  `PREPARED`，不排队、不占 GPU。资源释放时优先级由 `0803_04` e20 平台证据和 `0803_06/07`
+  e4/e8 归因共同决定：若分类直路持续负向而 periodic-angle det 已平台，优先比较 0803_08 的
+  common-preserving 分类与 0803_09 的尺寸几何增益，不进行 scale 或 reweight 扫描。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 11:52 CST
+更新时间：2026-08-03 12:02 CST
 
 ## 当前研究原则
 
@@ -24,8 +24,9 @@
 实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
 不热更新活动仓库。
 
-已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle`。它只完成隔离
-目标环境的测试与构建，不创建 smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
+已准备但未排队：178 的 `0803_08 common-preserving frame-detail + periodic-angle` 与
+`0803_09 log-size tangent + periodic-angle`。两者只完成隔离目标环境的测试与构建，不创建
+smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
 
 ## 已完成或释放
 
@@ -2266,3 +2267,14 @@
 - 该环境无 `pytest` 包，首次验证在导入前退出；改用同一测试文件的标准库入口后 133 项完整测试通过。
   父/新完整模型均为 `22,771,111` 参数、711 state tensors，参数增量为零；配置、launcher 和
   4-iter smoke 设置通过。状态为 `PREPARED`：未运行真数据 smoke、未建 formal workdir、不占 GPU。
+
+## 2026-08-03 12:02 CST：0803_09 log-size tangent + periodic-angle 已准备
+
+- 宽高是正物理量；新投影先解码每帧候选尺寸，计算相对各自 reference 的 log 比例增量，平均后
+  再映回各自 reference。角度沿用已验证正向的 π 周期切空间 midpoint；中心、分类、recurrent query、
+  DN、loss、attention 与 decoder 深度不变。该结构零参数、交换等变、class-agnostic、无 reweight。
+- 首次随机大残差不变量测试触及 sigmoid 尺寸上界，边界 clamp 使 log 比例无法保持严格相等；这不是
+  运行错误。测试改为非饱和正常增量以验证解析不变量，同时实现继续保留边界 clamp。178 隔离 checkout
+  `/data1/users/litianhao01/PairMOT_logshape_0803_09` 固定在修正提交 `35e18f1`。
+- 完整 135 项 decoder 测试通过；父/新模型均为 `22,771,111` 参数、711 state tensors，增量为零；
+  配置、launcher 与 4-iter 设置通过。状态为 `PREPARED`，未运行真数据 smoke、未排队、不占 GPU。
