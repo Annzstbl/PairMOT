@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:27 CST
+更新时间：2026-08-04 03:42 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19/23` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。后继 `0803_21 transport margins` 正在隔离准备；GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。后继 `0803_22 geometry + transported margins` 正在隔离准备，`0803_20 full tangent + shared margins` 为后备。 |
 
@@ -248,6 +248,20 @@
   HEAD `41c08d8`；3 项 transported-margin 定向测试、正式/smoke 配置加载与深拷贝、远端 launcher
   语法以及父/新整模零状态比较通过：`22,771,111` 参数、增量 0、711 状态张量。状态
   `PREPARED/NO_GPU`；未建 smoke/formal workdir，不抢占运行中的 0803_18。
+
+## 2026-08-04 03:42 CST：预留 0803_23 transported full-tangent geometry
+
+- `0803_13` 的终层几何完全平均在 e8/e12/e16 对原始 decoder 保持双正但优势收窄；新候选不再
+  删除所有帧间末层几何差，而是在 reference-local center、log-size、π 周期角组成的 5D 自然
+  切空间中，只保留终层 pair detail 沿“前三层 reference 已积累相对变换”方向的投影。
+- transport 方向显式 detach；pair-common 切空间增量、真实已建立的平移/尺度/旋转趋势和 DN
+  原路径保留，正交末层抖动被抑制。结构零参数、class-agnostic、frame-swap equivariant，无
+  class-aware、置信度 reweight、新 attention/layer/loss，仅增加常数规模解码、点积与重编码。
+- 已预留 ID `0803_23` 和 178 1xb8 formal/smoke 配置、零状态构建审计、安全启动器；隔离仓库
+  `/data1/users/litianhao01/PairMOT_terminaltransporttangent_0803_23` 固定 clean HEAD `d6af6d32`。
+  两项定向测试（既有轨迹投影、帧交换/DN 保持）、配置整模构建和 launcher 语法全部通过：
+  `22,771,111` 参数、增量 0、711 状态张量。状态 `PREPARED/NO_GPU`，不抢占 0803_13；待 e20
+  成熟判定后，与完全平均的 0803_19 按机制优先级选择，而非同时占用 178。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

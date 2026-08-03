@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:27 CST.
+Last updated: 2026-08-04 03:42 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -184,6 +184,22 @@ transport-margin tests, config load/deepcopy, remote launcher syntax, and the
 full parent/new model comparison at 22,771,111 parameters, zero state delta,
 and 711 tensors. It is PREPARED with no smoke/formal workdir or GPU use and
 will not preempt the active 0803_18 trajectory.
+
+Global experiment ID 0803_23 is reserved for transported full-tangent
+geometry on the one-GPU 178 lane. It represents each terminal box update as
+reference-local center displacement, log-size change, and the shortest
+pi-periodic angle change. Pair-common refinement is preserved, while
+frame-specific detail is projected only onto the detached relative transform
+already accumulated by earlier decoder references. This keeps established
+translation, scale, and rotation motion but suppresses a new transverse final
+layer discrepancy. The operation is parameter-free, class-agnostic and
+frame-swap equivariant, leaves DN untouched, and adds no reweighting,
+attention, layer, or loss. The isolated checkout at clean `d6af6d32` passed
+two targeted tests, config/build validation, launcher syntax, and the full
+parent/new comparison at 22,771,111 parameters, zero state delta, and 711
+tensors. It remains PREPARED/NO_GPU until 0803_13 reaches the epoch-20 mature
+decision; server 252 remains reserved for candidates already supported by
+fast-lane evidence.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 03:27 CST。
+更新时间：2026-08-04 03:42 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING；0803_14 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E20；e16 `50.415/57.456`，相对原始 decoder `+0.379/+0.523`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E20；e16 `50.415/57.456`，相对原始 decoder `+0.379/+0.523`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent`、`0803_23 transported tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -212,6 +212,16 @@
   transported-margin 测试、配置加载/深拷贝、远端 launcher 语法和整模比较全部通过：
   22,771,111 参数、零增量、711 tensors。状态 `PREPARED/NO_GPU`；未建 workdir，不抢占
   当前 0803_18。
+
+## 2026-08-04 03:42 CST：178 后继 0803_23 已预留
+
+- 0803_23 在 center-local、log-size、π 周期角联合切空间中保留 pair-common 末层更新，并只让
+  frame detail 沿早中层 reference 已形成的相对变换继续，抑制正交几何抖动；transport 显式
+  detach，DN 不变。零参数、class-agnostic、frame-swap 等变，无 class-aware/reweight/新层。
+- 178 隔离 checkout `/data1/users/litianhao01/PairMOT_terminaltransporttangent_0803_23` 固定 clean
+  `d6af6d32`；两项定向测试、正式/smoke 配置整模构建、零状态比较和 launcher 语法通过：
+  22,771,111 参数、零增量、711 tensors。状态 `PREPARED/NO_GPU`；等待 0803_13 e20 成熟决策，
+  不抢占当前唯一一张 PairMOT GPU。
 
 ## 99 本机
 
