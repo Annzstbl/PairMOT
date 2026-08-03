@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 10:17 CST。
+更新时间：2026-08-03 11:22 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_05` e8 为 `39.525/45.114`，继续 e12；`0803_07` smoke 与 formal iter50 五门槛通过，PGID `3694870` | 无；`0803_03` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_07 frame-evidence + periodic-angle`（GPU2/3） | RUNNING；smoke 与 formal iter50 五门槛通过，PGID `3694870`；GPU0/1 已从 `0803_05` 释放 | `0803_06 frame-evidence cls` 正在准备 GPU0/1 双卡版本；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`，继续更成熟节点 | `0803_06 frame-evidence cls` 为 PREPARED；`0803_07` 已在 252 RUNNING | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1657,3 +1657,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - pair mAP/AP50 为 `0.2577/0.4395`，both-independent 为 `0.3023/0.4959`；
   `epoch_12.pth` 为 381,090,228 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、
   28 CSV 与 108 个非空文件完整。PGID `2893156` 保持运行。
+
+## 2026-08-03 11:22 CST：252 0803_05 e12 完整评估并释放
+
+- e12 cls HOTA/DetA/AssA `43.161/36.061/53.834`，det
+  `49.396/44.754/56.154`；e8→e12 双 HOTA `+3.636/+4.282`，但相对父线同点仍为
+  `-4.234/-5.040`，相对 Encoder 同点为 `-6.519/-7.145`。e4/e8/e12 完整轨迹支持成熟负向结论。
+- pair mAP/AP50 `0.2142/0.3842`，both-independent `0.2592/0.4419`；checkpoint、
+  5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 精确 PGID `3549855` 经配置路径预检后终止，23 个成员全部退出；GPU0/1 为 1 MiB/0%，
+  GPU2/3 上 `0803_07` 继续运行。GPU0/1 转入 `0803_06 frame-evidence-cls` 双卡准备。

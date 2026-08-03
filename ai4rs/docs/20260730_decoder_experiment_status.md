@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 10:17 CST
+更新时间：2026-08-03 11:22 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | e8 cls/det HOTA `39.525/45.114`，继续 e12，PGID `3549855`。 |
+| 252 GPU 0,1 | 无 | `IDLE/PREPARING` | `0803_05` 已在 e12 完整评估后精确停止；正在准备零参数 `0803_06 frame-evidence-cls` 双卡归因分支。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | 真数据 smoke 与 formal iter50 五门槛通过，PGID `3694870`；接替 e12 成熟负向后停止的 `0803_03`。 |
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e12 cls/det HOTA `47.913/55.257`，相对父线同点 `+0.518/+0.821`；继续 e16 与成熟节点。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -28,6 +28,7 @@
 
 | 服务器 | 实验 | 状态 | 说明 |
 | --- | --- | --- | --- |
+| 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `STOPPED`；epoch 12 全量评估后于 11:18 精确停止 | e12 cls HOTA/DetA/AssA `43.161/36.061/53.834`，det `49.396/44.754/56.154`；相对父线同点 HOTA `-4.234/-5.040`，相对 Encoder 同点 `-6.519/-7.145`。e4/e8/e12 完整轨迹持续负向，不属于早停。pair mAP/AP50 `0.2142/0.3842`，both-independent `0.2592/0.4419`；checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整保留。精确 PGID `3549855` 的 23 个成员全部退出，GPU0/1 释放。 |
 | 252 GPU 0,1 | `0801_03 ... decoder_terminaldiagonalcentermotiondetailonly ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 08:54 精确停止 | epoch 8 cls HOTA/DetA/AssA `44.183/35.231/58.370`，det `50.011/44.289/58.441`；相对 Encoder 同点 HOTA `-1.086/-0.182`、DetA `-2.432/-2.772`，仅 AssA 提高。pair mAP/AP50 `0.210025/0.406177`，both-independent `0.245219/0.438068`，四项均明显下降。唯一 256 维 gate 最大值 `0.337337`、独立 attention 最大差异 `0.059180`，结构确已学习；完整 checkpoint、检测、TrackEval、50 序列与 108 文件保留，GPU 已释放。 |
 | 178 GPU 0 | `0731_16 ... decoder_terminalcommonevidencebypass ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 15:03 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.972/32.412/62.419`，det `49.378/39.704/63.985`；相对父模型 HOTA `-1.297/-0.815`、DetA `-5.251/-7.357`，而 AssA `+5.118/+8.840`，属于强烈的 DetA→AssA 搬运。pair mAP/AP50 下降 `0.032405/0.064222`，both-independent mAP/AP50 下降 `0.039642/0.070239`；terminal gate 最大权重 `0.032061`。完整产物保留，GPU0 已释放。 |
 | 252 GPU 0,1 | `0731_13 ... decoder_sharedattention_terminalmidpointenvelopeddetail ... fresh` | `STOPPED`；epoch 8 全量评估与结构审计后于 12:11 精确停止 | epoch 8 cls HOTA/DetA/AssA `43.170/34.514/57.338`，det `48.484/42.910/56.678`；相对父 encoder 同点 HOTA `-2.099/-1.709`、DetA `-3.149/-4.151`，而 AssA `+0.037/+1.533`，属于检测覆盖下降而非双提升。pair mAP/AP50 `0.212921/0.391949`，both-independent mAP/AP50 `0.248771/0.430138`，诊断指标同样下降。结构检查通过：6 组共享 attention 误差为零、18 组独立参数最大差异 `0.058077`、terminal-midpoint gate 从 smoke 的约 `3.9e-4` 学到 `0.119707`，排除模块未学习。epoch 8 checkpoint、检测和完整 TrackEval 均保留；GPU 0/1 已释放。 |
@@ -2204,3 +2205,15 @@
   50 序列、TrackEval `async_done=1`、28 CSV 和 108 个非空文件完整。
 - PGID `2893156` 继续运行到 e16 与更成熟节点；不因 e12 尚未超过 Encoder 而停止，重点观察
   后续 cls 关联是否延迟追上，并与 252 `0803_07` 的帧证据分类路径形成正交对照。
+
+## 2026-08-03 11:22 CST：0803_05 normalized-center epoch-12 收口
+
+- e12 cls HOTA/DetA/AssA 为 `43.161/36.061/53.834`，det 为
+  `49.396/44.754/56.154`；相对 e8 双 HOTA 虽继续恢复 `+3.636/+4.282`，但相对父线 e12
+  仍低 `4.234/5.040`，相对 Encoder e12 仍低 `6.519/7.145`。e4/e8/e12 三个完整节点均为系统性负向，
+  因而此结论不是以 e4/e8 直接否决。
+- pair mAP/AP50 为 `0.2142/0.3842`，both-independent 为 `0.2592/0.4419`；
+  381,025,078-byte checkpoint、5416 条检测、50 序列、28 CSV 和 108 个非空评估文件完整。
+- 11:18 对精确 PGID `3549855` 做配置路径预检后发送 TERM，23 个成员全部退出；GPU0/1 回落至
+  1 MiB，GPU2/3 上的 `0803_07` 未受影响。归一化中心共识收口为成熟负向，空闲双卡转给零参数
+  `0803_06 frame-evidence-cls` 单因素归因。

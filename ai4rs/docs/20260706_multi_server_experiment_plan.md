@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 10:17 CST.
+Last updated: 2026-08-03 11:22 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1922,3 +1922,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 相对 Encoder e12 尚低 `1.767/1.284`，故不把父线正增益误写成严格目标完成；同时因 e8→e12
   仍持续上升，不在 e12 释放 178。继续收集 e16 及后续成熟节点，与 252 的 `0803_07` 联合候选
   并行比较分类帧证据是否能补足 cls 收敛缺口。
+
+## 2026-08-03 11:22 CST：normalized-center 收口与资源续接
+
+- `0803_05` e12 cls/det HOTA 为 `43.161/49.396`，相对自身 e8 继续恢复
+  `3.636/4.282`，但相对父线同点低 `4.234/5.040`、相对 Encoder 同点低
+  `6.519/7.145`。完整 e4/e8/e12 轨迹足以否定归一化中心共识，不是 e4/e8 早停。
+- checkpoint、检测、TrackEval 与 50/28/108 产物核验完整后，精确停止 PGID `3549855`；
+  23 个成员退出，252 GPU0/1 释放，GPU2/3 上 `0803_07` 不受影响。
+- 下一步用 GPU0/1 启动零参数 `0803_06 frame-evidence-cls` 单因素分支，回答联合候选中分类帧证据
+  是否独立贡献；保持 x/y/w/h/angle、共享 recurrent query、DN、loss 与 decoder 深度不变，不引入
+  class-aware 或 reweight。必须依次通过目标环境全构建、完整回归、真数据双卡 smoke、checkpoint
+  语义审计与 formal iter-50 五门槛，再收集 e4/e8/e12 和成熟节点。
