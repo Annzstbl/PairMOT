@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 05:55 CST.
+Last updated: 2026-08-04 06:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2517,3 +2517,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   零增量整模检查与真实 smoke 均通过。
 - 新 `_finite_fresh` formal 已重新通过 iter50 五门槛并进入 e4/e8/e12。后续只使用该目录的
   checkpoint 和 TrackEval；旧目录仅作为错误签名与修复证据保留。
+
+## 2026-08-04 06:05 CST：transported tangent 真实训练覆盖复核
+
+- 修复版 0803_23 已到 epoch1 iter700，跨过旧实现 iter350 的首次非有限匹配代价位置并达到两倍
+  覆盖；同类告警与致命错误均为 0，loss/grad `16.8861/229.6270`，总、DN、Encoder proposal
+  分量全有限。
+- 数值修复因此不再只由定向单测和四步 smoke 支撑；178 保持该 fresh 轨迹到 e4/e8/e12，性能
+  判断仍等待完整 checkpoint、检测和 TrackEval，不能把数值有效等同于性能达标。

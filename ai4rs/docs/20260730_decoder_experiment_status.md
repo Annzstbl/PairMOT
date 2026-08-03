@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 05:55 CST
+更新时间：2026-08-04 06:05 CST
 
 ## 当前研究原则
 
@@ -3009,3 +3009,11 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   全有限，无非有限匹配代价。新的 `_finite_fresh` formal PGID `3151184` 在 iter50 为
   `0.9841 s/iter`、loss `21.0123`、grad `105.5777`，总、DN、encoder 有限且同类警告为 0；
   五项启动门槛重新通过。
+
+## 2026-08-04 06:05 CST：0803_23 修复版达到 iter700 覆盖
+
+- finite-fresh 正式轨迹到 epoch1 iter700，已经跨过旧实现首次告警 iter350 并达到两倍训练覆盖；
+  非有限匹配代价告警 `0`、致命错误 `0`。iter700 loss `16.8861`、grad `229.6270`，总、DN、
+  encoder proposal 所有记录分量均有限。
+- 数值修复获得正式数据长于 smoke 的直接证据，PGID `3151184` 继续 e4/e8/e12。该结论只确认
+  实现有效性，尚无权替代完整 HOTA/AP 评测或最终目标审计。
