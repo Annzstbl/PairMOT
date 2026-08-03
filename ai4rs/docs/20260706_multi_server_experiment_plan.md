@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:42 CST.
+Last updated: 2026-08-04 04:13 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -200,6 +200,18 @@ parent/new comparison at 22,771,111 parameters, zero state delta, and 711
 tensors. It remains PREPARED/NO_GPU until 0803_13 reaches the epoch-20 mature
 decision; server 252 remains reserved for candidates already supported by
 fast-lane evidence.
+
+Experiment 0803_13 reached complete epoch-20 cls/det HOTA
+`51.791/58.526`, a dual `+0.948/+0.493` improvement over the original decoder
+at the same checkpoint and a combined parent-line gain of `+1.441`. It is
+`+0.277/-0.396` versus Encoder at the same epoch. Pair mAP/AP50
+`0.288615/0.506941` and both-independent `0.333302/0.555375` all improved over
+epoch 16, with the 392,138,804-byte checkpoint, 5,416 detections, 50
+sequences, 28 CSV files, 108 non-empty evaluation files, and async completion
+verified. Because all complete epoch-8/12/16/20 nodes remain dual-positive
+against the strong original decoder and the advantage expanded again at
+epoch 20, the 178 lane continues this trajectory through epoch 24. Prepared
+successors remain GPU-free and server 252 stays reserved for mature evidence.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
