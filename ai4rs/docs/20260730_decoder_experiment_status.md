@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:12 CST
+更新时间：2026-08-03 23:15 CST
 
 ## 当前研究原则
 
@@ -8,7 +8,7 @@
 - decoder 目标是同时超过 `0727_01` 的 cls HOTA 54.437 和 det HOTA 62.393。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
-- 固定资源边界为：252 仅 GPU0/1、99 仅 GPU0/1、178 仅 GPU0、197 仅 GPU4/5；每台机器同一时间至多运行一项占满该授权的实验。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
+- 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡但不固定序号。每台机器同一时间至多使用该总卡数。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
 
 ## 运行中
 
@@ -16,16 +16,16 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`，相对 Encoder `-3.360/-1.434`；按晚收敛规则继续 e8/e12，PGID `3062903`。 |
-| 99 GPU 0,1 | 无 | `REACHABLE/PAIR_BLOCKED` | GPU0 被外部计算占用、GPU1 空闲；完整授权双卡窗口尚未形成，不抢占，`0803_14` 保持 PREPARED。 |
+| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle` | `PREPARING` | GPU1/2 空闲且满足总计 2 卡限制；迁移隔离提交并重新执行真数据 smoke，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
-`0803_14 terminal log-area` 已停止：PGID `77558` 的 7 个成员归零，252 GPU0/1 已释放，正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留，改为等待 99 GPU0/1 释放后重新启动。252 不再使用 GPU2/3。
+`0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
 - e4 cls HOTA/DetA/AssA `32.849/26.682/43.921`，det `37.319/34.948/41.243`；相对 Encoder e4 HOTA `-3.360/-1.434`。pair mAP/AP50 `0.1399/0.2613`，both-independent `0.1881/0.3391`。
 - 该节点只说明终层 log-size+周期角没有改善早期收敛，不作为否决；保持模型和正式目录不变，继续 e8/e12。
-- 资源实测：252 仅 GPU0/1 为 `0803_12`、GPU2/3 空闲；178 仅 GPU0 为 `0803_13`、GPU1 外部占用；197 仅 GPU4/5 为 `0803_11`、GPU0/1 外部占用；99 GPU0 外部占用而 GPU1 空闲，因此双卡候选继续等待。
+- 资源实测：252 仅 GPU0/1 为 `0803_12`、GPU2/3 空闲；178 当前用 GPU0 跑 `0803_13`；197 当前用 GPU4/5 跑 `0803_11`；99 GPU0 外部占用而 GPU1/2 空闲。只有 252 固定序号，其余机器仅限制卡数，因此 99 GPU1/2 可承接 `0803_14`。
 
 `0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
 `0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。

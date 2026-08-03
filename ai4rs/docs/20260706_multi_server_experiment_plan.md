@@ -4,16 +4,16 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:12 CST.
+Last updated: 2026-08-03 23:15 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
 
-Authorized experiment GPUs are fixed: 99 uses GPU0/1, 197 uses GPU4/5, 178 uses GPU0, and 252 uses GPU0/1. Idle GPUs outside these exact sets are not available to this plan. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
 
-At 2026-08-03 23:12 CST, the live allocation matches that boundary. The 99 lane remains blocked because external work occupies GPU0 even though GPU1 is idle; `0803_14` waits for the complete GPU0/1 pair. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
+At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -1861,7 +1861,7 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 相对 Encoder e4，det HOTA 已高 `5.035`，但 cls HOTA 仍低 `0.185`；cls DetA 高
   `2.126` 而 AssA 低 `5.451`。这形成明确的晚收敛观察问题：周期角度能否在保持覆盖优势时恢复
   cls 关联。因此 `0803_04` 保持 178 GPU0 到 e8/e12，不在 e4 释放或停止。
-- 99 GPU0/1 仍被外部任务占用，GPU2 未授权；197 GPU4/5 虽空闲但 formal 吞吐约
+- 当时 99 GPU0/1 被外部任务占用；后续用户澄清 99 只限制总计 2 卡而不固定序号。197 GPU4/5 虽空闲但 formal 吞吐约
   `80 s/iter`；252 四卡由 `0803_03/05` 使用。`0803_06` 保持 `PREPARED`、不排队、不抢占，
   待首个合适授权资源释放后再执行真数据 smoke 和 formal 五门槛。
 

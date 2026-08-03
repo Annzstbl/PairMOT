@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:12 CST。
+更新时间：2026-08-03 23:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -13,13 +13,13 @@
 
 ## 当前资源总览
 
-授权边界固定为：252 GPU0/1（2 卡、且为最慢资源）、99 GPU0/1（2 卡）、178 GPU0（1 卡）、197 GPU4/5（2 卡）。任何空闲但未授权的物理卡都不用于本轮实验；每台机器同一时间最多一项实验。
+资源边界为：252 固定 GPU0/1（2 卡、且为最慢资源）；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡，后三者不固定 GPU 序号。每台机器同一时间不超过对应总卡数。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | 无 PairMOT 任务 | REACHABLE/PAIR_BLOCKED；GPU0 外部占用、GPU1 空闲，GPU2 未授权，不抢占 | `0803_14 terminal log-area` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_14 terminal log-area` 准备迁移到 GPU1/2 | PREPARING；GPU1/2 空闲，GPU0 外部占用且不抢占 | 迁移后 smoke→formal | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | `0803_14 terminal log-area` PREPARED，迁移到 99 队列 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -27,13 +27,18 @@
 
 - 用户明确 252 只可使用 GPU0/1。原 `0803_12` PGID `4189798` 在 GPU2/3 的 23 个成员已全部退出，四卡显存均回落到 1 MiB；中断发生在 epoch 7，最近可恢复正式断点为 `epoch_4.pth`。
 - `0803_12` 启动器默认卡号已改为 GPU0/1，并增加显式 `PAIRMOT_RESUME=1` 恢复路径；恢复后须重新通过进程、显存、正式日志、iter50 和有限损失五门槛。
-- `0803_14` PGID `77558` 的 7 个成员此前已停止，GPU0/1 释放且无正式 epoch checkpoint；smoke 与 iter50 证据保留，改排 99 GPU0/1，不与 252 的唯一授权双卡任务并行。
+- `0803_14` PGID `77558` 的 7 个成员此前已停止，GPU0/1 释放且无正式 epoch checkpoint；smoke 与 iter50 证据保留。澄清后迁移到 99 空闲 GPU1/2，不与 252 的固定双卡任务并行。
 - 23:07 在固定 GPU0/1 启动恢复会话，PGID `123974`；23:08 正式日志到 epoch5 iter50，GPU0/1 各约 19.4 GiB，GPU2/3 各 1 MiB，loss `11.9163`、grad norm `31.7400`，DN 与 encoder proposal loss 均有限，错误扫描为空，状态恢复为 `RUNNING/TO_E12`。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与资源实测
 
 - 0803_13 e4 全量 TrackEval 完成：cls HOTA/DetA/AssA `32.849/26.682/43.921`，det `37.319/34.948/41.243`；相对 Encoder e4 HOTA `-3.360/-1.434`。检测诊断为 pair mAP/AP50 `0.1399/0.2613`、both-independent `0.1881/0.3391`。按 decoder 晚收敛约束继续 e8/e12。
-- 四机实测与授权一致：252 只占 GPU0/1；178 只占 GPU0；197 只占 GPU4/5；99 GPU0 为外部进程、GPU1 空闲，尚不构成完整双卡窗口。未授权的空闲 GPU 均不使用。
+- 四机实测：252 只占固定 GPU0/1；178 当前占 1 张 GPU0；197 当前占 2 张 GPU4/5；99 GPU0 为外部进程而 GPU1/2 空闲。只有 252 固定序号，故 99 GPU1/2 可形成合法双卡窗口。
+
+## 2026-08-03 23:15 CST：非 252 资源只限制卡数
+
+- 用户再次澄清：只有 252 指定 GPU0/1；99/178/197 分别只限制总计 2/1/2 卡，不限定序号。此前关于 99 GPU2 未授权及必须等待 GPU0 的判断撤销。
+- 当前分配继续合法：178 使用 GPU0 一张、197 使用 GPU4/5 两张。99 的 GPU1/2 均空闲，可迁入 `0803_14`；迁移后仍需在 99 重新通过真实 DDP smoke 和 formal iter50 五门槛。
 
 ## 99 本机
 
