@@ -2159,3 +2159,10 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   单测通过，当前不占 GPU。
 - 仅在 0803_08 e12 完整产物确认且成熟负向后执行接替；先做真实 DDP smoke 与 checkpoint
   语义检查，再按 iter50 五门槛宣称 formal 运行。
+
+## 2026-08-03 19:06 CST：0803_10 早期约束信号
+
+- e4 `32.399/39.251` 相对 Encoder 同点 `-3.810/+0.498`，相对 periodic-angle
+  `-3.625/-4.537`；只共享 log-area、保留 frame-specific aspect 暂未优于全尺度切空间。
+- 继续 e8/e12 检查晚收敛恢复；不以 e4 停止。0803_09 仍是长轨迹主候选，0803_10 作为
+  约束强度消融保留到成熟节点。

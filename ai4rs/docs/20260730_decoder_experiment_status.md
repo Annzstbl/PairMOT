@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 18:45 CST
+更新时间：2026-08-03 19:06 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4053545`。 |
+| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.399/39.251`，相对 Encoder `-3.810/+0.498`；继续 e8/e12，PGID `4053545`。 |
 | 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.688/47.811`，相对 Encoder 同点 `-4.581/-2.382`；按晚收敛约束继续 e12，PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING/LONG_TRAJECTORY` | e12 `49.206/56.275`；相对原始 decoder 同点 `+1.811/+1.839`、相对 periodic-angle `+1.293/+1.018`，继续 e16 及后期收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2520,3 +2520,13 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 真实隔离导入路径已核验；full build 为 22,771,111 参数、相对父线零增量、711 state tensors，
   4-iter 配置有效。后两层投影单测 `1 passed/137 deselected`；当前只做静态准备，不占 GPU，
   等 0803_08 e12 成熟判定后再执行 DDP smoke。
+
+## 2026-08-03 19:06 CST：0803_10 epoch 4 完整评估
+
+- cls HOTA/DetA/AssA `32.399/26.881/41.726`，det `39.251/34.057/46.221`；相对 Encoder
+  同点 `36.209/38.753` 为 `-3.810/+0.498`，相对 periodic-angle `36.024/43.788`
+  为 `-3.625/-4.537`。
+- pair mAP/AP50 `0.1351/0.2571`、both-independent `0.1799/0.3309`；仅比 0803_08 e4
+  HOTA 高 `0.334/0.184`，共享面积、保留 frame-specific aspect 的早期约束尚未形成正向收益。
+- 369,970,422-byte checkpoint、5416 条记录、50 序列、28 CSV、108 个非空文件完整；异步
+  评估 362.1 秒结束。按约束继续 e8/e12，不因 e4 直接停止。
