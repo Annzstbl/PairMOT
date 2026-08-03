@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 04:53 CST
+更新时间：2026-08-04 05:41 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | 无 | `IDLE/PREPARED_0803_13_MIGRATION` | 固定 GPU0/1 释放；0803_13 的严格同模型 2x4 端口与真实 smoke 已通过，仅当 178 e24 继续双正才从该断点承接成熟长轨迹。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `51.791/58.526`，相对原始 decoder 同点 `+0.948/+0.493`、合计 `+1.441`；双正扩大，继续 e24。后继 `0803_15/16/19/23` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `32.203/37.822` 为早期负向读数，继续 e8/e12；PGID `1357909`。后继 `0803_21 transport margins` PREPARED；GPU0 外部任务不受影响。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E28+` | e24 `52.841/59.322`，相对原始 decoder `+1.132/+0.541`、合计 `+1.673`；从只读源 checkpoint 恢复到 252 自有 workdir，e25 iter50 五门槛通过，PGID `419164`。 |
+| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... fresh` | `RUNNING/TO_E4+` | 0803_13 e24 成熟迁往 252 后，零参数 transported-tangent 的真实 smoke 与 formal iter50 通过；PGID `3144617`，继续 e4/e8/e12。GPU0 只是当前分配，不是固定序号。 |
+| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E12` | e8 `39.478/46.483`，相对原始 decoder同点 `-2.494/-1.695`；e4→e8明显恢复但仍双负，按慢收敛约束继续 e12，PGID `1357909`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -2963,3 +2963,30 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - e4 只登记为慢收敛信号，不作直接否决。197 当前两卡继续同一 formal 到 e8/e12，e8
   监控使用 `epoch_8.pth`、`val_det/epoch_07` 与 `val_track_0002`；资源序号仍仅为当前分配，
   只有 252 固定 GPU0/1。
+
+## 2026-08-04 05:41 CST：0803_13 e24 成熟迁移、0803_17 e8 与 0803_23 启动
+
+- 0803_13 e24 cls HOTA/DetA/AssA `52.841/43.966/65.407`，det
+  `59.322/52.304/69.604`。相对原始 decoder e24 `51.709/58.781` 为
+  `+1.132/+0.541`，联合优势 `+1.673`；相对 Encoder e24 `51.714/59.519` 为
+  `+1.127/-0.197`。它已通过成熟迁移门槛，但尚未满足最终双超 Encoder 与最终联合增益门槛。
+- e24 pair mAP/AP50 `0.295953/0.516788`，both-independent
+  `0.340356/0.563297`，均高于 e20；397,659,956-byte checkpoint、5416 条检测、50 序列、
+  28 CSV、108 文件与异步完成标志完整。178 原 PGID `3062903` 精确停止，成员 `9→0`，
+  GPU0 连续三次 `1 MiB/0%`。
+- 252 与 178 同名账号 UID 不同，旧 workdir 在 252 只读；共享文件系统又不支持 ACL。未放宽
+  旧目录权限，而是保留原 e24 checkpoint 为只读恢复源，在
+  `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24`
+  创建 252 自有续跑目录。启动器修复提交在 252 为 `a414cc1`；明确恢复到 epoch24/iter24912，
+  e25 iter50 `1.1754 s/iter`、loss `9.0711`、grad `53.3604`，DN/encoder 全有限，固定
+  GPU0/1 各约 19.4 GiB，PGID `419164` 五门槛通过。
+- 0803_17 e8 cls HOTA/DetA/AssA `39.478/33.917/48.692`，det
+  `46.483/42.353/52.855`；相对原始 decoder e8 `-2.494/-1.695`。pair mAP/AP50
+  `0.199659/0.363509`，both-independent `0.244129/0.426328`；checkpoint、50 序列、
+  28 CSV、108 文件完整。继续 e12，不按 e8 停止。
+- 0803_23 transported full-tangent 在 178 GPU0 的四步 smoke loss
+  `21.3727/20.6123/20.9003/21.2177`，grad
+  `60.6826/96.6635/127.6287/129.1387`；364,506,420-byte checkpoint 的 642 个浮点
+  tensor 全有限，iterative-cls/DN 语义通过。fresh formal PGID `3144617` 在 iter50 为
+  `0.9593 s/iter`、loss `21.0341`、grad `100.6837`，总、DN、encoder 全有限；零参数、
+  class-agnostic、无 reweight/额外层/attention/loss，继续 e4/e8/e12。

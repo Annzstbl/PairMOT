@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 04:53 CST.
+Last updated: 2026-08-04 05:41 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2491,3 +2491,18 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - AP 与完整 TrackEval 已闭环，但 e4 不作为 decoder 的否决点；197 继续 e8/e12，以中期
   是否回补 cls 且保留 det 判断 semantic margins 能否与终层几何互补。若成熟仍双负，优先
   切换已准备的 transported semantic geometry，而不增加层数、attention 或 loss。
+
+## 2026-08-04 05:41 CST：成熟长跑与新结构筛选并行
+
+- 0803_13 e24 `52.841/59.322` 相对原始 decoder 同点双增益，联合 `+1.673`；相对 Encoder
+  同点为 `+1.127/-0.197`。这足以把成熟曲线迁到最慢的 252 固定 GPU0/1 继续 e28+，但尚不
+  是最终成功点，后续重点是 det 回补并保持 cls 优势。
+- 跨机 UID 不同使旧 workdir 对 252 只读，且文件系统不支持 ACL。采用只读源 checkpoint 加
+  252 自有新 workdir 的恢复方式，避免开放目录权限；epoch/iter/优化器状态从 e24 连续恢复，
+  e25 iter50 已验证。
+- 释放出的 178 单卡启动 0803_23：在终层 5D 乘积切空间中传输已建立的相对变换，只保留
+  沿既有相对变换方向的 detail，抑制横向末层抖动。该结构零参数、帧交换等变，不改变 DN、
+  loss 或计算深度；真实 smoke 与 formal iter50 通过，进入 e4/e8/e12。
+- 99 的 shared semantic margins e8 `39.478/46.483` 仍低于原 decoder，但 e4→e8恢复明显，
+  按慢收敛规则看到 e12；197 的 geometry+margin 同样继续。三条快线分别承担 transported
+  tangent、semantic margin、geometry+margin 的正交筛选，252 只承接成熟曲线。

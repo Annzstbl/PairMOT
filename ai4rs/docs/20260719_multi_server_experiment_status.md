@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 04:53 CST。
+更新时间：2026-08-04 05:41 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E8+；e4 `32.203/37.822` 仅作早期读数，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E12；e8 `39.478/46.483`，继续成熟判定，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E8+；e4 `30.440/38.288` 完整，按晚收敛约束继续 e8/e12，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无 | IDLE；固定 GPU0/1 释放，0803_13 2x4 端口及真实 smoke 已通过 | `0803_13` 若 e24 继续双正，则从 epoch24 迁入成熟长轨迹 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E24；e20 `51.791/58.526`，相对原始 decoder `+0.948/+0.493`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent`、`0803_23 transported tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E28+；e24 相对原 decoder 联合 `+1.673`，e25 iter50 五门槛通过，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
+| 178 | `0803_23 transported full tangent`（当前 GPU0） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `3144617` | e4/e8/e12；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2256,3 +2256,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - pair mAP/AP50 `0.125500/0.238364`、both-independent
   `0.169556/0.314817`；checkpoint、5416 条检测、50 序列、28 CSV、108 文件及异步完成
   标志完整。PGID `387859` 继续 e8/e12，不按 e4 直接停止。
+
+## 2026-08-04 05:41 CST：成熟轨迹迁入 252，178 启动 0803_23
+
+- 0803_13 e24 cls/det `52.841/59.322`，相对原始 decoder 同点 `+1.132/+0.541`、联合
+  `+1.673`；相对 Encoder 同点 `+1.127/-0.197`。完整 checkpoint、AP、50/28/108 产物
+  核验后，178 PGID `3062903` 成员 `9→0`。
+- 由于两机 UID 不同且共享文件系统不支持 ACL，252 不写旧 workdir；以旧 `epoch_24.pth`
+  为只读源，在 252 自有目录续跑。e25 iter50 loss/grad `9.0711/53.3604`，DN/encoder 有限，
+  PGID `419164` 只占固定 GPU0/1。
+- 99 0803_17 e8 `39.478/46.483`，checkpoint 与完整 TrackEval 齐全，继续 e12。
+- 178 当前 GPU0 完成 0803_23 四步 smoke 与 formal iter50；正式 `0.9593 s/iter`、loss/grad
+  `21.0341/100.6837`，PGID `3144617` 五门槛通过。该 GPU 序号仅为当前选择，178 仍只受
+  单卡总量约束。
