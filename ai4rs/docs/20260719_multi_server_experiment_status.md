@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 11:31 CST。
+更新时间：2026-08-03 11:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` smoke 与 formal iter50 五门槛通过，PGID `3765372`；`0803_07` PGID `3694870` | 无；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` PGID `3765372`；`0803_07` e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，PGID `3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e16 cls/det HOTA `48.474/55.272`，e12→e16 `+0.561/+0.015`，继续 e20 | 无；`0803_06/07` 已在 252 RUNNING | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1680,3 +1680,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `55.272/49.385/64.188`；e12→e16 双 HOTA `+0.561/+0.015`。pair mAP/AP50
   `0.2628/0.4523`，both-independent `0.3057/0.5042`；checkpoint 与 50/28/108 产物完整。
   PGID `2893156` 继续 e20，不能用单个趋平区间否定 decoder 的延迟收敛。
+
+## 2026-08-03 11:45 CST：252 0803_07 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA `32.535/24.868/45.326`，det
+  `38.723/31.579/49.105`；相对 `0803_04` periodic-angle e4，双 HOTA
+  `-3.489/-5.065`，且 DetA/AssA 同时下降。pair mAP/AP50 `0.1220/0.2350`，
+  both-independent `0.1618/0.3021`，也显著低于单因素。
+- checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。PGID `3694870`
+  继续 e8/e12，禁止按 e4 早停；该点只用于指导下一候选保留共享分类 midpoint、仅注入
+  swap-odd 帧细节，不直接替换公共语义状态。

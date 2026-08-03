@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 11:31 CST
+更新时间：2026-08-03 11:45 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | 132 项回归、零参数全构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3765372`。 |
-| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | 真数据 smoke 与 formal iter50 五门槛通过，PGID `3694870`；接替 e12 成熟负向后停止的 `0803_03`。 |
+| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，不按 e4 停止；PGID `3694870`。 |
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e16 cls/det HOTA `48.474/55.272`；e12→e16 为 `+0.561/+0.015`，继续 e20 检验单区间平台。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
@@ -2238,3 +2238,16 @@
   checkpoint、5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。
 - 相对严格最终阈值仍低 `5.963/7.121`，目标未达到。PGID `2893156` 继续至 e20，检验 det 平台
   是否持续及 cls 的延迟关联增益；不因单个 e12→e16 区间收窄就停止正向分支。
+
+## 2026-08-03 11:45 CST：0803_07 组合分支 epoch-4
+
+- e4 cls HOTA/DetA/AssA `32.535/24.868/45.326`，det
+  `38.723/31.579/49.105`；相对 periodic-angle 单因素 `0803_04` e4，双 HOTA
+  `-3.489/-5.065`，双 DetA `-4.326/-3.291`，双 AssA `-1.317/-8.146`。相对父线 e4 为
+  `-1.771/+0.133`，说明 periodic-angle 的早期正收益被直接 frame-evidence 分类路由基本抵消。
+- pair mAP/AP50 `0.1220/0.2350`，both-independent `0.1618/0.3021`；相对 periodic-angle
+  单因素分别低 `0.0414/0.0684` 和 `0.0485/0.0753`。369,968,374-byte checkpoint、
+  5416 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- PGID `3694870` 已进入 e5，继续 e8/e12，不能以 e4 直接淘汰。下一结构候选不再用原始帧证据
+  替换共享分类状态，而保留共享状态作为精确 pair midpoint，仅注入两帧证据相对均值的 swap-odd
+  细节；零参数、class-agnostic、无 reweight，先静态准备、不抢占三条活动训练。

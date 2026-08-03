@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 11:31 CST.
+Last updated: 2026-08-03 11:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1943,3 +1943,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - `0803_04` e16 为 `48.474/55.272`，e12→e16 为 `+0.561/+0.015`；检测侧单区间趋平，
   分类侧仍有缓慢增长。由于该机制此前在 e8/e12 均为正向且 decoder 可能延迟收敛，继续 e20，
   再判断平台是否持续；严格目标仍是同 checkpoint 双超 `54.437/62.393` 且合并增益 `>1.5`。
+
+## 2026-08-03 11:45 CST：组合候选 e4 归因与下一结构方向
+
+- `0803_07` e4 cls/det HOTA `32.535/38.723`，相对 periodic-angle 单因素 e4 为
+  `-3.489/-5.065`；pair mAP/AP50 与 both-independent 分别为
+  `0.1220/0.2350` 和 `0.1618/0.3021`，覆盖与关联同时下降。完整 50/28/108 产物已核验。
+- 该实验保持到 e8/e12，不按 e4 直接停止。e4 只支持一个结构归因：分类 head 直接以原始帧证据
+  取代共享状态会丢失公共语义。下一候选改为 `shared + swap-odd detail`：两帧分类输入的算术平均
+  精确等于共享 `layer_output`，差值仅来自已有 frame evidence 的反对称部分；框回归、reference、
+  DN、loss、attention 和 decoder 深度不变，零参数、class-agnostic、无 reweight。先完成实现与
+  不变量测试，待活动实验成熟节点释放资源后再决定是否启动。
