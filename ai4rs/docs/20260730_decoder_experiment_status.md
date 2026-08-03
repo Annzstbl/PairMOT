@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 21:52 CST
+更新时间：2026-08-03 22:06 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.567/48.238`，相对 Encoder `-3.702/-1.955`；继续 e12，PGID `4053545`。 |
+| 252 GPU 0,1 | `0803_14 ... terminal-log-area + periodic-angle ... smoke` | `SMOKE_RUNNING` | 0803_10 e12 成熟停止；0803_14 零参数候选 PGID `75663` 正在四步 DDP 验证。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2616,3 +2616,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - fresh formal PGID `3062903`；iter50 `0.9711 s/iter`、loss `20.9881`、grad `102.8326`，
   9 个进程，GPU0 正常占用，错误扫描干净，HEAD/config/workdir 精确一致。
 - 状态 `RUNNING`，先收 e4/e8/e12，并按 decoder 慢收敛原则保留更长轨迹，不以 e4/e8 直接否决。
+
+## 2026-08-03 22:06 CST：0803_10 e12 成熟停止，0803_14 接替
+
+- 0803_10 e12 cls HOTA/DetA/AssA `44.971/37.182/56.588`，det
+  `52.008/46.294/60.418`；相对 Encoder 同点 `-4.709/-4.533`，相对原始 decoder 同点
+  `-2.424/-2.428`。e4/e8/e12 成熟双负后精确停止 PGID `4053545`，成员 `23→0`。
+- 381,037,558-byte e12 checkpoint、50 序列、28 CSV、108 个非空文件完整；GPU0/1 均
+  `0%/1 MiB`，断点保留。
+- 新增 0803_14 terminal-only log-area + periodic-angle：前三层逐帧独立，最终层只共享面积与
+  周期角、保留逐帧纵横比。目标单测和 22,771,111 参数零增量构建通过；DDP smoke PGID
+  `75663` 已启动。
