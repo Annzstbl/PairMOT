@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:28 CST。
+更新时间：2026-08-03 23:31 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -49,7 +49,7 @@
 ## 2026-08-03 23:28 CST：178 后续候选 0803_16 已设计
 
 - `0803_16 terminal normalized-center` 仅在最终输出共享 reference-local 中心增量，保留早中层递归 reference 与尺寸、角度、分类、DN 的逐帧自由度；零参数、非 class-aware、无 reweight 或额外计算层。
-- 178 formal/smoke 配置与零增量检查已加入本地隔离提交候选；排在 `0803_15 terminal angle-only` 之后。当前只做静态/远端 CPU 构建验证，不占用 `0803_13` 的一张 GPU。
+- 178 formal/smoke 配置与零增量检查已加入隔离提交 `c05cd21`；仓库 `/data1/users/litianhao01/PairMOT_terminalcenter_0803_16` 的终层单次调用测试和完整构建通过，模型 `22,771,111` 参数、增量 0、711 状态张量。排在 `0803_15 terminal angle-only` 之后，不占用 `0803_13` 的一张 GPU。
 
 ## 99 本机
 
