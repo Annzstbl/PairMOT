@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 02:05 CST
+更新时间：2026-08-04 02:10 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E16` | e12 `48.289/54.539`，相对原始 decoder 同点 `+0.894/+0.103`；继续 e16。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；继续 e12，之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18 terminal geometry + semantic margins`。 |
+| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18`，`0803_20 full tangent + semantic margins` 作为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -150,6 +150,15 @@
 - e4/e8/e12 三个完整节点均双负，属于成熟轨迹停止而非 e4/e8 早停。精确 TERM PGID
   `123974` 后成员 `23→0`，252 四卡均为 `1 MiB/0%`；最慢的 252 保持空闲，仅用于后续
   快速通道已证明候选的成熟确认。
+
+## 2026-08-04 02:10 CST：0803_20 terminal full-tangent + semantic margins 已准备
+
+- 新组合在最终 normal queries 同时使用 0803_19 的自然坐标几何一致化，以及 0803_17 的
+  centered class-margin 一致化；保留各帧 residual class mean、早中层递归 reference 与 DN
+  absolute 语义。零参数、类别置换等变、无 class-aware/reweight 或额外主计算层。
+- 197 隔离仓库 `/data/users/litianhao/PairMOT_terminalfulltangentmargin_0803_20_197` 固定
+  `f179249`；两个 launcher Bash 语法和完整父/新模型比较通过，均为 22,771,111 参数、
+  711 状态张量、增量 0。状态 `PREPARED`，排在 0803_18 之后且未占 GPU。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 02:05 CST.
+Last updated: 2026-08-04 02:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -100,6 +100,14 @@ recurrent references, classification, and DN remain independent. The isolated
 178 checkout at `dc0e958` passed the targeted final-layer call-count test, both
 launcher syntax checks, and a full zero-state-delta model comparison at
 22,771,111 parameters and 711 tensors. It is PREPARED and consumes no GPU.
+
+Experiment 0803_20 combines the 0803_19 full-tangent terminal geometry with
+the 0803_17 centered semantic-margin projection. It is the zero-parameter
+center-aware successor to 0803_18: each frame still preserves its class mean,
+all recurrent references, and DN semantics. The isolated 197 checkout at
+`f179249` passed both launcher syntax checks and the full parent/new model
+comparison at 22,771,111 parameters, zero state delta, and 711 tensors. It is
+PREPARED behind 0803_18 and consumes no GPU.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

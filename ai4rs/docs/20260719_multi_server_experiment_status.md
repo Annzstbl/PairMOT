@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 02:05 CST。
+更新时间：2026-08-04 02:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins`、`0803_20 full tangent + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -141,6 +141,15 @@
 - e4/e8/e12 三个完整节点构成持续双负成熟轨迹。核验后精确 TERM PGID `123974`，成员
   `23→0`；252 GPU0/1/2/3 均回落到 `1 MiB/0%`。252 作为最慢资源保持空闲，只等待后续
   已在快速通道证明的成熟候选，不用于新结构筛选。
+
+## 2026-08-04 02:10 CST：197 0803_20 组合后备已准备
+
+- `0803_20` 把 0803_19 的终层 reference-local 中心、log-ratio 尺寸、π 周期角几何一致化与
+  0803_17 的 centered semantic margins 组合；每帧 class mean、早中层 reference 与 DN 独立。
+  零参数、类别置换等变、无 class-aware/reweight、新 attention/layer/loss。
+- 197 隔离仓库 `/data/users/litianhao/PairMOT_terminalfulltangentmargin_0803_20_197` 固定
+  `f179249`；formal/smoke 启动器语法与整模零增量比较通过：22,771,111 参数、711 状态张量。
+  当前 `PREPARED`，排在 0803_18 后，不建 workdir、不占 GPU。
 
 ## 99 本机
 
