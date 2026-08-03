@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 13:04 CST
+更新时间：2026-08-03 13:22 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e4 cls/det HOTA `30.698/38.350`；完整评测后继续 e8/e12，PGID `3765372`。 |
-| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，不按 e4 停止；PGID `3694870`。 |
+| 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `41.380/47.515`，成熟差距仍在，继续 e12；PGID `3694870`。 |
 | 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e20 cls/det HOTA `49.446/55.397`；e16→e20 为 `+0.972/+0.125`，继续 e24。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
@@ -2301,3 +2301,15 @@ smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
 - PGID `3765372` 的 23 个成员已进入 e5。该实验与 `0803_07` 都继续 e8/e12，不以 e4 早停；
   当前因果证据降低 direct frame-evidence 路由优先级，并提高精确保留 shared midpoint 的
   `0803_08 common-preserving frame-detail` 优先级。
+
+## 2026-08-03 13:22 CST：0803_07 frame-evidence-cls + periodic-angle epoch-8
+
+- e8 cls HOTA/DetA/AssA `41.380/32.175/56.046`，det
+  `47.515/39.879/58.497`；相对 periodic-angle 单因素同点为 `-4.207/-5.400`，相对
+  Encoder 同点为 `-3.889/-2.678`。虽然 e4→e8 双 HOTA 增长 `+8.845/+8.792`，直接分类
+  路由的差距在成熟节点仍然显著。
+- pair mAP/AP50 `0.1887/0.3403`，both-independent `0.2297/0.3976`；相对 periodic-angle
+  分别下降 `0.0536/0.0839` 和 `0.0620/0.0946`。375,531,382-byte checkpoint、127426 条
+  检测、50 序列、28 CSV 与 108 个非空文件完整，异步评测正常完成。
+- PGID `3694870` 的 23 个成员已进入 e9，继续 e12 后再释放。该结果不支持扩展 direct
+  frame-evidence 路由，下一分类结构只考虑精确保留公共 midpoint 的 `0803_08`。

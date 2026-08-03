@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 13:04 CST.
+Last updated: 2026-08-03 13:22 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1990,3 +1990,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 单因素和组合分支在 e4 的检测 AP 几乎一致，且均显著弱于 periodic-angle，支持早期损失来自
   direct frame-evidence 分类路由本身，而非周期角度交互。仍继续两项到 e8/e12，以排除 decoder
   延迟收敛；若成熟节点仍负向，分类候选只保留公共 midpoint 并注入 swap-odd detail 的 `0803_08`。
+
+## 2026-08-03 13:22 CST：frame-evidence + periodic-angle e8 归因
+
+- `0803_07` e8 cls/det HOTA 为 `41.380/47.515`，相对 periodic-angle 单因素同点为
+  `-4.207/-5.400`，相对 Encoder 同点为 `-3.889/-2.678`。e4→e8 的双 HOTA 增量为
+  `+8.845/+8.792`，确认它确实收敛，但成熟差距仍未缩回。
+- 检测 pair mAP/AP50 `0.1887/0.3403`，both-independent `0.2297/0.3976`；四项相对
+  periodic-angle 同点均显著下降。checkpoint、127426 条检测、50 序列、28 CSV 和 108 个
+  非空文件完整，PGID `3694870` 已进入 e9。
+- 继续 e12，不以 e8 早停；若 e12 仍维持同方向缺口，则释放 GPU2/3，优先部署精确保留
+  shared midpoint 的 `0803_08`。direct frame-evidence 路由不再扩展新变体。
