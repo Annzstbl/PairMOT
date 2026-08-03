@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:31 CST
+更新时间：2026-08-03 23:40 CST
 
 ## 当前研究原则
 
@@ -32,6 +32,11 @@
 - 只在最后一层输出执行中心共识：先把两帧各自的候选中心位移除以对应 reference 的宽高，得到 reference-local 位移，再共享该局部中心增量并映射回各自 reference。所有递归 reference、宽高、角度、分类和 DN 保持原路径。
 - 该投影零参数、swap-equivariant、class-agnostic，无 reweight、额外 loss、attention 或 decoder 层；与 `0803_15 terminal angle-only` 构成“中心 vs 角度”的正交终层对照。
 - 新增 178 1xb8 formal/smoke 配置、零状态增量构建检查和只调用一次终层投影的定向测试。隔离仓库 `/data1/users/litianhao01/PairMOT_terminalcenter_0803_16` 固定 `c05cd21`；远端定向测试通过，完整构建为 `22,771,111` 参数、增量 0、711 个状态张量。状态 `PREPARED/WAITING_AFTER_0803_15`，不占用正在运行的 GPU。
+
+## 2026-08-03 23:40 CST：0803_15/16 接替启动链已补齐
+
+- 两项均新增 178 单卡 formal/smoke 安全启动器：Conda `nounset` 防护、目标 GPU 环境变量、fresh workdir、真实 GMC/预训练检查、错误扫描、iterative-cls/DN 审计和全浮点 checkpoint 有限性审计。
+- 四个启动器 Bash 语法通过；仅完成准备，不创建 workdir、不占 GPU。178 释放后按 `0803_15` 再 `0803_16` 的顺序执行真实 smoke→formal 五门槛。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
