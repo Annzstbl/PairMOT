@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 07:29 CST
+更新时间：2026-08-04 07:32 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
 | 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`、相对 Encoder `+0.133/+5.986`；完整评测通过，PGID `3151184` 继续 e8/e12。`0803_24` 为 PREPARED/NO_GPU。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_17 e12 成熟双负后停止；0803_21 smoke 与 formal iter50 五门槛通过，PGID `1384944`。GPU1/2 只是当前分配，GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，PGID `387859` 继续 e8/e12；`0803_24 transported shape tangent` 的 197 双卡版已 PREPARED/NO_GPU，实际启动时动态选择空闲卡。 |
+| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `42.014/47.865`，相对原始 decoder `+0.042/-0.313`；遵守晚收敛约束继续 e12，PGID `387859`。`0803_24` 双卡版 PREPARED/NO_GPU。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3082,3 +3082,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   72 epochs，formal/smoke 启动器语法通过。
 - 两个启动器要求显式传入当时两张空闲 GPU，未写死 197 序号。状态为 `PREPARED/NO_GPU`，
   未创建 smoke/formal workdir，不抢占当前 `0803_18`；是否启动等待 e12 与 0803_23 e8 闭环。
+
+## 2026-08-04 07:32 CST：0803_18 epoch-8 完整评估
+
+- e8 cls HOTA/DetA/AssA `42.014/34.349/54.039`，det
+  `47.865/43.079/55.209`。相对原始 decoder e8 `41.972/48.178` 为
+  `+0.042/-0.313`，相对 Encoder e8 `45.269/50.193` 为 `-3.255/-2.328`；相对
+  单独 terminal geometry `0803_13` e8 `45.002/49.083` 为 `-2.988/-1.218`。
+- pair mAP/AP50 `0.199896/0.368410`，both-independent mAP/AP50
+  `0.244107/0.431063`；375,527,527-byte checkpoint、5416 条检测、50 序列、28 CSV、
+  108 个非空评测文件和 `async_done=1` 完整。
+- shared semantic margin 的早期分类损失从 e4 已明显恢复，但 e8 仍未形成可靠增益。按 decoder
+  晚收敛约束保持 PGID `387859` 继续 e12，不用 e8 直接否决；`0803_24` 保持 PREPARED，
+  不并发抢占 197 当前两卡。

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 07:29 CST.
+Last updated: 2026-08-04 07:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -27,6 +27,11 @@ At 07:29 CST, the orthogonal `0803_24` transported-shape-only candidate was prep
 197 at clean HEAD `44395ea`. Its two-GPU launchers require the currently free indices to be
 passed explicitly, preserving the count-only resource rule. It remains PREPARED/NO_GPU behind
 the running `0803_18` e12 decision and the `0803_23` e8 result.
+
+At 07:32 CST, `0803_18` completed epoch 8 at `42.014/47.865`, only
+`+0.042/-0.313` against the original decoder and below the geometry-only branch. The full
+artifacts are valid, and the same PGID `387859` continues to epoch 12 because epoch 8 is not
+used as a direct rejection point.
 
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
