@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 15:57 CST。
+更新时间：2026-08-03 17:33 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -16,9 +16,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e12 为 `45.752/52.950` 且延迟追赶，继续 e16；`0803_08` formal iter50 五门槛通过；PGID `3765372/3940521` | `0803_07` e12 成熟负向后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle 同点 `+0.906/+0.698`，继续 e8/e12；PGID `2971994` | `0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
+| 197 | 无 | UNREACHABLE；0803_10 bundle 与旧提交隔离 clone 保留，未 fetch/占卡 | 等网络恢复后续接 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0803_10 shared log-area + periodic-angle`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；PGID `4053545/3940521`；0803_10 formal iter50 五门槛通过 | `0803_06` e16 成熟收口且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；e8 `46.170/53.539`，相对 Encoder 同点 `+0.901/+3.346`；PGID `2971994` | `0803_11` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1880,3 +1880,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   增长。386,533,238-byte checkpoint、153698 条检测、50 序列、28 CSV 与 108 文件完整。
 - PGID `3765372` 已进入 e17，继续 e20；追赶速度虽减慢但检测反超、分类缺口继续收窄，尚无成熟
   停止依据。严格最终阈值仍差 `6.853/6.463`。
+
+## 2026-08-03 17:33 CST：252 GPU0/1 从 0803_06 接替到 0803_10
+
+- 权威同点复核显示 `0803_06` e16 被原始 `0801_09` decoder 严格支配 `2.452/1.003`，且
+  AP 同向落后；依据 e4/e8/e12/e16 完整轨迹精确停止 PGID `3765372`，23 成员退出，GPU0/1
+  释放，e16 完整产物保留。
+- `0803_10` 首次 smoke 在训练前因 GMC cache 路径大小写错误退出；保留失败日志后修正，retry
+  四步 loss/grad 全有限，364,501,942-byte checkpoint 与语义检查通过。
+- fresh formal PGID `4053545`；iter50 `1.2074 s/iter`、loss `21.3965`、grad `114.6571`，
+  GPU0/1 各约 19.2 GiB，五门槛通过。状态 `RUNNING`，e4/e8/e12 均设置完整性监控口径。

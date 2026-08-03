@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 15:57 CST
+更新时间：2026-08-03 17:33 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,15 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e12 cls/det HOTA `45.752/52.950`，延迟追赶明显，继续 e16；PGID `3765372`。 |
-| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | 135 项测试、零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `3940521`。 |
-| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle `+0.906/+0.698`，继续 e8/e12；PGID `2971994`。 |
+| 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4053545`。 |
+| 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | e4 `32.065/39.067` 为负向结构信号，但继续 e8/e12；PGID `3940521`。 |
+| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | e8 `46.170/53.539`，相对 Encoder 同点 `+0.901/+3.346`，继续长收敛；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
-| 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
+| 197 GPU 4,5 | 无 | `UNREACHABLE/RECOVERABLE_PREP` | bundle 与旧提交隔离 clone 保留；未 fetch、未占 GPU。 |
 
-`0803_06 iterative-cls frame-evidence decoder` 已从 178 的单卡预案迁移为 252 GPU0/1 双卡正式
-实验；`0803_07 frame-evidence + periodic-angle` 同时运行于 GPU2/3。两者在隔离 checkout 中固定提交，
-不热更新活动仓库。
+`0803_06 iterative-cls frame-evidence decoder` 已在 e16 完整评估后按四节点成熟轨迹与原始
+`0801_09` 同点支配关系精确停止；GPU0/1 接替为 `0803_10 shared log-area + periodic-angle`。
+所有正式实验均在隔离 checkout 中固定提交，不热更新活动仓库。
 
 `0803_08 common-preserving frame-detail + periodic-angle` 已从 178 单卡静态候选迁移为 252
 GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_04` e24 平台确认
@@ -2464,3 +2464,19 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 386,533,238-byte checkpoint、153698 条检测、50 序列、28 CSV 与 108 个非空文件完整；
   异步 TrackEval 正常结束。相对严格最终阈值仍差 `6.853/6.463`，PGID `3765372` 的 23 个成员
   已恢复 e17；继续 e20，并建立 `val_track_0005` 完整性监控。
+
+## 2026-08-03 17:33 CST：0803_06 成熟收口并启动 0803_10
+
+- 回读权威长轨迹后，Encoder e16 为 `51.091/58.320`，原始 `0801_09` decoder e16 为
+  `50.036/56.933`。`0803_06` e16 `47.584/55.930` 被同模型原始 decoder 严格支配
+  `2.452/1.003`，pair mAP/AP50 也低 `0.0334/0.0566`。收口依据为 e4/e8/e12/e16 四个完整
+  节点与强版本支配，不是 e4/e8 单点淘汰。
+- 对精确 PGID `3765372` 发送 TERM 后 23 个成员全部退出，GPU0/1 为 `0%/1 MiB`；e16
+  checkpoint 和完整评估保留，e20 监控撤销。
+- `0803_10` 首次 smoke 在训练前因 cache 路径大小写错误退出，只产生 147-byte 失败日志、未占
+  GPU；修正为实际 `PairMmot` 路径并使用 `_retry1` workdir。真实 4-iter smoke loss
+  `12.9228/19.5098/19.6027/21.1315`，grad `103.6034/98.2696/107.9666/114.7782`，
+  364,501,942-byte checkpoint 与 iterative-cls/DN 语义检查通过。
+- formal PGID `4053545`；iter50 `1.2074 s/iter`、loss `21.3965`、grad `114.6571`，7 个
+  成员、GPU0/1 各约 19.2 GiB，错误扫描、资源、进程组、provenance 与 workdir 五门槛通过。
+  状态 `RUNNING`，已建立 e4 `val_track_0001` 监控，后续不以 e4/e8 直接否决。
