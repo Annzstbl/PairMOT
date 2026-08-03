@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 14:12 CST
+更新时间：2026-08-03 14:29 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e4 cls/det HOTA `30.698/38.350`；完整评测后继续 e8/e12，PGID `3765372`。 |
+| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e8 cls/det HOTA `40.922/46.854`；成熟负向仍在，继续 e12，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `41.380/47.515`，成熟差距仍在，继续 e12；PGID `3694870`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2336,3 +2336,14 @@ periodic-angle` 已在 `0803_04` e24 平台确认并释放后接管 GPU0。
   9 个成员存活，GPU0 约 31.4 GiB，错误扫描、provenance 与目标 workdir 五门槛通过。
 - 状态为 `RUNNING`，继续 e4/e8/e12。结构零参数、class-agnostic、无 reweight，不增加 attention
   或 decoder 深度；normal query 只对宽高采用 reference-local log 比例共识并保留周期角度共识。
+
+## 2026-08-03 14:29 CST：0803_06 frame-evidence-cls epoch-8
+
+- e8 cls HOTA/DetA/AssA `40.922/32.859/53.835`，det
+  `46.854/41.568/54.556`；相对 periodic-angle 同点为 `-4.665/-6.061`，相对 Encoder
+  同点为 `-4.347/-3.339`。e4→e8 双 HOTA 虽增长 `10.224/8.504`，成熟差距仍显著。
+- pair mAP/AP50 `0.1906/0.3551`，both-independent `0.2334/0.4148`；相对 periodic-angle
+  分别下降 `0.0517/0.0691` 和 `0.0583/0.0774`。375,533,238-byte checkpoint、128933 条
+  检测、50 序列、28 CSV 与 108 个非空文件完整。
+- PGID `3765372` 的 23 个成员已进入 e9，继续 e12。单因素和组合的 e8 证据一致，不再扩展
+  direct frame-evidence 路由；下一分类候选只保留 `0803_08` 的 exact shared midpoint。

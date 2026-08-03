@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 14:12 CST.
+Last updated: 2026-08-03 14:29 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2021,3 +2021,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `109.5454`，9 个成员、GPU0 约 31.4 GiB 驻留、错误扫描和提交来源五门槛均通过。
 - `0803_09` 状态提升为 `RUNNING`。继续收集 e4/e8/e12；它只改变宽高与角度的几何坐标共识，
   不引入参数、类别感知、重加权、额外 attention 或 decoder 深度。
+
+## 2026-08-03 14:29 CST：frame-evidence 单因素 e8 归因
+
+- `0803_06` e8 cls/det HOTA `40.922/46.854`，相对 periodic-angle 单因素同点为
+  `-4.665/-6.061`，相对 Encoder 同点为 `-4.347/-3.339`。e4→e8 虽增长
+  `10.224/8.504`，但直接分类路由的成熟差距仍未追回。
+- pair mAP/AP50 `0.1906/0.3551`，both-independent `0.2334/0.4148`；四项均明显低于
+  periodic-angle。同点完整 checkpoint、128933 条检测、50 序列、28 CSV 和 108 个非空文件
+  已核验，PGID `3765372` 已进入 e9。
+- 继续 e12 后再释放 GPU0/1。单因素与组合的 e8 证据共同排除继续扩展 direct frame-evidence
+  变体；分类侧下一实验固定为保留 shared midpoint 的 `0803_08`。

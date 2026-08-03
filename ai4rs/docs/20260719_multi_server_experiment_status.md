@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 14:12 CST。
+更新时间：2026-08-03 14:29 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e4 cls/det HOTA `30.698/38.350`；`0803_07` e8 为 `41.380/47.515`，继续 e12；PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；e8 cls/det HOTA 分别为 `40.922/46.854`、`41.380/47.515`，均继续 e12；PGID `3765372/3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；真数据 smoke 与 formal iter50 五门槛通过，PGID `2971994` | `0803_08 common-preserving frame-detail + periodic-angle` 保持 PREPARED；`0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1767,3 +1767,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 状态为 `RUNNING`。该结构零参数、class-agnostic、无 reweight，只在 normal query 上组合
   reference-local log-size tangent 与 π-periodic angle tangent；下一完整判定点为 e4/e8/e12，
   不按早期节点单独否决。
+
+## 2026-08-03 14:29 CST：252 0803_06 e8 完整评估
+
+- e8 cls HOTA/DetA/AssA `40.922/32.859/53.835`，det
+  `46.854/41.568/54.556`；e4→e8 双 HOTA `+10.224/+8.504`，但相对 periodic-angle
+  单因素同点仍低 `4.665/6.061`，相对 Encoder 同点低 `4.347/3.339`。
+- pair mAP/AP50 `0.1906/0.3551`，both-independent `0.2334/0.4148`；相对 periodic-angle
+  同点分别低 `0.0517/0.0691` 和 `0.0583/0.0774`。375,533,238-byte checkpoint、
+  128933 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- PGID `3765372` 的 23 个成员已进入 e9。单因素与联合分支在 e8 都显著负于 periodic-angle，
+  direct frame-evidence 路由的结构性负向结论一致；仍继续 e12 完成慢收敛审计。
