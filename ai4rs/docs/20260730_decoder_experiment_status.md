@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:15 CST
+更新时间：2026-08-03 23:22 CST
 
 ## 当前研究原则
 
@@ -16,10 +16,16 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`，相对 Encoder `-3.360/-1.434`；按晚收敛规则继续 e8/e12，PGID `3062903`。 |
-| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle` | `PREPARING` | GPU1/2 空闲且满足总计 2 卡限制；迁移隔离提交并重新执行真数据 smoke，GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | 99 smoke 与 formal iter50 五门槛通过；PGID `1327092`，等待 e4/e8/e12，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-03 23:22 CST：0803_14 迁移 99 GPU1/2 并正式运行
+
+- 新增 99 端正式/四步 smoke 配置与安全启动器，训练/验证数据、GMC、TrackEval 和 workdir 均改为 99 路径；两配置加载和深拷贝通过。隔离仓库固定提交 `ed7823d`，零参数构建仍为 `22,771,111` 参数、增量 0、711 个状态张量。
+- 真数据 DDP smoke 四次 loss `12.9438/19.3917/19.5249/21.1545`，grad norm `106.5528/91.3914/80.1813/83.8108`；DN 与 encoder loss 全有限，`iter_4.pth` 中 642 个浮点张量全有限，错误扫描为空。
+- formal fresh 于 23:20 启动，PGID `1327092`；23:21 到 epoch1 iter50：`0.9957 s/iter`、loss `21.4082`、grad norm `149.8043`，GPU1/2 各约 19.2 GiB，进程、显存、正式日志、iter50、有限数值五门槛全部通过，状态为 `RUNNING/TO_E12`。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:15 CST。
+更新时间：2026-08-03 23:22 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_14 terminal log-area` 准备迁移到 GPU1/2 | PREPARING；GPU1/2 空闲，GPU0 外部占用且不抢占 | 迁移后 smoke→formal | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；PGID `1327092`，smoke 与 formal iter50 五门槛通过；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
@@ -39,6 +39,12 @@
 
 - 用户再次澄清：只有 252 指定 GPU0/1；99/178/197 分别只限制总计 2/1/2 卡，不限定序号。此前关于 99 GPU2 未授权及必须等待 GPU0 的判断撤销。
 - 当前分配继续合法：178 使用 GPU0 一张、197 使用 GPU4/5 两张。99 的 GPU1/2 均空闲，可迁入 `0803_14`；迁移后仍需在 99 重新通过真实 DDP smoke 和 formal iter50 五门槛。
+
+## 2026-08-03 23:22 CST：99 GPU1/2 接管 0803_14
+
+- 99 隔离仓库 `/data/users/wangying01/lth/PairMOT_terminalarea_0803_14_99` 固定提交 `ed7823d`。正式与 smoke 配置完成 99 数据/GMC/TrackEval 路径迁移并通过加载、深拷贝、Bash 语法和零参数构建检查。
+- GPU1/2 真数据 smoke 完成：loss `12.9438/19.3917/19.5249/21.1545`，grad norm `106.5528/91.3914/80.1813/83.8108`，642 个浮点 checkpoint 张量全有限。
+- formal PGID `1327092` 在 epoch1 iter50 为 `0.9957 s/iter`、loss `21.4082`、grad norm `149.8043`；GPU1/2 各约 19.2 GiB，错误扫描为空，五门槛通过。GPU0 的外部进程保持不动。
 
 ## 99 本机
 
