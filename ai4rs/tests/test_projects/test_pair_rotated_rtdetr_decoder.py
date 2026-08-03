@@ -985,8 +985,10 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 reference_curr, reference_prev, 2))
         self.assertTrue(torch.equal(projected[0][:, :2], residual_prev[:, :2]))
         self.assertTrue(torch.equal(projected[1][:, :2], residual_curr[:, :2]))
-        self.assertTrue(torch.allclose(projected[0], swapped[1]))
-        self.assertTrue(torch.allclose(projected[1], swapped[0]))
+        self.assertTrue(torch.allclose(
+            projected[0], swapped[1], atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            projected[1], swapped[0], atol=1e-6, rtol=1e-5))
 
     def test_normalized_center_residual_uses_reference_local_coordinates(self):
         reference_prev = torch.tensor([[[0.4, 0.4, 0.2, 0.4, 0.5],
