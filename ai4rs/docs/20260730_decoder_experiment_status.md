@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 22:06 CST
+更新时间：2026-08-03 22:11 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_14 ... terminal-log-area + periodic-angle ... smoke` | `SMOKE_RUNNING` | 0803_10 e12 成熟停止；0803_14 零参数候选 PGID `75663` 正在四步 DDP 验证。 |
+| 252 GPU 0,1 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `77558`，等待 e4/e8/e12。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2627,3 +2627,12 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 新增 0803_14 terminal-only log-area + periodic-angle：前三层逐帧独立，最终层只共享面积与
   周期角、保留逐帧纵横比。目标单测和 22,771,111 参数零增量构建通过；DDP smoke PGID
   `75663` 已启动。
+
+## 2026-08-03 22:11 CST：0803_14 smoke 通过并正式启动
+
+- DDP smoke 四步 loss `12.946/19.487/19.571/21.118`，grad
+  `106.686/97.954/91.740/91.942`，全有限；364,502,454-byte checkpoint、711 个 state
+  tensor 全有限，错误扫描与语义检查通过，进程退出后 GPU0/1 各 1 MiB。
+- fresh formal PGID `77558`；iter50 `1.2555 s/iter`、loss `21.3640`、grad `102.0121`，
+  7 个进程、双卡各 19,192 MiB，错误扫描、HEAD/config/workdir 五门槛通过。
+- 状态 `RUNNING`，先收 e4/e8/e12；不以 e4/e8 直接否决。
