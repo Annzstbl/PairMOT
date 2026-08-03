@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 07:09 CST
+更新时间：2026-08-04 07:20 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
-| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E4+` | 首次 fresh 的尺度 `exp` 反向溢出风险已审计并停止；log-domain 等价修复的 smoke 与 formal iter50 通过，PGID `3151184`，继续 e4/e8/e12。`0803_24 transported shape tangent` 为 PREPARED/NO_GPU；GPU0 只是当前分配。 |
+| 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`、相对 Encoder `+0.133/+5.986`；完整评测通过，PGID `3151184` 继续 e8/e12。`0803_24` 为 PREPARED/NO_GPU。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_17 e12 成熟双负后停止；0803_21 smoke 与 formal iter50 五门槛通过，PGID `1384944`。GPU1/2 只是当前分配，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `30.440/38.288`，pair mAP/AP50 `0.1255/0.2384`；早期 cls 偏慢但不据 e4 否决，PGID `387859` 继续 e8/e12。后继 `0803_22 geometry + transported margins`、`0803_20 full tangent + shared margins` 均为 PREPARED。 |
 
@@ -3058,3 +3058,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   非空评测文件和 `async_done=1` 完整。
 - 该轨迹在 e24/e28 都保持相对原始 decoder 双正，且 det 与 Encoder 只差 `0.101`，因此不在
   e28 停止。252 固定 GPU0/1、PGID `419164` 继续到 e32；252 仍只承担这一条成熟路线。
+
+## 2026-08-04 07:20 CST：0803_23 epoch-4 完整评估
+
+- 修复后的 transported full-tangent e4 cls HOTA/DetA/AssA `36.342/30.409/45.421`，det
+  `44.739/38.109/54.712`。相对原始 decoder e4 `34.306/38.590` 为
+  `+2.036/+6.149`，相对 Encoder e4 `36.209/38.753` 也为 `+0.133/+5.986`；相对
+  terminal mean geometry `0803_13` e4 `32.849/37.319` 为 `+3.493/+7.420`。
+- pair mAP/AP50 `0.1649/0.3108`，both-independent mAP/AP50 `0.2139/0.3859`；
+  369,970,164-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。修复后的正式轨迹到 e5 仍无非有限匹配告警。
+- 这是当前最强的早期结构信号，但 e4 不作为最终通过依据。178 当前 GPU0、PGID `3151184`
+  保持同一 fresh 轨迹继续 e8/e12；GPU 序号只是动态分配，178 只固定总计 1 卡。
