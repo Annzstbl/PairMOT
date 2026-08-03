@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 15:10 CST。
+更新时间：2026-08-03 15:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e8 为 `40.922/46.854`，`0803_08` formal iter50 五门槛通过；PGID `3765372/3940521` | `0803_07` e12 成熟负向后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；真数据 smoke 与 formal iter50 五门槛通过，PGID `2971994` | `0803_08 common-preserving frame-detail + periodic-angle` 保持 PREPARED；`0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle 同点 `+0.906/+0.698`，继续 e8/e12；PGID `2971994` | `0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1802,3 +1802,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - fresh formal PGID `3940521`；真实 iter50 `1.2866 s/iter`、loss `21.4134`、grad
   `109.5162`，7 个成员存活，GPU2/3 各约 19.2 GiB，错误扫描、进程组、资源、provenance 与
   真实迭代五门槛通过。继续 e4/e8/e12，不按早期节点单独否决。
+
+## 2026-08-03 15:25 CST：178 0803_09 e4 完整评估
+
+- e4 cls HOTA/DetA/AssA `36.930/29.828/47.715`，det
+  `44.486/36.346/56.708`；相对 periodic-angle 单因素同点双 HOTA `+0.906/+0.698`，
+  合并 `+1.604`，双 DetA `+0.634/+1.476`。相对 Encoder e4 双 HOTA `+0.721/+5.733`。
+- pair mAP/AP50 `0.1743/0.3157`，both-independent `0.2193/0.3845`；相对 periodic-angle
+  同点分别提高 `0.0109/0.0123` 和 `0.0090/0.0071`。369,973,748-byte checkpoint、
+  114290 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- log-size tangent 在 HOTA、DetA 与四项 AP 上形成一致正向几何证据，但严格最终阈值仍差
+  `17.507/17.907`。PGID `2971994` 的 9 个成员已进入 e5，继续 e8/e12，不以 e4 宣告达标。

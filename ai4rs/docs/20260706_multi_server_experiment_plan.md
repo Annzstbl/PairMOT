@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 15:10 CST.
+Last updated: 2026-08-03 15:25 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2053,3 +2053,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - fresh formal PGID `3940521`；iter50 `1.2866 s/iter`、loss `21.4134`、grad `109.5162`，
   7 个成员、GPU2/3 各约 19.2 GiB、错误扫描与 provenance 五门槛通过。状态为 `RUNNING`，
   继续 e4/e8/e12，直接检验保留 shared midpoint 后的 swap-odd 分类细节是否避免成熟负迁移。
+
+## 2026-08-03 15:25 CST：log-size tangent e4 双向正增益
+
+- `0803_09` e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle 单因素同点为
+  `+0.906/+0.698`，合并 `+1.604`；相对 Encoder e4 为 `+0.721/+5.733`。宽高乘法几何
+  共识补充了周期角度而未破坏分类侧。
+- pair mAP/AP50 `0.1743/0.3157`，both-independent `0.2193/0.3845`，四项相对
+  periodic-angle 同点均提高。checkpoint、114290 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 这是首个在同点相对 periodic-angle 双 HOTA 与四项 AP 全正的尺寸机制；继续 e8/e12 检验增益
+  是否成熟保持。严格目标仍使用 Encoder 最终 `54.437/62.393`，不以 e4 宣告达成。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 15:10 CST
+更新时间：2026-08-03 15:25 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e8 cls/det HOTA `40.922/46.854`；成熟负向仍在，继续 e12，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | 135 项测试、零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `3940521`。 |
-| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `2971994`。 |
+| 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle `+0.906/+0.698`，继续 e8/e12；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2369,3 +2369,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `103.2465/94.2024/82.7476/82.7848`，checkpoint 与 iterative-cls/DN 语义检查通过。
 - fresh formal PGID `3940521`；iter50 `1.2866 s/iter`、loss `21.4134`、grad `109.5162`，
   7 个成员、GPU2/3 各约 19.2 GiB，五门槛通过。状态为 `RUNNING`，继续 e4/e8/e12。
+
+## 2026-08-03 15:25 CST：0803_09 log-size tangent + periodic-angle epoch-4
+
+- e4 cls HOTA/DetA/AssA `36.930/29.828/47.715`，det
+  `44.486/36.346/56.708`；相对 periodic-angle 单因素同点双 HOTA `+0.906/+0.698`、
+  双 DetA `+0.634/+1.476`，相对 Encoder e4 双 HOTA `+0.721/+5.733`。
+- pair mAP/AP50 `0.1743/0.3157`，both-independent `0.2193/0.3845`；相对 periodic-angle
+  同点提高 `0.0109/0.0123` 和 `0.0090/0.0071`。369,973,748-byte checkpoint、114290 条
+  检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 该零参数尺寸几何机制在 HOTA、DetA 和 AP 上一致正向，继续 e8/e12；严格最终阈值尚未达到，
+  PGID `2971994` 的 9 个成员已进入 e5。
