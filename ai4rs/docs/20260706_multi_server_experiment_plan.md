@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 00:42 CST.
+Last updated: 2026-08-04 00:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -46,6 +46,12 @@ decoder and all four AP diagnostics are also lower, while terminal-only
 0803_13 dominates both. They nevertheless continue to epoch 12 because epoch
 8 is not a direct decoder rejection point. No additional late-two-layer or
 progressive-geometry descendants will be prepared from these weak branches.
+
+Experiment 0803_14 reached epoch 4 at `30.813/36.985` cls/det HOTA, below both
+Encoder and the terminal full-size 0803_13 at the same point. Its checkpoint,
+AP diagnostics, 50 sequences, 28 CSV files, and 108 evaluation files are
+complete. This is recorded as early evidence only; 99 GPU1/2 continues to
+epoch 8 and 12 without touching the external process on GPU0.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
