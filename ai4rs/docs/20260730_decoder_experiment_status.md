@@ -2445,3 +2445,11 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `1f0147c`，未更新正在训练的 `0803_06/08` 仓库。
 - 252 目标配置深拷贝、launcher 语法和完整模型构建通过：`22,771,111` 参数、711 state tensors、
   参数增量 0。状态为 `PREPARED/WAITING_GPU`；四卡仍被 06/08 合法占用，未启动 smoke。
+
+## 2026-08-03 17:06 CST：197 迁移支线暂停
+
+- 197 在 114 MB bundle 完整落盘并完成隔离 clone 后主动断开；后续依次出现两次 connection
+  refused 和一次 `No route to host`。隔离目录 `/data/users/litianhao/PairMOT_logarea_0803_10_197`
+  仍停在旧提交 `2024222`，尚未 fetch/checkout、未构建、未启动 GPU。
+- 不删除现场、不高频重连。197 标记为 `UNREACHABLE/RECOVERABLE_PREP`；主线继续使用 252/178，
+  目标并未因该慢资源离线而阻塞。
