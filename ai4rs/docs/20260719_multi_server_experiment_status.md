@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 04:13 CST。
+更新时间：2026-08-04 04:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING；0803_14 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E8+；e4 `32.203/37.822` 仅作早期读数，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E24；e20 `51.791/58.526`，相对原始 decoder `+0.948/+0.493`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent`、`0803_23 transported tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
@@ -231,6 +231,15 @@
   checkpoint、5416 条检测、50 序列、28 CSV、108 非空文件与异步完成标记完整。
 - PGID `3062903`、9 个训练成员和 GPU0 占用正常，已进入 e21。依据 e8/e12/e16/e20 四个完整
   双正节点继续到 e24；0803_15/16/19/23 均保持 PREPARED/NO_GPU，不抢占当前强轨迹。
+
+## 2026-08-04 04:25 CST：99 0803_17 epoch 4
+
+- cls HOTA/DetA/AssA `32.203/26.308/42.066`，det `37.822/32.233/45.135`；相对原始 decoder
+  e4 HOTA 为 `-2.103/-0.768`，相对 Encoder e4 为 `-4.006/-0.931`。
+- pair mAP/AP50 `0.140801/0.262022`、both-independent `0.183663/0.330727`；369,970,486-byte
+  checkpoint、50 序列、28 CSV、108 非空评估文件和异步完成标记完整。
+- 原等待器漏用双卡验证目录的零填充 `epoch_03`，已按实际权威目录核验并纠正后续监控；训练本身
+  正常进入 e5。该点不作 e4 否决，继续 e8/e12 后再做成熟判定。
 
 ## 99 本机
 

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 04:13 CST
+更新时间：2026-08-04 04:25 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `51.791/58.526`，相对原始 decoder 同点 `+0.948/+0.493`、合计 `+1.441`；双正扩大，继续 e24。后继 `0803_15/16/19/23` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。后继 `0803_21 transport margins` 正在隔离准备；GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `32.203/37.822` 为早期负向读数，继续 e8/e12；PGID `1357909`。后继 `0803_21 transport margins` PREPARED；GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。后继 `0803_22 geometry + transported margins` 正在隔离准备，`0803_20 full tangent + shared margins` 为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -274,6 +274,17 @@
   `async_done=1` 完整。PGID `3062903` 的 9 个成员继续运行，04:12 已进入 e21；因 e8/e12/e16/e20
   四节点均相对强父线双正且 e20 优势回升，保留至 e24，不切换已准备候选，也不以中期未过最终
   `54.437/62.393` 门槛提前否决。
+
+## 2026-08-04 04:25 CST：0803_17 epoch 4 完整评估
+
+- terminal shared semantic margins e4 cls HOTA/DetA/AssA `32.203/26.308/42.066`，det
+  `37.822/32.233/45.135`；相对原始 decoder e4 `34.306/38.590` 为 `-2.103/-0.768`，相对
+  Encoder e4 `36.209/38.753` 为 `-4.006/-0.931`。语义平均未改善早期 cls，det 较 cls 更接近。
+- pair mAP/AP50 `0.140801/0.262022`、both-independent `0.183663/0.330727`；369,970,486-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 非空文件与 `async_done=1` 完整。
+- 初始 e4 监控按未补零的 `val_det/epoch_3` 等待，而实际双卡目录为 `epoch_03`；训练与评估均
+  正常，已由权威实际目录完成核验并终止错误等待器，后续监控使用补零路径。该节点只登记早期
+  负向信号，PGID `1357909` 已进入 e5，严格继续 e8/e12，不以 e4 直接否决。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

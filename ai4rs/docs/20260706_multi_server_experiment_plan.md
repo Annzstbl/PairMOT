@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 04:13 CST.
+Last updated: 2026-08-04 04:25 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -212,6 +212,18 @@ verified. Because all complete epoch-8/12/16/20 nodes remain dual-positive
 against the strong original decoder and the advantage expanded again at
 epoch 20, the 178 lane continues this trajectory through epoch 24. Prepared
 successors remain GPU-free and server 252 stays reserved for mature evidence.
+
+Experiment 0803_17 completed epoch 4 at cls/det HOTA `32.203/37.822`, with
+cls DetA/AssA `26.308/42.066` and det `32.233/45.135`. This is
+`-2.103/-0.768` versus the original decoder and `-4.006/-0.931` versus Encoder
+at the same epoch. Pair mAP/AP50 is `0.140801/0.262022` and both-independent
+is `0.183663/0.330727`; the 369,970,486-byte checkpoint, 5,416 detections, 50
+sequences, 28 CSV files, 108 non-empty evaluation files, and async completion
+are verified. The first monitor expected an unpadded `epoch_3` directory while
+the authoritative two-GPU output is `epoch_03`; this was a monitor-path issue,
+not a training failure, and later monitors use the actual padded path. The run
+continues through epoch 8 and 12 because epoch 4 is not a decoder rejection
+point.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
