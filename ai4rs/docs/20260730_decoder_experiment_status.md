@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:21 CST
+更新时间：2026-08-04 03:26 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。后继 `0803_21 transport margins` 正在隔离准备；GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。`0803_20 full tangent + semantic margins` 作为后备。 |
+| 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。后继 `0803_22 geometry + transported margins` 正在隔离准备，`0803_20 full tangent + shared margins` 为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -233,6 +233,18 @@
   unittest 加载同一测试文件后 3 项定向测试全部通过。正式/smoke 配置加载与深拷贝、远端两个
   launcher `bash -n`、父/新整模比较均通过：`22,771,111` 参数、增量 0、711 状态张量。
   状态为 `PREPARED/NO_GPU`；未创建 smoke/formal workdir，等待 0803_17 成熟资源决策。
+
+## 2026-08-04 03:26 CST：预留 0803_22 geometry + transported margins
+
+- 0803_18 用终层 log-size/周期角结合“完全平均”的 semantic margins；0803_22 保持同一几何
+  投影，只把语义侧替换为 0803_21 的 transported margins。这样可直接判断后期若出现分类或检测
+  回落，来源是终层语义过平滑还是几何共识本身，而不同时更换中心/尺寸机制。
+- 保留每帧 residual class mean、pair residual mean、中心、递归 reference 与 DN；零参数、类别
+  置换/帧交换等变，无 class-aware、reweight、新 attention/layer/loss。相对 0803_18 只增加少量
+  centered reduction 与点积，计算量近零变化。
+- 已预留全局 ID `0803_22`，新增 197 2xb4 formal/smoke 配置、零状态构建审计和安全启动器；
+  本地 Python 语法与 launcher `bash -n` 通过。当前 `PREPARED_LOCAL/NO_GPU`，未同步远端、
+  未建 workdir，不抢占运行中的 0803_18。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

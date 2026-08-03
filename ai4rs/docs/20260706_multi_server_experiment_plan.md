@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:21 CST.
+Last updated: 2026-08-04 03:26 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -170,6 +170,17 @@ that the existing py310 environment has no pytest; no package was installed,
 and the same test methods were run through the standard unittest loader. It is
 PREPARED with no smoke/formal workdir or GPU use until 0803_17 reaches a
 mature resource decision.
+
+Global experiment ID 0803_22 is reserved for terminal geometry plus
+transported semantic margins. It keeps the 0803_18 terminal log-size and
+pi-periodic angle projection but replaces complete centered-margin averaging
+with the 0803_21 transport projection. This is a strict semantic-mechanism
+counterpart to 0803_18, preserving center, per-frame residual class means,
+recurrent references, and DN while adding no parameters, class-aware routing,
+reweighting, attention, layer, or loss. The 197 formal/smoke configs,
+zero-state build audit, and safe launchers pass local Python and Bash syntax
+checks. It is PREPARED_LOCAL with no remote workdir or GPU use and will not
+preempt the active 0803_18 trajectory.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
