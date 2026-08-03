@@ -299,8 +299,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  symmetric_feature_decoder: bool = False,
                   residual_preserving_fusion_decoder: bool = False,
                   pair_shared_shape_refinement_decoder: bool = False,
-                  pair_shared_angle_refinement_decoder: bool = False,
-                  pair_shared_periodic_angle_refinement_decoder: bool = False,
+                   pair_shared_angle_refinement_decoder: bool = False,
+                   pair_shared_periodic_angle_refinement_decoder: bool = False,
+                   pair_shared_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_normalized_center_refinement_decoder:
                    bool = False,
                    frame_evidence_cls_decoder: bool = False,
@@ -354,6 +356,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_angle_refinement_decoder)
         self.pair_shared_periodic_angle_refinement_decoder = bool(
             pair_shared_periodic_angle_refinement_decoder)
+        self.pair_shared_log_size_periodic_angle_refinement_decoder = bool(
+            pair_shared_log_size_periodic_angle_refinement_decoder)
         self.pair_shared_normalized_center_refinement_decoder = bool(
             pair_shared_normalized_center_refinement_decoder)
         self.frame_evidence_cls_decoder = bool(
@@ -400,11 +404,12 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.pair_shared_shape_refinement_decoder,
                 self.pair_shared_angle_refinement_decoder,
                 self.pair_shared_periodic_angle_refinement_decoder,
+                self.pair_shared_log_size_periodic_angle_refinement_decoder,
                 self.pair_shared_normalized_center_refinement_decoder,
         )) > 1:
             raise ValueError(
-                'pair-shared shape, residual-angle, periodic-angle, and '
-                'normalized-center '
+                'pair-shared shape, residual-angle, periodic-angle, '
+                'log-size-periodic-angle, and normalized-center '
                 'refinement decoders are mutually exclusive')
         if (self.frame_evidence_cls_decoder
                 and self.frame_detail_cls_decoder):
@@ -1880,6 +1885,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self._pair_shared_periodic_angle_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
+            elif self.pair_shared_log_size_periodic_angle_refinement_decoder:
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = self._pair_shared_log_size_residual(
+                    tmp_prev, tmp_curr, reference_prev, reference_curr,
+                    num_dn)
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
             elif self.pair_shared_normalized_center_refinement_decoder:
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = (
@@ -2092,6 +2106,84 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             (normal_prev[..., :4], shared_residual_prev), dim=-1)
         normal_curr = torch.cat(
             (normal_curr[..., :4], shared_residual_curr), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_log_size_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share multiplicative width/height increments across the pair.
+
+        Width and height are positive physical quantities. Averaging raw
+        sigmoid logits does not represent an equal relative size correction
+        when the two frame references differ. Decode each proposed size,
+        average its log ratio to its own reference, then re-encode the common
+        multiplicative correction relative to each original reference.
+        Centers, angle, and the DN prefix remain unchanged.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared log-size refinement requires aligned residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-shared log-size refinement requires aligned references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-shared log-size refinement requires residual and '
+                'reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared log-size refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        reference_normal_prev = reference_prev[:, num_dn:]
+        reference_normal_curr = reference_curr[:, num_dn:]
+        reference_logit_prev = inverse_sigmoid(
+            reference_normal_prev, eps=1e-3)
+        reference_logit_curr = inverse_sigmoid(
+            reference_normal_curr, eps=1e-3)
+
+        proposed_size_prev = (
+            normal_prev[..., 2:4]
+            + reference_logit_prev[..., 2:4]).sigmoid()
+        proposed_size_curr = (
+            normal_curr[..., 2:4]
+            + reference_logit_curr[..., 2:4]).sigmoid()
+        reference_size_prev = reference_normal_prev[..., 2:4].clamp_min(1e-6)
+        reference_size_curr = reference_normal_curr[..., 2:4].clamp_min(1e-6)
+        log_delta_prev = torch.log(
+            proposed_size_prev.clamp_min(1e-6) / reference_size_prev)
+        log_delta_curr = torch.log(
+            proposed_size_curr.clamp_min(1e-6) / reference_size_curr)
+        shared_log_delta = 0.5 * (log_delta_prev + log_delta_curr)
+
+        target_size_prev = (
+            reference_size_prev * torch.exp(shared_log_delta)).clamp(
+                min=1e-6, max=1 - 1e-6)
+        target_size_curr = (
+            reference_size_curr * torch.exp(shared_log_delta)).clamp(
+                min=1e-6, max=1 - 1e-6)
+        shared_residual_prev = inverse_sigmoid(
+            target_size_prev, eps=1e-6) - reference_logit_prev[..., 2:4]
+        shared_residual_curr = inverse_sigmoid(
+            target_size_curr, eps=1e-6) - reference_logit_curr[..., 2:4]
+
+        normal_prev = torch.cat((
+            normal_prev[..., :2], shared_residual_prev,
+            normal_prev[..., 4:]), dim=-1)
+        normal_curr = torch.cat((
+            normal_curr[..., :2], shared_residual_curr,
+            normal_curr[..., 4:]), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (
