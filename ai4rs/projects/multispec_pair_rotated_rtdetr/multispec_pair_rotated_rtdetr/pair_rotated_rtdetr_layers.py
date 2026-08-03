@@ -301,10 +301,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                   pair_shared_shape_refinement_decoder: bool = False,
                   pair_shared_angle_refinement_decoder: bool = False,
                   pair_shared_periodic_angle_refinement_decoder: bool = False,
-                  pair_shared_normalized_center_refinement_decoder:
-                  bool = False,
-                  frame_evidence_cls_decoder: bool = False,
-                  shared_routing_decoder: bool = False,
+                   pair_shared_normalized_center_refinement_decoder:
+                   bool = False,
+                   frame_evidence_cls_decoder: bool = False,
+                   frame_detail_cls_decoder: bool = False,
+                   shared_routing_decoder: bool = False,
                  shared_attention_decoder: bool = False,
                  antisymmetric_detail_decoder: bool = False,
                  enveloped_detail_decoder: bool = False,
@@ -357,6 +358,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_normalized_center_refinement_decoder)
         self.frame_evidence_cls_decoder = bool(
             frame_evidence_cls_decoder)
+        self.frame_detail_cls_decoder = bool(frame_detail_cls_decoder)
         self.shared_routing_decoder = bool(shared_routing_decoder)
         self.shared_attention_decoder = bool(shared_attention_decoder)
         self.antisymmetric_detail_decoder = bool(
@@ -404,6 +406,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'pair-shared shape, residual-angle, periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
+        if (self.frame_evidence_cls_decoder
+                and self.frame_detail_cls_decoder):
+            raise ValueError(
+                'frame-evidence and frame-detail classification decoders '
+                'are mutually exclusive')
         if self.terminal_factorized_confidence not in {
                 'none', 'common', 'detail', 'both'}:
             raise ValueError(
@@ -1495,7 +1502,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     or self._common_evidence_bypass_enabled
                     or
                     self.terminal_classification_common_evidence_decoder
-                    or self.frame_evidence_cls_decoder)
+                    or self.frame_evidence_cls_decoder
+                    or self.frame_detail_cls_decoder)
                 layer_result = layer(
                     query=query,
                     value_prev=memory_prev,
@@ -1533,6 +1541,18 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     # adapter, extra attention, or an additional parameter.
                     layer_output_prev = frame_evidence_prev
                     layer_output_curr = frame_evidence_curr
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.frame_detail_cls_decoder:
+                    # Preserve the shared classification state as the exact
+                    # pair midpoint. Only the swap-odd component of the two
+                    # already-computed frame observations distinguishes the
+                    # classification inputs. Regression and recurrent state
+                    # remain exactly on the parent path.
+                    frame_detail = 0.5 * (
+                        frame_evidence_prev - frame_evidence_curr)
+                    layer_output_prev = layer_output + frame_detail
+                    layer_output_curr = layer_output - frame_detail
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
                 elif self.dual_output_adapter:
@@ -1900,6 +1920,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             else:
                 hidden_states.append(layer_output)
                 if (self.frame_evidence_cls_decoder
+                        or self.frame_detail_cls_decoder
                         or self.dual_output_adapter
                         or self.antisymmetric_detail_decoder
                         or self.enveloped_detail_decoder
@@ -1914,6 +1935,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
 
         if (self.tristate_decoder
                 or self.frame_evidence_cls_decoder
+                or self.frame_detail_cls_decoder
                 or self.dual_output_adapter
                 or self.antisymmetric_detail_decoder
                 or self.enveloped_detail_decoder

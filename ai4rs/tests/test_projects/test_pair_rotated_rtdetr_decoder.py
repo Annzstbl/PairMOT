@@ -93,6 +93,7 @@ def _build_decoder(num_layers: int = 2,
                    pair_shared_normalized_center_refinement_decoder:
                    bool = False,
                    frame_evidence_cls_decoder: bool = False,
+                   frame_detail_cls_decoder: bool = False,
                    shared_routing_decoder: bool = False,
                    shared_attention_decoder: bool = False,
                    antisymmetric_detail_decoder: bool = False,
@@ -163,6 +164,7 @@ def _build_decoder(num_layers: int = 2,
         pair_shared_normalized_center_refinement_decoder=(
             pair_shared_normalized_center_refinement_decoder),
         frame_evidence_cls_decoder=frame_evidence_cls_decoder,
+        frame_detail_cls_decoder=frame_detail_cls_decoder,
         shared_routing_decoder=shared_routing_decoder,
         shared_attention_decoder=shared_attention_decoder,
         antisymmetric_detail_decoder=antisymmetric_detail_decoder,
@@ -632,6 +634,62 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
         self.assertTrue(
             memory_curr.grad is None
             or memory_curr.grad.abs().sum().item() == 0.0)
+
+    def test_frame_detail_cls_preserves_shared_midpoint_and_references(self):
+        parent, parent_reg_prev, parent_reg_curr = _build_decoder(
+            num_layers=3, device=self.device)
+        detailed, detailed_reg_prev, detailed_reg_curr = _build_decoder(
+            num_layers=3,
+            frame_detail_cls_decoder=True,
+            device=self.device)
+        detailed.load_state_dict(parent.state_dict())
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in detailed.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in detailed.state_dict().items()})
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            2, num_value, parent.embed_dims, self.device)
+        parent_out = parent(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=parent_reg_prev,
+            reg_branches_curr=parent_reg_curr)
+        detailed_out = detailed(
+            memory_prev=memory_prev,
+            memory_curr=memory_curr,
+            spatial_shapes=spatial_shapes,
+            level_start_index=level_start_index,
+            reg_branches_prev=detailed_reg_prev,
+            reg_branches_curr=detailed_reg_curr)
+
+        hidden, refs_prev, refs_curr = parent_out
+        (detailed_hidden, detailed_refs_prev, detailed_refs_curr,
+         cls_prev, cls_curr) = detailed_out
+        for expected, actual in zip(hidden, detailed_hidden):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_prev, detailed_refs_prev):
+            self.assertTrue(torch.equal(expected, actual))
+        for expected, actual in zip(refs_curr, detailed_refs_curr):
+            self.assertTrue(torch.equal(expected, actual))
+        for shared, prev, curr in zip(
+                detailed_hidden, cls_prev, cls_curr):
+            torch.testing.assert_close(0.5 * (prev + curr), shared)
+            self.assertFalse(torch.equal(prev, curr))
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                frame_evidence_cls_decoder=True,
+                frame_detail_cls_decoder=True,
+                device=self.device)
 
     def test_frame_evidence_cls_is_orthogonal_to_periodic_angle(self):
         periodic, periodic_reg_prev, periodic_reg_curr = _build_decoder(
