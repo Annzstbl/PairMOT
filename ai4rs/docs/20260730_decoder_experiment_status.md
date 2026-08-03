@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 00:45 CST
+更新时间：2026-08-04 00:55 CST
 
 ## 当前研究原则
 
@@ -15,9 +15,9 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；按慢收敛约束继续 e12。PGID `123974`。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `45.002/49.083`，相对原始 decoder 同点 `+3.030/+0.905`；继续 e12。后继 `0803_15/16/17` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `30.813/36.985`，继续 e8/e12；PGID `1327092`，GPU0 外部任务不受影响。 |
-| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448`；按慢收敛约束继续 e12。PGID `53708`。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `45.002/49.083`，相对原始 decoder 同点 `+3.030/+0.905`；继续 e12。后继 `0803_15/16` PREPARED，不额外占卡。 |
+| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `30.813/36.985`，继续 e8/e12；之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
+| 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `40.377/45.730`，继续 e12；之后优先 `0803_18 terminal geometry + semantic margins`。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -90,6 +90,21 @@
   `async_done=1` 完整。
 - 该点只登记为 terminal-area 早期收敛更慢，不作直接否决；99 GPU1/2 保持 PGID
   `1327092` 到 e8/e12，GPU0 外部任务不受影响。
+
+## 2026-08-04 00:55 CST：语义后继迁移到 99/197 快速通道
+
+- `0803_17 terminal semantic margins` 新增 99 2xb4 formal/smoke 配置与安全启动器；隔离仓库
+  `/data/users/wangying01/lth/PairMOT_terminalmargin_0803_17_99` 固定提交 `ac02fc2`。
+  目标配置/四步配置整模比较通过：`22,771,111` 参数、增量 0、711 状态张量；两个启动器
+  Bash 语法通过。未创建 workdir、未占 GPU，排在 99 `0803_14` e12 成熟释放之后。
+- 新增 `0803_18 terminal geometry + semantic margins`：组合 `0803_13` 已在 e8 验证为正的
+  终层 log-size/周期角，与 `0803_17` 的终层 centered-margin 共识；中心、每帧 residual class
+  mean、递归 reference 与 DN 保持独立。仍是零参数、类别置换等变、无 class-aware/reweight、
+  新 attention 或层。
+- 197 隔离仓库 `/data/users/litianhao/PairMOT_terminalgeommargin_0803_18_197` 固定 `ac02fc2`；
+  目标/smoke 配置、组合相对原始 decoder 的零状态增量整模比较及两个启动器语法均通过：
+  `22,771,111` 参数、增量 0、711 状态张量。排在 `0803_11` e12 成熟释放之后，当前不占卡。
+- 252 继续只用固定 GPU0/1 跑成熟确认 `0803_12`，不部署上述新结构筛选。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

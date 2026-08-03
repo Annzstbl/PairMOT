@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 00:45 CST。
+更新时间：2026-08-04 00:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e4 `30.813/36.985`；PGID `1327092`，GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448`；PGID `53708` | 无 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e4 `30.813/36.985`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；PGID `123974` | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e8 `45.002/49.083`，相对原始 decoder `+3.030/+0.905`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e8 `45.002/49.083`，相对原始 decoder `+3.030/+0.905`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -92,6 +92,17 @@
   同点 `-5.396/-1.768`，相对 0803_13 同点 `-2.036/-0.334`。
 - pair mAP/AP50 `0.129617/0.246465`、both-independent `0.170361/0.313179`，50/28/108
   与 TrackEval 完整。只登记早期差距，99 GPU1/2 继续 e8/e12，不影响 GPU0 外部进程。
+
+## 2026-08-04 00:55 CST：99/197 语义后继已准备
+
+- 99 隔离仓库 `/data/users/wangying01/lth/PairMOT_terminalmargin_0803_17_99` 固定 `ac02fc2`；
+  `0803_17` 2xb4 配置、smoke、零增量整模比较与启动器语法通过，模型 22,771,111 参数、
+  711 状态张量。等待 `0803_14` e12 释放 GPU1/2，当前不占卡。
+- 197 隔离仓库 `/data/users/litianhao/PairMOT_terminalgeommargin_0803_18_197` 固定 `ac02fc2`；
+  组合 terminal log-size/周期角和 centered semantic margins，整模仍零参数/零状态增量。
+  formal/smoke 与启动器检查通过，等待 `0803_11` e12 释放当前两卡。
+- 上述准备不改变资源边界：99/197 各最多 2 卡且不固定序号，252 仍只固定 GPU0/1，178
+  仍只用 1 卡；未抢占外部进程。
 
 ## 99 本机
 

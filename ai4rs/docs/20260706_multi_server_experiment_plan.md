@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 00:45 CST.
+Last updated: 2026-08-04 00:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -52,6 +52,20 @@ Encoder and the terminal full-size 0803_13 at the same point. Its checkpoint,
 AP diagnostics, 50 sequences, 28 CSV files, and 108 evaluation files are
 complete. This is recorded as early evidence only; 99 GPU1/2 continues to
 epoch 8 and 12 without touching the external process on GPU0.
+
+To avoid blocking the semantic branch behind the strong long-running 178
+trajectory, 0803_17 now has a zero-state-delta 99 two-GPU port at isolated
+commit `ac02fc2`. It will use whichever two indices are free under the 99
+count cap after 0803_14 reaches the mature epoch-12 decision; no GPU index is
+fixed outside server 252.
+
+Experiment 0803_18 combines the positive terminal log-size/periodic-angle
+projection from 0803_13 with the terminal centered semantic-margin consensus.
+It remains parameter-free, class-permutation equivariant, and keeps center,
+per-frame objectness mean, recurrent references, and DN independent. Its 197
+two-GPU config and full model comparison passed at 22,771,111 parameters and
+711 state tensors. It is prepared after 0803_11 epoch 12 and currently uses no
+GPU. Server 252 remains reserved for the fixed GPU0/1 mature confirmation only.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |
