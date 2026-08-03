@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 03:00 CST。
+更新时间：2026-08-04 03:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING；0803_14 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `1357909`；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_20 full tangent + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E20；e16 `50.415/57.456`，相对原始 decoder `+0.379/+0.523`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
@@ -174,6 +174,22 @@
   同点为 `-0.676/-0.864`。pair mAP/AP50 `0.275158/0.486134`、both-independent
   `0.320648/0.537430`，checkpoint 与 50/28/108 评估产物完整。
 - 双正优势虽收窄但未反转，保持 PGID `3062903` 到 e20；不为排队候选提前释放 178 单卡。
+
+## 2026-08-04 03:05 CST：99 0803_14 e12 停止
+
+- e12 cls/det HOTA `46.987/52.992`，相对原始 decoder 同点 `-0.408/-1.444`，相对 Encoder
+  同点 `-2.693/-3.549`；pair mAP/AP50 `0.241566/0.426861`、both-independent
+  `0.286042/0.482380`，checkpoint 与 50/28/108 评估产物完整。
+- e4/e8/e12 均未形成双正后精确停止 PGID `1327092`，成员 `23→0`；GPU1/2 释放，GPU0
+  外部任务未受影响。
+
+## 2026-08-04 03:09 CST：99 0803_17 formal 运行
+
+- GPU1/2 连续两次空闲检查后，四步真数据 smoke 的 loss/grad、364,502,518-byte checkpoint、
+  642 个浮点张量、iterative-cls/DN 语义与错误扫描全部通过。
+- fresh formal 固定 clean HEAD `ac02fc2`，screen `1357907.pm_0803_17_formal_99`、PGID
+  `1357909`；iter50 `0.9994 s/iter`、loss `21.3978`、grad `110.7768`，7 个进程，GPU1/2
+  各约 19.2 GiB，五门槛通过。状态 `RUNNING`，收集 e4/e8/e12 及后期节点。
 
 ## 99 本机
 

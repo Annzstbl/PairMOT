@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 03:00 CST.
+Last updated: 2026-08-04 03:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -135,6 +135,23 @@ files, and async completion are verified. The gain is smaller than at epochs
 8 and 12 but remains dual-positive while absolute HOTA continues to rise, so
 the one-GPU 178 lane remains assigned through epoch 20 rather than being
 preempted by a prepared successor.
+
+Experiment 0803_14 completed epoch 12 at `46.987/52.992`, below the original
+decoder at the same checkpoint by `0.408/1.444` and below Encoder by
+`2.693/3.549`. Its complete epoch-4/8/12 trajectory, AP diagnostics,
+381,037,430-byte checkpoint, 50 sequences, 28 CSV files, 108 evaluation files,
+and async completion were verified before exact PGID `1327092` was terminated
+(`23 -> 0`). GPU1/2 returned to 10 MiB while the external GPU0 process was
+unchanged. This was a mature three-node stop, not an epoch-4/8 rejection.
+
+Experiment 0803_17 then passed two consecutive free checks and a real four-
+iteration two-GPU smoke on 99 GPU1/2. All four total losses and gradient norms,
+DN semantics, iterative-classification semantics, and 642 floating checkpoint
+tensors were finite. The clean isolated checkout at `ac02fc2` started fresh
+formal PGID `1357909`; epoch-1 iter50 was `0.9994 s/iter`, loss `21.3978`, and
+gradient norm `110.7768`, with seven processes, about 19.2 GiB per selected
+GPU, no fatal errors, and all five formal gates satisfied. It is RUNNING to
+e4/e8/e12 and later evidence without binding GPU indices as a general 99 rule.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

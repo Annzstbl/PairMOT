@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 03:00 CST
+更新时间：2026-08-04 03:10 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E20` | e16 `50.415/57.456`，相对原始 decoder 同点 `+0.379/+0.523`；双正仍保持，继续 e20。后继 `0803_15/16/19` PREPARED，不额外占卡。 |
-| 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.384/47.315`，相对原始 decoder `-0.588/-0.863`；继续 e12，之后优先 `0803_17 semantic margins`。GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_14 e12 成熟双负后停止；0803_17 smoke、iter50 与五门槛通过，PGID `1357909`。GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。`0803_20 full tangent + semantic margins` 作为后备。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -194,6 +194,28 @@
   386,615,796-byte checkpoint、50 序列、28 CSV、108 个非空文件与异步完成证据齐全。
 - 虽然对原始 decoder 的联合优势较 e8/e12 收窄，但 e16 仍为双正且绝对值继续上升；保持
   178 单卡 PGID `3062903` 到 e20，按成熟后期轨迹复核，不为后继候选提前终止。
+
+## 2026-08-04 03:05 CST：0803_14 epoch 12 成熟停止
+
+- e12 cls HOTA/DetA/AssA `46.987/38.382/59.800`，det `52.992/47.227/61.487`；相对原始
+  decoder 同点 `47.395/54.436` 为 `-0.408/-1.444`，相对 Encoder 同点为 `-2.693/-3.549`。
+- pair mAP/AP50 `0.241566/0.426861`、both-independent `0.286042/0.482380`；
+  381,037,430-byte checkpoint、50 序列、28 CSV、108 个非空文件与 `async_done=1` 完整。
+- e4/e8/e12 三个完整节点均未形成双正，精确 TERM PGID `1327092`，成员 `23→0`；GPU1/2
+  回到 `10 MiB/0%`，GPU0 外部任务保持原状。该成熟停止释放两卡给 0803_17。
+
+## 2026-08-04 03:09 CST：0803_17 smoke 通过并正式运行
+
+- 终层 semantic-margin 只平均两帧去 class mean 后的分类 margin，分别保留每帧 class mean；
+  DN、框回归、递归 reference 和前序 decoder 层不变。结构零参数、类别置换等变、无
+  class-aware/reweight、新 attention 或层。
+- GPU1/2 连续两次为 `10 MiB/0%` 后启动四步真数据 smoke；loss
+  `12.9371/19.4836/19.6450/21.2109`、grad `102.9283/109.1407/105.1020/100.4872`，
+  364,502,518-byte checkpoint、642 个浮点张量及 iterative-cls/DN 语义均有限，错误扫描为空。
+- 隔离仓库固定 clean HEAD `ac02fc2`。fresh formal screen `1357907.pm_0803_17_formal_99`、
+  PGID `1357909`；iter50 `0.9994 s/iter`、loss `21.3978`、grad `110.7768`，DN/encoder loss
+  全有限，7 个进程，GPU1/2 各约 19.2 GiB，五门槛通过。状态 `RUNNING`，已建立 e4 完整评估
+  监控并继续 e8/e12 及后期节点，不以 e4/e8 直接否决。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
