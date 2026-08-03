@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 08:31 CST。
+更新时间：2026-08-03 09:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_03` e8 完整结果为 `40.644/47.265`，相对自身 e4 大幅恢复但仍低于父线，继续 e12；`0803_05` e4 完整结果为 `31.737/37.202`，继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e4 全量评估完成，相对 `0801_09` 父线双 HOTA `+1.718/+5.198`；08:28 已进入 e8，继续完整保存、检测和 TrackEval | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED，均未排队 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e8 cls/det HOTA `45.587/52.915`，相对 Encoder 同点 `+0.318/+2.722`，09:02 已进入 e9 450/1038，继续 e12 与成熟节点 | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED；`0803_07` 已提升为下一优先候选 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1586,3 +1586,20 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   TrackEval `async_done=1`、28 个 CSV 与 108 个非空文件完整。
 - 训练已进入 e5，PGID `3549855` 保持运行。该结果只登记为 e4 归因，不作为停止理由；
   继续收集 e8/e12，避免把 decoder 慢收敛误判为结构失败。
+
+## 2026-08-03 09:03 CST：178 0803_04 periodic-angle e8 完整评估
+
+- e8 cls HOTA/DetA/AssA 为 `45.587/38.410/56.277`，det 为
+  `52.915/46.571/62.716`。相对 raw-angle `0803_03` e8，双 HOTA
+  `+4.943/+5.650`、双 DetA `+5.102/+3.428`、双 AssA `+3.409/+8.968`；
+  周期切空间优势从 e4 延续到 e8，不是单个早期点的偶然波动。
+- 相对 `0801_09` 父线 e8，双 HOTA 为 `+3.615/+4.737`；相对 Encoder e8，双 HOTA
+  为 `+0.318/+2.722`，合并提升 `+3.040`。这是当前 decoder 首次在同一 checkpoint、同一
+  训练点双侧超过 Encoder；但严格目标仍以最终 `54.437/62.393` 为准，所以只记为强正向机制证据，
+  不宣告达标，继续 e12 与成熟训练。
+- pair mAP/AP50 为 `0.2423/0.4242`，both-independent 为 `0.2917/0.4922`；
+  `epoch_8.pth` 为 375,562,996 bytes，5416 条记录、50 序列、TrackEval `async_done=1`、
+  28 CSV 与 108 个非空文件完整。PGID `2893156` 的 9 个成员存活，09:02 已到 e9 450/1038。
+- `0803_07 frame-evidence + periodic-angle` 因而提升为下一优先候选。已新增 252 双卡协议的配置、
+  4-iter smoke 和安全 launcher，当前只完成本地语法检查；GPU2/3 仍由 `0803_03` 占用，未 smoke、
+  未建 formal workdir、未排队，也未热更新活动仓库。

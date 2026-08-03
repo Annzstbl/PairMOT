@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 08:31 CST
+更新时间：2026-08-03 09:03 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_05 ... iterativecls pair-shared-normalized-center ... fresh` | `RUNNING` | e4 cls/det HOTA `31.737/37.202`，完整 TrackEval 已收齐；继续 e8/e12，PGID `3549855`。 |
 | 252 GPU 2,3 | `0803_03 ... iterativecls pair-shared-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `40.644/47.265`，相对自身 e4 恢复 `+9.568/+10.225` 但仍低于父线；继续 e12，PGID `3460950`。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e4 相对父线双 HOTA `+1.718/+5.198`；08:28 已进入 e8，等待完整保存、检测和 TrackEval。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e8 cls/det HOTA `45.587/52.915`，相对 Encoder 同点 `+0.318/+2.722`；继续 e12 与成熟节点。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2141,3 +2141,18 @@
 - pair mAP/AP50 `0.1266/0.2417`、both-independent `0.1684/0.3118`；checkpoint、
   5416 条检测、50 序列、TrackEval `async_done=1`、28 CSV 与 108 个非空文件完整。
   该节点仅用于早期归因，训练继续 e8/e12，不据 e4 否决局部中心坐标共识。
+
+## 2026-08-03 09:03 CST：0803_04 periodic-angle epoch-8 强正向
+
+- e8 cls HOTA/DetA/AssA 为 `45.587/38.410/56.277`，det 为
+  `52.915/46.571/62.716`。相对自身 e4，双 HOTA 恢复 `+9.563/+9.127`；相对
+  raw-angle e8，双 HOTA `+4.943/+5.650`、双 DetA `+5.102/+3.428`、双 AssA
+  `+3.409/+8.968`，周期坐标优势已跨 e4/e8 两个完整节点成立。
+- 相对父线 e8 双 HOTA 为 `+3.615/+4.737`；相对 Encoder e8 为
+  `+0.318/+2.722`，合并同点增益 `+3.040`。这证明机制强正向，但严格最终阈值仍是
+  `54.437/62.393`，所以训练继续 e12 和成熟节点，当前不写成目标达成。
+- pair mAP/AP50 `0.2423/0.4242`、both-independent `0.2917/0.4922`；checkpoint、
+  5416 条检测、50 序列、TrackEval `async_done=1`、28 CSV 与 108 个非空文件完整。
+- `0803_07 frame-evidence + periodic-angle` 提升为下一优先候选。252 双卡配置、4-iter smoke
+  配置及两份安全 launcher 已新增并通过本地语法检查；当前没有 smoke/formal workdir、队列或
+  GPU 占用，待 `0803_03` e12 释放 GPU2/3 后在独立 checkout 完成全套目标环境验证。

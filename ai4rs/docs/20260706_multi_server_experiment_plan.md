@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 08:31 CST.
+Last updated: 2026-08-03 09:03 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1883,3 +1883,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 两个节点的 checkpoint、5416 条检测记录、50 序列、异步 TrackEval、28 CSV 与 108 个
   非空评估文件均完整。252 的两条任务继续运行；178 的 `0803_04` 已进入 e8，下一决策优先读取
   其周期角度收益是否延续，再决定先部署 `0803_07` 联合候选还是 `0803_06` 分类归因候选。
+
+## 2026-08-03 09:03 CST：periodic-angle e8 强正向与下一调度
+
+- `0803_04` e8 cls/det HOTA 为 `45.587/52.915`，相对 raw-angle e8 提高
+  `4.943/5.650`，相对父线 e8 提高 `3.615/4.737`，相对 Encoder e8 提高
+  `0.318/2.722`。合并同点增益为 `+3.040`，证明 π 周期坐标设计是当前最强 decoder 机制。
+- 该结果仍低于严格最终阈值 `54.437/62.393`，因此 `0803_04` 继续 e12 和更成熟节点；
+  不把 e8 同点双超等同于目标完成，也不停止训练。
+- 下一优先候选固定为正交组合 `0803_07`，用帧证据分类路径补充周期角度的 cls 缺口。
+  已准备 252 的 2×b4 配置、真数据 4-iter smoke 与 formal launcher；当前仅完成本地静态检查。
+  等 `0803_03` e12 完整收口并释放 GPU2/3 后，在独立 checkout 依次执行完整构建、132 项回归、
+  真数据 smoke、checkpoint 语义审计和 formal iter-50 五门槛，不热更新活动仓库。
