@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 23:52 CST
+更新时间：2026-08-04 00:27 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_12 ... progressive-log-shape + periodic-angle ... resume` | `RUNNING/TO_E12` | 误用 GPU2/3 的 PGID `4189798` 已在 e7 精确停止；从正式 `epoch_4.pth` 在授权 GPU0/1 恢复，PGID `123974`，epoch5 iter50 五门槛复核通过。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `32.849/37.319`；后继 `0803_15 terminal-angle`、`0803_16 terminal-center`、`0803_17 terminal semantic margins` 依次 PREPARED，不额外占卡。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `45.002/49.083`，相对原始 decoder 同点 `+3.030/+0.905`；继续 e12。后继 `0803_15/16/17` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_14 ... terminal-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | 99 smoke 与 formal iter50 五门槛通过；PGID `1327092`，等待 e4/e8/e12，GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING/TO_E12` | e4 `31.540/38.185`，相对 Encoder `-4.669/-0.568`；继续 e8/e12，PGID `53708`。 |
 
@@ -54,6 +54,18 @@
 - 23:50 实测四条 formal 数值均有限：99 `0803_14` 到 e2 iter850，252 `0803_12` 恢复线到
   e7 iter250，178 `0803_13` 到 e7 iter950，197 `0803_11` 到 e8 iter100；继续等待完整
   checkpoint、检测和 TrackEval 后再做资源切换。
+
+## 2026-08-04 00:27 CST：0803_13 epoch 8 完整评估
+
+- e8 cls HOTA/DetA/AssA `45.002/39.137/53.997`，det `49.083/46.725/53.354`；相对原始
+  `0801_09` decoder 同点 HOTA `41.972/48.178` 提高 `+3.030/+0.905`，合计 `+3.935`。
+  相对 Encoder 同点 `45.269/50.193` 仍低 `0.267/1.110`，尚未达到最终门槛。
+- pair mAP/AP50 `0.233479/0.424803`、both-independent `0.285866/0.494486`；相对原始
+  decoder 同点四项提高约 `+0.023959/+0.037624/+0.035905/+0.056677`，HOTA、DetA/AssA
+  与 AP 不存在仅靠指标搬运的迹象。
+- 375,568,500-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。terminal-only 尺度/周期角在 e8 对强父线形成双正交增益，保持 PGID
+  `3062903` 继续 e12，并观察该优势是否避免全层 `0803_09` 在 e16 后的衰减；不释放 178。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 

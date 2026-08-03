@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 23:52 CST.
+Last updated: 2026-08-04 00:27 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -32,6 +32,13 @@ equivariant, keeps DN and all box paths independent, and adds no reweighting,
 attention, or layer. The isolated `e245127` checkout passed three targeted
 tests and a full model comparison at 22,771,111 parameters, zero delta, and 711
 state tensors. It remains PREPARED after 0803_15/16 and consumes no GPU.
+
+Experiment 0803_13 reached a complete epoch-8 checkpoint at cls/det HOTA
+`45.002/49.083`, a `+3.030/+0.905` gain over the original 0801_09 decoder at
+the same epoch. All four AP diagnostics also improved, and the checkpoint,
+50 sequences, 28 CSV files, 108 non-empty evaluation files, and async TrackEval
+completion were verified. The 178 lane therefore remains on 0803_13 through
+epoch 12 and later confirmation; prepared successors do not preempt it.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

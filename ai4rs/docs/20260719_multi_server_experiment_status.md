@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 23:52 CST。
+更新时间：2026-08-04 00:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；PGID `1327092`，smoke 与 formal iter50 五门槛通过；GPU0 外部占用且不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e4 `31.540/38.185`；PGID `53708`，GPU0/1 外部占用、GPU2/3 空闲 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；从 `epoch_4.pth` 恢复，PGID `123974`，epoch5 iter50 五门槛通过；GPU2/3 空闲 | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e4 `32.849/37.319`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e8 `45.002/49.083`，相对原始 decoder `+3.030/+0.905`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -67,6 +67,14 @@
   711 状态张量。状态 `PREPARED`，排在 `0803_15/16` 后且未占 GPU。
 - 23:50 四机仍各只运行既有合法分配；252 固定 GPU0/1，其余三机只遵守 2/1/2 卡总量，
   未抢占任何外部进程。
+
+## 2026-08-04 00:27 CST：178 0803_13 epoch 8
+
+- cls HOTA/DetA/AssA `45.002/39.137/53.997`，det `49.083/46.725/53.354`；相对原始
+  `0801_09` 同点 HOTA 双升 `+3.030/+0.905`，相对 Encoder 同点仍低 `0.267/1.110`。
+- pair mAP/AP50 `0.233479/0.424803`、both-independent `0.285866/0.494486`；checkpoint、
+  50 序列、28 CSV、108 非空文件与 TrackEval `async_done=1` 完整。
+- 该双正交增益足以保留到 e12 和更晚节点；178 不释放，`0803_15/16/17` 继续 PREPARED。
 
 ## 99 本机
 
