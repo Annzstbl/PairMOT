@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 04:25 CST。
+更新时间：2026-08-04 04:53 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_17 terminal semantic margins`（GPU1/2） | RUNNING/TO_E8+；e4 `32.203/37.822` 仅作早期读数，PGID `1357909`；GPU0 外部占用且不抢占 | `0803_21 terminal transported margins` PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING；0803_11 e12 成熟停止后，smoke/iter50 五门槛通过，PGID `387859` | `0803_22 geometry + transported margins` PREPARED；`0803_20 full tangent + shared margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无 | IDLE；`0803_12` e12 `45.677/52.131` 成熟双负后已停止，固定 GPU0/1 均释放 | 只接受后续成熟候选确认 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | 无 | IDLE；固定 GPU0/1 释放，0803_13 2x4 端口及真实 smoke 已通过 | `0803_13` 若 e24 继续双正，则从 epoch24 迁入成熟长轨迹 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E24；e20 `51.791/58.526`，相对原始 decoder `+0.948/+0.493`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center`、`0803_19 terminal full tangent`、`0803_23 transported tangent` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -240,6 +240,17 @@
   checkpoint、50 序列、28 CSV、108 非空评估文件和异步完成标记完整。
 - 原等待器漏用双卡验证目录的零填充 `epoch_03`，已按实际权威目录核验并纠正后续监控；训练本身
   正常进入 e5。该点不作 e4 否决，继续 e8/e12 后再做成熟判定。
+
+## 2026-08-04 04:53 CST：252 0803_13 成熟迁移端口通过
+
+- 端口只把 178 1x8 的物理放置改成 252 固定 GPU0/1 的 2x4；有效 model、optimizer、scheduler、
+  train loop、hooks 严格相等，全局 batch 仍为 8。首次检查发现额外显式 False 开关后先修正，
+  未在不一致状态占用 GPU。
+- 隔离 checkout clean `bec1a1c`，整模 22,771,111 参数、零增量、711 tensors，launcher 语法
+  通过。GPU0/1 两次空闲后真数据 DDP smoke 四步 loss/grad 全有限，364,501,750-byte checkpoint
+  的 642 个浮点张量和 iterative-cls/DN 语义检查通过，退出后两卡均 `1 MiB/0%`。
+- 状态 `PREPARED/NO_FORMAL_GPU`。只有 178 e24 完整评估继续双正，才精确停止原 PGID 后从
+  epoch24 在 252 单点恢复；禁止两个训练进程并发写共享 workdir。
 
 ## 99 本机
 

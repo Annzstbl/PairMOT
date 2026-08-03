@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 04:25 CST.
+Last updated: 2026-08-04 04:53 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -224,6 +224,21 @@ the authoritative two-GPU output is `epoch_03`; this was a monitor-path issue,
 not a training failure, and later monitors use the actual padded path. The run
 continues through epoch 8 and 12 because epoch 4 is not a decoder rejection
 point.
+
+A strict 252 continuation port is now prepared for the mature 0803_13 branch.
+It changes only physical placement from 178 1x8 to fixed 252 GPU0/1 at 2x4;
+the effective model, optimizer, schedulers, train loop, hooks, and global batch
+8 are equal. An initial protocol check caught disabled switches represented as
+extra explicit `False` keys in the 252 parent; these were removed before any
+GPU launch, after which the model dicts matched exactly. The clean isolated
+checkout at `bec1a1c` builds at 22,771,111 parameters, zero state delta, and
+711 tensors. A real four-iteration DDP smoke on fixed GPU0/1 produced finite
+losses `12.9372/19.5473/19.6326/21.1872`, gradients
+`106.2705/100.9766/89.2521/88.4672`, finite DN and encoder terms, and a
+364,501,750-byte checkpoint with all 642 floating tensors finite. Both GPUs
+returned to 1 MiB after smoke. Formal migration remains conditional on a
+dual-positive complete epoch-24 result: stop the 178 PGID first, then resume
+the single shared workdir from `epoch_24.pth` on 252, never concurrently.
 
 | Server | Role | SSH from 99 | Code root | Shared root | Work dir | Conda |
 | --- | --- | --- | --- | --- | --- | --- |

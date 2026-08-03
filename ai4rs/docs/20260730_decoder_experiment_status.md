@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 04:25 CST
+更新时间：2026-08-04 04:53 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | 无 | `IDLE` | `0803_12` e12 `45.677/52.131` 成熟双负后已停止；固定 GPU0/1 释放，只等待快速通道成熟候选确认。 |
+| 252 GPU 0,1 | 无 | `IDLE/PREPARED_0803_13_MIGRATION` | 固定 GPU0/1 释放；0803_13 的严格同模型 2x4 端口与真实 smoke 已通过，仅当 178 e24 继续双正才从该断点承接成熟长轨迹。 |
 | 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING/TO_E24` | e20 `51.791/58.526`，相对原始 decoder 同点 `+0.948/+0.493`、合计 `+1.441`；双正扩大，继续 e24。后继 `0803_15/16/19/23` PREPARED，不额外占卡。 |
 | 99 GPU 1,2 | `0803_17 ... terminal semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `32.203/37.822` 为早期负向读数，继续 e8/e12；PGID `1357909`。后继 `0803_21 transport margins` PREPARED；GPU0 外部任务不受影响。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_11 e12 成熟双负后停止；0803_18 smoke、iter50 与五门槛通过，PGID `387859`。后继 `0803_22 geometry + transported margins` 正在隔离准备，`0803_20 full tangent + shared margins` 为后备。 |
@@ -285,6 +285,23 @@
 - 初始 e4 监控按未补零的 `val_det/epoch_3` 等待，而实际双卡目录为 `epoch_03`；训练与评估均
   正常，已由权威实际目录完成核验并终止错误等待器，后续监控使用补零路径。该节点只登记早期
   负向信号，PGID `1357909` 已进入 e5，严格继续 e8/e12，不以 e4 直接否决。
+
+## 2026-08-04 04:53 CST：0803_13 成熟轨迹的 252 迁移通道通过
+
+- 为提高并行吞吐，预案是在 178 e24 仍相对原 decoder 双正时，将成熟 0803_13 从该断点迁到
+  最慢但空闲的 252 固定 GPU0/1 继续晚期确认，并把更快的 178 单卡释放给 transported-tangent
+  新结构。当前只完成端口与 smoke，不提前停止 178 或启动 252 formal。
+- 252 2x4 配置与权威 178 1x8 配置的有效 `model`、optimizer、scheduler、train loop、hooks
+  逐项严格相等；每 rank batch 4 × world 2 保持 global batch 8。首次比较发现 252 父配置多携带
+  若干显式 `False` 开关，已在 GPU 启动前清理并重新证明 model dict 完全一致。
+- 隔离仓库 `/data/users/litianhao01/PairMmot_terminal_0803_13_resume252` 固定 clean `bec1a1c`；
+  整模比较为 22,771,111 参数、零增量、711 状态张量，两个 launcher 语法通过。固定 GPU0/1
+  连续两次为 `1 MiB/0%` 后执行真数据 DDP smoke，loss
+  `12.9372/19.5473/19.6326/21.1872`、grad
+  `106.2705/100.9766/89.2521/88.4672`，DN/encoder 项和 642 个浮点 checkpoint 张量均有限；
+  364,501,750-byte `iter_4.pth` 完整，错误扫描为空，退出后 GPU0/1 回到 `1 MiB/0%`。
+- 状态 `PREPARED/NO_FORMAL_GPU`；只有 e24 完整 checkpoint、检测、TrackEval 继续支持双正后，
+  才会先精确停止 178 PGID，再从 `epoch_24.pth` 单点恢复，禁止两机同时写同一 workdir。
 
 ## 2026-08-03 23:12 CST：0803_13 epoch 4 与四机资源核验
 
