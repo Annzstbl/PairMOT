@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 15:25 CST.
+Last updated: 2026-08-03 15:57 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2063,3 +2063,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   periodic-angle 同点均提高。checkpoint、114290 条检测、50 序列、28 CSV 与 108 个非空文件完整。
 - 这是首个在同点相对 periodic-angle 双 HOTA 与四项 AP 全正的尺寸机制；继续 e8/e12 检验增益
   是否成熟保持。严格目标仍使用 Encoder 最终 `54.437/62.393`，不以 e4 宣告达成。
+
+## 2026-08-03 15:57 CST：frame-evidence 单因素 e12 延迟收敛
+
+- `0803_06` e12 cls/det HOTA `45.752/52.950`，e8→e12 为 `+4.830/+6.096`；相对
+  periodic-angle 的缺口收窄到 `2.161/2.307`，相对 Encoder e12 为 `-3.928/-3.591`。
+- 四项 AP 提高到 `0.2238/0.4040/0.2689/0.4633`，相对 e8 均明显增长；checkpoint、
+  147478 条检测、50 序列、28 CSV 与 108 个非空文件完整。
+- 单因素明显优于 `0803_07` 联合分支同点，说明 direct frame evidence 与 periodic-angle 的组合
+  存在负交互，但单因素自身仍在延迟追赶。保留 GPU0/1 到 e16，不以 e12 直接否决；e16 再判断
+  追赶速度是否持续。

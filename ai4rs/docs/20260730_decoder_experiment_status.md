@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 15:25 CST
+更新时间：2026-08-03 15:57 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e8 cls/det HOTA `40.922/46.854`；成熟负向仍在，继续 e12，PGID `3765372`。 |
+| 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | e12 cls/det HOTA `45.752/52.950`，延迟追赶明显，继续 e16；PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_08 ... common-preserving-frame-detail + periodic-angle ... fresh` | `RUNNING` | 135 项测试、零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `3940521`。 |
 | 178 GPU 0 | `0803_09 ... log-size-tangent + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle `+0.906/+0.698`，继续 e8/e12；PGID `2971994`。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
@@ -2380,3 +2380,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   检测、50 序列、28 CSV 与 108 个非空文件完整。
 - 该零参数尺寸几何机制在 HOTA、DetA 和 AP 上一致正向，继续 e8/e12；严格最终阈值尚未达到，
   PGID `2971994` 的 9 个成员已进入 e5。
+
+## 2026-08-03 15:57 CST：0803_06 frame-evidence-cls epoch-12
+
+- e12 cls HOTA/DetA/AssA `45.752/36.629/59.854`，det
+  `52.950/46.363/62.645`；e8→e12 双 HOTA `+4.830/+6.096`，相对 periodic-angle 同点
+  为 `-2.161/-2.307`，相对 Encoder e12 为 `-3.928/-3.591`。
+- pair mAP/AP50 `0.2238/0.4040`，both-independent `0.2689/0.4633`；相对 e8 分别提高
+  `0.0332/0.0489` 和 `0.0355/0.0485`。381,033,910-byte checkpoint、147478 条检测、
+  50 序列、28 CSV 与 108 个非空文件完整。
+- 单因素比 `0803_07` 联合分支 e12 高 `2.248/1.782` HOTA，表明组合存在负交互；单因素自身
+  缺口继续快速收窄。PGID `3765372` 已进入 e13，继续 e16，不以 e12 直接否决。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 15:25 CST。
+更新时间：2026-08-03 15:57 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e8 为 `40.922/46.854`，`0803_08` formal iter50 五门槛通过；PGID `3765372/3940521` | `0803_07` e12 成熟负向后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_08 common-preserving frame-detail + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` e12 为 `45.752/52.950` 且延迟追赶，继续 e16；`0803_08` formal iter50 五门槛通过；PGID `3765372/3940521` | `0803_07` e12 成熟负向后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_09 log-size tangent + periodic-angle` | RUNNING；e4 cls/det HOTA `36.930/44.486`，相对 periodic-angle 同点 `+0.906/+0.698`，继续 e8/e12；PGID `2971994` | `0803_04` e24 后停止且断点保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1813,3 +1813,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   114290 条检测、50 序列、28 CSV 与 108 个非空文件完整。
 - log-size tangent 在 HOTA、DetA 与四项 AP 上形成一致正向几何证据，但严格最终阈值仍差
   `17.507/17.907`。PGID `2971994` 的 9 个成员已进入 e5，继续 e8/e12，不以 e4 宣告达标。
+
+## 2026-08-03 15:57 CST：252 0803_06 e12 延迟追赶
+
+- e12 cls HOTA/DetA/AssA `45.752/36.629/59.854`，det
+  `52.950/46.363/62.645`；e8→e12 双 HOTA `+4.830/+6.096`。相对 periodic-angle 同点
+  缺口从 e8 的 `4.665/6.061` 缩到 `2.161/2.307`，相对 Encoder e12仍低 `3.928/3.591`。
+- pair mAP/AP50 `0.2238/0.4040`，both-independent `0.2689/0.4633`；相对 e8 四项增长
+  `0.0332/0.0489` 和 `0.0355/0.0485`。381,033,910-byte checkpoint、147478 条检测、
+  50 序列、28 CSV 与 108 个非空文件完整。
+- 单因素比联合分支 e12 双 HOTA 高 `2.248/1.782`，四项 AP 高
+  `0.0204/0.0357/0.0259/0.0420`。PGID `3765372` 已进入 e13；由于成熟缺口显著收窄，
+  继续 e16，不把 e12 当作直接否决点。
