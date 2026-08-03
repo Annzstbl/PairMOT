@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 09:03 CST。
+更新时间：2026-08-03 09:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_03` e8 完整结果为 `40.644/47.265`，相对自身 e4 大幅恢复但仍低于父线，继续 e12；`0803_05` e4 完整结果为 `31.737/37.202`，继续 e8/e12 | 无 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0803_05 normalized-center`（GPU0/1）；`0803_03 angle-only`（GPU2/3） | 两项 RUNNING；`0803_03` e8 完整结果为 `40.644/47.265`，继续 e12；`0803_05` e4 完整结果为 `31.737/37.202`，继续 e8/e12 | `0803_07 frame-evidence + periodic-angle` 双卡版 PREPARED，未排队 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e8 cls/det HOTA `45.587/52.915`，相对 Encoder 同点 `+0.318/+2.722`，09:02 已进入 e9 450/1038，继续 e12 与成熟节点 | `0803_06 frame-evidence cls` 与 `0803_07 frame-evidence + periodic-angle` 为 PREPARED；`0803_07` 已提升为下一优先候选 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -1603,3 +1603,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - `0803_07 frame-evidence + periodic-angle` 因而提升为下一优先候选。已新增 252 双卡协议的配置、
   4-iter smoke 和安全 launcher，当前只完成本地语法检查；GPU2/3 仍由 `0803_03` 占用，未 smoke、
   未建 formal workdir、未排队，也未热更新活动仓库。
+
+## 2026-08-03 09:10 CST：252 0803_07 双卡候选完成目标环境静态验证
+
+- 在新建隔离 checkout `/data/users/litianhao01/PairMmot_framecls_periodic_0803_07` 导入提交
+  `f3752db`；活动 `0803_03` 仓库仍为 `0989cfd`，没有 fetch、checkout 或工作区写入。
+- 安全激活目标 py310 并把隔离 repo 放到 `PYTHONPATH` 首位后，配置深拷贝与父/新完整模型构建
+  通过：两者均为 `22,771,111` 参数、`711` 个 state tensor，参数与 state 增量严格为零；
+  252 formal/smoke 配置分别保持 2×b4 和 4-iter 语义。
+- 完整 decoder 回归 `132 passed`，另有 2 个 subtests 通过；formal/smoke launcher 的 `bash -n`
+  均通过。当前状态仍为 `PREPARED`：没有真数据 smoke、formal workdir、等待进程或 GPU 占用；
+  待 `0803_03` e12 完整收口并释放 GPU2/3 后再执行 smoke 与 formal 五门槛。

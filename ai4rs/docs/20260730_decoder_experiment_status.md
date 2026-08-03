@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 09:03 CST
+更新时间：2026-08-03 09:10 CST
 
 ## 当前研究原则
 
@@ -2156,3 +2156,14 @@
 - `0803_07 frame-evidence + periodic-angle` 提升为下一优先候选。252 双卡配置、4-iter smoke
   配置及两份安全 launcher 已新增并通过本地语法检查；当前没有 smoke/formal workdir、队列或
   GPU 占用，待 `0803_03` e12 释放 GPU2/3 后在独立 checkout 完成全套目标环境验证。
+
+## 2026-08-03 09:10 CST：0803_07 252 双卡目标环境验证
+
+- 新隔离 checkout `/data/users/litianhao01/PairMmot_framecls_periodic_0803_07` 固定在 `f3752db`；
+  活动 angle-only 仓库保持 `0989cfd`，未热更新。
+- 显式使用 252 formal/smoke 配置的完整构建检查通过：`22,771,111` 参数、参数增量 0、
+  711 个 state tensor、4 个 smoke iter。完整 decoder 回归为 `132 passed`，另有 2 个
+  subtests 通过；两份 launcher 语法通过。
+- 状态为 `PREPARED`。没有真数据 smoke、formal workdir、队列或 GPU 占用；等待
+  `0803_03` e12 后释放 GPU2/3，再按真实 DDP smoke → checkpoint 语义审计 → formal iter-50
+  五门槛顺序启动。

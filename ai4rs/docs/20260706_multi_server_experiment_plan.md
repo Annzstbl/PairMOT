@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 09:03 CST.
+Last updated: 2026-08-03 09:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1895,3 +1895,10 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   已准备 252 的 2×b4 配置、真数据 4-iter smoke 与 formal launcher；当前仅完成本地静态检查。
   等 `0803_03` e12 完整收口并释放 GPU2/3 后，在独立 checkout 依次执行完整构建、132 项回归、
   真数据 smoke、checkpoint 语义审计和 formal iter-50 五门槛，不热更新活动仓库。
+
+## 2026-08-03 09:10 CST：0803_07 252 部署前验证完成
+
+- 隔离 checkout 固定在 `f3752db`；父/新完整模型均为 `22,771,111` 参数和 711 个 state tensor，
+  增量为零。132 项 decoder 回归、2 个 subtests、配置深拷贝和两份 launcher 语法全部通过。
+- 保持 `PREPARED` 而非 `QUEUED/RUNNING`。GPU2/3 仍由 `0803_03` 占用；不抢占、不热更新，
+  资源释放后才执行真数据 DDP smoke、checkpoint 语义检查与 formal iter-50 五门槛。
