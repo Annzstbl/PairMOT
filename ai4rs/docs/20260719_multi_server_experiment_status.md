@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-03 12:02 CST。
+更新时间：2026-08-03 12:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 99 本机 | 无 PairMOT 任务 | REACHABLE；GPU0/1 被外部进程持续占用，GPU2 不纳入本轮授权资源，不抢占 | 无 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无 | IDLE/SLOW；GPU4/5 的 portability smoke 约 `80 s/iter`，暂不部署正式长跑 | 无 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_06 frame-evidence cls`（GPU0/1）；`0803_07 frame-evidence + periodic-angle`（GPU2/3） | 两项 RUNNING；`0803_06` PGID `3765372`；`0803_07` e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，PGID `3694870` | common-preserving frame-detail 候选仅静态准备；`0803_05` 已在 e12 成熟负向后停止 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e16 cls/det HOTA `48.474/55.272`，e12→e16 `+0.561/+0.015`，继续 e20 | `0803_08 common-preserving frame-detail + periodic-angle`、`0803_09 log-size tangent + periodic-angle` 为 PREPARED；无等待进程 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_04 periodic tangent-angle consensus` | RUNNING；e20 cls/det HOTA `49.446/55.397`，e16→e20 `+0.972/+0.125`，继续 e24 | `0803_08 common-preserving frame-detail + periodic-angle`、`0803_09 log-size tangent + periodic-angle` 为 PREPARED；无等待进程 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 99 本机
@@ -1709,3 +1709,12 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 隔离 checkout 固定提交 `35e18f1`；135 项完整测试通过，父/新模型均为 `22,771,111` 参数、
   711 state tensors，增量为零；配置深拷贝和 launcher 语法通过。状态为 `PREPARED`，没有真数据
   smoke、formal workdir、队列或 GPU 占用。
+
+## 2026-08-03 12:46 CST：178 0803_04 e20 完整评估
+
+- e20 cls HOTA/DetA/AssA `49.446/41.202/61.747`，det
+  `55.397/49.953/63.587`；e16→e20 双 HOTA `+0.972/+0.125`。cls 的 DetA/AssA 同时提高，
+  det 的 DetA 提高而 AssA 小幅下降，表现为分类继续延迟收敛、检测接近平台但未全面退化。
+- pair mAP/AP50 `0.2706/0.4658`，both-independent `0.3132/0.5154`，四项相对 e16
+  均继续提高。checkpoint 392,152,244 bytes，50/28/108 产物完整。
+- PGID `2893156` 已进入 e21，继续 e24；严格最终阈值尚差 `4.991/6.996`，状态仍为 `RUNNING`。

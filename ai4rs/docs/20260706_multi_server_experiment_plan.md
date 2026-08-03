@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-03 12:02 CST.
+Last updated: 2026-08-03 12:46 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -1972,3 +1972,11 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   `PREPARED`，不排队、不占 GPU。资源释放时优先级由 `0803_04` e20 平台证据和 `0803_06/07`
   e4/e8 归因共同决定：若分类直路持续负向而 periodic-angle det 已平台，优先比较 0803_08 的
   common-preserving 分类与 0803_09 的尺寸几何增益，不进行 scale 或 reweight 扫描。
+
+## 2026-08-03 12:46 CST：periodic-angle e20 延迟收敛证据
+
+- `0803_04` e20 cls/det HOTA 为 `49.446/55.397`，相对 e16 再升 `0.972/0.125`；
+  pair mAP/AP50 与 both-independent 也同步提高到 `0.2706/0.4658` 和 `0.3132/0.5154`。
+- cls 的覆盖与关联均继续增长，说明 decoder 延迟收敛确实存在；det 增长已很小但 DetA 仍升，不能
+  在 e20 终止整个正向分支。继续 e24，严格目标仍未达到。若 e24 det 仍平台，则优先用已经 PREPARED
+  的 `0803_09` 测试 log-size 几何补益，而 `0803_08` 由 `0803_06/07` 的分类归因决定是否部署。

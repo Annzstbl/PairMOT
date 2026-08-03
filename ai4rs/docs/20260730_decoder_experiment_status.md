@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 12:02 CST
+更新时间：2026-08-03 12:46 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_06 ... frame-evidence-cls ... fresh` | `RUNNING` | 132 项回归、零参数全构建、真数据 smoke 与 formal iter50 五门槛通过，PGID `3765372`。 |
 | 252 GPU 2,3 | `0803_07 ... frame-evidence-cls + periodic-angle ... fresh` | `RUNNING` | e4 cls/det HOTA `32.535/38.723`，继续 e8/e12，不按 e4 停止；PGID `3694870`。 |
-| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e16 cls/det HOTA `48.474/55.272`；e12→e16 为 `+0.561/+0.015`，继续 e20 检验单区间平台。 |
+| 178 GPU 0 | `0803_04 ... iterativecls pair-shared-periodic-angle ... fresh` | `RUNNING` | e20 cls/det HOTA `49.446/55.397`；e16→e20 为 `+0.972/+0.125`，继续 e24。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | 无 | `IDLE/SLOW` | 4-iter portability smoke 数值正常但约 `80 s/iter`，不部署正式长跑。 |
 
@@ -2278,3 +2278,15 @@ smoke/formal workdir 或等待进程，不抢占 `0803_04` 的 GPU0。
   `/data1/users/litianhao01/PairMOT_logshape_0803_09` 固定在修正提交 `35e18f1`。
 - 完整 135 项 decoder 测试通过；父/新模型均为 `22,771,111` 参数、711 state tensors，增量为零；
   配置、launcher 与 4-iter 设置通过。状态为 `PREPARED`，未运行真数据 smoke、未排队、不占 GPU。
+
+## 2026-08-03 12:46 CST：0803_04 periodic-angle epoch-20
+
+- e20 cls HOTA/DetA/AssA `49.446/41.202/61.747`，det
+  `55.397/49.953/63.587`；相对 e16 双 HOTA `+0.972/+0.125`，cls DetA/AssA
+  `+0.825/+1.234`，det DetA `+0.568`、AssA `-0.601`。分类延迟增益继续出现，检测关联趋平但
+  覆盖仍上升，不能把 e16 的单区间平台当作最终收敛。
+- pair mAP/AP50 `0.2706/0.4658`，both-independent `0.3132/0.5154`；相对 e16 分别提高
+  `0.0078/0.0135` 和 `0.0075/0.0112`。392,152,244-byte checkpoint、5416 条检测、
+  50 序列、28 CSV 与 108 个非空文件完整。
+- 相对严格最终阈值仍低 `4.991/6.996`，目标未达到。PGID `2893156` 已自然进入 e21，继续 e24；
+  同时保留 `0803_09` 作为 det 平台的零参数尺寸几何补充，不抢占当前正向长跑。
