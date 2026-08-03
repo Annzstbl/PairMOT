@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 00:55 CST。
+更新时间：2026-08-04 01:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_14 terminal log-area`（GPU1/2） | RUNNING/TO_E12；e4 `30.813/36.985`；GPU0 外部占用且不抢占 | `0803_17 terminal semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_11 late log-size + periodic-angle`（GPU4/5） | RUNNING/TO_E12；e8 `40.377/45.730`，相对原始 decoder `-1.595/-2.448` | `0803_18 terminal geometry + semantic margins` PREPARED | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_12 progressive log-shape + periodic-angle`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.430/46.542`，相对原始 decoder `-1.542/-1.636`；PGID `123974` | 无；`0803_14` 迁移 99 GPU1/2 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E12；e8 `45.002/49.083`，相对原始 decoder `+3.030/+0.905`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_13 terminal geometry` formal | RUNNING/TO_E16；e12 `48.289/54.539`，相对原始 decoder `+0.894/+0.103`；PGID `3062903` | `0803_15 terminal angle`、`0803_16 terminal center` PREPARED | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -103,6 +103,16 @@
   formal/smoke 与启动器检查通过，等待 `0803_11` e12 释放当前两卡。
 - 上述准备不改变资源边界：99/197 各最多 2 卡且不固定序号，252 仍只固定 GPU0/1，178
   仍只用 1 卡；未抢占外部进程。
+
+## 2026-08-04 01:45 CST：178 0803_13 epoch 12
+
+- cls HOTA/DetA/AssA `48.289/41.435/58.165`，det `54.539/49.791/61.810`；相对原始
+  `0801_09` 同点 `47.395/54.436` 仍双升 `+0.894/+0.103`，但联合优势由 e8 的 `+3.935`
+  收窄至 `+0.997`。相对 Encoder 同点仍低 `1.391/2.002`。
+- pair mAP/AP50 `0.261539/0.464763`、both-independent `0.309710/0.522863`；
+  381,093,940-byte checkpoint、50 序列、28 CSV、108 非空文件及 `async_done=1` 完整。
+- terminal-only 几何仍保持对原始 decoder 的双正收益，但优势正在衰减；按 decoder 晚收敛约束
+  保持 PGID `3062903` 到 e16，检验是否会像全层几何分支一样反转，不提前释放 178 单卡。
 
 ## 99 本机
 

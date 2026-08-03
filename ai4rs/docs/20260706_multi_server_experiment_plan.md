@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 00:55 CST.
+Last updated: 2026-08-04 01:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -39,6 +39,16 @@ the same epoch. All four AP diagnostics also improved, and the checkpoint,
 50 sequences, 28 CSV files, 108 non-empty evaluation files, and async TrackEval
 completion were verified. The 178 lane therefore remains on 0803_13 through
 epoch 12 and later confirmation; prepared successors do not preempt it.
+
+At epoch 12, 0803_13 reached cls/det HOTA `48.289/54.539`, still a dual
+`+0.894/+0.103` improvement over the original decoder at the same checkpoint.
+The combined parent-line gain has, however, narrowed from `+3.935` at epoch 8
+to `+0.997` at epoch 12. Because this is still dual-positive and decoder
+convergence is late, the 178 one-GPU lane remains assigned through epoch 16 to
+test whether the terminal-only constraint prevents the later reversal seen in
+the all-layer geometry branch. The complete checkpoint, AP diagnostics, 50
+sequences, 28 CSV files, 108 evaluation files, and async completion are
+verified.
 
 The complete epoch-8 results for 0803_11 and 0803_12 are respectively
 `40.377/45.730` and `40.430/46.542` cls/det HOTA. Both are below the original
