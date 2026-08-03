@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-03 21:48 CST
+更新时间：2026-08-03 21:52 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_10 ... shared-log-area + periodic-angle ... fresh` | `RUNNING/TO_E12` | e8 `41.567/48.238`，相对 Encoder `-3.702/-1.955`；继续 e12，PGID `4053545`。 |
 | 252 GPU 2,3 | `0803_12 ... progressive-log-shape + periodic-angle ... fresh` | `RUNNING` | 零参数全构建、DDP smoke 与 formal iter50 五门槛通过；PGID `4189798`。 |
-| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... smoke` | `SMOKE_RUNNING` | 0803_09 e24 成熟停止；0803_13 零参数候选 PGID `3061443` 正在四步真数据验证。 |
+| 178 GPU 0 | `0803_13 ... terminal-log-size + periodic-angle ... fresh` | `RUNNING` | smoke 与 formal iter50 五门槛通过；PGID `3062903`，等待 e4/e8/e12。 |
 | 99 GPU 0,1 | 无 | `REACHABLE/EXTERNALLY_OCCUPIED` | 正确 SSH 别名已恢复可达；GPU0/1 被外部计算占用，不抢占。 |
 | 197 GPU 4,5 | `0803_11 ... late-log-size + periodic-angle ... fresh` | `RUNNING` | GPU 管理恢复；DDP smoke 与 formal iter50 五门槛通过，PGID `53708`。 |
 
@@ -2607,3 +2607,12 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `9→0`，GPU0 `0%/1 MiB`，断点保留。
 - 0803_13 随后在隔离提交 `1b7f904` 启动四步真数据 smoke，PGID `3061443`；只在最终输出
   层施加尺度/周期角共识，等待 loss/grad/checkpoint/语义四项验证。
+
+## 2026-08-03 21:52 CST：0803_13 smoke 通过并正式启动
+
+- 四步真数据 smoke loss `21.373/20.676/20.895/21.162`，grad
+  `59.765/65.665/103.829/106.195`，全有限；364,505,716-byte checkpoint、711 个 state
+  tensor 全有限，错误扫描与语义检查通过，GPU0 释放。
+- fresh formal PGID `3062903`；iter50 `0.9711 s/iter`、loss `20.9881`、grad `102.8326`，
+  9 个进程，GPU0 正常占用，错误扫描干净，HEAD/config/workdir 精确一致。
+- 状态 `RUNNING`，先收 e4/e8/e12，并按 decoder 慢收敛原则保留更长轨迹，不以 e4/e8 直接否决。

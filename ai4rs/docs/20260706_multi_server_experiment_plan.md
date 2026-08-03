@@ -2216,3 +2216,9 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   连续轨迹，停止全层尺度共识，保留完整 e24 断点并释放 178 GPU0。
 - 0803_13 已进入四步真数据 smoke；只有 loss/grad 全有限、checkpoint 完整、错误扫描与
   结构语义通过后才启动 fresh formal，并同样保留到 e12 以上评估慢收敛。
+
+## 2026-08-03 21:52 CST：terminal-only 进入正式长轨迹
+
+- 0803_13 smoke 与 formal iter50 五门槛均通过，且正式速度 `0.9711 s/iter`，没有计算量激增。
+- 先观察 e4/e8/e12 与原始 decoder/Encoder/periodic-angle 的同点差值；无论早期高低，都不以
+  e4/e8 单点停止，重点检查 terminal-only 是否避免 0803_09 e12 后优势衰减。
