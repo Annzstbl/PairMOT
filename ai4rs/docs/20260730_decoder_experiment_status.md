@@ -2414,3 +2414,14 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 375,564,404-byte checkpoint、153665 条检测、50 序列、28 CSV 与 108 个非空文件完整；
   异步 TrackEval 正常结束。相对严格最终阈值仍差 `8.267/8.854`，PGID `2971994` 已恢复 e9，
   继续 e12 并建立 `val_track_0003` 完整性监控。
+
+## 2026-08-03 16:53 CST：0803_08 common-preserving frame-detail epoch-4
+
+- e4 cls HOTA/DetA/AssA `32.065/25.138/43.440`，det
+  `39.067/31.078/50.405`；相对 periodic-angle 同点双 HOTA `-3.959/-4.721`，相对
+  Encoder e4 为 `-4.144/+0.314`。精确保留 shared midpoint 仍未避免早期分类与关联损失。
+- pair mAP/AP50 `0.1332/0.2541`，both-independent `0.1721/0.3160`；相对
+  periodic-angle 同点四项为 `-0.0302/-0.0493/-0.0382/-0.0614`。
+- 369,968,886-byte checkpoint、95613 条检测、50 序列、28 CSV 与 108 个非空文件完整；异步
+  TrackEval 正常结束。PGID `3940521` 的 23 个成员继续运行，已建立 e8 `val_track_0002`
+  完整性监控；该负向 e4 只降低优先级，不作为直接停止理由。
