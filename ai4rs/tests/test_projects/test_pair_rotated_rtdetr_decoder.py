@@ -478,8 +478,10 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
     def test_log_size_residual_shares_multiplicative_increment(self):
         reference_prev = torch.rand(2, 4, 5) * 0.6 + 0.2
         reference_curr = torch.rand(2, 4, 5) * 0.6 + 0.2
-        prev = torch.randn(2, 4, 5)
-        curr = torch.randn(2, 4, 5)
+        # Keep normal queries away from the unavoidable sigmoid-size ceiling;
+        # the geometric invariant is exact before boundary clipping.
+        prev = 0.2 * torch.randn(2, 4, 5)
+        curr = 0.2 * torch.randn(2, 4, 5)
         original_prev = prev.clone()
         original_curr = curr.clone()
 
