@@ -35,6 +35,27 @@ model['bbox_head'].update(
     iterative_cls_dn_absolute=True,
     iterative_cls_detach_between_layers=False)
 
+# The 252 parent explicitly carries several disabled switches that are absent
+# from the authoritative 178 config. Remove them so the effective scientific
+# model dict is byte-for-byte equivalent before resuming the optimizer state.
+model['decoder'].pop('residual_preserving_fusion_decoder', None)
+model['decoder'].pop(
+    'pair_shared_terminal_log_area_periodic_angle_refinement_decoder', None)
+model['decoder'].pop(
+    'pair_shared_terminal_periodic_angle_refinement_decoder', None)
+model['decoder'].pop(
+    'pair_shared_terminal_normalized_center_refinement_decoder', None)
+model['decoder'].pop(
+    'pair_shared_terminal_full_tangent_refinement_decoder', None)
+model['decoder'].pop(
+    'pair_shared_terminal_transport_tangent_refinement_decoder', None)
+model['bbox_head'].pop('iterative_cls_terminal_shared_margins', None)
+model['bbox_head'].pop('iterative_cls_terminal_transport_margins', None)
+model['bbox_head'].pop('terminal_encoder_cls_residual', None)
+model['bbox_head'].pop('terminal_pair_common_cls_residual', None)
+model['bbox_head'].pop('terminal_pair_common_objectness_residual', None)
+model['bbox_head'].pop('terminal_pair_differential_objectness_residual', None)
+
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_178/'
     '0803_13_paper_base_liquid_encoder_p5temporal_dualevidence_'
