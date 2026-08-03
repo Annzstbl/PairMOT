@@ -96,6 +96,8 @@ def _build_decoder(num_layers: int = 2,
                    bool = False,
                    pair_shared_late_log_size_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
@@ -175,6 +177,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_log_area_periodic_angle_refinement_decoder),
         pair_shared_late_log_size_periodic_angle_refinement_decoder=(
             pair_shared_late_log_size_periodic_angle_refinement_decoder),
+        pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
+            pair_shared_terminal_log_size_periodic_angle_refinement_decoder),
         pair_shared_progressive_log_shape_periodic_angle_refinement_decoder=(
             pair_shared_progressive_log_shape_periodic_angle_refinement_decoder),
         pair_shared_normalized_center_refinement_decoder=(
@@ -699,6 +703,44 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 pair_shared_late_log_size_periodic_angle_refinement_decoder=(
                     True),
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_terminal_log_size_periodic_angle_only_projects_final_layer(self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        log_size = projected._pair_shared_log_size_residual
+        periodic_angle = projected._pair_shared_periodic_angle_residual
+        with mock.patch.object(
+                projected, '_pair_shared_log_size_residual',
+                side_effect=log_size) as log_size_mock, mock.patch.object(
+                    projected, '_pair_shared_periodic_angle_residual',
+                    side_effect=periodic_angle) as angle_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(log_size_mock.call_count, 1)
+        self.assertEqual(angle_mock.call_count, 1)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_late_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
                     True),
                 device=self.device)
 
