@@ -3599,3 +3599,25 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `0803_28` 在 epoch7 iter750，动态 GPU2/3、23 个正式进程健康，GPU0/1 外部任务不动；178
   `0803_23` 在 epoch46 iter750，动态 GPU0、9 个正式进程健康，GPU1 外部任务不动。继续优先
   收集 99 e4、197 e8 和 178 e48，不以 e4/e8 直接否决 decoder。
+
+## 2026-08-04 20:28 CST：0803_30 在 252 固定 GPU0/1 正式运行，0803_29 e4 登记
+
+- 252 释放后，为 geometry-only osculating-plane `0803_30` 新增独立 2x4 配置与 smoke/formal
+  启动器；只把 178 已验证候选移植到 global batch 8，并固定 252 GPU0/1，不改变 decoder
+  科学结构。隔离 checkout `/data/users/litianhao01/PairMOT_terminaltransportplane_0803_30_252`
+  为 clean HEAD `c3fc5a1`，两项定向测试、配置深拷贝、启动器语法与完整构建通过：
+  `22,771,111` 参数、增量 0、711 个 state tensor。
+- 首次 smoke 在模型训练前发现继承的 197 数据/GMC/TrackEval 物理路径；失败目录保留并改名为
+  `smoke_0803_30_iterative_cls_terminal_transport_plane_4iter_failed_data_path_20260804_2022`。
+  只修复 252 物理路径后 fresh 重试，双卡四步 loss `12.9396/19.5077/19.6125/21.2174`、
+  grad `102.6709/115.7236/99.8417/105.2715`，DN/Encoder 与 642 个浮点 checkpoint tensor
+  全有限，364,502,774-byte `iter_4.pth` 落盘，致命错误为 0。
+- fresh formal screen `798987.pm_0803_30_formal_252`、PGID `798989`；iter50
+  `1.1484 s/iter`、loss `21.3741`、grad `109.9191`，7 个进程，GPU0/1 各约 19.2 GiB，
+  total、DN、Encoder proposal 全有限且 fatal=0，五门槛通过。状态 `RUNNING/TO_E4+`；GPU2/3
+  为 `1 MiB`，不用于本任务。
+- 99 `0803_29` e4 cls HOTA/DetA/AssA `30.658/25.232/39.985`，det
+  `38.402/32.550/46.208`；相对原 decoder e4 `34.306/38.590` 为 `-3.648/-0.188`，相对
+  `0803_27` e4 为 `+0.235/+0.273`。pair mAP/AP50 `0.1306/0.2495`，checkpoint、5416 条检测、
+  50 序列、28 CSV、108 个非空文件完整。切平面改善同类早期几何，但 position 分类仍慢；动态
+  GPU0/1、PGID `1582836` 已进入 e5，继续 e8/e12，不以 e4 直接否决。
