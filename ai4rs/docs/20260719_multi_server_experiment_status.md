@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 04:40 CST。
+更新时间：2026-08-05 05:41 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,40 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E8+；e4 `31.979/37.928` 完整，PGID `1715384` 已进入 e6 | 继续 e8/e12，不以 e4 早停；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E4+；五门槛通过并进入 e3，PGID `482699` | `0804_03` e4/e8/e12 成熟双负后 STOPPED；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E20+；e16 `51.220/57.370`，较原 decoder 联合 `+1.621`，PGID `823929` 已进入 e18 | 继续 e20/e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E8+；e4 cls/det `34.117/39.239`，PGID `3652382` 已进入 e7 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e8/e12 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.230/46.977` 完整，PGID `1715384` 已进入 e9 | 继续 e12，不以 e8 早停；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E8+；e4 `31.656/36.905` 完整，PGID `482699` 已进入 e7 | 继续 e8/e12，不以 e4 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E24+；e20 `52.198/58.132`，严格总和仍差 `8.000`，PGID `823929` 已进入 e21 | 继续 e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 cls/det `41.647/47.450`，PGID `3652382` 已进入 e10 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e12 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 05:41 CST：252 product-tangent e20 与 99 SE(2) e8 闭环
+
+- 252 `0804_01` e20 cls HOTA/DetA/AssA `52.198/43.979/63.843`，det
+  `58.132/51.652/67.820`，同 checkpoint 和 `110.330`；严格门槛仍差
+  `2.239/4.261/8.000`。相对原 decoder e20 `+1.355/+0.099`，相对 Encoder
+  `+0.684/-0.790`；e16→e20 双升 `+0.978/+0.762`，四项 AP 也小幅上升。
+  392,051,702-byte checkpoint、5416/50、28 CSV、108 文件和 393.1 秒异步完成标记
+  完整。固定 GPU0/1、PGID `823929` 已进入 e21并继续 e24+，GPU2/3 未用。
+- 99 `0804_05` e8 cls HOTA/DetA/AssA `41.230/33.612/53.634`，det
+  `46.977/42.481/54.032`。相对 body-frame e8，det DetA `+0.793` 但 AssA
+  `-2.168`，双 HOTA `-0.417/-0.473`；pair mAP/AP50 `0.1972/0.3621`、
+  both-independent `0.2415/0.4251`。375,526,710-byte checkpoint、5416/50、
+  28 CSV、108 文件和 266.9 秒异步完成标记完整。动态 GPU0/1 继续 e12，不以 e8 早停。
+
+## 2026-08-05 05:23 CST：178 body-frame e8 与 197 Frenet e4 闭环
+
+- 178 `0804_04` e8 cls HOTA/DetA/AssA `41.647/33.670/54.231`，det
+  `47.450/41.688/56.200`；相对原 decoder e8 `-0.325/-0.728`、相对 Encoder
+  `-3.622/-2.743`。pair mAP/AP50 `0.2004/0.3618`、both-independent
+  `0.2436/0.4184`，375,567,924-byte checkpoint、5416/50、28 CSV、108 文件和
+  253.3 秒异步完成标记完整。继续 e12，不以 e8 早停。
+- 197 `0804_06` e4 cls HOTA/DetA/AssA `31.656/26.584/39.932`，det
+  `36.905/32.714/42.549`；相对 SE(2) e4 的 DetA 略高，但 AssA 低
+  `2.152/4.330`。pair mAP/AP50 `0.1384/0.2648`、both-independent
+  `0.1825/0.3378`，369,968,743-byte checkpoint、5416/50、28 CSV、108 文件和
+  305.2 秒异步完成标记完整。PGID `482699` 已进入 e5并继续 e8/e12，不以 e4 早停。
+- 252 固定 GPU0/1 已进 e20，GPU2/3 仍为本任务空闲；99 动态 GPU0/1 已进 e8。
+  四台资源的卡数均未扩大，178 的 `0804_07` 仍严格为 `PREPARED/NO_GPU`。
 
 ## 2026-08-05 04:40 CST：0804_07 axis-Frenet 静态准备完成
 

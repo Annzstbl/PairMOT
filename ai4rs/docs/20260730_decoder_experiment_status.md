@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 04:40 CST
+更新时间：2026-08-05 05:41 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,66 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E20+` | e16 cls/det `51.220/57.370`，相对原 decoder 联合 `+1.621`，但严格绝对门槛未过；PGID `823929` 已进入 e18，继续 e20/e24+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det HOTA `34.117/39.239`，det 较原 decoder 同点 `+0.649`；PGID `3652382` 已进入 e7，继续 e8/e12。 |
-| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.979/37.928`，定位/AP 早期下降且无 AssA 补偿；PGID `1715384` 已进入 e6，继续 e8/e12，不以 e4 否决。 |
-| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实双卡 smoke/checkpoint/formal iter50 五门槛通过；PGID `482699` 已进入 e3，GPU2/3 各约 19.3 GiB，其他卡未动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E24+` | e20 cls/det `52.198/58.132`，严格总和仍差 `8.000`，但 e16→e20 继续双升；PGID `823929` 已进入 e21，继续 e24+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 cls/det `41.647/47.450`，相对原 decoder `-0.325/-0.728`；PGID `3652382` 已进入 e10，继续 e12 成熟窗口，不以 e8 否决。 |
+| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 cls/det `41.230/46.977`；相对 body-frame 同点 `-0.417/-0.473`，PGID `1715384` 已进入 e9，继续 e12，不以 e8 否决。 |
+| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.656/36.905`；端点切向使 AssA 较 SE(2) 同点低 `2.152/4.330`，PGID `482699` 已进入 e7，继续 e8/e12，不以 e4 否决。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
 `0804_07 axis-Frenet product tangent` 已在 178 独立 checkout 静态闭环，状态严格为
 `PREPARED/NO_GPU`；它不进入当前运行表、不抢占 `0804_04`。
+
+## 2026-08-05 05:41 CST：product-tangent e20 继续上升但严格未达标
+
+- 252 `0804_01` e20 cls HOTA/DetA/AssA `52.198/43.979/63.843`，det
+  `58.132/51.652/67.820`；同 checkpoint 和 `110.330`，严格绝对门槛
+  `54.437/62.393/118.330` 分别仍差 `2.239/4.261/8.000`，不能登记成功。
+- 相对原 decoder e20 `50.843/58.033` 为 `+1.355/+0.099`，联合 `+1.454`；
+  相对 Encoder e20 `51.514/58.922` 为 `+0.684/-0.790`。e16→e20 继续双升
+  `+0.978/+0.762`，pair mAP/AP50 由 `0.2914/0.5039` 升至 `0.2958/0.5113`，
+  both-independent 由 `0.3379/0.5551` 升至 `0.3395/0.5575`，曲线尚未平台。
+- 392,051,702-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件
+  与 393.1 秒异步完成标记完整。固定 GPU0/1 的 PGID `823929` 已进入 e21并继续 e24+；
+  GPU2/3 不用于本任务，不以 e20 未过绝对线停止仍在上升的成熟轨迹。
+
+## 2026-08-05 05:38 CST：SE(2) Lie-twist e8 完整闭环
+
+- 99 `0804_05` e8 cls HOTA/DetA/AssA `41.230/33.612/53.634`，det
+  `46.977/42.481/54.032`，同 checkpoint 和 `88.207`；pair mAP/AP50
+  `0.1972/0.3621`、both-independent `0.2415/0.4251`。
+- 相对 body-frame e8，cls HOTA/DetA/AssA 为 `-0.417/-0.058/-0.597`，det 为
+  `-0.473/+0.793/-2.168`：有限旋转把少量 det 定位换成更大的关联损失。相对原 decoder
+  e8 `41.972/48.178` 为 `-0.742/-1.201`，相对 Encoder `45.269/50.193`
+  为 `-4.039/-3.216`。
+- 375,526,710-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件
+  与 266.9 秒异步完成标记完整。e4→e8 双 HOTA 已恢复 `+9.251/+9.049`，因此动态
+  GPU0/1 的 PGID `1715384` 继续 e12 成熟窗口，不以 e8 直接否决。
+
+## 2026-08-05 05:23 CST：body-frame e8 完整闭环
+
+- 178 `0804_04` e8 cls HOTA/DetA/AssA `41.647/33.670/54.231`，det
+  `47.450/41.688/56.200`，同 checkpoint 和 `89.097`；pair mAP/AP50
+  `0.2004/0.3618`、both-independent `0.2436/0.4184`。
+- 相对原 decoder e8 `41.972/48.178` 为 `-0.325/-0.728`，相对 Encoder
+  `45.269/50.193` 为 `-3.622/-2.743`，也低于轴归一化 product-tangent e8
+  `46.673/53.922` 为 `-5.026/-6.472`。body-frame 从 e4 到 e8 虽双升
+  `+7.530/+8.211`，但去掉 width/height 轴向 metric 后没有保留主要收益。
+- 375,567,924-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件
+  与 253.3 秒异步完成标记完整。该点只作为中期归因；PGID `3652382` 继续 e12 成熟窗口，
+  不以 e8 直接否决，`0804_07` 仍为 `PREPARED/NO_GPU` 且不抢占单卡。
+
+## 2026-08-05 05:09 CST：Frenet endpoint-tangent e4 完整闭环
+
+- 197 `0804_06` e4 cls HOTA/DetA/AssA `31.656/26.584/39.932`，det
+  `36.905/32.714/42.549`；同 checkpoint 和 `68.561`。pair mAP/AP50
+  `0.1384/0.2648`、both-independent `0.1825/0.3378`。
+- 相对 SE(2) e4，cls/det DetA 为 `+0.975/+1.170`，但 AssA 为
+  `-2.152/-4.330`，HOTA 为 `-0.323/-1.023`；相对 body-frame e4 HOTA
+  `-2.461/-2.334`。早期证据说明前后端点切向旋转没有换来定位优势，反而削弱关联一致性。
+- 369,968,743-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件
+  与 305.2 秒异步完成标记完整。该结果只作 e4 结构归因；动态 GPU2/3 的 PGID `482699`
+  已进入 e5并继续 e8/e12，不以 e4 直接否决，其他 GPU 未动。
 
 ## 2026-08-05 04:40 CST：axis-Frenet product tangent 静态就绪
 
