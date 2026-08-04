@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 08:29 CST
+更新时间：2026-08-04 08:36 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E36+` | e32 `53.642/60.531`，相对原始 decoder `+1.076/+0.576`、联合 `+1.652`，相对 Encoder `+1.288/+0.201`；PGID `419164` 继续 e36。 |
 | 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E12+` | e8 `46.283/53.755`，相对原始 decoder `+4.311/+5.577`、相对 Encoder `+1.014/+3.562`；当前第一主线，PGID `3151184` 继续 e12。`0803_24/25` PREPARED。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `30.158/37.094`，相对原始 decoder `-4.148/-1.496`；完整评测通过，PGID `1384944` 继续 e8/e12。GPU1/2 只是当前分配。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `42.014/47.865`，相对原始 decoder `+0.042/-0.313`；遵守晚收敛约束继续 e12，PGID `387859`。`0803_24` 双卡版 PREPARED/NO_GPU。 |
@@ -3133,3 +3133,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - `0803_23` 升级为当前第一优先主线，178 当前 GPU0、PGID `3151184` 继续 e12 以满足成熟
   轨迹约束；不在 e8 宣布最终达标。`0803_24 shape-only` 与 `0803_25 center-only` 保持
   PREPARED/NO_GPU，作为归因和后续风险备份。
+
+## 2026-08-04 08:36 CST：0803_13 epoch-32 成熟双超同点 Encoder
+
+- terminal mean geometry e32 cls HOTA/DetA/AssA `53.642/44.778/65.968`，det
+  `60.531/53.028/71.463`。相对原始 decoder e32 `52.566/59.955` 为
+  `+1.076/+0.576`，联合优势 `+1.652`；相对 Encoder e32 `52.354/60.330` 为
+  `+1.288/+0.201`，首次在成熟 e32 同时越过两项同点 Encoder。
+- pair mAP/AP50 `0.307277/0.528711`，both-independent mAP/AP50
+  `0.349227/0.570345`；408,623,606-byte checkpoint、5416 条检测、50 序列、28 CSV、
+  108 个非空评测文件和 `async_done=1` 完整。
+- 当前绝对值之和 `114.173`，仍低于最终严格门槛 `>118.330`，且 det 绝对值尚未超过
+  Encoder 最终 `62.393`，不得误报完成。252 固定 GPU0/1、PGID `419164` 保持成熟路线
+  继续 e36；252 仍不承接新结构筛选。
