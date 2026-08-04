@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 01:36 CST。
+更新时间：2026-08-05 01:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,18 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E12；e8 `41.415/48.105` 完整闭环，PGID `1673454` 已继续 e9 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.938/38.765` 完整闭环，PGID `2540932` 已继续 e5 | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | 仅保留成熟路线或严格复验；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | `0804_01 resume252` 端口 smoke-passed、PREPARED/WAIT_E12；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E12+；e8 `46.673/53.922` 强同点双正，PGID `3555710` 已继续 e9 | `0804_04 body-frame product-tangent` PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 01:46 CST：252 成熟接力端口就绪但未启动
+
+- 252 隔离仓库 clean HEAD `f356593` 的 `0804_01` 2x4 端口与 178 1x8 科学模型完全相等；
+  配置 deepcopy、两份 launcher 语法与完整构建通过，参数/state 为 `22,771,111/711`，全局
+  batch 仍为 8。
+- 固定 GPU0/1 两轮空闲后，四步 DDP smoke 的 loss/grad、DN、Encoder proposal、iterative-cls
+  checkpoint 语义和 642 个浮点 tensor 均有限，错误扫描为 0。状态只为
+  `PREPARED/WAIT_E12`：无 formal workdir/进程，等待 178 e12 证据后才决定是否接力。
 
 ## 2026-08-05 01:36 CST：实时资源与历史任务复核
 

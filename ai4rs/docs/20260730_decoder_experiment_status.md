@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 01:36 CST
+更新时间：2026-08-05 01:46 CST
 
 ## 当前研究原则
 
@@ -19,6 +19,21 @@
 | 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E8+` | e4 `31.938/38.765` 为 cls 慢、det 仅微正的尺度单因素信号；完整产物闭环后 PGID `2540932` 已继续 e5→e8/e12，不以 e4 直接否决。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 01:46 CST：0804_01 的 252 成熟接力端口通过烟测
+
+- 为避免 e12 到齐后再临时修改活跃仓库，在 252 隔离 checkout clean HEAD `f356593` 静态准备
+  `0804_01 product-tangent` 的 2x4 接力配置；它直接导入 178 权威 1x8 模型，仅改固定 GPU0/1、
+  per-rank batch 4、worker 与 252 数据/GMC/TrackEval 物理路径。配置 deepcopy、launcher
+  `bash -n` 与双模型完整构建通过：科学 `model` 完全相等，参数 `22,771,111`、711 states，
+  全局 batch 仍为 8。
+- 252 GPU0/1 两轮均为 `1 MiB/0%` 后完成真实双卡四步 smoke：loss
+  `12.9389/19.5019/19.6050/21.1636`、grad
+  `103.0192/97.8254/91.1546/101.3375`，total、DN、Encoder proposal 全有限；
+  `iter_4.pth` 的 iterative-cls/DN 语义与 642 个浮点 tensor 检查通过，无 fatal。
+- 当前仍严格登记 `PREPARED/WAIT_E12`，未创建 formal workdir、未启动 252 长训。只有 178 e12
+  保持明确同点优势时才从该 checkpoint 接力到固定 GPU0/1，并释放 178 验证 `0804_04`；否则
+  不在最慢资源上延长弱路线。
 
 ## 2026-08-05 01:36 CST：运行健康与 252 历史点名任务复核
 

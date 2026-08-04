@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 01:36 CST.
+Last updated: 2026-08-05 01:46 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,17 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:46 CST, the 252 continuation port for strong candidate `0804_01` is
+smoke-passed but deliberately not running. Its isolated clean HEAD `f356593`
+imports the authoritative 178 scientific model unchanged and alters only the
+2x4 physical realization and 252 paths. Config deep copy, launcher syntax, and
+full builds prove equal models, `22,771,111` parameters, 711 states, and global
+batch eight. After two fixed-GPU0/1 idle checks, a real four-iteration DDP smoke
+produced finite total/DN/encoder/gradient values and a verified finite
+checkpoint. It remains PREPARED/WAIT_E12 with no formal workdir. It may resume
+from 178 epoch 12 only if that complete aligned evaluation retains a clear
+advantage; otherwise the slow lane stays idle.
 
 At 01:36 CST, the three screening/trajectory lanes remain healthy: 178
 `0804_01` is at epoch 10 iter 50 on dynamic GPU0, 99 `0804_02` is at epoch 9
