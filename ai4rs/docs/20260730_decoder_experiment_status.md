@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 19:09 CST
+更新时间：2026-08-04 19:20 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E64` | e56 最好点 `54.980/62.009`，cls 过线 `+0.543`、det 仍低 `0.384`，总和 `116.989` 距严格目标差 `1.341`；e60 回落为 `54.855/61.870`，PGID `419164` 已到 e62，保留 e64 平台确认。GPU2/3 不用于本任务。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E44` | e36 `52.856/60.111` 后 e40 `52.689/60.163`，cls 小幅回落、det 仅增 `0.052`；PGID `3151184` 已到 e43，保留 e44 成熟确认。GPU 序号不固定，GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E44` | e36 `52.856/60.111` 后 e40 `52.689/60.163`，cls 小幅回落、det 仅增 `0.052`；PGID `3151184` 保留 e44 成熟确认。GPU 序号不固定，GPU1 外部任务不动；geometry-only `0803_30` 已 PREPARED/NO_GPU。 |
 | 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E4+` | `0803_27` e4/e8/e12 成熟双负后精确停止 PGID `1470665`；动态空闲 GPU0/1 上新线 smoke 与 formal iter50 五门槛通过，formal PGID `1582836`。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E8+` | e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，相对 position/product e4 `+0.821/+0.267`；只登记早期信号，PGID `1016336` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
@@ -3556,3 +3556,18 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `+0.821/+0.267`。pair mAP/AP50 `0.1307/0.2564`，checkpoint、28 CSV、108 文件和完整
   TrackEval 齐全。该点只登记 position 分类仍慢、full transport 较 product 略好；动态 GPU2/3
   的 PGID `1016336` 继续 e8/e12，GPU0/1 外部任务不动。
+
+## 2026-08-04 19:20 CST：0803_30 geometry-only osculating-plane 已准备
+
+- `0803_27/28` 的 position-tangent 分类在 e4 都明显拖慢 cls，而 178 `0803_23` 的成熟
+  full-tangent 几何主要停在一维 detail 投影。下一单因素因此只把终层 normal-query box detail
+  从既有 motion 一维切线改为“既有 motion + detached pair-common terminal correction”张成的
+  至多二维正交切平面；分类、DN、辅助层和递归 reference 完全保持 `0803_23` 路径。
+- 新开关与 position-tangent 组合模式分离，定向测试确认几何调用恰好一次、position feature
+  调用为零、原三元 decoder 输出契约不变、交换等变、DN 保留、投影能量不增且梯度有限。
+  两项远端 unittest 通过；formal/smoke 配置均完成深拷贝，整模为 `22,771,111` 参数、增量 0、
+  711 个 state tensor，两份启动器 Bash 语法通过。
+- 178 隔离仓库 `/data1/users/litianhao01/PairMOT_terminaltransportplane_0803_30` 固定 clean HEAD
+  `c2069cd`。状态仅 `PREPARED/NO_GPU`，未创建 smoke/formal workdir；等待 `0803_23` e44 完整
+  checkpoint、检测和 TrackEval 后再决定交接，不热更新当前训练仓库。启动器要求传入届时一张
+  空闲 GPU，不固定 178 序号。

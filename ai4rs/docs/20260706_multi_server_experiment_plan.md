@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 19:09 CST.
+Last updated: 2026-08-04 19:20 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,15 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 19:20 CST, `0803_30` is PREPARED/NO_GPU for the 178 successor lane. It changes only
+the terminal 5D box-detail geometry from the one-dimensional motion tangent used by
+`0803_23` to the orthogonal plane spanned by established motion and the detached
+pair-common terminal correction. Classification deliberately retains the parent path,
+isolating the geometry change from the early cls slowdown seen in position-tangent
+`0803_27/28`. Two targeted remote tests, config deep copies, launcher syntax, and a full
+zero-state-delta build passed at clean HEAD `c2069cd` (`22,771,111` parameters, 711
+states). No smoke or formal workdir exists; it waits for complete `0803_23` e44 evidence.
 
 At 19:09 CST, fixed-252 `0803_13` has complete e56/e60 results. Epoch 56 is the
 current best at `54.980/62.009`: cls is `+0.543` above final Encoder, det is still

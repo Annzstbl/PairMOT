@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 19:09 CST。
+更新时间：2026-08-04 19:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.244/38.396` 仅作早期信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E64；e56 最好 `54.980/62.009`，总和 `116.989`；e60 回落 `54.855/61.870`，PGID `419164` | 保留 e64 平台确认；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E44；e36 `52.856/60.111`、e40 `52.689/60.163`，PGID `3151184` | 保留 e44 成熟确认；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E44；e36 `52.856/60.111`、e40 `52.689/60.163`，PGID `3151184` | `0803_30 geometry-only osculating-plane` PREPARED/NO_GPU；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-04 16:42 CST：shape-only 成熟停止，0803_28 接替 197
@@ -55,6 +55,18 @@
 - 197 `0803_28` e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，但相对
   `0803_27` 同点 `+0.821/+0.267`。完整 checkpoint、检测、28 CSV、108 文件和 TrackEval
   闭环；e4 只作早期信号，动态 GPU2/3 的 PGID `1016336` 继续 e8/e12，GPU0/1 外部任务未动。
+
+## 2026-08-04 19:20 CST：178 后继 0803_30 静态完备
+
+- 新候选只把 `0803_23` 终层 5D box detail 的一维 motion-tangent 投影放宽到由既有 motion 与
+  detached pair-common terminal correction 张成的至多二维正交切平面；分类路径完全不启用
+  position-tangent evidence。它仍为零参数/状态、终层一次、交换等变、class-agnostic，无
+  reweight、新 layer、attention 或 loss。
+- 178 隔离 checkout `/data1/users/litianhao01/PairMOT_terminaltransportplane_0803_30` 为 clean
+  HEAD `c2069cd`。两项语义/几何 unittest、配置深拷贝、两份 launcher Bash 语法和完整模型
+  构建均通过：`22,771,111` 参数、增量 0、711 states。
+- 状态 `PREPARED/NO_GPU`：未创建 smoke/formal workdir，不抢占 `0803_23` 的当前单卡。
+  e44 完整闭环并释放后，仍须重新核验动态空闲卡、执行真实四步 smoke 和 formal iter50 五门槛。
 
 ## 2026-08-04 16:05 CST：e52/e32/e4 三节点闭环
 
