@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 13:10 CST。
+更新时间：2026-08-04 13:33 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_25 center-only transported tangent`（当前 GPU1/2） | RUNNING/TO_E12+；e8 `41.359/46.931`，相对原 decoder `-0.613/-1.247`；PGID `1442845` 继续 e12 | `0803_26 product-tangent` 双卡版 PREPARED/NO_GPU；GPU 序号不固定，GPU0 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.487/37.808` 只作早期归因；PGID `712277` 继续 e8/e12 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E48+；e44 `54.381/61.716`，较 e40 双升但绝对和 `116.097` 未达目标，PGID `419164` | 成熟长轨迹继续 e48，使用 252 自有可写 workdir；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E24+；e20 `51.119/57.969`，较 e16 明显回升，PGID `3151184` 继续 e24 | 保留至 e24 判断恢复持续性；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E28+；e24 `52.012/58.551`，较 e20 继续回升，PGID `3151184` 继续 e28 | 保留至 e28 判断 det 差距是否继续收窄；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2460,3 +2460,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `async_done=1` 完整。
 - e8 不是直接否决点。动态 GPU1/2、PGID `1442845` 继续 e12，GPU0 外部任务保持不动；
   99 仍只限制两卡总量、不固定序号，`0803_26` 暂不抢占。
+
+## 2026-08-04 13:30 CST：178 0803_23 e24 恢复持续并继续 e28
+
+- e24 cls/det HOTA `52.012/58.551`，DetA/AssA 分别为 `43.460/64.440` 与
+  `51.647/68.767`；较 e20 回升 `+0.893/+0.582`，相对原 decoder e24
+  `+0.303/-0.230`，相对 Encoder e24 `+0.298/-0.968`。
+- pair mAP/AP50 `0.2937/0.5083`、both-independent `0.3373/0.5536`；
+  397,671,156-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件与
+  `async_done=1` 完整。
+- e16→e20→e24 连续恢复。动态 GPU0、PGID `3151184` 已进入 e25 并继续 e28；GPU1 外部
+  任务保持不动，178 仍只占一张卡且不固定序号。
