@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 00:49 CST.
+Last updated: 2026-08-05 01:14 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,16 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:14 CST, 197 `0804_03` terminal log-size-only completed e4 at
+`31.938/38.765`, or `-2.368/+0.175` versus the original decoder and
+`-4.271/+0.012` versus Encoder. Its cls/det DetA/AssA are
+`26.971/40.785` and `34.129/45.148`; pair mAP/AP50 is `0.1437/0.2727`.
+The checkpoint, 5416 detection records, 50 sequences, 28 CSV files, 108
+non-empty evaluation files, and async completion marker are complete. This
+is an early scale-factor attribution point, not a rejection: dynamically
+selected 197 GPU2/3 continues PGID `2540932` through e8/e12 while GPU5
+external work remains untouched.
 
 At 00:49 CST, fixed-GPU 252 `0803_30` completed its full e4/e8/e12 evidence
 window. Epoch 12 closed at cls/det `45.089/51.741` with DetA/AssA

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 00:49 CST。
+更新时间：2026-08-05 01:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,10 +18,21 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `33.265/38.716` 完整闭环，PGID `1673454` 已继续 e5 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E4+；真实双卡 smoke 与 formal iter50 五门槛通过，PGID `2540932` | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.938/38.765` 完整闭环，PGID `2540932` 已继续 e5 | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | 仅保留成熟路线或严格复验；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E8+；e4 `35.274/43.849` 完整闭环，PGID `3555710` 已继续 e5 | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 01:14 CST：197 log-size-only e4 完整评估
+
+- `0804_03` e4 cls/det HOTA `31.938/38.765`，DetA/AssA 为
+  `26.971/40.785` 与 `34.129/45.148`；相对原 decoder e4 `-2.368/+0.175`，相对 terminal
+  mean geometry `-0.911/+1.446`，相对 Encoder `-4.271/+0.012`。pair mAP/AP50
+  `0.1437/0.2727`、both-independent `0.1873/0.3435`。尺度单因素当前是 cls 慢、det 极小正增益，
+  只作早期归因。
+- 369,969,511-byte checkpoint、5416/50、28 CSV、108 文件与 async 标志完整。动态 GPU2/3、
+  PGID `2540932` 已继续 e5→e8/e12，total/DN/Encoder/grad 有限；GPU5 外部任务未动，不以
+  e4 早停。
 
 ## 2026-08-05 00:49 CST：252 transport-plane e12 成熟停止
 

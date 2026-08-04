@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 00:49 CST
+更新时间：2026-08-05 01:14 CST
 
 ## 当前研究原则
 
@@ -16,9 +16,22 @@
 | --- | --- | --- | --- |
 | 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 `35.274/43.849` 相对原 decoder 双正但低于 full-tangent；完整产物闭环后 PGID `3555710` 已继续 e5→e8/e12，不以 e4 直接否决。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E8+` | e4 `33.265/38.716` 为 cls 负、det 微正的早期信号；完整产物闭环后 PGID `1673454` 已继续 e5→e8/e12，不以 e4 直接否决。GPU 序号不固定。 |
-| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E4+` | `0803_28` e12 `43.953/50.679` 经 e4/e8/e12 成熟双负后精确停止；log-size-only 已通过定向单测、配置深拷贝、零增量整模构建、真实双卡 smoke 与 formal iter50 五门槛，screen `2540930.pm_0804_03_formal_197`、PGID `2540932`。GPU5 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E8+` | e4 `31.938/38.765` 为 cls 慢、det 仅微正的尺度单因素信号；完整产物闭环后 PGID `2540932` 已继续 e5→e8/e12，不以 e4 直接否决。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 01:14 CST：197 log-size-only epoch 4 完整评估
+
+- `0804_03` e4 cls HOTA/DetA/AssA `31.938/26.971/40.785`，det
+  `38.765/34.129/45.148`；相对原 decoder e4 `34.306/38.590` 为
+  `-2.368/+0.175`，相对 terminal mean geometry `32.849/37.319` 为
+  `-0.911/+1.446`，相对 Encoder `36.209/38.753` 为 `-4.271/+0.012`。与 99 的
+  angle-only e4 `33.265/38.716` 相比为 `-1.327/+0.049`，说明两个 shape 单因素都只给出
+  极弱 det 正信号，而尺度共识的分类收敛更慢；该点只作正交归因，不作停止理由。
+- pair mAP/AP50 `0.143726/0.272730`、both-independent `0.187306/0.343500`；
+  369,969,511-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。TrackEval 于 01:12 闭环，动态 GPU2/3 的 PGID `2540932` 已在 e5，
+  total/DN/Encoder/grad 有限并继续 e8/e12；GPU5 外部任务未动。
 
 ## 2026-08-05 00:49 CST：252 transport-plane epoch 12 成熟收口
 
