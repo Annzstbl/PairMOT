@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 08:40 CST.
+Last updated: 2026-08-04 09:19 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -57,6 +57,10 @@ At 08:40 CST, the 99 two-GPU realization of `0803_25` passed a zero-parameter fu
 clean HEAD `345a59c`. Its launchers require two currently free GPU indices explicitly. It
 remains PREPARED/NO_GPU behind the running `0803_21` mature checkpoint and does not reserve
 or preempt any GPU.
+
+At 09:19 CST, `0803_21` completed epoch 8 at `38.854/46.716`, still below the original
+decoder by `3.118/1.462` with complete artifacts. It continues to epoch 12 under the
+three-node mature rule; the prepared center-only successor remains at zero GPU occupancy.
 
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
