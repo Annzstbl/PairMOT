@@ -41,9 +41,15 @@ parent_config.model.decoder.update(
 
 decoder = new_config.model.decoder
 assert decoder.pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder
-assert not decoder.pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder
-assert not decoder.pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder
-assert not decoder.pair_shared_terminal_transport_se2_product_tangent_refinement_decoder
+assert not decoder.get(
+    'pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder',
+    False)
+assert not decoder.get(
+    'pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder',
+    False)
+assert not decoder.get(
+    'pair_shared_terminal_transport_se2_product_tangent_refinement_decoder',
+    False)
 assert not decoder.pair_shared_terminal_transport_product_tangent_refinement_decoder
 assert not decoder.pair_shared_terminal_transport_center_tangent_refinement_decoder
 assert not decoder.pair_shared_terminal_transport_shape_tangent_refinement_decoder
