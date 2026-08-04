@@ -47,9 +47,12 @@ assert not decoder.pair_shared_terminal_transport_center_tangent_refinement_deco
 assert not decoder.pair_shared_terminal_transport_shape_tangent_refinement_decoder
 assert not decoder.pair_shared_terminal_transport_tangent_refinement_decoder
 assert not decoder.pair_shared_terminal_transport_plane_refinement_decoder
-assert not decoder.pair_shared_terminal_full_tangent_refinement_decoder
-assert not decoder.pair_shared_terminal_log_size_periodic_angle_refinement_decoder
-assert not decoder.pair_shared_terminal_periodic_angle_refinement_decoder
+assert not decoder.get(
+    'pair_shared_terminal_full_tangent_refinement_decoder', False)
+assert not decoder.get(
+    'pair_shared_terminal_log_size_periodic_angle_refinement_decoder', False)
+assert not decoder.get(
+    'pair_shared_terminal_periodic_angle_refinement_decoder', False)
 assert new_config.model.bbox_head.iterative_cls_residual
 assert new_config.model.bbox_head.iterative_cls_dn_absolute
 assert not new_config.model.bbox_head.iterative_cls_detach_between_layers
