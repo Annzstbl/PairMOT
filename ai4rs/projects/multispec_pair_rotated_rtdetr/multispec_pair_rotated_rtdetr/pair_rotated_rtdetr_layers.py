@@ -325,6 +325,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
+                   terminal_position_tangent_product_decoder: bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
@@ -409,6 +410,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
+        self.terminal_position_tangent_product_decoder = bool(
+            terminal_position_tangent_product_decoder)
         self.pair_shared_progressive_log_shape_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder))
@@ -480,6 +483,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
+                self.terminal_position_tangent_product_decoder,
                 self.
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder,
                 self.pair_shared_normalized_center_refinement_decoder,
@@ -492,7 +496,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'angle, terminal-normalized-center, terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
-                'tangent, terminal-transport-tangent, progressive-log-shape-'
+                'tangent, terminal-transport-tangent, terminal-position-'
+                'tangent-product, progressive-log-shape-'
                 'periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
@@ -834,6 +839,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.terminal_regression_enveloped_detail_decoder,
             self.terminal_midpoint_regression_enveloped_detail_decoder,
             self.terminal_factorized_evidence_decoder,
+            self.terminal_position_tangent_product_decoder,
         )
         if sum(bool(mode) for mode in terminal_detail_modes) > 1:
             raise ValueError(
@@ -896,7 +902,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             or self.terminal_midpoint_enveloped_detail_decoder
             or self.terminal_regression_enveloped_detail_decoder
             or self.terminal_midpoint_regression_enveloped_detail_decoder
-            or self.terminal_factorized_evidence_decoder)
+            or self.terminal_factorized_evidence_decoder
+            or self.terminal_position_tangent_product_decoder)
 
     @property
     def _common_evidence_bypass_enabled(self) -> bool:
@@ -960,7 +967,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 nn.Linear(self.embed_dims, self.embed_dims, bias=False)
                 for _ in range(self.num_layers)
             ])
-        if self._terminal_enveloped_detail_enabled:
+        if (self._terminal_enveloped_detail_enabled
+                and not self.terminal_position_tangent_product_decoder):
             # Only the final prediction layer needs a gate.  Allocating gates
             # for earlier layers would create intentionally unused DDP
             # parameters and obscure the structural invariant.
@@ -1399,7 +1407,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 or self.classification_enveloped_detail_decoder):
             for gate in self.enveloped_detail_gates:
                 nn.init.zeros_(gate.weight)
-        if self._terminal_enveloped_detail_enabled:
+        if (self._terminal_enveloped_detail_enabled
+                and not self.terminal_position_tangent_product_decoder):
             for gate in self.terminal_enveloped_detail_gates:
                 if isinstance(gate, nn.Parameter):
                     nn.init.zeros_(gate)
@@ -1727,6 +1736,30 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     layer_output_curr = layer_output + frame_detail
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
+                elif self.terminal_position_tangent_product_decoder:
+                    # The recurrent query and all auxiliary outputs remain on
+                    # the parent shared path. At the terminal layer, retain
+                    # only frame evidence detail aligned with the detached
+                    # positional displacement already encoded by the two
+                    # references. The orthogonal projection cannot increase
+                    # detail energy and is swap equivariant. Regression starts
+                    # from the parent heads here and is factorized in the
+                    # product tangent block below.
+                    layer_output_prev = layer_output
+                    layer_output_curr = layer_output
+                    tmp_prev = reg_branches_prev[lid](layer_output)
+                    tmp_curr = reg_branches_curr[lid](layer_output)
+                    if lid == self.num_layers - 1:
+                        num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                        frame_detail = (
+                            self._pair_position_tangent_feature_detail(
+                                frame_evidence_prev,
+                                frame_evidence_curr,
+                                query_pos_prev,
+                                query_pos_curr,
+                                num_dn))
+                        layer_output_prev = layer_output - frame_detail
+                        layer_output_curr = layer_output + frame_detail
                 elif self.terminal_enveloped_detail_decoder:
                     if lid == self.num_layers - 1:
                         frame_detail = (
@@ -2069,10 +2102,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self._pair_transport_shape_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
-            elif (
+            elif ((
                     self.
                     pair_shared_terminal_transport_product_tangent_refinement_decoder
-                    and lid == self.num_layers - 1):
+                    or self.terminal_position_tangent_product_decoder)
+                  and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 # Factor the product geometry into independent translation
                 # and shape tangent bundles. This retains the full terminal
@@ -2572,6 +2606,52 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
             torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
         )
+
+    @staticmethod
+    def _pair_position_tangent_feature_detail(
+            evidence_prev: Tensor, evidence_curr: Tensor,
+            query_pos_prev: Tensor, query_pos_curr: Tensor,
+            num_dn: int) -> Tensor:
+        """Project terminal frame evidence onto established position motion.
+
+        The existing reference-point MLP already embeds each frame's oriented
+        box geometry in the decoder feature space. Its detached pair
+        difference defines a local positional tangent. Only the component of
+        the swap-odd cross-attention evidence lying on that tangent is kept;
+        transverse appearance noise is removed without averaging away
+        motion-aligned evidence. The projection is parameter-free, cannot
+        increase detail energy, and preserves the unaligned DN prefix.
+        """
+        if evidence_prev.shape != evidence_curr.shape:
+            raise ValueError(
+                'position-tangent feature transport requires aligned '
+                'frame evidence')
+        if query_pos_prev.shape != query_pos_curr.shape:
+            raise ValueError(
+                'position-tangent feature transport requires aligned '
+                'position features')
+        if evidence_prev.shape != query_pos_prev.shape:
+            raise ValueError(
+                'position-tangent feature transport requires evidence and '
+                'position features to have equal shapes')
+        if num_dn < 0 or num_dn > evidence_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair features')
+
+        detail = 0.5 * (
+            evidence_curr[:, num_dn:] - evidence_prev[:, num_dn:])
+        transport = (
+            query_pos_curr[:, num_dn:] - query_pos_prev[:, num_dn:]).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        if not num_dn:
+            return transported_detail
+        return torch.cat((
+            torch.zeros_like(evidence_prev[:, :num_dn]),
+            transported_detail), dim=1)
 
     @staticmethod
     def _pair_transport_center_tangent_residual(

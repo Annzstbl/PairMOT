@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 13:33 CST
+更新时间：2026-08-04 14:19 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E48+` | e44 `54.381/61.716`，较 e40 `+0.324/+0.466`，相对原始 decoder e44 `-0.034/-0.021`；绝对和 `116.097` 距严格目标 `118.330` 仍差 `2.233`，PGID `419164` 继续 e48。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
-| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` PREPARED/NO_GPU。 |
+| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` 与 `0803_27 position-tangent + product geometry` 均 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -3363,3 +3363,21 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `async_done=1` 完整。
 - e16→e20→e24 连续恢复，不能在 e24 停止成熟强线。178 当前动态 GPU0、PGID `3151184`
   已进入 e25，继续到 e28 检查 det 差距是否进一步收窄；GPU1 外部任务不动。
+
+## 2026-08-04 14:19 CST：0803_27 position-tangent + product geometry 已准备
+
+- 现有终层几何投影主要改善收敛速度，成熟期增益逐渐收窄；而直接共享分类 residual 或引入
+  语义 margin 的历史候选会损伤 DetA 或 cls AssA。`0803_27` 因此只在最后一层把两帧既有
+  cross-attention evidence 的交换奇差分，正交投影到 reference-point MLP 已编码的 detached
+  位置位移方向；保留运动对齐的分类细节，去除横向外观噪声。回归侧独立执行 `0803_26` 的
+  center 2D 与 shape 3D product-tangent 投影，递归 query、辅助层输出与 DN prefix 不变。
+- 该结构零新增参数、状态、层、attention 与 loss；投影能量不增、交换等变、class-agnostic，
+  不使用 reweight。远端真实 py310 环境新增两项定向测试全部通过，覆盖交换等变、DN 清零、
+  正交余量、有限梯度、position detach、终层单次调用和互斥配置。完整 157 项 decoder 套件仅有
+  1 项既有顺序相关 midpoint 测试失败，未修改的 `0803_26` 基线复现同一失败；该用例在父/新
+  工作树单独运行均通过，因此不是新候选回归。
+- 99 正式/四步 smoke 配置深拷贝、两份 launcher Bash 语法和专用整模构建审计通过：
+  `22,771,111` 参数、增量 0、711 状态张量。隔离工作树
+  `/data/users/wangying01/lth/PairMOT_positiontangent_0803_27_99` 未创建 smoke/formal workdir，
+  状态 `PREPARED/NO_GPU`。启动器要求显式传入当时两张空闲 GPU，不固定 99 序号；等待
+  `0803_25` e12 和 shape-only 成熟证据后再与 `0803_26` 排序，不抢占当前训练。
