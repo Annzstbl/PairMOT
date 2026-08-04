@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 12:58 CST
+更新时间：2026-08-04 13:10 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E48+` | e44 `54.381/61.716`，较 e40 `+0.324/+0.466`，相对原始 decoder e44 `-0.034/-0.021`；绝对和 `116.097` 距严格目标 `118.330` 仍差 `2.233`，PGID `419164` 继续 e48。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E24+` | e20 `51.119/57.969`，较 e16 回升 `+1.492/+1.149`，相对原始 decoder `+0.276/-0.064`；PGID `3151184` 继续 e24。GPU 序号不固定，GPU1 外部任务不动。 |
-| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.262/37.687` 为早期负向但不直接否决；PGID `1442845` 继续 e8/e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` PREPARED/NO_GPU。 |
+| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -3339,3 +3339,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   425,094,518-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件及
   `async_done=1` 完整。
 - 252 固定 GPU0/1 的 PGID `419164` 已继续到 epoch45，后续检查 e48；GPU2/3 不用于本任务。
+
+## 2026-08-04 13:08 CST：0803_25 center-only epoch-8 继续到 epoch-12
+
+- center-only e8 cls HOTA/DetA/AssA `41.359/34.708/51.115`，det
+  `46.931/42.204/54.111`。e4→e8 回升 `+10.097/+9.244`，确认正在收敛；但相对原始 decoder
+  e8 `41.972/48.178` 为 `-0.613/-1.247`，相对 full-tangent e8 `46.283/53.755` 为
+  `-4.924/-6.824`，中心分量单独使用仍未复现联合切空间的早期增益。
+- pair mAP/AP50 `0.2052/0.3754`，both-independent mAP/AP50 `0.2492/0.4369`；
+  375,530,550-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e8 不作直接否决。99 当前动态 GPU1/2、PGID `1442845` 继续 e12，GPU0 外部任务不动；
+  `0803_26` 保持 PREPARED/NO_GPU，等待 center/shape 的成熟归因再决定接替。
