@@ -321,6 +321,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_shape_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
@@ -402,6 +404,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_shape_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
         self.pair_shared_progressive_log_shape_periodic_angle_refinement_decoder = (
@@ -472,6 +477,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_product_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
                 self.
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder,
@@ -484,8 +491,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'angle, terminal-log-area-periodic-angle, terminal-periodic-'
                 'angle, terminal-normalized-center, terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
-                'terminal-transport-shape-tangent, terminal-transport-'
-                'tangent, progressive-log-shape-'
+                'terminal-transport-shape-tangent, terminal-transport-product-'
+                'tangent, terminal-transport-tangent, progressive-log-shape-'
                 'periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
@@ -2058,6 +2065,25 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     pair_shared_terminal_transport_shape_tangent_refinement_decoder
                     and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (
+                    self.
+                    pair_shared_terminal_transport_product_tangent_refinement_decoder
+                    and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Factor the product geometry into independent translation
+                # and shape tangent bundles. This retains the full terminal
+                # motion prior without allowing center energy to rotate into
+                # scale/angle detail (or vice versa) through one 5D dot
+                # product. Both projections are parameter-free and preserve
+                # the DN prefix exactly.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
                 tmp_prev, tmp_curr = (
                     self._pair_transport_shape_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
