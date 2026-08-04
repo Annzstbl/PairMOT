@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 04:40 CST.
+Last updated: 2026-08-05 07:40 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,42 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 07:40 CST, dynamic-197 `0804_06` closed its mature e4/e8/e12 window.
+Epoch 12 cls HOTA/DetA/AssA is `44.810/36.342/57.539`, det is
+`51.879/45.809/61.000`, pair mAP/AP50 is `0.2243/0.3983`, and
+both-independent is `0.2672/0.4546`. The 381,030,887-byte checkpoint,
+iterative-cls/DN semantics, 642 finite floating tensors, 5416 detections,
+50 sequences, 28 CSVs, 108 nonempty evaluation files, and async completion
+marker all closed. Its aligned e12 deficits to the original decoder are
+`2.585/2.557`; exact TERM of PGID `482699` reduced members `23→0`. This is a
+mature-window stop, not an epoch-4/8 rejection.
+
+The successor `0804_09` tests whether the repeated DetA/AP loss comes from
+rank-one deletion of transverse geometric detail. It changes only the center
+2D and shape 3D product-tangent detail operators to minimal orthogonal
+Householder transports, preserving the complete detail norm while aligning
+it with established motion. Classification, DN, auxiliary outputs, recursive
+references, and model size are unchanged. The operation is parameter-free,
+class agnostic, swap equivariant, and introduces no prediction reweighting,
+layer, attention, or loss.
+
+Clean isolated HEAD `84fa6cc` passed the directed norm/swap/DN/gradient test,
+config deep copies, launcher syntax, and complete parent/candidate builds at
+`22,771,111` parameters, zero delta, and 711 states. A real dynamic-GPU0/1
+DDP smoke produced losses `12.9412/19.4368/19.6046/21.1094` and gradients
+`102.5677/89.2892/81.2947/90.7800`; the 364,505,255-byte checkpoint passed
+iterative-cls/DN and all-642-tensor finite checks. Fresh formal screen
+`2390923.pm_0804_09_formal_197`, PGID `2390925`, reached iter50 at
+`0.9251 s/iter`, loss `21.4022`, grad `108.1453`, with seven members,
+finite total/DN/encoder values, and zero fatal signatures. It is now
+RUNNING/TO_E12+ and must collect e4/e8/e12 without early rejection.
+
+The 07:38 resource audit found fixed-252 GPU0/1 at `0804_01` e26 iter950,
+dynamic-178 GPU0 at `0804_07` e4 iter800 with external GPU1 untouched,
+dynamic-99 GPU0/1 at `0804_08` e3 iter650 with external GPU2 untouched, and
+dynamic-197 GPU0/1 at `0804_09` iter50. All four formal logs have zero fatal
+signatures and remain within the corrected per-server card caps.
 
 At 04:12 CST, fixed-252 `0804_01` epoch 16 detection evaluation closed at
 pair mAP/AP50 `0.2914/0.5039` and both-independent `0.3379/0.5551`.

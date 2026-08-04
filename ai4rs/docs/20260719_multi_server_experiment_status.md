@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 07:08 CST。
+更新时间：2026-08-05 07:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,33 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；screen/PGID `1751253/1751255`，五门槛通过，已进入 e1 | 收 e4/e8/e12；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E12；e8 `40.641/47.268` 完整，PGID `482699` 已进入 e12 | 继续 e12，不以 e8 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E28+；e24 `52.478/58.771`，严格总和仍差 `7.081`，PGID `823929` 已进入 e25 | 继续 e28+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；screen/PGID `3752854/3752856`，五门槛通过，已进入 e2 | 收 e4/e8/e12；GPU1 未动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；screen/PGID `1751253/1751255`，五门槛通过，e3 iter650 | 收 e4/e8/e12；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；screen/PGID `2390923/2390925`，五门槛通过，formal iter50 | 收 e4/e8/e12；其他 GPU 当前空闲 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E28+；e24 `52.478/58.771`，严格总和仍差 `7.081`，PGID `823929` e26 iter950 | 继续 e28+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；screen/PGID `3752854/3752856`，五门槛通过，e4 iter800 | 收 e4/e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 07:40 CST：197 Frenet 成熟收口并由 0804_09 接替
+
+- `0804_06` e12 cls HOTA/DetA/AssA `44.810/36.342/57.539`，det
+  `51.879/45.809/61.000`；pair mAP/AP50 `0.2243/0.3983`、both-independent
+  `0.2672/0.4546`。相对原 decoder e12 为 `-2.585/-2.557`，相对 Encoder 为
+  `-4.870/-4.662`。381,030,887-byte checkpoint、iterative-cls/DN、642 个浮点张量、
+  5416/50/28/108 与 326.4 秒异步完成全部闭环。
+- e4/e8/e12 三个节点持续双负后精确 TERM PGID `482699`，成员 `23→0`，六张 GPU 两轮
+  均为 `1 MiB/0%`。该判定来自成熟窗口，不是 e4/e8 直接否决。
+- 新 `0804_09` 只把 product-tangent 的 center/shape rank-one detail 投影替换为正交、
+  范数保持的 Householder 平行传输；零参数/状态增量、交换等变、class-agnostic，无
+  prediction reweight、新层、attention 或 loss。独立 clean HEAD `84fa6cc` 的定向测试、
+  配置 deepcopy、完整父/候选构建和 launcher 语法通过：`22,771,111` 参数、711 states。
+- 动态 GPU0/1 真实 DDP smoke loss `12.9412/19.4368/19.6046/21.1094`、grad
+  `102.5677/89.2892/81.2947/90.7800`；364,505,255-byte checkpoint 的 iterative-cls/DN
+  与 642 张量全有限。fresh formal screen/PGID `2390923/2390925`，iter50
+  `0.9251 s/iter`、loss/grad `21.4022/108.1453`，7 成员、GPU0/1 各约 19.2 GiB、
+  total/DN/Encoder 有限、fatal 0，五项门槛通过，登记 `RUNNING/TO_E12+`。
+- 07:38 资源复审：252 只用固定 GPU0/1、e26 iter950；178 只用动态 GPU0、e4 iter800，
+  GPU1 外部任务不动；99 只用动态 GPU0/1、e3 iter650，GPU2 外部任务不动；197 只用
+  动态 GPU0/1。所有本任务卡数均在边界内。
 
 ## 2026-08-05 07:08 CST：四节点闭环与 0804_07/08 动态接替
 
