@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 19:52 CST
+更新时间：2026-08-04 20:44 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E64` | e56 最好点 `54.980/62.009`，cls 过线 `+0.543`、det 仍低 `0.384`，总和 `116.989` 距严格目标差 `1.341`；e60 回落为 `54.855/61.870`，PGID `419164` 已到 e62，保留 e64 平台确认。GPU2/3 不用于本任务。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E48` | e44 `53.672/60.553`，较 e40 明显回升 `+0.983/+0.390`；虽相对原 decoder 仍低 `0.743/1.184`，但不构成平台，PGID `3151184` 继续 e48。GPU1 外部任务不动；`0803_30` 保持 PREPARED/NO_GPU。 |
-| 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E4+` | `0803_27` e4/e8/e12 成熟双负后精确停止 PGID `1470665`；动态空闲 GPU0/1 上新线 smoke 与 formal iter50 五门槛通过，formal PGID `1582836`。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
+| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E4+` | 2x4 配置、定向测试、整模构建、真实 DDP smoke 与 formal iter50 五门槛通过；screen `798987.pm_0803_30_formal_252`、PGID `798989`，GPU2/3 不用于本任务。成熟 `0803_13` 已在 e64 完整闭环后停止，最好仍为 e56 `54.980/62.009`。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E48` | e44 `53.672/60.553`，较 e40 明显回升 `+0.983/+0.390`；虽相对原 decoder 仍低 `0.743/1.184`，但不构成平台，PGID `3151184` 正在 e48。GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `30.658/38.402`，相对原 decoder `-3.648/-0.188`，只登记 position 分类慢收敛与几何轻微改善；PGID `1582836` 继续 e8/e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E8+` | e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，相对 position/product e4 `+0.821/+0.267`；只登记早期信号，PGID `1016336` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
