@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 06:00 CST
+更新时间：2026-08-05 07:08 CST
 
 ## 当前研究原则
 
@@ -14,18 +14,56 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E24+` | e20 cls/det `52.198/58.132`，严格总和仍差 `8.000`，但 e16→e20 继续双升；PGID `823929` 已进入 e22，继续 e24+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 cls/det `41.647/47.450`，相对原 decoder `-0.325/-0.728`；PGID `3652382` 已进入 e11，继续 e12 成熟窗口，不以 e8 否决。 |
-| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 cls/det `41.230/46.977`；相对 body-frame 同点 `-0.417/-0.473`，PGID `1715384` 已进入 e10，继续 e12，不以 e8 否决。 |
-| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.656/36.905`；端点切向使 AssA 较 SE(2) 同点低 `2.152/4.330`，PGID `482699` 已进入 e8，继续 e8/e12，不以 e4 否决。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E28+` | e24 cls/det `52.478/58.771`，同点和 `111.249`、严格仍差 `7.081`；e20→e24 双升，PGID `823929` 已进入 e25，继续 e28+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | body-frame e12 成熟双负后精确停止；新 PGID `3752856` 通过单卡 smoke 与 formal iter50 五门槛，已进入 e2，GPU1 不动。 |
+| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | SE(2) e12 成熟双负后精确停止；新 PGID `1751255` 通过双卡 smoke 与 formal iter50 五门槛，已进入 e1；GPU2 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E12` | e8 cls/det `40.641/47.268` 完整，仍低于原 decoder；按慢收敛规则继续 e12，PGID `482699` 已进入 e12，其他 GPU 不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
-`0804_07 axis-Frenet product tangent` 已在 178 独立 checkout 静态闭环，状态严格为
-`PREPARED/NO_GPU`；它不进入当前运行表、不抢占 `0804_04`。
+`0804_04 body-frame` 与 `0804_05 SE(2)` 均在 e4/e8/e12 三个完整节点后成熟停止；
+`0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
 
-`0804_08 shared-metric product tangent` 已在 99 全新独立 checkout 静态闭环，状态严格为
-`PREPARED/NO_GPU`；它不进入当前运行表、不抢占 `0804_05`。
+## 2026-08-05 07:08 CST：e24 继续双升；两条成熟负线由 0804_07/08 接替
+
+- 252 `0804_01` e24 cls HOTA/DetA/AssA `52.478/44.082/64.477`，det
+  `58.771/52.076/68.677`，同 checkpoint 和 `111.249`；严格门槛
+  `54.437/62.393/118.330` 分别仍差 `1.959/3.622/7.081`，尚未达标。
+  相对原 decoder e24 `51.709/58.781` 为 `+0.769/-0.010`、联合 `+0.759`；
+  相对 Encoder e24 `51.714/59.519` 为 `+0.764/-0.748`、联合 `+0.016`。
+  e20→e24 仍双升 `+0.280/+0.639`，pair mAP/AP50 `0.2973/0.5127`、
+  both-independent `0.3412/0.5591` 也继续上升，因此固定 GPU0/1 保留到 e28+，
+  不把 e24 尚未过线当作停止理由；GPU2/3 不用于本任务。
+- 397,549,046-byte e24 checkpoint 的 iterative-cls/DN 语义和 642 个浮点张量全有限；
+  5416 条检测、50 序列、28 CSV、108 个非空评测文件与 `async_done=1` 全部闭环，
+  TrackEval 用时 399.5 秒。07:07 PGID `823929` 已到 e25 iter350，fatal 0。
+- 178 `0804_04 body-frame` e12 cls HOTA/DetA/AssA `47.220/37.937/61.436`，det
+  `53.882/47.177/63.450`；pair mAP/AP50 `0.2414/0.4132`、both-independent
+  `0.2853/0.4658`。相对原 decoder e12 `-0.175/-0.554`、相对 Encoder
+  `-2.460/-2.659`。e4/e8/e12 三点完整后才精确停止 PGID `3652382`，成员 `8→0`，
+  不是 e4/e8 早停；381,084,660-byte checkpoint、5416/50/28/108 与异步完成均完整。
+- 178 GPU0 连续两轮为 `1 MiB/0%` 后，`0804_07 axis-Frenet` 真实单卡 smoke 四步
+  loss `21.3688/20.6416/20.8939/21.1817`、grad
+  `60.1890/67.1206/97.9977/90.9295`，364,507,572-byte checkpoint 的 642 个浮点张量
+  全有限。fresh formal screen/PGID `3752854/3752856`，iter50 `0.9441 s/iter`、
+  loss/grad `20.9969/156.2116`，DN/Encoder 有限、fatal 0；五门槛通过，登记
+  `RUNNING/TO_E12+`。07:07 已到 e2 iter800，GPU0 约 31.5 GiB，GPU1 未动。
+- 99 `0804_05 SE(2)` e12 cls HOTA/DetA/AssA `45.531/37.305/57.963`，det
+  `51.727/46.529/59.516`；pair mAP/AP50 `0.2304/0.4116`、both-independent
+  `0.2739/0.4678`。相对原 decoder e12 `-1.864/-2.709`、相对 body-frame
+  `-1.689/-2.155`；e4/e8/e12 完整持续双负后精确停止 PGID `1715384`，成员 `23→0`。
+- 99 全机三卡两轮均为 `10 MiB/0%` 后，本次动态选择 GPU0/1 验证 `0804_08`；真实双卡
+  smoke 四步 loss `12.9369/19.5109/19.6569/21.2423`、grad
+  `103.4712/141.1132/120.5418/136.1262`，364,504,438-byte checkpoint 的 642 个浮点张量
+  全有限。fresh formal screen/PGID `1751253/1751255` 已到 iter100，loss/grad
+  `20.5120/112.2396`，DN/Encoder 有限、fatal 0；五门槛通过，登记 `RUNNING/TO_E12+`。
+  07:07 已到 e1 iter700；随后出现的 GPU2 外部任务约 6.0 GiB/97%，本任务不触碰。
+- 197 `0804_06 Frenet` e8 cls HOTA/DetA/AssA `40.641/33.920/50.843`，det
+  `47.268/42.797/54.147`；pair mAP/AP50 `0.1977/0.3616`、both-independent
+  `0.2427/0.4267`。相对原 decoder e8 `-1.331/-0.910`、相对 Encoder
+  `-4.628/-2.925`；375,534,503-byte checkpoint、5416/50/28/108 与 322.4 秒异步完成
+  均完整。按规则继续 e12，07:07 PGID `482699` 已到 e12 iter450，GPU2/3 动态占用，
+  其他卡不动。
 
 ## 2026-08-05 06:00 CST：shared-metric product tangent 静态闭环；四线健康推进
 

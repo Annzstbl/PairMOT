@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 06:00 CST。
+更新时间：2026-08-05 07:08 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,27 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.230/46.977` 完整，PGID `1715384` 已进入 e10 | `0804_08 shared-metric` PREPARED/NO_GPU；继续 e12，不以 e8 早停 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E8+；e4 `31.656/36.905` 完整，PGID `482699` 已进入 e8 | 继续 e8/e12，不以 e4 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E24+；e20 `52.198/58.132`，严格总和仍差 `8.000`，PGID `823929` 已进入 e22 | 继续 e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 cls/det `41.647/47.450`，PGID `3652382` 已进入 e11 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e12 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；screen/PGID `1751253/1751255`，五门槛通过，已进入 e1 | 收 e4/e8/e12；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E12；e8 `40.641/47.268` 完整，PGID `482699` 已进入 e12 | 继续 e12，不以 e8 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E28+；e24 `52.478/58.771`，严格总和仍差 `7.081`，PGID `823929` 已进入 e25 | 继续 e28+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；screen/PGID `3752854/3752856`，五门槛通过，已进入 e2 | 收 e4/e8/e12；GPU1 未动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 07:08 CST：四节点闭环与 0804_07/08 动态接替
+
+- 252 `0804_01` e24 为 cls/det `52.478/58.771`、同点和 `111.249`，严格三门槛仍差
+  `1.959/3.622/7.081`。相对原 decoder e24 `+0.769/-0.010`，相对 Encoder
+  `+0.764/-0.748`；e20→e24 仍双升 `+0.280/+0.639`，AP 亦继续增长。397,549,046-byte
+  checkpoint、5416/50/28/108 与 399.5 秒异步完成完整；固定 GPU0/1 继续 e28+。
+- 178 `0804_04 body-frame` e12 `47.220/53.882`，相对原 decoder
+  `-0.175/-0.554`；99 `0804_05 SE(2)` e12 `45.531/51.727`，相对原 decoder
+  `-1.864/-2.709`。两者均在 e4/e8/e12 完整闭环后精确停止，不是 e4/e8 早停。
+- 178 `0804_07 axis-Frenet` 单卡 smoke/checkpoint/formal iter50 五门槛通过，fresh
+  screen/PGID `3752854/3752856`，GPU0 运行、GPU1 未动；99 `0804_08 shared-metric`
+  双卡五门槛通过，fresh screen/PGID `1751253/1751255`，动态 GPU0/1 运行，GPU2 外部任务
+  不触碰。两项均为零参数、非 class-aware、无 reweight 的轻量单因素 decoder。
+- 197 `0804_06 Frenet` e8 `40.641/47.268`，375,534,503-byte checkpoint、
+  5416/50/28/108 与 322.4 秒异步完成完整；e8 只作中期归因，继续到 e12。
 
 ## 2026-08-05 06:00 CST：0804_08 静态准备与四机复审
 
