@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 13:33 CST.
+Last updated: 2026-08-04 14:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -13,26 +13,32 @@ Current per-server status dashboard:
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
 
-At 13:30 CST, full transported tangent `0803_23` completed epoch 24 on the dynamically
-selected 178 GPU0 at `52.012/58.551`. It continued the recovery from epoch 16 through
-epoch 20, gaining another `+0.893/+0.582`; versus the original decoder it is
-`+0.303/-0.230`, and versus Encoder it is `+0.298/-0.968` at the aligned point. Complete
-checkpoint, AP, 50-sequence TrackEval, and async artifacts were verified. PGID `3151184`
-continues to epoch 28 while external work on GPU1 remains untouched.
+At 14:49 CST, full transported tangent `0803_23` completed epoch 28 on the dynamically
+selected single 178 GPU at `51.971/58.914`. Detection improved another `+0.363` from
+epoch 24 while classification was effectively flat (`-0.041`), so PGID `3151184`
+continues to epoch 32. Complete checkpoint, AP, 50-sequence TrackEval, and async artifacts
+were verified; the external process on the other physical GPU remains untouched.
 
-At 13:08 CST, center-only `0803_25` completed epoch 8 on the dynamically selected 99
-GPU1/2 at `41.359/46.931`. It recovered strongly from epoch 4 but remains
-`0.613/1.247` below the original decoder and `4.924/6.824` below the full transported
-tangent at the aligned point. Complete checkpoint, AP, 50-sequence TrackEval, and async
-artifacts were verified. Epoch 8 is not a rejection point, so PGID `1442845` continues
-to epoch 12 while `0803_26` remains PREPARED/NO_GPU.
+At 14:33 CST, center-only `0803_25` was stopped only after its complete epoch-12 point
+`46.196/51.938` confirmed an e4/e8/e12 mature dual-negative trajectory. PGID `1442845`
+fell from 23 members to zero. The zero-state `0803_27` position-tangent evidence plus
+product geometry candidate then passed a real four-iteration DDP smoke on two dynamically
+selected free 99 GPUs. Fresh formal PGID `1470665` reached iter50 with finite total, DN,
+encoder proposal, and grad values and no fatal error; it is RUNNING to e4/e8/e12.
 
-At 12:55 CST, mature `0803_13` completed epoch 44 on fixed 252 GPU0/1 at
-`54.381/61.716`. It improved over epoch 40 by `+0.324/+0.466` and is nearly tied with
-the original decoder at epoch 44 (`-0.034/-0.021`), but its absolute sum `116.097` is
-still `2.233` below the strict `>118.330` target. Complete checkpoint, 5416 detections,
-50 sequences, 28 CSV files, 108 evaluation files, and async completion were verified.
-PGID `419164` therefore continues to epoch 48; GPU2/3 remain unused by this task.
+At 14:23 CST, mature `0803_13` completed epoch 48 on fixed 252 GPU0/1 at
+`54.533/61.587`. Classification strictly exceeds final Encoder by `0.096`, but detection
+is still `0.806` below and the sum `116.120` remains `2.210` short of the strict
+`>118.330` target. Complete checkpoint, 5416 detections, 50 sequences, 28 CSV files,
+108 evaluation files, and async completion were verified. PGID `419164` continues to
+epoch 52 because the original decoder's detection peak occurs at e52–e56; GPU2/3 remain
+unused by this task.
+
+At 14:26 CST, shape-only `0803_24` completed epoch 8 at `41.910/47.783`, close to the
+original decoder but still far below the early full-tangent synergy. It continues to
+epoch 12 rather than being rejected at e8. The zero-parameter `0803_28` position-tangent
+classification plus full 5D transport candidate is PREPARED/NO_GPU in a clean 197
+checkout at `1e2be85`; it will not run until the current two-card trajectory closes.
 
 At 07:09 CST, mature experiment `0803_13` completed epoch 28 on 252 fixed GPU0/1 at
 `53.114/59.729`. It remains dual-positive against the original decoder at the same epoch
