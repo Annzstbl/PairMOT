@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 09:19 CST.
+Last updated: 2026-08-04 09:50 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -61,6 +61,22 @@ or preempt any GPU.
 At 09:19 CST, `0803_21` completed epoch 8 at `38.854/46.716`, still below the original
 decoder by `3.118/1.462` with complete artifacts. It continues to epoch 12 under the
 three-node mature rule; the prepared center-only successor remains at zero GPU occupancy.
+
+At 09:43 CST, `0803_23` completed epoch 12 at `50.145/56.375`. It remains ahead of the
+original decoder by `+2.750/+1.939` and is `+0.465/-0.166` against Encoder at the aligned
+checkpoint. The combined original-decoder gain is still `+4.689`, so the one-GPU 178 job
+continues unchanged to epoch 16 rather than releasing the strongest trajectory early.
+
+At 09:43 CST, `0803_18` completed a mature e4/e8/e12 trajectory; its e12 result
+`45.404/51.784` is below the original decoder by `1.991/2.652` and Encoder by
+`4.276/4.757`. After all checkpoint and TrackEval artifacts were verified, PGID `387859`
+was stopped exactly. This is a three-node mature decision, not an e4/e8 rejection.
+
+At 09:49 CST, 197 dynamically selected free GPU2/3 after two consecutive checks; GPU0/1
+external work remained untouched. `0803_24` transported shape tangent passed the real-data
+two-GPU smoke and formal iter50 gates at clean HEAD `44395ea`. Formal PGID `712277` now runs
+to e4/e8/e12 with finite total, DN, encoder-proposal, and gradient values. No GPU index is
+fixed on 197; GPU2/3 are only the current free-card choice.
 
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 

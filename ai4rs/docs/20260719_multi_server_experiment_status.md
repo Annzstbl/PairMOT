@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 09:19 CST。
+更新时间：2026-08-04 09:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,9 +18,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_21 terminal transported margins`（当前 GPU1/2） | RUNNING/TO_E12+；e8 `38.854/46.716`，相对原 decoder `-3.118/-1.462`，PGID `1384944` 继续 e12 | `0803_25 center-only` 双卡版 PREPARED/NO_GPU，成熟交接后动态选卡 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_18 terminal geometry + semantic margins`（GPU4/5） | RUNNING/TO_E12+；e8 `42.014/47.865`，相对原 decoder `+0.042/-0.313`，按晚收敛约束继续，PGID `387859` | `0803_24 transported shape tangent` 双卡版 PREPARED/NO_GPU，启动时动态选择空闲卡；`0803_22`、`0803_20` 仍保留 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E4+；`0803_18` e12 `45.404/51.784` 成熟双负后停止；fresh formal PGID `712277` 的 iter50 五门槛通过 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E36+；e32 `53.642/60.531`，相对原 decoder 联合 `+1.652`，相对 Encoder 双正，PGID `419164` | 成熟长轨迹，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E12+；e8 `46.283/53.755`，相对原 decoder `+4.311/+5.577`、相对 Encoder `+1.014/+3.562`，PGID `3151184` | 当前第一主线继续 e12；`0803_24 shape-only`、`0803_25 center-only` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E16+；e12 `50.145/56.375`，相对原 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`，PGID `3151184` | 当前第一主线继续 e16；`0803_25 center-only` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2318,3 +2318,24 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 两次空闲检查后 fresh formal screen `1384942.pm_0803_21_formal_99`、PGID `1384944` 启动；
   iter50 `0.9814 s/iter`、loss `21.3915`、grad `104.8633`，总、DN、encoder proposal
   全有限，GPU1/2 各约 19.2 GiB，无致命错误，五门槛通过。状态 `RUNNING`，继续 e4/e8/e12。
+
+## 2026-08-04 09:43 CST：197 0803_18 e12 停止，0803_24 接替
+
+- 0803_18 e12 cls/det HOTA `45.404/51.784`，相对原 decoder e12
+  `-1.991/-2.652`、相对 Encoder `-4.276/-4.757`；pair mAP/AP50
+  `0.2298/0.4115`、both-independent `0.2732/0.4675`。checkpoint、5416 条检测、50 序列、
+  28 CSV、108 文件和异步完成证据完整。
+- e4/e8/e12 成熟三节点双负后精确停止 PGID `387859`，成员 `23→0`。连续两次核验后动态选择
+  空闲 GPU2/3；GPU0/1 外部 PID `8290/8291` 未动，符合 197 仅限制两卡总量、不固定序号的规则。
+- 0803_24 双卡 smoke 四步与 642 个浮点 checkpoint tensor 全有限；fresh formal clean HEAD
+  `44395ea`，screen `712275.pm_0803_24_formal_197`、PGID `712277`。iter50
+  `1.8555 s/iter`、loss/grad `21.4056/136.6876`，GPU2/3 各约 19.2 GiB，五门槛通过，
+  状态 `RUNNING/TO_E4+`。
+
+## 2026-08-04 09:43 CST：178 0803_23 e12 继续强主线
+
+- e12 cls/det HOTA `50.145/56.375`，相对原 decoder 同点 `+2.750/+1.939`、联合
+  `+4.689`，相对 Encoder 同点 `+0.465/-0.166`。pair mAP/AP50 `0.2745/0.4824`、
+  both-independent `0.3205/0.5354`；checkpoint、50/28/108 和异步完成证据完整。
+- e12 只剩 det `0.166` 的 Encoder 同点缺口，PGID `3151184` 继续 e16，不为后继提前释放
+  178 单卡；当前 GPU0 只是动态选择，不是固定序号授权。
