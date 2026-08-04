@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 01:46 CST。
+更新时间：2026-08-05 03:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,44 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E12；e8 `41.415/48.105` 完整闭环，PGID `1673454` 已继续 e9 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.938/38.765` 完整闭环，PGID `2540932` 已继续 e5 | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | `0804_01 resume252` 端口 smoke-passed、PREPARED/WAIT_E12；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E12+；e8 `46.673/53.922` 强同点双正，PGID `3555710` 已继续 e9 | `0804_04 body-frame product-tangent` PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E4+；smoke/checkpoint/formal iter50 五门槛通过，PGID `1715384` | `0804_02` e4/e8/e12 成熟无优势后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_03 terminal log-size-only`（当前动态 GPU2/3） | RUNNING/TO_E12；e8 `41.299/46.767` 完整闭环，PGID `2540932` 已运行 e10 | e8 只作中期负信号，不早停；GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E16+；正式恢复与 iter50 五门槛通过，PGID `823929` 已运行 e13 | e12 `49.784/56.243` 未达严格目标但成熟优于原 decoder；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E4+；单卡 smoke/checkpoint/formal iter50 五门槛通过，PGID `3652382` 已运行 e1 | `0804_01` e12 完整迁移后 STOPPED；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 03:04 CST：0804_05 在 99 完成五门槛并进入正式轨迹
+
+- `0804_05` 保持 0804_01 的 shape tangent，只把终层中心位移改写为由已运输角增量驱动的
+  SE(2) midpoint Lie twist，再沿参考轨迹投影并匹配回缩。它零参数/状态增量、class-agnostic、
+  无 reweight，不改变分类、DN、layer、attention 或 loss；只增加终层逐元素 `sinc`/三角运算。
+- 99 隔离仓库 clean HEAD `f2c60a9`；三项定向测试、正式/烟测配置 deepcopy、两份 launcher
+  语法和完整父/候选构建通过，参数/state `22,771,111/711`、增量 0。动态 GPU0/1 两轮空闲后，
+  四步 DDP smoke loss `12.9369/19.4810/19.5814/21.1211`、grad
+  `103.5530/98.0642/155.6795/142.9127`，DN/Encoder 与 642 个 checkpoint 浮点 tensor
+  全有限。
+- fresh formal screen `1715383.pm_0804_05_formal_99`、PGID `1715384`；iter50
+  `0.9695 s/iter`、loss/grad `21.3647/108.6043`，双 rank 与动态 GPU0/1 各约 19.2 GiB，
+  正式日志/目录更新且无 fatal。五门槛通过，状态 `RUNNING/TO_E4+`；GPU0/1 只是本次动态选择。
+
+## 2026-08-05 02:53 CST：成熟迁移、两项后继启动与两项中期/成熟判定
+
+- 178 `0804_01` e12 完整闭环为 cls/det `49.784/56.243`，DetA/AssA
+  `41.865/61.515` 与 `50.021/65.603`；相对原 decoder `+2.389/+1.807`，相对 Encoder
+  `+0.104/-0.298`。pair mAP/AP50 `0.2758/0.4786`、both-independent
+  `0.3214/0.5310`，checkpoint、5416/50/28/108 与 async 标志完整。未严格达标但成熟优势足以
+  延长，原 PGID `3555710` 在完整 e12 后停止。
+- 252 从该 e12 checkpoint 在固定 GPU0/1 恢复：隔离 HEAD `f356593`、screen
+  `823928.pm_0804_01_resume252`、PGID `823929`，恢复日志为 epoch12/iter12456；formal iter50
+  `1.2182 s/iter`、loss/grad `9.9167/39.2891`，五门槛通过并继续 e16/e20/e24+。GPU2/3
+  保持 1 MiB，严格成功仍要求同一 checkpoint 同时 `cls>54.437`、`det>62.393`、和 `>118.330`。
+- 释放后的 178 动态 GPU0 对 `0804_04` 完成四步真实 smoke 与 642 tensor checkpoint 审计；
+  fresh screen `3652381.pm_0804_04_formal_178`、PGID `3652382`，formal iter50
+  `0.9726 s/iter`、loss/grad `21.0216/101.0078`，五门槛通过并继续 e4/e8/e12；GPU1 外部任务不动。
+- 99 `0804_02` angle-only e12 `45.595/53.257`，相对原 decoder `-1.800/-1.179`；e4/e8/e12
+  完整窗口均无净优势后停止 PGID `1673454`，属于成熟收口而非 e4/e8 早停。
+- 197 `0804_03` log-size-only e8 `41.299/46.767`，相对原 decoder `-0.673/-1.411`；完整
+  checkpoint/AP/TrackEval 闭环，但只登记中期负信号，PGID `2540932` 继续 e12，GPU5 外部任务不动。
 
 ## 2026-08-05 01:46 CST：252 成熟接力端口就绪但未启动
 

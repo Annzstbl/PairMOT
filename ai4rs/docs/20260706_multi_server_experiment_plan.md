@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 01:46 CST.
+Last updated: 2026-08-05 03:04 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,48 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 03:04 CST, all four allowed lanes carry valid formal trajectories. Fixed
+252 GPU0/1 runs the mature `0804_01` product-tangent continuation from epoch
+12 under PGID `823929`; dynamic 178 GPU0 runs `0804_04` body-frame product
+tangent under PGID `3652382`; dynamic 197 GPU2/3 continues `0804_03`
+log-size-only to e12 under PGID `2540932`; and dynamically selected 99 GPU0/1
+runs the new `0804_05` SE(2) midpoint Lie-twist product tangent under PGID
+`1715384`. These dynamic indices are observations for the current jobs, not
+fixed allocations. External 178 GPU1 and 197 GPU5 work remains untouched;
+252 GPU2/3 remains unused by this goal.
+
+`0804_05` is the next single-factor structural test motivated by the e12
+product-tangent localization/AP gap. It keeps transported shape geometry and
+changes only terminal center translation to an angle-coupled finite-motion
+SE(2) midpoint tangent. It is parameter-free, class agnostic, has no
+reweighting, and adds no layer, attention, or loss. At isolated clean HEAD
+`f2c60a9`, swap, zero-angle reduction, and global-rotation tests passed;
+formal/smoke config deep copies, launcher syntax, and full parent/candidate
+builds passed with `22,771,111` parameters, zero delta, and 711 states. A real
+four-step DDP smoke produced finite loss/gradient/DN/encoder values and a
+verified 642-tensor checkpoint. Fresh formal iter50 reached `0.9695 s/iter`,
+loss `21.3647`, and grad `108.6043` with both ranks alive and no fatal error.
+The job is therefore RUNNING/TO_E4+, but e4/e8 remain intermediate evidence
+and cannot directly reject the decoder; collect e4/e8/e12 and extend if the
+DetA/AssA/AP trajectory warrants it.
+
+At 02:53 CST, `0804_01` closed e12 at `49.784/56.243`, or
+`+2.389/+1.807` versus the original decoder and `+0.104/-0.298` versus Encoder
+at the aligned epoch. Its complete checkpoint, detections, AP, TrackEval, and
+async artifacts justified migrating the mature line to the slow 252 lane,
+not declaring success. The fixed-GPU resume loaded epoch12/iter12456 and passed
+formal iter50 at `1.2182 s/iter`, finite loss `9.9167`, and grad `39.2891`.
+Continue to e16/e20/e24+ and validate every node against the strict same-
+checkpoint thresholds `cls>54.437`, `det>62.393`, and sum `>118.330`.
+
+The released 178 lane launched `0804_04` body-frame product tangent after a
+finite real single-GPU smoke and checkpoint audit; its formal iter50 passed at
+`0.9726 s/iter`, loss `21.0216`, and grad `101.0078`. Continue e4/e8/e12
+without early rejection. On 99, angle-only `0804_02` closed the complete
+e4/e8/e12 window at e12 `45.595/53.257`, remaining below the original decoder,
+so it was stopped on mature evidence. On 197, log-size-only `0804_03` e8
+`41.299/46.767` is only an intermediate negative signal and continues to e12.
 
 At 01:46 CST, the 252 continuation port for strong candidate `0804_01` is
 smoke-passed but deliberately not running. Its isolated clean HEAD `f356593`

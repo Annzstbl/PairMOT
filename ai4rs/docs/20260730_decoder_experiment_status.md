@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 01:46 CST
+更新时间：2026-08-05 03:04 CST
 
 ## 当前研究原则
 
@@ -14,11 +14,57 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 `46.673/53.922` 相对 Encoder 同点 `+1.404/+3.729`，并超过 full-tangent `+0.390/+0.167`；PGID `3555710` 已继续 e9→e12，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E12` | e8 `41.415/48.105` 相对原 decoder仍为 `-0.557/-0.073`；完整产物闭环后 PGID `1673454` 已继续 e9→e12，不以 e8 直接否决。GPU 序号不固定。 |
-| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E8+` | e4 `31.938/38.765` 为 cls 慢、det 仅微正的尺度单因素信号；完整产物闭环后 PGID `2540932` 已继续 e5→e8/e12，不以 e4 直接否决。GPU5 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E16+` | e12 `49.784/56.243` 相对 Encoder 同点为 `+0.104/-0.298`，未达标但相对原 decoder 联合 `+4.196`；PGID `823929` 从 e12 完整恢复并健康运行 e13，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实单卡 smoke 与正式 iter50 五门槛通过；PGID `3652382` 健康运行 e1，GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E4+` | 零参数、shape→SE(2) center 单因素；真实双卡 smoke 与正式 iter50 五门槛通过，PGID `1715384`。GPU 序号为本次动态选择，不构成固定分配。 |
+| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E12` | e8 `41.299/46.767` 相对原 decoder `-0.673/-1.411`，仅作中期负信号；PGID `2540932` 已运行 e10，继续 e12，GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 03:04 CST：SE(2) Lie-twist 在 99 通过五门槛；四线并行进入有效轨迹
+
+- `0804_05` 是 product-tangent 的一个单因素几何后继：shape tangent 先保持 0804_01 的运输投影，
+  随后仅把最终 center correction 改写为由已运输角增量驱动的 SE(2) midpoint Lie twist，沿参考轨迹
+  投影后用匹配 Jacobian 回缩。分类、DN、辅助输出、递归 reference、层、attention、loss 均不变；
+  零参数、零 state 增量、class-agnostic、无 reweight，终层只增加逐元素 `sinc`/三角运算。
+- 99 隔离仓库 clean HEAD `f2c60a9`；交换等变、零角退化为 body-frame、整体旋转等变三项定向测试，
+  正式/烟测配置 deepcopy、两份 launcher `bash -n` 和完整父/候选构建均通过：
+  `22,771,111` 参数、增量 0、711 states。动态 GPU0/1 两轮均为 `10 MiB/0%` 后，真实双卡 smoke
+  loss `12.9369/19.4810/19.5814/21.1211`、grad
+  `103.5530/98.0642/155.6795/142.9127`；total、DN、Encoder proposal、642 个 checkpoint
+  浮点 tensor 全有限。
+- fresh formal screen `1715383.pm_0804_05_formal_99`、PGID `1715384`，iter50
+  `0.9695 s/iter`、loss/grad `21.3647/108.6043`；双 rank、动态 GPU0/1 各约 19.2 GiB，
+  正式目录/日志持续更新且无 fatal，五门槛通过，登记 `RUNNING/TO_E4+`。e4/e8 仅作中间归因，
+  不直接否决 decoder；先收齐 e4/e8/e12，再结合 DetA/AssA/AP 与轨迹决定延长。
+
+## 2026-08-05 02:53 CST：product-tangent 成熟迁移；angle-only 收口；body-frame 启动
+
+- 178 `0804_01` e12 cls HOTA/DetA/AssA `49.784/41.865/61.515`，det
+  `56.243/50.021/65.603`；相对原 decoder e12 `47.395/54.436` 为 `+2.389/+1.807`，联合
+  `+4.196`，相对 Encoder `49.680/56.541` 为 `+0.104/-0.298`，相对 full-tangent
+  `50.145/56.375` 为 `-0.361/-0.132`。pair mAP/AP50 `0.2758/0.4786`、both-independent
+  `0.3214/0.5310`；checkpoint、5416/50/28/108 与 async 标志完整。它尚未严格达标，但保留了
+  显著成熟优势，因此不是淘汰，而是把 e12 迁到最慢资源继续观察晚收敛。
+- 252 隔离仓库 `f356593` 从同一 e12 checkpoint 恢复到固定 GPU0/1，screen
+  `823928.pm_0804_01_resume252`、PGID `823929`；日志确认 `resumed epoch:12, iter:12456`，
+  正式 iter50 `1.2182 s/iter`、loss/grad `9.9167/39.2891`，total/DN/Encoder 全有限、
+  GPU2/3 保持 1 MiB，五门槛通过。继续收 e16/e20/e24+，每个 checkpoint 必须同点核验严格
+  `cls>54.437`、`det>62.393`、`sum>118.330`。
+- 178 原 PGID `3555710` 在 e12 产物完整后精确停止并释放动态 GPU0；随即对 `0804_04`
+  body-frame product tangent 完成真实单卡 smoke，loss
+  `21.3731/20.6355/20.9715/21.1433`、grad
+  `60.1883/78.9025/84.5692/78.5934`，checkpoint 642 tensor 有限。fresh formal screen
+  `3652381.pm_0804_04_formal_178`、PGID `3652382`，iter50 `0.9726 s/iter`、loss/grad
+  `21.0216/101.0078`，五门槛通过并运行到 e4/e8/e12；GPU1 外部任务不动。
+- 99 `0804_02` angle-only e12 `45.595/53.257`，DetA/AssA 为
+  `37.536/57.720` 与 `47.802/61.450`，相对原 decoder `-1.800/-1.179`；pair mAP/AP50
+  `0.2336/0.4131`、both-independent `0.2754/0.4665`。e4/e8/e12 三个完整节点均无净优势，
+  所以在成熟窗口后停止 PGID `1673454` 并释放 99，而不是因 e4/e8 早停。
+- 197 `0804_03` log-size-only e8 `41.299/46.767`，DetA/AssA 为
+  `34.582/52.056` 与 `42.695/53.068`，相对原 decoder `-0.673/-1.411`；pair mAP/AP50
+  `0.2043/0.3736`、both-independent `0.2487/0.4357`。这是中期负信号，PGID `2540932`
+  继续 e12，不以 e8 直接否决；动态 GPU2/3 使用不意味着固定序号，GPU5 外部任务不动。
 
 ## 2026-08-05 01:46 CST：0804_01 的 252 成熟接力端口通过烟测
 
