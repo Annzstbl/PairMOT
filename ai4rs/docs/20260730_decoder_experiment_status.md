@@ -3453,3 +3453,21 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - e28 未达最终门槛，但 det 尚未回落，不能把分类单点平台作为慢收敛 decoder 的否决依据。178
   当前动态 GPU0、PGID `3151184` 已自然进入 e29，继续到 e32；GPU1 新出现的外部显存占用不动，
   本任务仍只使用一张卡且不固定其序号。
+
+## 2026-08-04 15:14 CST：0803_29 position-tangent + osculating-plane 已准备
+
+- `0803_23` 的 5D full-tangent 在 e8 有强增益，但到 e28 接近原 decoder 后出现成熟一维瓶颈；
+  center-only/shape-only 又证明简单分块会丢失跨坐标耦合。`0803_29` 因此保留 5D 耦合，把终层
+  pair detail 投影到由“既有帧间运动”和“当前双帧共同终层修正”张成的至多二维正交切平面。
+  第一方向延续物体运动，第二方向允许沿当前共同修正产生帧间速度差，避免把所有横向有效细节
+  一并删除；分类仍使用 0803_27 的 position-tangent evidence。
+- 两个基方向均 detached，Gram-Schmidt 与安全单位化保证投影能量不增。结构仅在最后一层调用
+  一次，DN prefix、递归 query 与辅助输出不变；零新增参数/state/attention/layer/loss，交换等变、
+  class-agnostic，不使用 reweight。
+- 99 py310 两项定向测试通过，覆盖终层 feature/plane 各调用一次、父模型参数/state 精确相等、
+  交换等变、DN 保留、能量上界和有限梯度；formal/smoke 配置深拷贝、两份 launcher Bash 语法、
+  整模构建均通过，模型 `22,771,111` 参数、增量 0、711 状态张量。隔离仓库
+  `/data/users/wangying01/lth/PairMOT_tangentplane_0803_29_99_retry1` 为 clean HEAD `4738c27`。
+- 第一次 bundle clone 因无关 Git LFS 演示 GIF 下载 EOF 中断；使用 `GIT_LFS_SKIP_SMUDGE=1`
+  在 `_retry1` 隔离路径恢复，未触碰活动 checkout。当前 `PREPARED/NO_GPU`，没有 smoke/formal
+  workdir 或队列；99 仍只运行动态双卡 `0803_27`。

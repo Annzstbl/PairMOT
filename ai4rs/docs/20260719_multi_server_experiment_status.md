@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 14:55 CST。
+更新时间：2026-08-04 15:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_27 position-tangent evidence + product geometry`（当前 GPU0/1） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1470665` | `0803_26 product-tangent` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_27 position-tangent evidence + product geometry`（当前 GPU0/1） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1470665` | `0803_26 product-tangent` 与 `0803_29 position-tangent plane` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E12+；e8 `41.910/47.783` 接近原 decoder，PGID `712277` 继续 e12 | `0803_28 position-tangent + full transport` 已迁移到 clean checkout，PREPARED/NO_GPU；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.533/61.587`，cls 过线但 det 未过，绝对和 `116.120`，PGID `419164` | 成熟长轨迹继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E32+；e28 `51.971/58.914`，det 较 e24 继续改善，PGID `3151184` | 保留至 e32；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 15:14 CST：0803_29 终层切平面运输已静态准备
+
+- 为缓解 `0803_23` full-tangent 成熟期的一维运输瓶颈，`0803_29` 将终层 5D box detail 投影到
+  “已建立帧间运动 + 当前双帧共同终层修正”张成的至多二维正交切平面；分类侧沿用 position-tangent
+  evidence。该结构零参数、零状态、终层一次、交换等变、DN prefix 原样保留，不含 class-aware、
+  reweight、新 attention/layer/loss。
+- 99 CPU 隔离仓库 `/data/users/wangying01/lth/PairMOT_tangentplane_0803_29_99_retry1` 固定 clean
+  HEAD `4738c27`。两项远端 py310 定向测试通过，覆盖终层调用、参数/state 等价、交换等变、DN
+  保留、投影能量不增和有限梯度；正式/smoke 配置深拷贝、launcher Bash 语法及整模构建通过，
+  模型 `22,771,111` 参数、增量 0、711 状态张量。
+- 状态仅为 `PREPARED/NO_GPU`：未创建 smoke/formal workdir、未排队、不占卡。99 仍只运行
+  `0803_27` 的动态双卡；`0803_29` 等成熟结果和资源释放后再排序。
 
 ## 2026-08-04 14:55 CST：四线重排与新候选接替
 

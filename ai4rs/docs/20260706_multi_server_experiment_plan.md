@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 14:55 CST.
+Last updated: 2026-08-04 15:14 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,15 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 15:14 CST, `0803_29` added a zero-state terminal osculating-plane successor for the
+99 lane. It retains position-aligned classification detail and projects 5D box detail onto
+the orthogonal span of established pair motion and the detached pair-common terminal
+correction, relaxing the mature one-dimensional full-tangent bottleneck without class-aware
+logic, reweighting, new parameters, layers, attention, or loss. Two targeted remote py310
+tests, config deep copies, launcher syntax, and a full `22,771,111`-parameter/711-state build
+passed at clean HEAD `4738c27`. It is PREPARED/NO_GPU and does not preempt the running
+`0803_27`; 99 GPU indices remain dynamically selected under the two-card cap.
 
 At 14:49 CST, full transported tangent `0803_23` completed epoch 28 on the dynamically
 selected single 178 GPU at `51.971/58.914`. Detection improved another `+0.363` from
