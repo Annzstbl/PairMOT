@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 05:41 CST。
+更新时间：2026-08-05 06:00 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.230/46.977` 完整，PGID `1715384` 已进入 e9 | 继续 e12，不以 e8 早停；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E8+；e4 `31.656/36.905` 完整，PGID `482699` 已进入 e7 | 继续 e8/e12，不以 e4 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E24+；e20 `52.198/58.132`，严格总和仍差 `8.000`，PGID `823929` 已进入 e21 | 继续 e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 cls/det `41.647/47.450`，PGID `3652382` 已进入 e10 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e12 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.230/46.977` 完整，PGID `1715384` 已进入 e10 | `0804_08 shared-metric` PREPARED/NO_GPU；继续 e12，不以 e8 早停 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E8+；e4 `31.656/36.905` 完整，PGID `482699` 已进入 e8 | 继续 e8/e12，不以 e4 早停；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E24+；e20 `52.198/58.132`，严格总和仍差 `8.000`，PGID `823929` 已进入 e22 | 继续 e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 cls/det `41.647/47.450`，PGID `3652382` 已进入 e11 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e12 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 06:00 CST：0804_08 静态准备与四机复审
+
+- 99 新隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_terminalsharedmetric_0804_08_99` 固定提交
+  `f9b923b`，活跃 `0804_05` 仓库仍 clean。新结构统一双帧 center update、参考 chord 与
+  重构所用的 geometric-mean pair-size metric；零参数/状态增量、class-agnostic、无 reweight，
+  等尺寸严格退化为 `0804_01`。2 项定向测试和完整父/候选构建通过，参数均为
+  `22,771,111`、711 states；当前只登记 `PREPARED/NO_GPU`，未创建 smoke/formal workdir。
+- 05:58 四机复审确认：252 仅 GPU0/1 到 e22 iter250；178 仅 GPU0 到 e11 iter600；
+  99 动态 GPU0/1 到 e10 iter400；197 动态 GPU2/3 到 e8 iter450。screen、PGID、GPU、
+  正式日志持续一致，fatal 扫描均为 0；已有 checkpoint 仍分别截至 e20/e8/e8/e4，故继续
+  等待 e24/e12/e12/e8 的 checkpoint、检测/AP 与异步 TrackEval 闭环。
 
 ## 2026-08-05 05:41 CST：252 product-tangent e20 与 99 SE(2) e8 闭环
 
