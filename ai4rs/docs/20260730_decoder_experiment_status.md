@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 21:44 CST
+更新时间：2026-08-04 21:58 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,24 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E4+` | 2x4 配置、定向测试、整模构建、真实 DDP smoke 与 formal iter50 五门槛通过；screen `798987.pm_0803_30_formal_252`、PGID `798989`，GPU2/3 不用于本任务。成熟 `0803_13` 已在 e64 完整闭环后停止，最好仍为 e56 `54.980/62.009`。 |
+| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `31.119/37.046` 为早期双负信号，但 checkpoint/检测/TrackEval 完整且 PGID `798989` 已继续 e5→e8/e12；只占固定 GPU0/1，GPU2/3 不用于本任务。成熟 `0803_13` 最好仍为 e56 `54.980/62.009`。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E52` | e48 `53.944/60.888`，较 e44 再升 `+0.272/+0.335`；虽相对原 decoder e48 仍低 `0.665/1.203`，但自身曲线未平台，PGID `3151184` 继续 e52。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E12` | e8 `40.865/46.308`，较自身 e4 回升 `+10.207/+7.906`，但相对原 decoder 同点仍为 `-1.107/-1.870`；PGID `1582836` 已继续 e9→e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E12` | e8 `38.401/44.520`，相对原 decoder `-3.571/-3.658`，相对 position/product e8 `-3.488/-3.645`；按慢收敛约束继续 e12 后再成熟判定。PGID `1016336`，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-04 21:58 CST：0803_30 epoch 4 完整评估
+
+- e4 cls HOTA/DetA/AssA `31.119/24.852/41.221`，det `37.046/30.516/45.751`；相对原 decoder
+  e4 `34.306/38.590` 为 `-3.187/-1.544`，相对 terminal mean geometry `0803_13` e4
+  `32.849/37.319` 为 `-1.730/-0.273`。这是 terminal transport-plane 的早期慢收敛信号，不能由
+  e4 直接否决。
+- pair mAP/AP50 `0.132184/0.250904`、both-independent `0.172747/0.315071`；369,970,998-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- TrackEval 于 21:50:54 启动、21:56:31 闭环；训练同时已恢复到 e5，PGID `798989` 存活，
+  total/DN/Encoder/grad 有限，GPU0/1 各约 19.2 GiB、GPU2/3 仍为 1 MiB。继续 e8/e12，
+  不因 e4 双负停止最慢资源上的已验证成熟候选。
 
 ## 2026-08-04 21:44 CST：0803_29 epoch 8 完整评估
 

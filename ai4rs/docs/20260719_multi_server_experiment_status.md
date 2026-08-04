@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 21:14 CST。
+更新时间：2026-08-04 21:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,23 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `30.658/38.402` 仅作早期信号，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E12；e8 `40.865/46.308`，较 e4 快速恢复但仍低于原 decoder，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E12；e8 `38.401/44.520` 为中期负信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `798989` | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
+| 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E8+；e4 `31.119/37.046` 仅作早期信号，PGID `798989` 已继续 e5 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E52；e48 `53.944/60.888`，较 e44 `+0.272/+0.335`，PGID `3151184` | GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 21:58 CST：0803_29 e8 与 0803_30 e4 完整闭环
+
+- 99 `0803_29` e8 cls/det HOTA `40.865/46.308`，DetA/AssA 为 cls
+  `34.345/50.731`、det `41.571/53.385`。较自身 e4 回升 `+10.207/+7.906`，但相对原 decoder
+  e8 仍为 `-1.107/-1.870`；pair mAP/AP50 `0.1975/0.3638`。checkpoint、5416/50、28/108
+  和异步完成标志完整，动态 GPU0/1 的 PGID `1582836` 已继续 e9→e12。
+- 252 `0803_30` e4 cls/det HOTA `31.119/37.046`，DetA/AssA 为 cls
+  `24.852/41.221`、det `30.516/45.751`；相对原 decoder e4 为 `-3.187/-1.544`，pair
+  mAP/AP50 `0.1322/0.2509`。369,970,998-byte checkpoint、5416/50、28/108 与异步完成标志
+  完整；固定 GPU0/1 的 PGID `798989` 已到 e5，GPU2/3 保持空闲。
+- 两个节点均只用于诊断慢收敛与分解结构，不作 e4/e8 直接否决；99 继续 e12，252 继续 e8/e12。
 
 ## 2026-08-04 16:42 CST：shape-only 成熟停止，0803_28 接替 197
 
