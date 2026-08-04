@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 19:20 CST.
+Last updated: 2026-08-04 19:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,13 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 19:52 CST, `0803_23` completed e44 at `53.672/60.553`, recovering
+`+0.983/+0.390` from e40. Although it remains `0.743/1.184` below the original decoder
+at the aligned epoch and `4.105` short of the strict absolute sum target, the latest
+dual rise contradicts a mature-plateau stop. Complete checkpoint, AP, 50-sequence
+TrackEval, 28 CSV files, and 108 evaluation files were verified. The dynamically selected
+178 GPU0 therefore remains on PGID `3151184` to e48; prepared `0803_30` consumes no GPU.
 
 At 19:20 CST, `0803_30` is PREPARED/NO_GPU for the 178 successor lane. It changes only
 the terminal 5D box-detail geometry from the one-dimensional motion tangent used by

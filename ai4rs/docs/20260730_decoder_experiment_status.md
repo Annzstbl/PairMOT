@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 19:20 CST
+更新时间：2026-08-04 19:52 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E64` | e56 最好点 `54.980/62.009`，cls 过线 `+0.543`、det 仍低 `0.384`，总和 `116.989` 距严格目标差 `1.341`；e60 回落为 `54.855/61.870`，PGID `419164` 已到 e62，保留 e64 平台确认。GPU2/3 不用于本任务。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E44` | e36 `52.856/60.111` 后 e40 `52.689/60.163`，cls 小幅回落、det 仅增 `0.052`；PGID `3151184` 保留 e44 成熟确认。GPU 序号不固定，GPU1 外部任务不动；geometry-only `0803_30` 已 PREPARED/NO_GPU。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E48` | e44 `53.672/60.553`，较 e40 明显回升 `+0.983/+0.390`；虽相对原 decoder 仍低 `0.743/1.184`，但不构成平台，PGID `3151184` 继续 e48。GPU1 外部任务不动；`0803_30` 保持 PREPARED/NO_GPU。 |
 | 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E4+` | `0803_27` e4/e8/e12 成熟双负后精确停止 PGID `1470665`；动态空闲 GPU0/1 上新线 smoke 与 formal iter50 五门槛通过，formal PGID `1582836`。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E8+` | e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，相对 position/product e4 `+0.821/+0.267`；只登记早期信号，PGID `1016336` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
@@ -3571,3 +3571,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `c2069cd`。状态仅 `PREPARED/NO_GPU`，未创建 smoke/formal workdir；等待 `0803_23` e44 完整
   checkpoint、检测和 TrackEval 后再决定交接，不热更新当前训练仓库。启动器要求传入届时一张
   空闲 GPU，不固定 178 序号。
+
+## 2026-08-04 19:52 CST：0803_23 epoch-44 恢复，不为后继提前停止
+
+- e44 cls HOTA/DetA/AssA `53.672/44.220/67.433`，det
+  `60.553/53.202/71.309`；相对 e40 `52.689/60.163` 为 `+0.983/+0.390`，否定了 e40
+  小幅平台可直接外推的判断。相对原 decoder e44 `54.415/61.737` 仍低 `0.743/1.184`，相对
+  最终 Encoder 低 `0.765/1.840`，绝对和 `114.225` 距严格 `>118.330` 差 `4.105`。
+- pair mAP/AP50 `0.3052/0.5199`，both-independent `0.3463/0.5598`；425,288,244-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件齐全。该节点未达最终目标，
+  但 11 个完整节点的最新段仍在恢复，因此不能以“已有成熟点数量多”为由忽略慢收敛趋势。
+- 178 当前动态 GPU0、PGID `3151184` 已自然进入 e45，继续 e48；GPU1 外部任务不动。
+  `0803_30` 保持 clean PREPARED/NO_GPU，不创建 smoke/formal workdir、不抢占正在恢复的强线。

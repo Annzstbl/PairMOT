@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 19:20 CST。
+更新时间：2026-08-04 19:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.244/38.396` 仅作早期信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E64；e56 最好 `54.980/62.009`，总和 `116.989`；e60 回落 `54.855/61.870`，PGID `419164` | 保留 e64 平台确认；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E44；e36 `52.856/60.111`、e40 `52.689/60.163`，PGID `3151184` | `0803_30 geometry-only osculating-plane` PREPARED/NO_GPU；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E48；e44 `53.672/60.553`，较 e40 `+0.983/+0.390`，PGID `3151184` | `0803_30 geometry-only osculating-plane` PREPARED/NO_GPU；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-04 16:42 CST：shape-only 成熟停止，0803_28 接替 197
@@ -67,6 +67,17 @@
   构建均通过：`22,771,111` 参数、增量 0、711 states。
 - 状态 `PREPARED/NO_GPU`：未创建 smoke/formal workdir，不抢占 `0803_23` 的当前单卡。
   e44 完整闭环并释放后，仍须重新核验动态空闲卡、执行真实四步 smoke 和 formal iter50 五门槛。
+
+## 2026-08-04 19:52 CST：178 0803_23 e44 继续恢复
+
+- e44 cls/det HOTA `53.672/60.553`，DetA/AssA 为 cls `44.220/67.433`、det
+  `53.202/71.309`。相对 e40 双升 `+0.983/+0.390`；相对原 decoder e44 仍为
+  `-0.743/-1.184`，绝对和 `114.225` 距严格目标差 `4.105`。
+- pair mAP/AP50 `0.3052/0.5199`、both-independent `0.3463/0.5598`；checkpoint、5416
+  条检测、50 序列、28 CSV、108 文件和完整 TrackEval 闭环。e44 的明显恢复不支持停止强线，
+  动态 GPU0 的 PGID `3151184` 继续 e48，GPU1 外部任务不动。
+- `0803_30` 继续 `PREPARED/NO_GPU`。虽然已通过全部静态门槛，但不为启动后继而无视当前 decoder
+  的晚收敛恢复；待 e48 再判断一维 full-tangent 是否真正平台。
 
 ## 2026-08-04 16:05 CST：e52/e32/e4 三节点闭环
 
