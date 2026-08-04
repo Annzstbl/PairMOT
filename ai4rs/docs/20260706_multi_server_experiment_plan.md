@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 03:04 CST.
+Last updated: 2026-08-05 03:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,18 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 03:10 CST, `0804_06` constant-turn Frenet product tangent is statically
+PREPARED/NO_GPU for the next 197 decision. It changes only body-frame center
+detail from one shared chord projector to the two endpoint tangents implied by
+reference angular turn; zero turn reduces to body-frame exactly. Shape,
+classification, DN, layers, attention, and loss are unchanged. In an isolated
+clean checkout at `2c45640`, swap/finite-gradient/DN preservation and zero-turn
+tests, config deep copies, launcher syntax, and full parent/candidate builds
+passed with `22,771,111` parameters, zero delta, and 711 states. Do not create
+smoke or formal workdirs and do not touch the active 197 repository until
+`0804_03` e12 checkpoint/AP/TrackEval closes and two dynamically selected GPUs
+are truly free.
 
 At 03:04 CST, all four allowed lanes carry valid formal trajectories. Fixed
 252 GPU0/1 runs the mature `0804_01` product-tangent continuation from epoch

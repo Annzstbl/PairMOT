@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 03:04 CST。
+更新时间：2026-08-05 03:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,10 +18,19 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E4+；smoke/checkpoint/formal iter50 五门槛通过，PGID `1715384` | `0804_02` e4/e8/e12 成熟无优势后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_03 terminal log-size-only`（当前动态 GPU2/3） | RUNNING/TO_E12；e8 `41.299/46.767` 完整闭环，PGID `2540932` 已运行 e10 | e8 只作中期负信号，不早停；GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0804_03 terminal log-size-only`（当前动态 GPU2/3） | RUNNING/TO_E12；e8 `41.299/46.767` 完整闭环，PGID `2540932` 已运行 e11 | `0804_06 Frenet product-tangent` PREPARED/NO_GPU；GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E16+；正式恢复与 iter50 五门槛通过，PGID `823929` 已运行 e13 | e12 `49.784/56.243` 未达严格目标但成熟优于原 decoder；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E4+；单卡 smoke/checkpoint/formal iter50 五门槛通过，PGID `3652382` 已运行 e1 | `0804_01` e12 完整迁移后 STOPPED；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 03:10 CST：0804_06 Frenet product tangent 静态就绪
+
+- 新候选仅把 body-frame center detail 的共用弦 projector 换成 constant-turn 圆弧的前/后端点切线；
+  shape、分类、DN、层、attention 和 loss 不变。它交换等变，零转角退化为 body-frame，零参数、
+  class-agnostic、无 reweight，终层只增加三角函数和点积。
+- 197 隔离仓库 clean HEAD `2c45640`；两项定向测试、正式/烟测配置 deepcopy、launcher 语法及
+  完整父/候选构建通过，参数/state `22,771,111/711`、增量 0。状态仅为 PREPARED/NO_GPU：
+  未创建 smoke/formal workdir，不改动活跃 0804_03 仓库；等待 e12 全产物闭环和动态两卡释放。
 
 ## 2026-08-05 03:04 CST：0804_05 在 99 完成五门槛并进入正式轨迹
 

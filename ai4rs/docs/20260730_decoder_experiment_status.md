@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 03:04 CST
+更新时间：2026-08-05 03:10 CST
 
 ## 当前研究原则
 
@@ -20,6 +20,19 @@
 | 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E12` | e8 `41.299/46.767` 相对原 decoder `-0.673/-1.411`，仅作中期负信号；PGID `2540932` 已运行 e10，继续 e12，GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 03:10 CST：Frenet endpoint-tangent 后继完成静态闭环
+
+- 根据 product/body-frame 单弦投影可能压制转弯轨迹横向定位 detail 的风险，准备 `0804_06`
+  constant-turn Frenet product tangent：shape tangent 不变；center detail 不再让前后帧共用弦方向，
+  而是由参考 π 周期角速度把弦旋转 `-turn/2` 与 `+turn/2`，分别投影到圆弧前/后端点切线。
+  交换帧序时两端 projector 对调且 detail 反号，零转角严格退化为 body-frame。该结构零参数、
+  class-agnostic、无 reweight，不增加 layer/attention/loss，仅有终层逐元素三角函数和点积。
+- 197 隔离仓库 clean HEAD `2c45640`；交换等变/有限梯度/DN 精确保留、零转角退化两项定向测试，
+  正式/烟测配置 deepcopy、两份 launcher `bash -n` 和完整父/候选构建通过：
+  `22,771,111` 参数、增量 0、711 states。当前严格登记 `PREPARED/NO_GPU`，没有 smoke/formal
+  workdir；先等待 0804_03 e12 完整 checkpoint/AP/TrackEval，且只在动态两卡真正释放后再决定
+  是否进入五门槛，绝不热更新当前活跃 197 仓库。
 
 ## 2026-08-05 03:04 CST：SE(2) Lie-twist 在 99 通过五门槛；四线并行进入有效轨迹
 
