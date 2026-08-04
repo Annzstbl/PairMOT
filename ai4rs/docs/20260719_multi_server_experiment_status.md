@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 12:20 CST。
+更新时间：2026-08-04 12:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_25 center-only transported tangent`（当前 GPU1/2） | RUNNING/TO_E8+；e4 `31.262/37.687` 只作早期归因；PGID `1442845` 继续 e8/e12 | `0803_26 product-tangent` 双卡版 PREPARED/NO_GPU；GPU 序号不固定，GPU0 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.487/37.808` 只作早期归因；PGID `712277` 继续 e8/e12 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E44+；e40 `54.057/61.250`，同点 Encoder 双正但绝对和 `115.307` 未达目标，PGID `419164` | 成熟长轨迹继续 e44，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
+| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E48+；e44 `54.381/61.716`，较 e40 双升但绝对和 `116.097` 未达目标，PGID `419164` | 成熟长轨迹继续 e48，使用 252 自有可写 workdir；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E24+；e20 `51.119/57.969`，较 e16 明显回升，PGID `3151184` 继续 e24 | 保留至 e24 判断恢复持续性；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -2438,3 +2438,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件与 `async_done=1` 完整。
 - 当前动态 GPU0、PGID `3151184` 保持到 e24，观察同点差距是否继续收窄；178 仍只占一张卡，
   序号不固定，暂不为后继提前停训。
+
+## 2026-08-04 12:55 CST：252 0803_13 e44 继续到 e48
+
+- e44 cls/det HOTA `54.381/61.716`，DetA/AssA 分别为 `44.931/67.539` 与
+  `54.021/72.880`；较 e40 双升 `+0.324/+0.466`，但相对原 decoder e44
+  `54.415/61.737` 仍为 `-0.034/-0.021`。
+- 绝对和 `116.097` 距严格 `>118.330` 尚差 `2.233`，且相对最终 cls/det 门槛仍差
+  `0.056/0.677`，故不登记为目标完成。pair mAP/AP50 `0.3178/0.5406`、
+  both-independent `0.3591/0.5797`。
+- 425,094,518-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件和
+  `async_done=1` 完整。PGID `419164` 在固定 GPU0/1 上继续 e48；GPU2/3 未被本任务使用。

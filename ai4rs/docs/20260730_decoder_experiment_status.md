@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 12:20 CST
+更新时间：2026-08-04 12:58 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E44+` | e40 `54.057/61.250`，相对原始 decoder `-0.002/+0.148`、相对 Encoder同点 `+0.260/+0.187`；绝对和 `115.307` 未达严格目标，PGID `419164` 继续 e44。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E48+` | e44 `54.381/61.716`，较 e40 `+0.324/+0.466`，相对原始 decoder e44 `-0.034/-0.021`；绝对和 `116.097` 距严格目标 `118.330` 仍差 `2.233`，PGID `419164` 继续 e48。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E24+` | e20 `51.119/57.969`，较 e16 回升 `+1.492/+1.149`，相对原始 decoder `+0.276/-0.064`；PGID `3151184` 继续 e24。GPU 序号不固定，GPU1 外部任务不动。 |
 | 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.262/37.687` 为早期负向但不直接否决；PGID `1442845` 继续 e8/e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
@@ -3326,3 +3326,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - e20 尚未恢复 e12 的大幅联合优势，也远未达到最终绝对门槛；但 e16 单点谷值已出现明确反弹，
   不能成熟否决。178 当前动态 GPU0、PGID `3151184` 继续 e24，检验恢复是否持续；不为
   product-tangent 提前释放单卡。
+
+## 2026-08-04 12:55 CST：0803_13 terminal geometry epoch-44 继续上升但未达目标
+
+- e44 cls HOTA/DetA/AssA `54.381/44.931/67.539`，det
+  `61.716/54.021/72.880`。相对 e40 `54.057/61.250` 回升 `+0.324/+0.466`；相对原始
+  decoder e44 `54.415/61.737` 为 `-0.034/-0.021`，当前只是基本持平，未形成目标所需优势。
+- 绝对和为 `116.097`，距严格 `>118.330` 尚差 `2.233`；距最终 cls/det 门槛
+  `54.437/62.393` 分别差 `0.056/0.677`。因此该点不登记为成功，也不因未过最终门槛直接
+  否决仍在上升的成熟曲线。
+- pair mAP/AP50 `0.3178/0.5406`，both-independent mAP/AP50 `0.3591/0.5797`；
+  425,094,518-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件及
+  `async_done=1` 完整。
+- 252 固定 GPU0/1 的 PGID `419164` 已继续到 epoch45，后续检查 e48；GPU2/3 不用于本任务。

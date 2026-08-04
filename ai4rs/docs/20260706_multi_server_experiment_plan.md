@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 12:20 CST.
+Last updated: 2026-08-04 12:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,13 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 12:55 CST, mature `0803_13` completed epoch 44 on fixed 252 GPU0/1 at
+`54.381/61.716`. It improved over epoch 40 by `+0.324/+0.466` and is nearly tied with
+the original decoder at epoch 44 (`-0.034/-0.021`), but its absolute sum `116.097` is
+still `2.233` below the strict `>118.330` target. Complete checkpoint, 5416 detections,
+50 sequences, 28 CSV files, 108 evaluation files, and async completion were verified.
+PGID `419164` therefore continues to epoch 48; GPU2/3 remain unused by this task.
 
 At 07:09 CST, mature experiment `0803_13` completed epoch 28 on 252 fixed GPU0/1 at
 `53.114/59.729`. It remains dual-positive against the original decoder at the same epoch
