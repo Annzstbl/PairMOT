@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 07:44 CST
+更新时间：2026-08-04 08:06 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E32+` | e28 `53.114/59.729`，相对原始 decoder 同点 `+0.937/+0.449`、合计 `+1.386`；完整评测通过，PGID `419164` 继续 e32。 |
 | 178 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E8+` | e4 `36.342/44.739`，相对原始 decoder `+2.036/+6.149`；PGID `3151184` 继续 e8/e12。`0803_24 shape-only`、`0803_25 center-only` 均 PREPARED/NO_GPU。 |
-| 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E4+` | 0803_17 e12 成熟双负后停止；0803_21 smoke 与 formal iter50 五门槛通过，PGID `1384944`。GPU1/2 只是当前分配，GPU0 外部任务不受影响。 |
+| 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E8+` | e4 `30.158/37.094`，相对原始 decoder `-4.148/-1.496`；完整评测通过，PGID `1384944` 继续 e8/e12。GPU1/2 只是当前分配。 |
 | 197 GPU 4,5 | `0803_18 ... terminal-log-size/angle + semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `42.014/47.865`，相对原始 decoder `+0.042/-0.313`；遵守晚收敛约束继续 e12，PGID `387859`。`0803_24` 双卡版 PREPARED/NO_GPU。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -3108,3 +3108,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   HEAD `09a0d2f`；1xb8、72 epochs 配置与 formal/smoke 启动器通过。启动器要求显式传入当时
   一张空闲 GPU，不固定序号。状态 `PREPARED/NO_GPU`，排在正在运行的 0803_23 与 shape-only
   0803_24 之后。
+
+## 2026-08-04 08:06 CST：0803_21 epoch-4 完整评估
+
+- transported semantic margin e4 cls HOTA/DetA/AssA `30.158/23.503/41.345`，det
+  `37.094/29.928/47.230`。相对原始 decoder e4 `34.306/38.590` 为
+  `-4.148/-1.496`，相对 Encoder e4 `36.209/38.753` 为 `-6.051/-1.659`；相对
+  shared-margin `0803_18` e4 `30.440/38.288` 也为 `-0.282/-1.194`。
+- pair mAP/AP50 `0.121050/0.227453`，both-independent mAP/AP50
+  `0.160944/0.293398`；369,968,054-byte checkpoint、5416 条检测、50 序列、28 CSV、
+  108 个非空评测文件和 `async_done=1` 完整。
+- e4 不作为直接否决，99 当前 GPU1/2、PGID `1384944` 继续 e8/e12；但在它取得成熟正增益
+  之前，不把 semantic margin 与 0803_23 强几何分支组合，避免无证据扩散。
