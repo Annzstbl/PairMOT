@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 21:58 CST。
+更新时间：2026-08-04 22:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,22 @@
 | 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E12；e8 `40.865/46.308`，较 e4 快速恢复但仍低于原 decoder，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E12；e8 `38.401/44.520` 为中期负信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E8+；e4 `31.119/37.046` 仅作早期信号，PGID `798989` 已继续 e5 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E52；e48 `53.944/60.888`，较 e44 `+0.272/+0.335`，PGID `3151184` | GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `3555710` | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 22:44 CST：178 full-tangent 收口并启动 factorized product-tangent
+
+- `0803_23` e52 完整结果为 cls/det `54.197/60.991`，DetA/AssA 为 cls
+  `44.752/67.727`、det `53.567/71.845`；较 e48 仅 `+0.253/+0.103`，相对原 decoder e52
+  为 `-0.498/-1.397`。pair mAP/AP50 `0.3087/0.5262`，checkpoint、5416/50、28/108 和
+  async 标志完整。结合 e44/e48/e52 成熟平台，TERM PGID `3151184` 后成员 `9→0`。
+- `0804_01` 将 5D terminal detail 分解为独立 center 2D 与 shape 3D tangent 投影，零参数、
+  class-agnostic、无 reweight 或额外计算层。clean HEAD `e2f5e7d` 的定向测试、deepcopy、
+  launcher 语法及父/候选整模构建通过，均为 `22,771,111` 参数、711 states。
+- 动态 GPU0 两次为 `1 MiB/0%` 后完成真实四步 smoke：四组 loss/grad、DN/Encoder 与 642 个
+  checkpoint 浮点 tensor 全有限。fresh formal screen `3555709.pm_0804_01_formal_178`、PGID
+  `3555710`，iter50 `0.9700 s/iter`、loss/grad `20.9975/132.7340`，五门槛通过；GPU1 外部
+  任务不动，状态 `RUNNING/TO_E4+`。
 
 ## 2026-08-04 21:58 CST：0803_29 e8 与 0803_30 e4 完整闭环
 

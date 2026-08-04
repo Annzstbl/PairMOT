@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 21:58 CST
+更新时间：2026-08-04 22:44 CST
 
 ## 当前研究原则
 
@@ -15,11 +15,31 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `31.119/37.046` 为早期双负信号，但 checkpoint/检测/TrackEval 完整且 PGID `798989` 已继续 e5→e8/e12；只占固定 GPU0/1，GPU2/3 不用于本任务。成熟 `0803_13` 最好仍为 e56 `54.980/62.009`。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E52` | e48 `53.944/60.888`，较 e44 再升 `+0.272/+0.335`；虽相对原 decoder e48 仍低 `0.665/1.203`，但自身曲线未平台，PGID `3151184` 继续 e52。GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E4+` | full-tangent `0803_23` e52 `54.197/60.991` 成熟平台后精确停止；纯 product-tangent 已通过静态、真实 smoke 与 formal iter50 五门槛，screen `3555709.pm_0804_01_formal_178`、PGID `3555710`。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E12` | e8 `40.865/46.308`，较自身 e4 回升 `+10.207/+7.906`，但相对原 decoder 同点仍为 `-1.107/-1.870`；PGID `1582836` 已继续 e9→e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E12` | e8 `38.401/44.520`，相对原 decoder `-3.571/-3.658`，相对 position/product e8 `-3.488/-3.645`；按慢收敛约束继续 e12 后再成熟判定。PGID `1016336`，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-04 22:44 CST：full-tangent e52 成熟收口，纯 product-tangent 接替 178
+
+- `0803_23` e52 cls HOTA/DetA/AssA `54.197/44.752/67.727`，det
+  `60.991/53.567/71.845`；较 e48 仅增 `+0.253/+0.103`，相对原 decoder e52
+  `54.695/62.388` 为 `-0.498/-1.397`，相对最终门槛仍低 `0.240/1.402`。
+- pair mAP/AP50 `0.308716/0.526239`、both-independent `0.349509/0.565064`；
+  436,330,612-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。结合 e44→e48→e52 的成熟 det 增量 `+0.335→+0.103`，精确 TERM
+  PGID `3151184` 后成员 `9→0`；这不是 e4/e8 早停。
+- 新 `0804_01` 只把 terminal 5D detail 的单内积拆成 center 2D 与 shape 3D 两个独立切丛，
+  防止平移能量跨维混入 log-size/angle；分类、DN、辅助输出、递归 reference 不变，零参数/状态、
+  交换等变、class-agnostic，无 reweight、新 layer、attention 或 loss。
+- 178 隔离 checkout clean HEAD `e2f5e7d`；定向 unittest、配置/smoke deepcopy、launcher
+  语法和整模构建通过：`22,771,111` 参数、增量 0、711 states。GPU0 两次空闲检查均为
+  `1 MiB/0%`；真实 smoke 四组 loss `21.3692/20.6455/20.9246/21.2007`、grad
+  `60.2135/67.4355/115.0544/105.6304`，DN/Encoder 与 642 个 checkpoint tensor 全有限。
+- fresh formal screen `3555709.pm_0804_01_formal_178`、PGID `3555710`；iter50
+  `0.9700 s/iter`、loss `20.9975`、grad `132.7340`，进程、GPU0、正式日志、iter50 与有限性
+  五门槛全部通过，状态 `RUNNING/TO_E4+`。GPU1 外部任务保持不动。
 
 ## 2026-08-04 21:58 CST：0803_30 epoch 4 完整评估
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 19:52 CST.
+Last updated: 2026-08-04 22:44 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,15 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 22:44 CST, 178 `0803_23` closed epoch 52 at `54.197/60.991`. Complete AP,
+checkpoint, 50-sequence TrackEval, 28 CSV files, 108 evaluation files, and async completion
+were verified. Its mature e44/e48/e52 detection gains slowed to `+0.103` while remaining
+`1.402` below the final detection threshold, so exact PGID `3151184` was stopped only after
+the mature window. The orthogonal pure `0804_01` factorized product-tangent successor then
+passed its targeted unittest, config deep copies, launcher syntax, zero-parameter full build,
+real four-iteration smoke, finite checkpoint audit, and fresh formal iter50. It is RUNNING on
+the dynamically selected 178 GPU0 under PGID `3555710`; GPU1 external work remains untouched.
 
 At 19:52 CST, `0803_23` completed e44 at `53.672/60.553`, recovering
 `+0.983/+0.390` from e40. Although it remains `0.743/1.184` below the original decoder
