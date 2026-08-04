@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:26 CST
+更新时间：2026-08-04 14:33 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
-| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` 与 `0803_27 position-tangent + product geometry` 均 PREPARED/NO_GPU。 |
+| 99 当前 GPU 0,1 | `0803_27 ... terminal position-tangent evidence + product geometry ... fresh` | `RUNNING/TO_E4+` | center-only e12 成熟双负后精确停止 PGID `1442845`；动态空闲 GPU0/1 完成 smoke 并启动新线，formal PGID `1470665` 的 iter50 数值与显存五门槛通过。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -3406,3 +3406,21 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `async_done=1` 完整。
 - e8 不直接否决。197 当前动态 GPU2/3、PGID `712277` 已继续 e9→e12，GPU0/1 外部任务不动；
   e12 完整后再决定 197 接替纯 product-tangent `0803_26`，避免在分量未成熟时提前外推。
+
+## 2026-08-04 14:33 CST：0803_25 center-only e12 成熟停止，0803_27 接替 99
+
+- center-only e12 cls HOTA/DetA/AssA `46.196/38.381/57.929`，det
+  `51.938/46.335/60.487`。相对原始 decoder e12 `47.395/54.436` 为 `-1.199/-2.498`，且
+  e4/e8/e12 三个完整节点持续双负；该判断不是用 e4/e8 直接否决。pair mAP/AP50
+  `0.2338/0.4199`，both-independent mAP/AP50 `0.2798/0.4809`；381,025,142-byte checkpoint、
+  5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 精确 TERM PGID `1442845` 后成员 `23→0`。99 三张物理卡两次检查均仅 10 MiB，第二次利用率
+  `0/1/0%`；遵守 99 本任务最多使用两卡的边界，启动时动态选择 GPU0/1，并未在代码或配置中
+  固定序号。
+- `0803_27` 真数据四步 DDP smoke loss `12.9372/19.4915/19.6438/21.2056`，grad
+  `102.8284/107.8695/112.6019/123.3048`；DN/Encoder proposal 全有限，364,503,798-byte
+  checkpoint 的 642 个浮点 tensor 全有限，iterative-cls/DN 审计通过，致命错误扫描为 0。
+- fresh formal 固定 clean HEAD `aea3157`，screen `1470663.pm_0803_27_formal_99`、PGID
+  `1470665`。iter50 为 `1.0201 s/iter`、loss `21.4337`、grad `92.6051`，总、DN、Encoder
+  proposal 均有限，GPU0/1 各约 19.2 GiB，致命错误为 0，五门槛通过。状态
+  `RUNNING/TO_E4+`；继续收 e4/e8/e12，不用 e4/e8 直接否决。
