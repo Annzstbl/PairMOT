@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 01:14 CST.
+Last updated: 2026-08-05 01:31 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,30 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:31 CST, 178 `0804_01` factorized product-tangent completed e8 at
+`46.673/53.922`, which is `+4.701/+5.744` versus the original decoder,
+`+1.404/+3.729` versus Encoder, and `+0.390/+0.167` versus full-tangent.
+Its remaining full-tangent differences are det DetA `-0.141` and pair AP50
+`-0.0099`, while AssA is higher. Complete checkpoint, detection, AP,
+50-sequence TrackEval, 28 CSV files, 108 evaluation files, and async completion
+were verified. Dynamic 178 GPU0 continues PGID `3555710` to e12; GPU1 external
+work is untouched. This is a strong aligned-epoch candidate, not yet the final
+absolute-threshold success.
+
+At the same time, 99 `0804_02` angle-only e8 closed at `41.415/48.105`, still
+`-0.557/-0.073` versus the original decoder and `-3.854/-2.088` versus Encoder.
+Its complete artifacts were verified before PGID `1673454` continued to e12;
+e8 is not used as a rejection point.
+
+The prepared `0804_04` body-frame product tangent changes only 0804_01's center
+coordinates to a pair-oriented local frame, targeting the remaining DetA/AP50
+gap without changing shape transport, classification, DN, layers, attention,
+or loss. It is parameter-free, class agnostic, and has no reweighting. In an
+isolated 178 checkout at clean HEAD `e7ef507`, source provenance, two targeted
+tests, config deep copies, launcher syntax, and full parent/candidate builds
+passed with `22,771,111` parameters, zero delta, and 711 states. It remains
+PREPARED/NO_GPU until 0804_01 reaches mature evidence and a GPU is released.
 
 At 01:14 CST, 197 `0804_03` terminal log-size-only completed e4 at
 `31.938/38.765`, or `-2.368/+0.175` versus the original decoder and

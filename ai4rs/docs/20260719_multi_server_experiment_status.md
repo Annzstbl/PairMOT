@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 01:14 CST。
+更新时间：2026-08-05 01:31 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,29 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `33.265/38.716` 完整闭环，PGID `1673454` 已继续 e5 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E12；e8 `41.415/48.105` 完整闭环，PGID `1673454` 已继续 e9 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.938/38.765` 完整闭环，PGID `2540932` 已继续 e5 | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | 仅保留成熟路线或严格复验；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E8+；e4 `35.274/43.849` 完整闭环，PGID `3555710` 已继续 e5 | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E12+；e8 `46.673/53.922` 强同点双正，PGID `3555710` 已继续 e9 | `0804_04 body-frame product-tangent` PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 01:31 CST：178/99 e8 完整评估与 0804_04 静态准备
+
+- 178 `0804_01` e8 cls/det HOTA `46.673/53.922`，DetA/AssA 为
+  `39.891/56.595` 与 `47.262/64.136`；相对原 decoder `+4.701/+5.744`、相对 Encoder
+  `+1.404/+3.729`、相对 full-tangent `+0.390/+0.167`。pair mAP/AP50
+  `0.2524/0.4443`、both-independent `0.3039/0.5139`。375,558,772-byte checkpoint、
+  5416/50/28/108 与 async 标志完整；动态 GPU0、PGID `3555710` 已到 e9并继续 e12，GPU1
+  外部任务不动。
+- 99 `0804_02` e8 cls/det HOTA `41.415/48.105`，DetA/AssA 为
+  `34.045/53.460` 与 `43.261/55.420`；相对原 decoder `-0.557/-0.073`、相对 Encoder
+  `-3.854/-2.088`。pair mAP/AP50 `0.2031/0.3660`、both-independent `0.2485/0.4294`；
+  375,528,630-byte checkpoint、5416/50/28/108 与 async 标志完整。动态 GPU0/1、PGID
+  `1673454` 已到 e9并继续 e12；GPU2 外部任务不动，不以 e8 早停。
+- `0804_04` 仅把 product-tangent 的中心块改为双帧中间朝向定义的物体局部坐标，shape、分类、
+  DN 与计算深度不变；零参数、class-agnostic、无 reweight。178 独立 clean HEAD `e7ef507` 的
+  来源核验、2 项定向测试、配置 deepcopy、launcher 语法和零状态增量整模构建通过：
+  `22,771,111` 参数、增量 0、711 states。状态仅为 PREPARED/NO_GPU，尚未 smoke/formal。
 
 ## 2026-08-05 01:14 CST：197 log-size-only e4 完整评估
 

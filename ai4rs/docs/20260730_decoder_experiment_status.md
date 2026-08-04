@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 01:14 CST
+更新时间：2026-08-05 01:31 CST
 
 ## 当前研究原则
 
@@ -14,11 +14,38 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 `35.274/43.849` 相对原 decoder 双正但低于 full-tangent；完整产物闭环后 PGID `3555710` 已继续 e5→e8/e12，不以 e4 直接否决。GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E8+` | e4 `33.265/38.716` 为 cls 负、det 微正的早期信号；完整产物闭环后 PGID `1673454` 已继续 e5→e8/e12，不以 e4 直接否决。GPU 序号不固定。 |
+| 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 `46.673/53.922` 相对 Encoder 同点 `+1.404/+3.729`，并超过 full-tangent `+0.390/+0.167`；PGID `3555710` 已继续 e9→e12，GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E12` | e8 `41.415/48.105` 相对原 decoder仍为 `-0.557/-0.073`；完整产物闭环后 PGID `1673454` 已继续 e9→e12，不以 e8 直接否决。GPU 序号不固定。 |
 | 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E8+` | e4 `31.938/38.765` 为 cls 慢、det 仅微正的尺度单因素信号；完整产物闭环后 PGID `2540932` 已继续 e5→e8/e12，不以 e4 直接否决。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 01:31 CST：178/99 epoch 8 完整评估；body-frame 后继静态就绪
+
+- `0804_01` product-tangent e8 cls HOTA/DetA/AssA `46.673/39.891/56.595`，det
+  `53.922/47.262/64.136`；相对原 decoder e8 `41.972/48.178` 为
+  `+4.701/+5.744`，相对 Encoder `45.269/50.193` 为 `+1.404/+3.729`。它也超过
+  full-tangent `0803_23` e8 `46.283/53.755` 为 `+0.390/+0.167`；相对 full-tangent 的
+  cls DetA/AssA 为 `+0.093/+0.486`、det 为 `-0.141/+0.519`，说明分块切空间已基本修复 e4 的
+  定位损失并进一步提高关联质量。
+- product-tangent pair mAP/AP50 `0.252434/0.444294`、both-independent
+  `0.303859/0.513938`；375,558,772-byte checkpoint、5416/50、28 CSV、108 文件和 async
+  标志完整。其 AP50 比 full-tangent 低 `0.009917`、det DetA 低 `0.141`，但 HOTA 双正且训练
+  已在 e9；动态 GPU0 的 PGID `3555710` 继续 e12，GPU1 外部任务不动。e12 若保持强同点优势，
+  该线升级为长轨迹候选，而不是在 e8 直接宣告最终达标。
+- `0804_02` angle-only e8 cls/det HOTA `41.415/48.105`，DetA/AssA 为
+  `34.045/53.460` 与 `43.261/55.420`；相对原 decoder `-0.557/-0.073`，相对 Encoder
+  `-3.854/-2.088`，相对 terminal mean geometry `-3.587/-0.978`。pair mAP/AP50
+  `0.203140/0.366031`、both-independent `0.248462/0.429392`；375,528,630-byte checkpoint、
+  5416/50/28/108 与 async 标志完整。动态 GPU0/1 的 PGID `1673454` 已在 e9并继续 e12，
+  GPU2 外部任务不动；不以 e8 直接否决。
+- 根据 product-tangent e4 的“AssA 高、DetA 低”和 e8 剩余 det DetA/AP50 小缺口，准备
+  `0804_04 body-frame product tangent`：只把中心切空间从图像轴对齐坐标换成双帧中间朝向与
+  几何均值尺度定义的物体局部坐标，shape tangent、分类、DN、loss、层数与 attention 不变。
+  它零参数、交换等变、class-agnostic、无 reweight，仅增加终层逐元素三角函数。178 独立
+  checkout clean HEAD `e7ef507`；模块来源核验、2 项定向测试、正式/烟测配置 deepcopy、两份
+  launcher `bash -n` 和完整父/候选构建通过：`22,771,111` 参数、增量 0、711 states。
+  当前严格登记 `PREPARED/NO_GPU`，未做 smoke、未创建正式 workdir，不抢占 0804_01。
 
 ## 2026-08-05 01:14 CST：197 log-size-only epoch 4 完整评估
 
