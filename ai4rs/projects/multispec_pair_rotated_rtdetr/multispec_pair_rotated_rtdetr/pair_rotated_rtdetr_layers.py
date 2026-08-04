@@ -327,6 +327,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_se2_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_plane_refinement_decoder:
@@ -421,6 +423,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_se2_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_se2_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
         self.pair_shared_terminal_transport_plane_refinement_decoder = bool(
@@ -505,6 +510,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_se2_product_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_plane_refinement_decoder,
@@ -525,6 +532,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
                 'tangent, terminal-transport-body-frame-product-tangent, '
+                'terminal-transport-SE2-product-tangent, '
                 'terminal-transport-tangent, '
                 'terminal-transport-plane, '
                 'tangent-product, terminal-position-tangent-transport, '
@@ -2152,6 +2160,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif ((
                     self.
+                    pair_shared_terminal_transport_se2_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # First establish the transported terminal orientation, then
+                # express center corrections as finite SE(2) midpoint twists.
+                # This couples translation only to the already selected
+                # angle increment while leaving shape transport unchanged.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_se2_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
                     pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder)
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -3046,6 +3071,143 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             tangent_prev, ref_prev, ref_logit_prev, normal_prev)
         normal_curr = encode_center(
             tangent_curr, ref_curr, ref_logit_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_se2_center_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport center detail as finite SE(2) midpoint twists.
+
+        A planar rigid motion with rotation ``omega`` maps its translational
+        Lie-algebra coordinate through the SE(2) left Jacobian. In midpoint
+        coordinates that Jacobian is the scalar
+        ``sinc(omega / 2)`` followed by the half-angle rotation. The common
+        pair body frame absorbs that rotation, so dividing by the even sinc
+        factor yields a swap-equivariant finite-motion tangent. We project
+        only the antisymmetric center detail onto the established reference
+        motion, then apply the matching sinc retraction for each frame.
+
+        The transported shape projection runs before this method, making its
+        terminal angle the sole new coupling signal. DN entries and shape
+        residuals are preserved exactly. The operation is parameter-free,
+        class agnostic, and reduces exactly to body-frame center transport
+        when all angular increments are zero.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair SE(2) center-tangent refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair SE(2) center-tangent refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair SE(2) center-tangent refinement requires residual and '
+                'reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair SE(2) center-tangent refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        pair_angle = torch.remainder(
+            ref_prev[..., 4:]
+            + 0.5 * wrap_period(ref_curr[..., 4:] - ref_prev[..., 4:]),
+            1.0).detach()
+        theta = pair_angle * torch.pi
+        cos_theta = torch.cos(theta)
+        sin_theta = torch.sin(theta)
+
+        def to_body(vector: Tensor) -> Tensor:
+            return torch.cat((
+                cos_theta * vector[..., :1]
+                + sin_theta * vector[..., 1:2],
+                -sin_theta * vector[..., :1]
+                + cos_theta * vector[..., 1:2]), dim=-1)
+
+        def from_body(vector: Tensor) -> Tensor:
+            return torch.cat((
+                cos_theta * vector[..., :1]
+                - sin_theta * vector[..., 1:2],
+                sin_theta * vector[..., :1]
+                + cos_theta * vector[..., 1:2]), dim=-1)
+
+        def midpoint_jacobian(angle_delta: Tensor) -> Tensor:
+            omega = wrap_period(angle_delta) * torch.pi
+            # torch.sinc(x) is sin(pi*x)/(pi*x), including its stable x=0
+            # limit. Our normalized argument therefore evaluates
+            # sin(omega/2)/(omega/2) without a fragile conditional branch.
+            return torch.sinc(omega / (2.0 * torch.pi)).clamp_min(1e-4)
+
+        pair_size = torch.sqrt(
+            ref_prev[..., 2:4].clamp_min(1e-6)
+            * ref_curr[..., 2:4].clamp_min(1e-6)).detach().clamp_min(1e-6)
+        jacobian_prev = midpoint_jacobian(
+            proposed_prev[..., 4:] - ref_prev[..., 4:])
+        jacobian_curr = midpoint_jacobian(
+            proposed_curr[..., 4:] - ref_curr[..., 4:])
+        tangent_prev = (
+            to_body(proposed_prev[..., :2] - ref_prev[..., :2])
+            / pair_size / jacobian_prev)
+        tangent_curr = (
+            to_body(proposed_curr[..., :2] - ref_curr[..., :2])
+            / pair_size / jacobian_curr)
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+
+        transport_jacobian = midpoint_jacobian(
+            ref_curr[..., 4:] - ref_prev[..., 4:]).detach()
+        transport = (
+            to_body(ref_curr[..., :2] - ref_prev[..., :2])
+            / pair_size / transport_jacobian).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail_tangent * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_center(tangent: Tensor, reference: Tensor,
+                          reference_logit: Tensor, jacobian: Tensor,
+                          original_residual: Tensor) -> Tensor:
+            target_center = (
+                reference[..., :2]
+                + from_body(tangent * pair_size * jacobian)).clamp(
+                    1e-3, 1 - 1e-3)
+            center_residual = (
+                inverse_sigmoid(target_center, eps=1e-3)
+                - reference_logit[..., :2])
+            return torch.cat(
+                (center_residual, original_residual[..., 2:]), dim=-1)
+
+        normal_prev = encode_center(
+            tangent_prev, ref_prev, ref_logit_prev, jacobian_prev,
+            normal_prev)
+        normal_curr = encode_center(
+            tangent_curr, ref_curr, ref_logit_curr, jacobian_curr,
+            normal_curr)
         if not num_dn:
             return normal_prev, normal_curr
         return (
