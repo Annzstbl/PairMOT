@@ -2657,3 +2657,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   178 单卡 PGID `3151184` 到 e20。
 - 99 的 center-only `0803_25` 与排队的 product-tangent `0803_26` 分别验证中心贡献和跨维内积
   干扰；在 e20 证据前不增加更复杂模块，也不改动 252 固定 GPU0/1 的成熟轨迹。
+
+## 2026-08-04 11:26 CST：成熟线 e40 继续延长
+
+- 0803_13 e40 cls/det HOTA `54.057/61.250`，相对 Encoder 同点仍为
+  `+0.260/+0.187`，相对 e36 继续增长 `+0.183/+0.390`；pair mAP/AP50
+  `0.3138/0.5373`、both-independent `0.3553/0.5768`，完整评测闭环。
+- 该点绝对和 `115.307`，距严格总和门槛还差 `3.023`，且绝对 cls/det 分别还差
+  `0.380/1.143`。因曲线没有平台，252 固定 GPU0/1 无缝继续 e44；不在该最慢资源的 GPU2/3
+  并发新筛选，也不把同点双正误写为最终达成。
+- 快资源继续完成 178 full-tangent e20、99 center-only e4+、197 shape-only e4+；只有成熟证据
+  支持时才切换到已准备的 product-tangent，仍禁止 class-aware、reweight、额外 layer/attention/loss。
