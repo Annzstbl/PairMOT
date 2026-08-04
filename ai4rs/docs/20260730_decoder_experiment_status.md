@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:23 CST
+更新时间：2026-08-04 14:26 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
 | 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` 与 `0803_27 position-tangent + product geometry` 均 PREPARED/NO_GPU。 |
-| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3394,3 +3394,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 该线 e44→e48 的 det 已回落，但原始 decoder 的检测峰值出现在 e52–e56，且用户明确要求不能
   因 decoder 收敛较慢而过早否决。252 因此仍只固定 GPU0/1、PGID `419164` 继续到 e52；
   GPU2/3 不用于本任务，新结构仍不在最慢资源上筛选。
+
+## 2026-08-04 14:26 CST：0803_24 shape-only epoch-8 接近原 decoder
+
+- shape-only e8 cls HOTA/DetA/AssA `41.910/34.476/53.595`，det
+  `47.783/43.107/54.921`。相对原始 decoder e8 `41.972/48.178` 为 `-0.062/-0.395`，较
+  center-only e8 `41.359/46.931` 高 `+0.551/+0.852`；shape 分量单独使用比 center 分量稳定。
+- 它仍比 full-tangent e8 `46.283/53.755` 低 `4.373/5.972`，说明 full-tangent 的早期大幅增益
+  不是两个独立分量的简单外推。pair mAP/AP50 `0.2046/0.3732`，both-independent mAP/AP50
+  `0.2476/0.4338`；epoch8 checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e8 不直接否决。197 当前动态 GPU2/3、PGID `712277` 已继续 e9→e12，GPU0/1 外部任务不动；
+  e12 完整后再决定 197 接替纯 product-tangent `0803_26`，避免在分量未成熟时提前外推。
