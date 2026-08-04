@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 23:05 CST
+更新时间：2026-08-04 23:29 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,39 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `31.119/37.046` 为早期双负信号，但 checkpoint/检测/TrackEval 完整且 PGID `798989` 已继续 e5→e8/e12；只占固定 GPU0/1，GPU2/3 不用于本任务。成熟 `0803_13` 最好仍为 e56 `54.980/62.009`。 |
+| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E12` | e8 `40.934/47.531` 仍为双负中期信号，但 checkpoint/检测/TrackEval 完整且 PGID `798989` 已继续 e9→e12；只占固定 GPU0/1，GPU2/3 不用于本任务。成熟 `0803_13` 最好仍为 e56 `54.980/62.009`。 |
 | 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E4+` | full-tangent `0803_23` e52 `54.197/60.991` 成熟平台后精确停止；纯 product-tangent 已通过静态、真实 smoke 与 formal iter50 五门槛，screen `3555709.pm_0804_01_formal_178`、PGID `3555710`。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E4+` | `0803_29` e12 `45.384/51.334` 成熟双负后精确停止；angle-only 已通过静态、真实双卡 smoke 与 formal iter50 五门槛，screen `1673453.pm_0804_02_formal_99`、PGID `1673454`。GPU 序号不固定。 |
-| 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E12` | e8 `38.401/44.520`，相对原 decoder `-3.571/-3.658`，相对 position/product e8 `-3.488/-3.645`；按慢收敛约束继续 e12 后再成熟判定。PGID `1016336`，GPU0/1 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E4+` | `0803_28` e12 `43.953/50.679` 经 e4/e8/e12 成熟双负后精确停止；log-size-only 已通过定向单测、配置深拷贝、零增量整模构建、真实双卡 smoke 与 formal iter50 五门槛，screen `2540930.pm_0804_03_formal_197`、PGID `2540932`。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-04 23:29 CST：197 成熟收口并启动 log-size-only；252 收齐 e8
+
+- `0803_28` e12 cls HOTA/DetA/AssA `43.953/36.592/55.255`，det
+  `50.679/46.150/57.353`；相对原 decoder e12 `47.395/54.436` 为
+  `-3.442/-3.757`，相对 position/product `0803_27` e12 `46.017/52.755` 为
+  `-2.064/-2.076`。pair mAP/AP50 `0.222433/0.403522`、both-independent
+  `0.267528/0.461563`；381,032,167-byte checkpoint、5416/50、28 CSV、108 个非空文件和
+  `async_done=1` 完整。e4/e8/e12 三个完整节点均双负后精确 TERM PGID `1016336`，成员
+  `23→0`；这是成熟判定而非 e4/e8 早停，GPU5 外部任务未动。
+- 新 `0804_03` 只在最终 normal queries 共享宽高的 log-domain 乘法增量；中心、周期角、分类、
+  DN、辅助输出与递归 reference 保持父线。它与 99 的 angle-only 构成尺度/朝向正交对照，结构
+  零参数/状态、交换等变、class-agnostic，无 reweight、新 layer、attention 或 loss。隔离仓库
+  clean HEAD `c73e19a`；定向单测、正式/烟测配置深拷贝、launcher 语法与整模构建通过：
+  `22,771,111` 参数、增量 0、711 states。
+- 动态 GPU2/3 两轮均为 `1 MiB/0%`；真实 DDP smoke loss
+  `12.9355/19.3070/19.4537/21.0277`、grad
+  `106.2667/108.1143/96.9112/103.3604`，DN/Encoder 与 642 个 checkpoint 浮点 tensor
+  全有限。fresh formal screen `2540930.pm_0804_03_formal_197`、PGID `2540932`；iter50
+  `1.0330 s/iter`、loss/grad `21.4643/103.1342`，7 个成员、GPU2/3 各约 19.2 GiB，五门槛
+  全部通过，登记 `RUNNING/TO_E4+`。
+- 252 `0803_30` e8 cls HOTA/DetA/AssA `40.934/33.759/52.305`，det
+  `47.531/42.486/55.014`；相对原 decoder e8 `41.972/48.178` 为 `-1.038/-0.647`，相对
+  terminal mean geometry `0803_13` e8 `45.002/49.083` 为 `-4.068/-1.552`。pair mAP/AP50
+  `0.195488/0.359509`、both-independent `0.238468/0.419121`；375,538,934-byte checkpoint、
+  5416/50、28/108 和异步完成标志完整。固定 GPU0/1 的 PGID `798989` 已到 e9，继续 e12，
+  不因 e8 直接否决；GPU2/3 保持未使用。
 
 ## 2026-08-04 23:05 CST：position-plane e12 成熟停止，periodic-angle-only 接替 99
 

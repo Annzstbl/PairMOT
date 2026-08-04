@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 23:05 CST。
+更新时间：2026-08-04 23:29 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,10 +18,30 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke 与 formal iter50 五门槛通过，PGID `1673454` | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E12；e8 `38.401/44.520` 为中期负信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E8+；e4 `31.119/37.046` 仅作早期信号，PGID `798989` 已继续 e5 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
+| 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E4+；真实双卡 smoke 与 formal iter50 五门槛通过，PGID `2540932` | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.934/47.531` 为中期负信号，PGID `798989` 已继续 e9 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `3555710` | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 23:29 CST：197 启动 log-size-only，252 e8 完整评估
+
+- 197 `0803_28` e12 cls/det `43.953/50.679`，DetA/AssA 分别为
+  `36.592/55.255` 与 `46.150/57.353`；相对原 decoder e12 为 `-3.442/-3.757`，相对
+  position/product 为 `-2.064/-2.076`。pair mAP/AP50 `0.2224/0.4035`、both-independent
+  `0.2675/0.4616`，381,032,167-byte checkpoint、5416/50/28/108 与异步完成标志完整。
+  e4/e8/e12 成熟窗口持续双负后精确停止 PGID `1016336`，成员 `23→0`。
+- `0804_03` 仅共享终层宽高的 log-domain 乘法增量，角度、中心、分类、DN、辅助输出与递归
+  reference 不变；零参数、交换等变、class-agnostic，无 reweight 或计算堆叠。clean HEAD
+  `c73e19a` 的定向单测、配置深拷贝、launcher 语法和零状态增量整模构建通过。真实 GPU2/3
+  smoke 四步 loss `12.9355/19.3070/19.4537/21.0277`、grad
+  `106.2667/108.1143/96.9112/103.3604`，DN/Encoder 与 642 个浮点 tensor 全有限；formal
+  screen `2540930.pm_0804_03_formal_197`、PGID `2540932`，iter50
+  `1.0330 s/iter`、loss/grad `21.4643/103.1342`，五门槛通过。
+- 252 `0803_30` e8 cls/det `40.934/47.531`，DetA/AssA 为
+  `33.759/52.305` 与 `42.486/55.014`；相对原 decoder e8 `-1.038/-0.647`，相对 terminal
+  mean geometry `0803_13` e8 `-4.068/-1.552`。pair mAP/AP50 `0.1955/0.3595`、
+  both-independent `0.2385/0.4191`，375,538,934-byte checkpoint、5416/50/28/108 与 async
+  标志完整；固定 GPU0/1 的 PGID `798989` 已进入 e9，继续 e12，不以 e8 早停。
 
 ## 2026-08-04 23:05 CST：99 position-plane 收口并启动 periodic-angle-only
 
