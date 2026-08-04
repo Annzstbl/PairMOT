@@ -3313,3 +3313,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `async_done=1` 完整。
 - e4 仍只作分量归因。197 动态 GPU2/3、PGID `712277` 继续 e8/e12，GPU0/1 外部任务不动；
   center/shape 两项成熟结果到齐前不把早期联合效应直接外推为 product-tangent 成功。
+
+## 2026-08-04 12:13 CST：0803_23 full-tangent epoch-20 明显回升
+
+- full transported tangent e20 cls HOTA/DetA/AssA `51.119/42.702/63.455`，det
+  `57.969/51.405/67.704`。相对原始 decoder e20 `50.843/58.033` 为
+  `+0.276/-0.064`；相对 Encoder e20 `51.514/58.922` 为 `-0.395/-0.953`。e16→e20
+  绝对 HOTA 回升 `+1.492/+1.149`，同点差距也显著收窄。
+- pair mAP/AP50 `0.2864/0.4981`，both-independent mAP/AP50 `0.3305/0.5452`；
+  392,145,588-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e20 尚未恢复 e12 的大幅联合优势，也远未达到最终绝对门槛；但 e16 单点谷值已出现明确反弹，
+  不能成熟否决。178 当前动态 GPU0、PGID `3151184` 继续 e24，检验恢复是否持续；不为
+  product-tangent 提前释放单卡。

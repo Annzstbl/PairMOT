@@ -2687,3 +2687,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   不用 e4 淘汰。GPU0/1 外部任务不动，卡号只记录本次动态选择。
 - 当前设计解释是 full-tangent 的早期收益依赖 center–shape 联合几何；是否需要 product-space
   分块投影必须由 e8/e12 与 full-tangent e20 共同决定，不能由两个 e4 单点直接确认。
+
+## 2026-08-04 12:13 CST：full-tangent e20 继续恢复审计
+
+- 0803_23 e20 cls/det HOTA `51.119/57.969`，相对原 decoder同点 `+0.276/-0.064`、相对
+  Encoder 同点 `-0.395/-0.953`；较自身 e16 明显回升 `+1.492/+1.149`。检测 AP 同步升至
+  pair `0.2864/0.4981`、both-independent `0.3305/0.5452`。
+- 完整 checkpoint、5416/50/28/108 与异步完成证据齐全。e20 仍未达到最终绝对目标，但已否定
+  “e16 后持续下行”的单点外推，因此保留 178 当前动态 GPU0 到 e24，不提前切 product-tangent。
+- e24 若继续缩小对 Encoder/原 decoder 的双侧差距，则延长强线；若恢复停滞，再结合 center/shape
+  的 e8/e12 选择 product-tangent 接替，仍不做 scale、reweight、class-aware 或计算堆叠。
