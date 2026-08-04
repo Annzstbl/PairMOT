@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 10:39 CST.
+Last updated: 2026-08-04 11:00 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2646,3 +2646,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   iter50 `0.9843 s/iter`、loss/grad `21.4116/114.8470`，五门槛通过。
 - 保持该零参数、class-agnostic center-only 正交轨迹到 e4/e8/e12，不以早期节点直接否决；
   product-tangent `0803_26` 继续作为下一后继，不并发抢占 99 两卡。
+
+## 2026-08-04 10:58 CST：full-tangent e16 转入回升审计
+
+- 0803_23 e16 cls/det HOTA `49.627/56.820`，相对原 decoder 同点
+  `-0.409/-0.113`、相对 Encoder 同点 `-1.464/-1.500`；检测 AP 为 pair
+  `0.2716/0.4735`、both-independent `0.3148/0.5216`，完整产物闭环。
+- e4/e8/e12 的持续强双正到 e16 首次变为轻微双负，说明单一 5D tangent 的增益可能发生后期
+  衰减，但一个节点尚不能区分暂时谷值与结构失效。原 decoder 有已知晚收敛，因此保留同一
+  178 单卡 PGID `3151184` 到 e20。
+- 99 的 center-only `0803_25` 与排队的 product-tangent `0803_26` 分别验证中心贡献和跨维内积
+  干扰；在 e20 证据前不增加更复杂模块，也不改动 252 固定 GPU0/1 的成熟轨迹。

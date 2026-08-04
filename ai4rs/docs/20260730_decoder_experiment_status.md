@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 10:39 CST
+更新时间：2026-08-04 11:00 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E40+` | e36 `53.874/60.860`，相对原始 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`；同点联合优势仍未过 `1.5`，PGID `419164` 继续 e40。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E16+` | e12 `50.145/56.375`，相对原始 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`；当前第一主线，PGID `3151184` 继续 e16。GPU 序号不固定。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E20+` | e16 `49.627/56.820`，相对原始 decoder `-0.409/-0.113`、相对 Encoder `-1.464/-1.500`；此前 e4/e8/e12 强增益后首次轻微双负，PGID `3151184` 继续 e20 验证是否回升。GPU 序号不固定。 |
 | 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E4+` | `0803_21` e4/e8/e12 成熟双负后停止；0803_25 动态选择 GPU1/2，smoke 完整通过，formal PGID `1442845` 的 iter50 五门槛通过。GPU 序号不固定；`0803_26 product-tangent` PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E4+` | `0803_18` e4/e8/e12 成熟双负后停止；动态选择 GPU2/3，formal PGID `712277` 的 iter50 五门槛通过。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
@@ -3262,3 +3262,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `1442843.pm_0803_25_formal_99`、PGID `1442845`。iter50 为 `0.9843 s/iter`、loss
   `21.4116`、grad `114.8470`，总、DN、encoder proposal 全有限，GPU1/2 各约 19.2 GiB，
   致命错误为 0，五门槛通过。状态 `RUNNING/TO_E4+`，按慢收敛规则收集 e4/e8/e12。
+
+## 2026-08-04 10:58 CST：0803_23 epoch-16 优势回落
+
+- transported full-tangent e16 cls HOTA/DetA/AssA `49.627/41.278/62.277`，det
+  `56.820/50.118/66.772`。相对原始 decoder e16 `50.036/56.933` 为
+  `-0.409/-0.113`，相对 Encoder e16 `51.091/58.320` 为 `-1.464/-1.500`；e12 相对原
+  decoder 的 `+2.750/+1.939` 已转为轻微双负。
+- pair mAP/AP50 `0.2716/0.4735`，both-independent mAP/AP50 `0.3148/0.5216`；
+  386,614,516-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e4/e8/e12 连续强双正后，e16 是首次相对原 decoder 轻微双负；原 decoder 本身存在后期回升，
+  且同一作业已在异步评测期间进入 e17，因此单个 e16 不作为成熟否决。178 当前 GPU0、PGID
+  `3151184` 保持到 e20，检验 5D tangent 是暂时谷值还是优势消失；GPU0 仍只是动态选择。

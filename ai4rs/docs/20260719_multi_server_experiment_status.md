@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 10:39 CST。
+更新时间：2026-08-04 11:00 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0803_25 center-only transported tangent`（当前 GPU1/2） | RUNNING/TO_E4+；`0803_21` e12 `44.179/52.106` 成熟双负后停止；fresh formal PGID `1442845` 的 iter50 五门槛通过 | `0803_26 product-tangent` 双卡版 PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E4+；`0803_18` e12 `45.404/51.784` 成熟双负后停止；fresh formal PGID `712277` 的 iter50 五门槛通过 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.874/60.860`，相对原 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`，PGID `419164` | 成熟长轨迹继续 e40，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E16+；e12 `50.145/56.375`，相对原 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`，PGID `3151184` | 当前第一主线继续 e16；`0803_25 center-only` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E20+；e16 `49.627/56.820`，相对原 decoder `-0.409/-0.113`、相对 Encoder `-1.464/-1.500`，PGID `3151184` 继续 e20 | 保留至 e20 判断回升；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
@@ -2380,3 +2380,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   encoder proposal 全有限，五门槛通过。状态 `RUNNING/TO_E4+`。
 - GPU1/2 是本次实时选择，不是固定授权；GPU0 外部 PID `1439554` 未触碰。`0803_26` 保持
   PREPARED/NO_GPU，等待 0803_25 的成熟节点交接。
+
+## 2026-08-04 10:58 CST：178 0803_23 e16 继续到 e20
+
+- e16 cls/det HOTA `49.627/56.820`，DetA/AssA 分别为 `41.278/62.277` 与
+  `50.118/66.772`；相对原 decoder e16 `-0.409/-0.113`、相对 Encoder
+  `-1.464/-1.500`。pair mAP/AP50 `0.2716/0.4735`，both-independent
+  `0.3148/0.5216`。
+- 386,614,516-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件与
+  `async_done=1` 完整。e16 较 e12 为 cls `-0.518`、det `+0.445`，HOTA 结构由强双正收敛为
+  相对原 decoder 轻微双负。
+- 因 e4/e8/e12 连续强双正、原 decoder 有已知后期回升，单个 e16 不足以成熟否决。当前 GPU0、
+  PGID `3151184` 不停训，继续 e20；178 仍只用一张动态选择的卡。
