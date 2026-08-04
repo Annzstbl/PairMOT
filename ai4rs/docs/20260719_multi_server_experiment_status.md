@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 23:29 CST。
+更新时间：2026-08-05 00:07 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,18 @@
 | 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke 与 formal iter50 五门槛通过，PGID `1673454` | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E4+；真实双卡 smoke 与 formal iter50 五门槛通过，PGID `2540932` | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.934/47.531` 为中期负信号，PGID `798989` 已继续 e9 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
-| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `3555710` | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E8+；e4 `35.274/43.849` 完整闭环，PGID `3555710` 已继续 e5 | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 00:07 CST：178 product-tangent e4 完整评估
+
+- `0804_01` e4 cls/det HOTA `35.274/43.849`，DetA/AssA 为
+  `28.529/45.125` 与 `34.333/58.100`；相对原 decoder e4 `+0.968/+5.259`，相对 terminal
+  mean geometry `+2.425/+6.530`，但相对 full-tangent e4 `-1.068/-0.890`。分块后 det AssA
+  较 full-tangent 高 `3.388`、DetA 低 `3.776`，记录为关联稳定/定位召回的早期交换，不作否决。
+- pair mAP/AP50 `0.1593/0.2965`、both-independent `0.2069/0.3704`；369,973,108-byte
+  checkpoint、5416/50、28 CSV、108 文件与 async 标志完整。动态 GPU0、PGID `3555710`
+  已到 e5，继续 e8/e12；GPU1 外部任务未动。
 
 ## 2026-08-04 23:29 CST：197 启动 log-size-only，252 e8 完整评估
 

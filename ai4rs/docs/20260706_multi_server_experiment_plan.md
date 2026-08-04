@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 23:29 CST.
+Last updated: 2026-08-05 00:07 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,14 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 00:07 CST, 178 `0804_01` factorized product-tangent completed e4 at
+`35.274/43.849`. It is strongly dual-positive versus the original decoder at the same point
+but `1.068/0.890` below full-tangent. Detection AssA is `3.388` above full-tangent while
+DetA is `3.776` below it, exposing an association-versus-localization trade rather than a
+uniform failure. Complete checkpoint, AP, 50-sequence TrackEval, 28 CSV files, 108 evaluation
+files, and async completion were verified. Dynamic 178 GPU0 continues the same PGID `3555710`
+to e8/e12; e4 is not a rejection point and GPU1 external work remains untouched.
 
 At 23:29 CST, 197 `0803_28` completed e12 at `43.953/50.679`. Its checkpoint,
 AP, 50-sequence TrackEval, 28 CSV files, 108 evaluation files, and async completion were
