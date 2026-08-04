@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 09:50 CST
+更新时间：2026-08-04 10:02 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E36+` | e32 `53.642/60.531`，相对原始 decoder `+1.076/+0.576`、联合 `+1.652`，相对 Encoder `+1.288/+0.201`；PGID `419164` 继续 e36。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E40+` | e36 `53.874/60.860`，相对原始 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`；同点联合优势仍未过 `1.5`，PGID `419164` 继续 e40。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E16+` | e12 `50.145/56.375`，相对原始 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`；当前第一主线，PGID `3151184` 继续 e16。GPU 序号不固定。 |
 | 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `38.854/46.716`，相对原始 decoder `-3.118/-1.462`；按晚收敛约束继续 e12，PGID `1384944`。`0803_25 center-only` PREPARED。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E4+` | `0803_18` e4/e8/e12 成熟双负后停止；动态选择 GPU2/3，formal PGID `712277` 的 iter50 五门槛通过。GPU 序号不固定，GPU0/1 外部任务不动。 |
@@ -3209,3 +3209,16 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `712277`。iter50 为 `1.8555 s/iter`、loss `21.4056`、grad `136.6876`，GPU2/3 各约
   19.2 GiB，总、DN、encoder proposal 均有限，无致命错误，五门槛通过。状态 `RUNNING`，
   先收 e4/e8/e12，不用 e4/e8 直接否决。
+
+## 2026-08-04 10:02 CST：0803_13 epoch-36 保持同点双超
+
+- terminal mean geometry e36 cls HOTA/DetA/AssA `53.874/44.868/66.433`，det
+  `60.860/53.299/71.836`。相对原始 decoder e36 `52.985/60.410` 为
+  `+0.889/+0.450`，联合 `+1.339`；相对 Encoder e36 `52.912/60.707` 为
+  `+0.962/+0.153`，联合 `+1.115`，继续保持成熟同点双正。
+- pair mAP/AP50 `0.3098/0.5315`，both-independent mAP/AP50 `0.3520/0.5725`；
+  414,119,542-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e36 较 e32 绝对 HOTA 又提高 `+0.232/+0.329`，但当前和 `114.734` 仍低于 Encoder 最终和
+  加 1.5 的严格门槛 `>118.330`，且距最终 cls/det 门槛仍为 `0.563/1.533`。252 固定
+  GPU0/1、PGID `419164` 继续 e40；GPU2/3 保持空闲，252 不承担新结构筛选。
