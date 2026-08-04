@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 20:44 CST
+更新时间：2026-08-04 21:14 CST
 
 ## 当前研究原则
 
@@ -15,9 +15,9 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E4+` | 2x4 配置、定向测试、整模构建、真实 DDP smoke 与 formal iter50 五门槛通过；screen `798987.pm_0803_30_formal_252`、PGID `798989`，GPU2/3 不用于本任务。成熟 `0803_13` 已在 e64 完整闭环后停止，最好仍为 e56 `54.980/62.009`。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E48` | e44 `53.672/60.553`，较 e40 明显回升 `+0.983/+0.390`；虽相对原 decoder 仍低 `0.743/1.184`，但不构成平台，PGID `3151184` 正在 e48。GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E52` | e48 `53.944/60.888`，较 e44 再升 `+0.272/+0.335`；虽相对原 decoder e48 仍低 `0.665/1.203`，但自身曲线未平台，PGID `3151184` 继续 e52。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `30.658/38.402`，相对原 decoder `-3.648/-0.188`，只登记 position 分类慢收敛与几何轻微改善；PGID `1582836` 继续 e8/e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
-| 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E8+` | e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，相对 position/product e4 `+0.821/+0.267`；只登记早期信号，PGID `1016336` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E12` | e8 `38.401/44.520`，相对原 decoder `-3.571/-3.658`，相对 position/product e8 `-3.488/-3.645`；按慢收敛约束继续 e12 后再成熟判定。PGID `1016336`，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3621,3 +3621,21 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `0803_27` e4 为 `+0.235/+0.273`。pair mAP/AP50 `0.1306/0.2495`，checkpoint、5416 条检测、
   50 序列、28 CSV、108 个非空文件完整。切平面改善同类早期几何，但 position 分类仍慢；动态
   GPU0/1、PGID `1582836` 已进入 e5，继续 e8/e12，不以 e4 直接否决。
+
+## 2026-08-04 21:14 CST：0803_23 e48 双升续跑，0803_28 e8 继续成熟窗口
+
+- 178 `0803_23` e48 cls HOTA/DetA/AssA `53.944/44.633/67.242`，det
+  `60.888/53.443/71.770`；较 e44 `53.672/60.553` 再升 `+0.272/+0.335`。相对原 decoder e48
+  `54.609/62.091` 仍低 `0.665/1.203`，相对最终 Encoder 低 `0.493/1.505`；绝对和 `114.832`
+  距严格 `>118.330` 尚差 `3.498`，未达目标。
+- pair mAP/AP50 `0.3054/0.5221`、both-independent `0.3461/0.5618`，430,807,092-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件及 `async_done=1` 完整。e44→e48
+  自身双升且原 decoder 的检测峰值在 e52–e56，因此动态 GPU0、PGID `3151184` 继续到 e52，
+  不把尚未过最终线误当成平台；GPU1 外部任务不动。
+- 197 `0803_28` e8 cls HOTA/DetA/AssA `38.401/32.595/48.019`，det
+  `44.520/41.869/48.825`；相对原 decoder e8 `41.972/48.178` 为 `-3.571/-3.658`，相对
+  `0803_27` position/product e8 `41.889/48.165` 为 `-3.488/-3.645`，说明 position 分类与
+  full transport 在中期没有形成互补。
+- pair mAP/AP50 `0.1898/0.3386`、both-independent `0.2370/0.4073`，375,532,775-byte
+  checkpoint、5416/50、28 CSV、108 文件与异步完成证据齐全。e8 只登记中期负信号；动态
+  GPU2/3、PGID `1016336` 已进入 e9，继续 e12 后再作成熟判定，GPU0/1 外部任务不动。

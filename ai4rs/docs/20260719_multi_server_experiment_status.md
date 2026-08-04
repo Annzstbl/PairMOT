@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 20:44 CST。
+更新时间：2026-08-04 21:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,9 +18,9 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `30.658/38.402` 仅作早期信号，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.244/38.396` 仅作早期信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E12；e8 `38.401/44.520` 为中期负信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `798989` | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E48；e44 `53.672/60.553`，较 e40 `+0.983/+0.390`，PGID `3151184` 正在 e48 | GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E52；e48 `53.944/60.888`，较 e44 `+0.272/+0.335`，PGID `3151184` | GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-04 16:42 CST：shape-only 成熟停止，0803_28 接替 197
@@ -2597,3 +2597,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `25.232/39.985` 与 `32.550/46.208`；相对原 decoder e4 `-3.648/-0.188`，相对 0803_27 e4
   `+0.235/+0.273`。pair mAP/AP50 `0.1306/0.2495`，checkpoint、5416/50、28 CSV、108 文件
   完整；动态 GPU0/1 的 PGID `1582836` 继续 e8/e12，不以 e4 早停。
+
+## 2026-08-04 21:14 CST：178 e48 与 197 e8 完整评估
+
+- 178 `0803_23` e48 cls/det HOTA `53.944/60.888`，DetA/AssA 分别为
+  `44.633/67.242` 与 `53.443/71.770`；较 e44 双升 `+0.272/+0.335`，但相对原 decoder e48
+  仍低 `0.665/1.203`。绝对和 `114.832` 距严格目标差 `3.498`。pair mAP/AP50
+  `0.3054/0.5221`、both-independent `0.3461/0.5618`，checkpoint、5416/50/28/108 和异步
+  完成证据齐全。自身曲线未平台，PGID `3151184` 继续 e52。
+- 197 `0803_28` e8 cls/det HOTA `38.401/44.520`，DetA/AssA 为
+  `32.595/48.019` 与 `41.869/48.825`；相对原 decoder e8 `-3.571/-3.658`，相对 position/product
+  e8 `-3.488/-3.645`。pair mAP/AP50 `0.1898/0.3386`、both-independent `0.2370/0.4073`，
+  checkpoint、5416/50/28/108 和异步完成证据完整；PGID `1016336` 继续 e12，不以 e8 早停。
