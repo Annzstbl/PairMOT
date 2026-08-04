@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 22:44 CST。
+更新时间：2026-08-04 23:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_29 position-tangent + osculating-plane`（当前 GPU0/1） | RUNNING/TO_E12；e8 `40.865/46.308`，较 e4 快速恢复但仍低于原 decoder，PGID `1582836` | `0803_27` e12 成熟双负后 STOPPED；`0803_26` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke 与 formal iter50 五门槛通过，PGID `1673454` | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E12；e8 `38.401/44.520` 为中期负信号，PGID `1016336` | GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E8+；e4 `31.119/37.046` 仅作早期信号，PGID `798989` 已继续 e5 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E4+；真实 smoke 与 formal iter50 五门槛通过，PGID `3555710` | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 23:05 CST：99 position-plane 收口并启动 periodic-angle-only
+
+- `0803_29` e12 完整结果为 cls/det `45.384/51.334`，DetA/AssA 为 cls
+  `37.106/57.832`、det `46.020/59.456`；相对原 decoder e12 为 `-2.011/-3.102`。
+  pair mAP/AP50 `0.2213/0.4006`，checkpoint、5416/50、28/108 和 async 标志完整；e4/e8/e12
+  成熟三节点均无优势，TERM PGID `1582836` 后成员 `23→0`。
+- `0804_02` 是只作用于最终 π 周期角的零参数共识，中心/尺度/分类/DN 保持原路径；clean HEAD
+  `2e3fe7e` 的定向测试、deepcopy、launcher 语法和零增量整模构建通过。首次 clone 的 LFS GIF
+  缺失保留为失败审计，`GIT_LFS_SKIP_SMUDGE=1` 的 `_retry1` 为有效隔离 checkout。
+- 动态 GPU0/1 两轮空闲检查后，真实 smoke 四组 loss/grad、DN/Encoder 与 642 个 checkpoint
+  tensor 全有限。fresh formal screen `1673453.pm_0804_02_formal_99`、PGID `1673454`，iter50
+  `0.9654 s/iter`、loss/grad `21.3937/115.9512`，五门槛通过，状态 `RUNNING/TO_E4+`。
 
 ## 2026-08-04 22:44 CST：178 full-tangent 收口并启动 factorized product-tangent
 
