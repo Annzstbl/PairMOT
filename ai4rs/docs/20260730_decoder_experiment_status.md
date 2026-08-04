@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 21:14 CST
+更新时间：2026-08-04 21:44 CST
 
 ## 当前研究原则
 
@@ -16,10 +16,22 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E4+` | 2x4 配置、定向测试、整模构建、真实 DDP smoke 与 formal iter50 五门槛通过；screen `798987.pm_0803_30_formal_252`、PGID `798989`，GPU2/3 不用于本任务。成熟 `0803_13` 已在 e64 完整闭环后停止，最好仍为 e56 `54.980/62.009`。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E52` | e48 `53.944/60.888`，较 e44 再升 `+0.272/+0.335`；虽相对原 decoder e48 仍低 `0.665/1.203`，但自身曲线未平台，PGID `3151184` 继续 e52。GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E8+` | e4 `30.658/38.402`，相对原 decoder `-3.648/-0.188`，只登记 position 分类慢收敛与几何轻微改善；PGID `1582836` 继续 e8/e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
+| 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E12` | e8 `40.865/46.308`，较自身 e4 回升 `+10.207/+7.906`，但相对原 decoder 同点仍为 `-1.107/-1.870`；PGID `1582836` 已继续 e9→e12。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E12` | e8 `38.401/44.520`，相对原 decoder `-3.571/-3.658`，相对 position/product e8 `-3.488/-3.645`；按慢收敛约束继续 e12 后再成熟判定。PGID `1016336`，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-04 21:44 CST：0803_29 epoch 8 完整评估
+
+- e8 cls HOTA/DetA/AssA `40.865/34.345/50.731`，det `46.308/41.571/53.385`；较自身 e4 HOTA
+  `30.658/38.402` 明显回升 `+10.207/+7.906`，说明 position-tangent 的分类慢收敛正在恢复，不能由
+  e4/e8 直接否决。
+- 相对原 decoder e8 `41.972/48.178` 仍低 `1.107/1.870`，相对 position/product `0803_27` e8
+  `41.889/48.165` 仍低 `1.024/1.857`；pair mAP/AP50 `0.197487/0.363752`、both-independent
+  `0.244215/0.429793`，尚无 AP 与轨迹指标互相背离的收益证据。
+- 375,531,702-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整；21:41 正式训练已到 e9 iter300，GPU0/1 动态占用、PGID `1582836`
+  存活且 total/DN/Encoder/grad 均有限。继续 e12 形成成熟窗口，不提前切换到排队候选。
 
 ## 2026-08-03 23:22 CST：0803_14 迁移 99 GPU1/2 并正式运行
 
