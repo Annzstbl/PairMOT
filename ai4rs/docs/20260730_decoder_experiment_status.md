@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:19 CST
+更新时间：2026-08-04 14:23 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E48+` | e44 `54.381/61.716`，较 e40 `+0.324/+0.466`，相对原始 decoder e44 `-0.034/-0.021`；绝对和 `116.097` 距严格目标 `118.330` 仍差 `2.233`，PGID `419164` 继续 e48。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
 | 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.359/46.931`，较 e4 大幅回升但相对原 decoder e8 `-0.613/-1.247`、相对 full-tangent e8 `-4.924/-6.824`；PGID `1442845` 继续 e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` 与 `0803_27 position-tangent + product geometry` 均 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
@@ -3378,6 +3378,19 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   工作树单独运行均通过，因此不是新候选回归。
 - 99 正式/四步 smoke 配置深拷贝、两份 launcher Bash 语法和专用整模构建审计通过：
   `22,771,111` 参数、增量 0、711 状态张量。隔离工作树
-  `/data/users/wangying01/lth/PairMOT_positiontangent_0803_27_99` 未创建 smoke/formal workdir，
+  `/data/users/wangying01/lth/PairMOT_positiontangent_0803_27_99` 固定 clean HEAD `aea3157`，未创建 smoke/formal workdir，
   状态 `PREPARED/NO_GPU`。启动器要求显式传入当时两张空闲 GPU，不固定 99 序号；等待
   `0803_25` e12 和 shape-only 成熟证据后再与 `0803_26` 排序，不抢占当前训练。
+
+## 2026-08-04 14:23 CST：0803_13 terminal geometry epoch-48 分类过线但检测回落
+
+- e48 cls HOTA/DetA/AssA `54.533/45.002/67.846`，det
+  `61.587/53.995/72.635`。相对 e44 为 `+0.152/-0.129`，相对原始 decoder e48
+  `54.609/62.091` 为 `-0.076/-0.504`；分类首次严格超过最终 Encoder `54.437`，但检测仍低于
+  `62.393` 达 `0.806`，同一 checkpoint 未满足双过线。
+- 绝对和 `116.120`，距严格 `>118.330` 尚差 `2.210`。pair mAP/AP50
+  `0.3183/0.5399`，both-independent mAP/AP50 `0.3590/0.5779`；430,579,894-byte checkpoint、
+  5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 该线 e44→e48 的 det 已回落，但原始 decoder 的检测峰值出现在 e52–e56，且用户明确要求不能
+  因 decoder 收敛较慢而过早否决。252 因此仍只固定 GPU0/1、PGID `419164` 继续到 e52；
+  GPU2/3 不用于本任务，新结构仍不在最慢资源上筛选。
