@@ -327,6 +327,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_householder_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_se2_product_tangent_refinement_decoder:
@@ -429,6 +431,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_householder_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_householder_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder))
@@ -525,6 +530,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_householder_product_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_se2_product_tangent_refinement_decoder,
@@ -553,6 +560,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
                 'tangent, terminal-transport-shared-metric-product-tangent, '
+                'terminal-transport-Householder-product-tangent, '
                 'terminal-transport-body-frame-product-tangent, '
                 'terminal-transport-SE2-product-tangent, '
                 'terminal-transport-Frenet-product-tangent, '
@@ -2184,6 +2192,24 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif ((
                     self.
+                    pair_shared_terminal_transport_householder_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Parallel-transport the complete pair detail with a minimal
+                # orthogonal Householder map instead of discarding its
+                # transverse component through a rank-one projection.  The
+                # center and shape bundles remain factorized, and the map is
+                # norm preserving, parameter free, and swap equivariant.
+                tmp_prev, tmp_curr = (
+                    self._pair_householder_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_householder_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
                     pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder)
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -2946,6 +2972,210 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         return torch.cat((
             torch.zeros_like(evidence_prev[:, :num_dn]),
             transported_detail), dim=1)
+
+    @staticmethod
+    def _householder_transport_detail(
+            detail: Tensor, transport: Tensor) -> Tensor:
+        """Align detail to a transport axis with an orthogonal reflection.
+
+        The sign of the target axis is chosen to require the smaller turn.
+        The reflector is built from detached directions, so its backward map
+        is itself orthogonal.  Degenerate details or transport axes use the
+        identity map.  Unlike a rank-one projection, no detail energy is
+        deleted or amplified.
+        """
+        if detail.shape != transport.shape:
+            raise ValueError(
+                'Householder detail and transport must have equal shapes')
+        detail_energy = detail.square().sum(dim=-1, keepdim=True)
+        transport_energy = transport.square().sum(dim=-1, keepdim=True)
+        detail_direction = (
+            detail.detach()
+            / detail_energy.detach().clamp_min(1e-12).sqrt())
+        transport_direction = (
+            transport.detach()
+            / transport_energy.detach().clamp_min(1e-12).sqrt())
+        alignment = (detail_direction * transport_direction).sum(
+            dim=-1, keepdim=True)
+        target_direction = torch.where(
+            alignment >= 0, transport_direction, -transport_direction)
+        reflector_direction = detail_direction - target_direction
+        reflector_energy = reflector_direction.square().sum(
+            dim=-1, keepdim=True)
+        reflected = detail - 2.0 * reflector_direction * (
+            (detail * reflector_direction).sum(dim=-1, keepdim=True)
+            / reflector_energy.clamp_min(1e-12))
+        valid = ((detail_energy > 1e-12)
+                 & (transport_energy > 1e-12)
+                 & (reflector_energy > 1e-12))
+        return torch.where(valid, reflected, detail)
+
+    @classmethod
+    def _pair_householder_center_tangent_residual(
+            cls, residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport complete center detail onto established translation.
+
+        Center increments use the established per-frame width/height metric.
+        Their common component is retained, while the complete antisymmetric
+        detail is minimally reflected onto the detached reference-motion
+        axis.  This preserves detail norm instead of projecting it away.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair Householder center refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair Householder center refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair Householder center refinement requires residual and '
+                'reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair Householder center refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+
+        tangent_prev = (
+            proposed_prev[..., :2] - ref_prev[..., :2]) / size_prev
+        tangent_curr = (
+            proposed_curr[..., :2] - ref_curr[..., :2]) / size_curr
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        pair_size = torch.sqrt(size_prev * size_curr).clamp_min(1e-6)
+        transport = (
+            (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
+        transported_detail = cls._householder_transport_detail(
+            detail_tangent, transport)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_center(tangent: Tensor, reference: Tensor,
+                          reference_logit: Tensor,
+                          reference_size: Tensor,
+                          original_residual: Tensor) -> Tensor:
+            target_center = (
+                reference[..., :2] + tangent * reference_size).clamp(
+                    1e-3, 1 - 1e-3)
+            center_residual = (
+                inverse_sigmoid(target_center, eps=1e-3)
+                - reference_logit[..., :2])
+            return torch.cat(
+                (center_residual, original_residual[..., 2:]), dim=-1)
+
+        normal_prev = encode_center(
+            tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
+        normal_curr = encode_center(
+            tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @classmethod
+    def _pair_householder_shape_tangent_residual(
+            cls, residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport complete log-size/angle detail without energy loss."""
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair Householder shape refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair Householder shape refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair Householder shape refinement requires residual and '
+                'reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair Householder shape refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        tangent_prev = torch.cat((
+            torch.log(proposed_prev[..., 2:4].clamp_min(1e-6) / size_prev),
+            wrap_period(proposed_prev[..., 4:] - ref_prev[..., 4:])),
+            dim=-1)
+        tangent_curr = torch.cat((
+            torch.log(proposed_curr[..., 2:4].clamp_min(1e-6) / size_curr),
+            wrap_period(proposed_curr[..., 4:] - ref_curr[..., 4:])),
+            dim=-1)
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        transport = torch.cat((
+            torch.log(size_curr / size_prev),
+            wrap_period(ref_curr[..., 4:] - ref_prev[..., 4:])),
+            dim=-1).detach()
+        transported_detail = cls._householder_transport_detail(
+            detail_tangent, transport)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_shape(tangent: Tensor, reference: Tensor,
+                         reference_logit: Tensor,
+                         reference_size: Tensor,
+                         original_residual: Tensor) -> Tensor:
+            target_log_size = (
+                torch.log(reference_size) + tangent[..., :2]).clamp(
+                    min=-13.815510557964274,
+                    max=-1.0000005000003334e-6)
+            target_size = torch.exp(target_log_size)
+            target_angle = torch.remainder(
+                reference[..., 4:] + tangent[..., 2:], 1.0)
+            target_shape = torch.cat((target_size, target_angle), dim=-1)
+            shape_residual = (
+                inverse_sigmoid(target_shape, eps=1e-3)
+                - reference_logit[..., 2:])
+            return torch.cat(
+                (original_residual[..., :2], shape_residual), dim=-1)
+
+        normal_prev = encode_shape(
+            tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
+        normal_curr = encode_shape(
+            tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
 
     @staticmethod
     def _pair_transport_center_tangent_residual(
