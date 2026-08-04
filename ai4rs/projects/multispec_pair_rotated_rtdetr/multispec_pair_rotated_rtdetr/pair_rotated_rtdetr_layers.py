@@ -325,6 +325,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_se2_product_tangent_refinement_decoder:
@@ -424,6 +426,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder))
@@ -518,6 +523,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_body_frame_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_se2_product_tangent_refinement_decoder,
@@ -545,7 +552,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
-                'tangent, terminal-transport-body-frame-product-tangent, '
+                'tangent, terminal-transport-shared-metric-product-tangent, '
+                'terminal-transport-body-frame-product-tangent, '
                 'terminal-transport-SE2-product-tangent, '
                 'terminal-transport-Frenet-product-tangent, '
                 'terminal-transport-axis-Frenet-product-tangent, '
@@ -2176,6 +2184,22 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif ((
                     self.
+                    pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Express both frame updates in one geometric-mean box metric
+                # before the established rank-one transport. Shape transport
+                # is unchanged, isolating cross-frame metric consistency.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shared_metric_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
                     pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder)
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -3002,6 +3026,91 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
         normal_curr = encode_center(
             tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_shared_metric_center_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport center detail in one shared pair-size metric.
+
+        The original product tangent normalizes the two proposed center
+        updates by different frame sizes, but compares their detail against a
+        chord normalized by the geometric pair size. This variant uses that
+        same geometric-mean width/height metric for both updates, projection,
+        and reconstruction. It reduces to the original operation when the two
+        reference sizes agree, remains swap-equivariant, and adds no state.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair shared-metric center-tangent refinement requires '
+                'aligned residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair shared-metric center-tangent refinement requires '
+                'aligned references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair shared-metric center-tangent refinement requires '
+                'residual and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair shared-metric center-tangent refinement requires 5D '
+                'boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+        pair_size = torch.sqrt(size_prev * size_curr).clamp_min(1e-6)
+
+        tangent_prev = (
+            proposed_prev[..., :2] - ref_prev[..., :2]) / pair_size
+        tangent_curr = (
+            proposed_curr[..., :2] - ref_curr[..., :2]) / pair_size
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        transport = (
+            (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail_tangent * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_center(tangent: Tensor, reference: Tensor,
+                          reference_logit: Tensor,
+                          original_residual: Tensor) -> Tensor:
+            target_center = (
+                reference[..., :2] + tangent * pair_size).clamp(
+                    1e-3, 1 - 1e-3)
+            center_residual = (
+                inverse_sigmoid(target_center, eps=1e-3)
+                - reference_logit[..., :2])
+            return torch.cat(
+                (center_residual, original_residual[..., 2:]), dim=-1)
+
+        normal_prev = encode_center(
+            tangent_prev, ref_prev, ref_logit_prev, normal_prev)
+        normal_curr = encode_center(
+            tangent_curr, ref_curr, ref_logit_curr, normal_curr)
         if not num_dn:
             return normal_prev, normal_curr
         return (
