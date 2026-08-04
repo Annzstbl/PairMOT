@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 10:02 CST
+更新时间：2026-08-04 10:11 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E40+` | e36 `53.874/60.860`，相对原始 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`；同点联合优势仍未过 `1.5`，PGID `419164` 继续 e40。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E16+` | e12 `50.145/56.375`，相对原始 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`；当前第一主线，PGID `3151184` 继续 e16。GPU 序号不固定。 |
-| 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `38.854/46.716`，相对原始 decoder `-3.118/-1.462`；按晚收敛约束继续 e12，PGID `1384944`。`0803_25 center-only` PREPARED。 |
+| 99 GPU 1,2 | `0803_21 ... terminal transported semantic margins ... fresh` | `RUNNING/TO_E12+` | e8 `38.854/46.716`，相对原始 decoder `-3.118/-1.462`；按晚收敛约束继续 e12，PGID `1384944`。`0803_25 center-only` 与 `0803_26 product-tangent` PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E4+` | `0803_18` e4/e8/e12 成熟双负后停止；动态选择 GPU2/3，formal PGID `712277` 的 iter50 五门槛通过。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -3222,3 +3222,19 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - e36 较 e32 绝对 HOTA 又提高 `+0.232/+0.329`，但当前和 `114.734` 仍低于 Encoder 最终和
   加 1.5 的严格门槛 `>118.330`，且距最终 cls/det 门槛仍为 `0.563/1.533`。252 固定
   GPU0/1、PGID `419164` 继续 e40；GPU2/3 保持空闲，252 不承担新结构筛选。
+
+## 2026-08-04 10:11 CST：0803_26 product-tangent 分块传输已准备
+
+- `0803_23` 的单个 5D 投影允许中心平移能量通过同一内积旋转到 log-size/angle detail，e12
+  的 det 同点优势收窄到 `-0.166`。`0803_26` 把 terminal product geometry 分成独立的 center
+  2D 与 shape 3D tangent bundle：先沿既有平移方向投影中心 detail，再沿既有尺度/角度方向
+  投影 shape detail，不允许两组坐标跨维混合。
+- 结构只顺序调用已有 center/shape 投影各一次，零参数、交换等变、class-agnostic，无
+  reweight、新 layer、attention 或 loss，DN prefix 完全保留。定向测试覆盖末层各调用一次、
+  与显式分块组合一致、swap/DN/有限反向和互斥配置，真实 py310 环境通过。
+- 99 正式与 smoke 配置加载、`deepcopy` 和远端 Bash 语法通过；完整父/候选模型均为
+  `22,771,111` 参数、711 状态张量，增量 0。隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_terminaltransportproduct_0803_26_99` 固定 clean HEAD
+  `89ec85a`。首次 checkout 仅因非必要 83 MB LFS GIF 缺失中断，失败工作树保留为
+  `PairMOT_terminaltransportproduct_0803_26_99_failed_lfs_1008`，随后用
+  `GIT_LFS_SKIP_SMUDGE=1` 重建成功。状态 `PREPARED/NO_GPU`，排在 `0803_25` 后且不占卡。

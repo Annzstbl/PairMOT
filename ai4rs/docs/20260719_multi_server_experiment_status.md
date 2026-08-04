@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 10:02 CST。
+更新时间：2026-08-04 10:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_21 terminal transported margins`（当前 GPU1/2） | RUNNING/TO_E12+；e8 `38.854/46.716`，相对原 decoder `-3.118/-1.462`，PGID `1384944` 继续 e12 | `0803_25 center-only` 双卡版 PREPARED/NO_GPU，成熟交接后动态选卡 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_21 terminal transported margins`（当前 GPU1/2） | RUNNING/TO_E12+；e8 `38.854/46.716`，相对原 decoder `-3.118/-1.462`，PGID `1384944` 继续 e12 | `0803_25 center-only`、`0803_26 product-tangent` 双卡版 PREPARED/NO_GPU，成熟交接后动态选卡 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E4+；`0803_18` e12 `45.404/51.784` 成熟双负后停止；fresh formal PGID `712277` 的 iter50 五门槛通过 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.874/60.860`，相对原 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`，PGID `419164` | 成熟长轨迹继续 e40，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E16+；e12 `50.145/56.375`，相对原 decoder `+2.750/+1.939`、相对 Encoder `+0.465/-0.166`，PGID `3151184` | 当前第一主线继续 e16；`0803_25 center-only` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -2348,3 +2348,13 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   28 CSV、108 文件和异步完成证据完整。
 - 绝对和 `114.734` 仍低于严格 `>118.330`，同点 Encoder 联合优势 `1.115` 也未过 `1.5`。
   固定 GPU0/1 的 PGID `419164` 继续 e40；GPU2/3 空闲，资源规则不变。
+
+## 2026-08-04 10:11 CST：99 0803_26 product-tangent 已准备
+
+- 新候选把 0803_23 的单一 5D tangent 投影分解为独立 center 2D 与 shape 3D 投影，保留完整
+  几何传输但禁止中心/形状跨维内积干扰。它零参数、交换等变、class-agnostic，无 reweight、
+  新层、attention 或 loss，DN prefix 保持不变。
+- 远端定向单测、两配置加载/深拷贝、两启动器 Bash 语法和整模审计通过：父/候选均为
+  `22,771,111` 参数、711 tensors，增量 0。99 隔离 checkout clean HEAD `89ec85a`。
+- 首次 LFS smudge 失败工作树改名保留，随后 `GIT_LFS_SKIP_SMUDGE=1` 重建成功。状态
+  `PREPARED/NO_GPU`，排在 `0803_25` 后，不改变当前 99 两卡占用或卡号规则。

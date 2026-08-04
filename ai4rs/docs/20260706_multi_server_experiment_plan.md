@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 10:02 CST.
+Last updated: 2026-08-04 10:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -83,6 +83,13 @@ original decoder by `+0.889/+0.450` and Encoder by `+0.962/+0.153` at the aligne
 checkpoint, but its same-epoch Encoder gain is only `1.115` combined and its absolute sum
 `114.734` is still below the strict `>118.330` target. The fixed 252 GPU0/1 job therefore
 continues to epoch 40; GPU2/3 remain unused by this task.
+
+At 10:11 CST, `0803_26` was prepared as a product-manifold factorization of the strong
+transported tangent. It projects center motion in 2D and shape motion in 3D independently,
+removing cross-coordinate interference from the single 5D dot product without adding any
+parameter, layer, attention, loss, class-aware rule, or reweighting. The remote targeted
+test, config deep copies, launcher syntax, and zero-state-increment full build passed at clean
+99 HEAD `89ec85a`. It remains PREPARED/NO_GPU behind `0803_25` and does not reserve a GPU.
 
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
