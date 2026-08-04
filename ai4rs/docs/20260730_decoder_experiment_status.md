@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:49 CST
+更新时间：2026-08-04 15:00 CST
 
 ## 当前研究原则
 
@@ -3437,8 +3437,10 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 197 2xb4 正式/四步 smoke 配置深拷贝、两份 launcher Bash 语法与专用整模构建审计通过：
   `22,771,111` 参数、增量 0、711 状态张量。99 CPU 隔离验证工作树
   `/data/users/wangying01/lth/PairMOT_positiontransport_0803_28_99` 固定 clean HEAD `11d6b2f`；
-  状态 `PREPARED/NO_GPU`。待 197 shape-only e12 闭环后再迁移到 197，启动器只要求当时两张
-  空闲卡，不固定 GPU 序号。
+  完整 bundle 两端 SHA-256 一致，197 隔离 checkout
+  `/data/users/litianhao/PairMOT_positiontransport_0803_28_197` 固定 clean HEAD `1e2be85`，launcher
+  语法复核通过且 smoke/formal workdir 均不存在。状态 `PREPARED/NO_GPU`；待 197 shape-only e12
+  闭环后再启动，启动器只要求当时两张空闲卡，不固定 GPU 序号。
 
 ## 2026-08-04 14:49 CST：0803_23 full-tangent epoch-28 检测继续改善
 
