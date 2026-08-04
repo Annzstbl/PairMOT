@@ -1599,10 +1599,8 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 reg_branches_curr=reg_curr)
         self.assertEqual(feature_mock.call_count, 0)
         self.assertEqual(plane_mock.call_count, 1)
-        hidden, refs_prev, refs_curr, hidden_prev, hidden_curr = output
-        for lid in range(decoder.num_layers):
-            self.assertTrue(torch.equal(hidden_prev[lid], hidden[lid]))
-            self.assertTrue(torch.equal(hidden_curr[lid], hidden[lid]))
+        self.assertEqual(len(output), 3)
+        _hidden, refs_prev, refs_curr = output
         for reference in refs_prev + refs_curr:
             self.assertTrue(torch.isfinite(reference).all())
 
