@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 11:00 CST
+更新时间：2026-08-04 12:20 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E40+` | e36 `53.874/60.860`，相对原始 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`；同点联合优势仍未过 `1.5`，PGID `419164` 继续 e40。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E20+` | e16 `49.627/56.820`，相对原始 decoder `-0.409/-0.113`、相对 Encoder `-1.464/-1.500`；此前 e4/e8/e12 强增益后首次轻微双负，PGID `3151184` 继续 e20 验证是否回升。GPU 序号不固定。 |
-| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E4+` | `0803_21` e4/e8/e12 成熟双负后停止；0803_25 动态选择 GPU1/2，smoke 完整通过，formal PGID `1442845` 的 iter50 五门槛通过。GPU 序号不固定；`0803_26 product-tangent` PREPARED/NO_GPU。 |
-| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E4+` | `0803_18` e4/e8/e12 成熟双负后停止；动态选择 GPU2/3，formal PGID `712277` 的 iter50 五门槛通过。GPU 序号不固定，GPU0/1 外部任务不动。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E44+` | e40 `54.057/61.250`，相对原始 decoder `-0.002/+0.148`、相对 Encoder同点 `+0.260/+0.187`；绝对和 `115.307` 未达严格目标，PGID `419164` 继续 e44。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E24+` | e20 `51.119/57.969`，较 e16 回升 `+1.492/+1.149`，相对原始 decoder `+0.276/-0.064`；PGID `3151184` 继续 e24。GPU 序号不固定，GPU1 外部任务不动。 |
+| 99 当前 GPU 1,2 | `0803_25 ... terminal transported center tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.262/37.687` 为早期负向但不直接否决；PGID `1442845` 继续 e8/e12。GPU 序号不固定，GPU0 外部任务不动；`0803_26 product-tangent` PREPARED/NO_GPU。 |
+| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E8+` | e4 `31.487/37.808` 为早期负向但不直接否决；PGID `712277` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 11:00 CST。
+更新时间：2026-08-04 12:20 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_25 center-only transported tangent`（当前 GPU1/2） | RUNNING/TO_E4+；`0803_21` e12 `44.179/52.106` 成熟双负后停止；fresh formal PGID `1442845` 的 iter50 五门槛通过 | `0803_26 product-tangent` 双卡版 PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E4+；`0803_18` e12 `45.404/51.784` 成熟双负后停止；fresh formal PGID `712277` 的 iter50 五门槛通过 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.874/60.860`，相对原 decoder `+0.889/+0.450`、相对 Encoder `+0.962/+0.153`，PGID `419164` | 成熟长轨迹继续 e40，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E20+；e16 `49.627/56.820`，相对原 decoder `-0.409/-0.113`、相对 Encoder `-1.464/-1.500`，PGID `3151184` 继续 e20 | 保留至 e20 判断回升；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0803_25 center-only transported tangent`（当前 GPU1/2） | RUNNING/TO_E8+；e4 `31.262/37.687` 只作早期归因；PGID `1442845` 继续 e8/e12 | `0803_26 product-tangent` 双卡版 PREPARED/NO_GPU；GPU 序号不固定，GPU0 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E8+；e4 `31.487/37.808` 只作早期归因；PGID `712277` 继续 e8/e12 | `0803_22`、`0803_20` 保留；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E44+；e40 `54.057/61.250`，同点 Encoder 双正但绝对和 `115.307` 未达目标，PGID `419164` | 成熟长轨迹继续 e44，使用 252 自有可写 workdir | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E24+；e20 `51.119/57.969`，较 e16 明显回升，PGID `3151184` 继续 e24 | 保留至 e24 判断恢复持续性；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-03 23:06 CST：资源边界纠正
