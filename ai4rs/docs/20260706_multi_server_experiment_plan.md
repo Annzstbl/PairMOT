@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 08:06 CST.
+Last updated: 2026-08-04 08:29 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -42,6 +42,11 @@ At 08:06 CST, `0803_21` completed epoch 4 at `30.158/37.094`, below the original
 by `4.148/1.496` with complete artifacts. It continues to epoch 8 and 12 under the slow
 decoder-convergence rule, while semantic/geometric combination work stays deferred until a
 mature positive semantic result exists.
+
+At 08:29 CST, `0803_23` completed epoch 8 at `46.283/53.755`, exceeding the original
+decoder by `+4.311/+5.577` and Encoder by `+1.014/+3.562` at the aligned checkpoint.
+All AP and TrackEval artifacts are complete. It is now the first-priority trajectory and
+continues unchanged to epoch 12; the shape-only and center-only variants remain PREPARED.
 
 At 2026-08-03 23:15 CST, external work occupies 99 GPU0 while GPU1/2 are free. Because 99 has a count-only two-GPU cap, `0803_14` may use GPU1/2 after migration and smoke. Experiment 0803_13 reached e4 at `32.849/37.319` and continues to e8/e12 because early decoder convergence is not a rejection criterion.
 
