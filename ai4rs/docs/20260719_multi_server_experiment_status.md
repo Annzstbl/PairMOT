@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 00:19 CST。
+更新时间：2026-08-05 00:49 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,19 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_02 terminal periodic-angle-only`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `33.265/38.716` 完整闭环，PGID `1673454` 已继续 e5 | `0803_29` e12 成熟双负后 STOPPED；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_03 terminal log-size-only`（当前 GPU2/3） | RUNNING/TO_E4+；真实双卡 smoke 与 formal iter50 五门槛通过，PGID `2540932` | `0803_28` e12 成熟双负后 STOPPED；GPU 序号不固定，GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_30 geometry-only terminal osculating-plane`（固定 GPU0/1） | RUNNING/TO_E12；e8 `40.934/47.531` 为中期负信号，PGID `798989` 已继续 e9 | `0803_13` e64 成熟闭环后 STOPPED；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_30_paper_base_liquid_encoder_p5temporal_dualevidence_decoder_iterativeclsdnisolatede2e_pairsharedterminaltransportplane_refinement_pairdn_paircoherent_le180_r18_coco_full_1200x900_bf16_2xb4_fresh` |
+| 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | 仅保留成熟路线或严格复验；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E8+；e4 `35.274/43.849` 完整闭环，PGID `3555710` 已继续 e5 | `0803_23` e52 成熟平台后 STOPPED；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 00:49 CST：252 transport-plane e12 成熟停止
+
+- `0803_30` e12 cls/det HOTA `45.089/51.741`，DetA/AssA 为
+  `37.490/56.626` 与 `47.123/58.773`；相对原 decoder e12 `-2.306/-2.695`，相对 terminal
+  mean geometry `-3.200/-2.798`，相对 Encoder `-4.591/-4.800`。pair mAP/AP50
+  `0.2287/0.4149`、both-independent `0.2721/0.4709`。
+- 381,043,830-byte checkpoint、5416/50、28 CSV、108 文件与 async 标志完整。e4/e8/e12
+  三个完整节点均双负后精确停止 PGID `798989`，成员 `23→0`；固定 GPU0/1 回落至 1 MiB，
+  GPU2/3 未触碰。252 是最慢资源，暂不用于新的弱结构筛选。
 
 ## 2026-08-05 00:19 CST：99 periodic-angle-only e4 完整评估
 

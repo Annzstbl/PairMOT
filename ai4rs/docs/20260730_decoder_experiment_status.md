@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 00:19 CST
+更新时间：2026-08-05 00:49 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,25 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_30 ... geometry-only terminal osculating-plane ... fresh` | `RUNNING/TO_E12` | e8 `40.934/47.531` 仍为双负中期信号，但 checkpoint/检测/TrackEval 完整且 PGID `798989` 已继续 e9→e12；只占固定 GPU0/1，GPU2/3 不用于本任务。成熟 `0803_13` 最好仍为 e56 `54.980/62.009`。 |
 | 178 当前 GPU 0 | `0804_01 ... factorized product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 `35.274/43.849` 相对原 decoder 双正但低于 full-tangent；完整产物闭环后 PGID `3555710` 已继续 e5→e8/e12，不以 e4 直接否决。GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_02 ... terminal periodic-angle-only ... fresh` | `RUNNING/TO_E8+` | e4 `33.265/38.716` 为 cls 负、det 微正的早期信号；完整产物闭环后 PGID `1673454` 已继续 e5→e8/e12，不以 e4 直接否决。GPU 序号不固定。 |
 | 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E4+` | `0803_28` e12 `43.953/50.679` 经 e4/e8/e12 成熟双负后精确停止；log-size-only 已通过定向单测、配置深拷贝、零增量整模构建、真实双卡 smoke 与 formal iter50 五门槛，screen `2540930.pm_0804_03_formal_197`、PGID `2540932`。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 00:49 CST：252 transport-plane epoch 12 成熟收口
+
+- `0803_30` e12 cls HOTA/DetA/AssA `45.089/37.490/56.626`，det
+  `51.741/47.123/58.773`；相对原 decoder e12 `47.395/54.436` 为
+  `-2.306/-2.695`，相对 terminal mean geometry `0803_13` e12 `48.289/54.539` 为
+  `-3.200/-2.798`，相对 Encoder e12 `49.680/56.541` 为 `-4.591/-4.800`。几何平面没有
+  把 e8 的双负转成优势。
+- pair mAP/AP50 `0.228720/0.414872`、both-independent `0.272100/0.470852`；
+  381,043,830-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。e4/e8/e12 三个完整节点均被原 decoder、terminal mean 与 Encoder
+  双侧支配后，精确 TERM PGID `798989`，成员 `23→0`；固定 GPU0/1 回落至 1 MiB，GPU2/3
+  全程未用于本任务。该决策来自成熟三节点证据，不是 e4/e8 早停；252 作为最慢资源暂留空，
+  只接成熟路线或严格复验。
 
 ## 2026-08-05 00:19 CST：99 periodic-angle-only epoch 4 完整评估
 
