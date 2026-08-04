@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 03:10 CST
+更新时间：2026-08-05 04:23 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,86 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E16+` | e12 `49.784/56.243` 相对 Encoder 同点为 `+0.104/-0.298`，未达标但相对原 decoder 联合 `+4.196`；PGID `823929` 从 e12 完整恢复并健康运行 e13，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实单卡 smoke 与正式 iter50 五门槛通过；PGID `3652382` 健康运行 e1，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E4+` | 零参数、shape→SE(2) center 单因素；真实双卡 smoke 与正式 iter50 五门槛通过，PGID `1715384`。GPU 序号为本次动态选择，不构成固定分配。 |
-| 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E12` | e8 `41.299/46.767` 相对原 decoder `-0.673/-1.411`，仅作中期负信号；PGID `2540932` 已运行 e10，继续 e12，GPU5 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E20+` | e16 cls/det `51.220/57.370`，相对原 decoder 联合 `+1.621`，但严格绝对门槛未过；PGID `823929` 已进入 e17，继续 e20/e24+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det HOTA `34.117/39.239`，det 较原 decoder 同点 `+0.649`；PGID `3652382` 已进入 e6，继续 e8/e12。 |
+| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.979/37.928`，定位/AP 早期下降且无 AssA 补偿；PGID `1715384` 已进入 e5，继续 e8/e12，不以 e4 否决。 |
+| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实双卡 smoke/checkpoint/formal iter50 五门槛通过；PGID `482699` 已进入 e2，GPU2/3 各约 19.3 GiB，其他卡未动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 04:23 CST：SE(2) Lie-twist e4 完整归因
+
+- 99 `0804_05` e4 cls HOTA/DetA/AssA `31.979/25.609/42.084`，det
+  `37.928/31.544/46.879`；相对原 decoder e4 `34.306/38.590` 为
+  `-2.327/-0.662`，相对 Encoder e4 `36.209/38.753` 为 `-4.230/-0.825`。
+- pair mAP/AP50 `0.1290/0.2500`、both-independent `0.1702/0.3194`；
+  369,967,414-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件
+  与 248.4 秒异步完成标记完整。相对 body-frame e4 `34.117/39.239` 为
+  `-2.138/-1.311`，且 DetA/AP 下滑没有换来 AssA 优势，早期证据指向角耦合有限运动
+  对中心定位过强。
+- 该结果仅用于结构归因，不构成 e4 淘汰。动态 GPU0/1 的 PGID `1715384` 已进入 e5，
+  total/DN/Encoder/grad 有限，继续 e8/e12；GPU 序号仍是本次动态选择而非固定分配。
+
+## 2026-08-05 04:15 CST：product-tangent e16 联合优势超过原 decoder 1.5
+
+- 252 `0804_01` e16 cls HOTA/DetA/AssA `51.220/43.809/61.567`，det
+  `57.370/51.202/66.638`；同 checkpoint 和为 `108.590`，因此严格绝对门槛
+  `54.437/62.393/118.330` 分别仍差 `3.217/5.023/9.740`，尚未达标。
+- 相对原 decoder e16 `50.036/56.933` 为 `+1.184/+0.437`，联合 `+1.621`；
+  相对 Encoder e16 `51.091/58.320` 为 `+0.129/-0.950`，相对 full-tangent
+  e16 `49.627/56.820` 为 `+1.593/+0.550`。e12→e16 又提高
+  `+1.436/+1.127`，pair AP/AP50 与 both-independent 也分别提高
+  `+0.0156/+0.0253`、`+0.0165/+0.0241`。
+- 386,552,438-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件均已核验；
+  该节点虽未达最终目标，却确认分块 product tangent 在成熟区间保留明确联合增益。
+  固定 GPU0/1 的 PGID `823929` 继续 e20/e24+；不因单个 e16 未过绝对线而停止。
+
+## 2026-08-05 04:12 CST：178 e4 闭环；252 e16 TrackEval 存活
+
+- 178 `0804_04` e4 cls HOTA/DetA/AssA `34.117/27.146/45.226`，det
+  `39.239/34.041/46.965`；相对原 decoder e4 `34.306/38.590` 为
+  `-0.189/+0.649`，相对 Encoder e4 `36.209/38.753` 为 `-2.092/+0.486`。
+  pair mAP/AP50 `0.1398/0.2697`、both-independent `0.1870/0.3463`，
+  5416 条检测、50 序列和 TrackEval 完整。该早期点显示 det 侧轻微正信号、cls 基本持平，
+  PGID `3652382` 已健康进入 e5，继续保留 e8/e12 与成熟窗口，不以 e4 否决。
+- 252 `0804_01` e16 pair mAP/AP50 `0.2914/0.5039`、both-independent
+  `0.3379/0.5551`；同 checkpoint 异步 TrackEval 进程 PID `833515` 存活，
+  评测目录文件数已由 2 增至 19，属于正在生成轨迹而非失败。PGID `823929` 已进入
+  e17，GPU0/1 各约 21.6 GiB、GPU2/3 均为 1 MiB；待 summary CSV 落盘后严格核验
+  `cls>54.437`、`det>62.393`、`sum>118.330`，同时继续成熟节点。
+- 99 `0804_05` 已到 e4 iter900，197 `0804_06` 已到 e2 iter50；两条正式日志的
+  total/DN/Encoder/grad 均有限。99 当前动态 GPU0/1、197 当前动态 GPU2/3，均未扩大卡数。
+
+## 2026-08-05 04:02 CST：252 e16 与 178 e4 进入评估闭环
+
+- 252 固定 GPU0/1 的 `0804_01` 已完成 epoch16 训练并生成 386,552,438-byte
+  `epoch_16.pth`，PGID `823929` 的正式恢复日志在 e16 全程 total/DN/Encoder/grad 有限、fatal 为 0，
+  04:01 进入 validation；GPU2/3 仍为 `1 MiB/0%`。等待 AP 与同 checkpoint TrackEval 完整后，
+  再按 `54.437/62.393/118.330` 三重门槛判断。
+- 178 动态 GPU0 的 `0804_04` e4 已完成 1354-batch validation；pair mAP/AP50
+  `0.1398/0.2697`，both-independent `0.1870/0.3463`，5416 条检测与 50 序列完整，
+  `val_track_eval/val_track_0001` 已异步启动。当前只登记 AP 与评测进行态，HOTA 未出前不做性能结论，
+  更不会以 e4 直接否决；GPU1 外部任务未动。
+- 99 动态 GPU0/1 的 `0804_05` 已进入 epoch4 iter50，iter50 loss/grad
+  `11.6851/30.7542`，总、DN、Encoder proposal 有限，继续等待 e4 checkpoint/AP/TrackEval。
+
+## 2026-08-05 03:54 CST：log-size-only e12 成熟收口；Frenet 通过五门槛
+
+- `0804_03` e12 cls HOTA/DetA/AssA `44.836/36.679/57.472`，det
+  `51.366/46.167/59.307`；相对原 decoder e12 `47.395/54.436` 为
+  `-2.559/-3.070`。pair mAP/AP50 `0.2332/0.4164`、both-independent
+  `0.2674/0.4572`；381,026,151-byte checkpoint、5416 条检测、50 序列、28 CSV、
+  108 个非空评测文件和 `async_done=1` 全部闭环。e4/e8/e12 三个完整节点持续双负后，
+  精确停止 PGID `2540932`；独立复核时已无成员，GPU2/3 连续两次为 `1 MiB/0%`。
+  该决策来自 e12 成熟窗口，不是以 e4/e8 直接否决 decoder；GPU5 外部任务始终未动。
+- 197 隔离仓库 clean HEAD `2c45640` 的 `0804_06` 在动态 GPU2/3 完成真实双卡 smoke：
+  四步 loss `12.9369/19.5816/19.7056/21.2506`、grad
+  `103.5813/99.5912/91.1271/93.4536`，总损失、DN、Encoder proposal 全有限；
+  364,504,615-byte checkpoint 的 642 个浮点 tensor 全有限，致命错误扫描为 0。
+- fresh formal screen `482698.pm_0804_06_formal_197`、PGID `482699`；iter50
+  `1.0850 s/iter`、loss/grad `21.3925/110.7751`，7 个进程组成员、双 rank、GPU2/3
+  各约 19.2 GiB、正式日志/workdir 与 clean commit 对齐，DN/Encoder proposal 有限且 fatal 为 0。
+  五门槛通过，正式登记 `RUNNING/TO_E4+`；继续收 e4/e8/e12 和后续成熟节点，不以 e4/e8 早停。
 
 ## 2026-08-05 03:10 CST：Frenet endpoint-tangent 后继完成静态闭环
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 03:10 CST.
+Last updated: 2026-08-05 04:23 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,62 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 04:12 CST, fixed-252 `0804_01` epoch 16 detection evaluation closed at
+pair mAP/AP50 `0.2914/0.5039` and both-independent `0.3379/0.5551`.
+Same-checkpoint TrackEval PID `833515` is alive and its directory grew from
+2 to 19 files, while formal PGID `823929` entered epoch 17. GPU0/1 use about
+21.6 GiB each and GPU2/3 remain at 1 MiB. Wait for both summary CSVs before
+checking `cls>54.437`, `det>62.393`, and sum `>118.330`, and retain mature
+nodes regardless of this single e16 point.
+
+The same epoch-16 TrackEval then closed at cls HOTA/DetA/AssA
+`51.220/43.809/61.567` and det `57.370/51.202/66.638`, sum `108.590`.
+It does not pass the strict absolute thresholds, but it improves over the
+original decoder at aligned epoch 16 by `+1.184/+0.437`, joint `+1.621`,
+and improves over its own epoch 12 by `+1.436/+1.127`. Detection AP also
+rises in all four tracked measures. Keep fixed GPU0/1 through e20/e24+;
+do not truncate this mature, still-rising candidate at one e16 point.
+
+Dynamic-178 `0804_04` epoch 4 closed at cls HOTA/DetA/AssA
+`34.117/27.146/45.226` and det `39.239/34.041/46.965`, or
+`-0.189/+0.649` versus the original decoder at the aligned epoch. Its pair
+mAP/AP50 is `0.1398/0.2697` and both-independent is `0.1870/0.3463`.
+This is an early det-positive, cls-near-flat signal, not a rejection; PGID
+`3652382` entered epoch 5 and retains e8/e12 plus mature windows.
+Dynamic-99 `0804_05` reached epoch4 iter900, and dynamic-197 `0804_06`
+entered epoch2 iter50. Both remain finite and within the two-GPU caps.
+
+At 04:23 CST, dynamic-99 `0804_05` epoch 4 closed at cls
+HOTA/DetA/AssA `31.979/25.609/42.084` and det
+`37.928/31.544/46.879`. Pair mAP/AP50 is `0.1290/0.2500` and
+both-independent is `0.1702/0.3194`; the checkpoint, 5416 records,
+50 sequences, 28 CSVs, 108 nonempty files, and async completion marker are
+complete. The `-2.327/-0.662` aligned deficit to the original decoder and
+lack of AssA compensation identify overly strong early angle-coupled center
+motion, but epoch 4 is attribution only. Keep PGID `1715384` through
+e8/e12 and mature evidence.
+
+At 03:54 CST, 197 `0804_03` closed its mature e4/e8/e12 window. Epoch 12
+cls/det HOTA is `44.836/51.366`, with DetA/AssA
+`36.679/57.472` and `46.167/59.307`; pair mAP/AP50 is `0.2332/0.4164`
+and both-independent is `0.2674/0.4572`. The 381,026,151-byte checkpoint,
+5416 detections, 50 sequences, 28 CSV files, 108 nonempty evaluation files,
+and async completion marker all closed. It remained below the original
+decoder by `2.559/3.070` at e12 after three complete nodes, so exact PGID
+`2540932` was stopped on mature evidence, not e4/e8 early rejection. GPU2/3
+were then verified at 1 MiB/0% twice; external GPU5 work was untouched.
+
+The prepared `0804_06` Frenet endpoint-tangent successor then passed a real
+two-GPU smoke on dynamically selected GPU2/3. Four losses were
+`12.9369/19.5816/19.7056/21.2506`, gradients were
+`103.5813/99.5912/91.1271/93.4536`, DN/encoder terms were finite, and all
+642 floating tensors in the 364,504,615-byte checkpoint were finite. Fresh
+formal screen `482698.pm_0804_06_formal_197`, PGID `482699`, reached iter50 at
+`1.0850 s/iter`, loss `21.3925`, and grad `110.7751`; session/workers, dynamic
+GPU2/3, formal workdir/log, finite total/DN/encoder values, and zero fatal
+signatures pass all five gates. Register it RUNNING/TO_E4+ and collect
+e4/e8/e12 plus mature nodes without rejecting at e4/e8.
 
 At 03:10 CST, `0804_06` constant-turn Frenet product tangent is statically
 PREPARED/NO_GPU for the next 197 decision. It changes only body-frame center
