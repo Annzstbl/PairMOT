@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 15:00 CST
+更新时间：2026-08-04 19:09 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E32+` | e28 `51.971/58.914`，较 e24 `-0.041/+0.363`，相对原 decoder e28 `-0.206/-0.366`；det 仍改善，PGID `3151184` 继续 e32。GPU 序号不固定，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0803_27 ... terminal position-tangent evidence + product geometry ... fresh` | `RUNNING/TO_E4+` | center-only e12 成熟双负后精确停止 PGID `1442845`；动态空闲 GPU0/1 完成 smoke 并启动新线，formal PGID `1470665` 的 iter50 数值与显存五门槛通过。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
-| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动；`0803_28 position-tangent + full transport` PREPARED/NO_GPU。 |
+| 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E64` | e56 最好点 `54.980/62.009`，cls 过线 `+0.543`、det 仍低 `0.384`，总和 `116.989` 距严格目标差 `1.341`；e60 回落为 `54.855/61.870`，PGID `419164` 已到 e62，保留 e64 平台确认。GPU2/3 不用于本任务。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E44` | e36 `52.856/60.111` 后 e40 `52.689/60.163`，cls 小幅回落、det 仅增 `0.052`；PGID `3151184` 已到 e43，保留 e44 成熟确认。GPU 序号不固定，GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0803_29 ... position-tangent + osculating-plane ... fresh` | `RUNNING/TO_E4+` | `0803_27` e4/e8/e12 成熟双负后精确停止 PGID `1470665`；动态空闲 GPU0/1 上新线 smoke 与 formal iter50 五门槛通过，formal PGID `1582836`。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
+| 197 当前 GPU 2,3 | `0803_28 ... position-tangent + full transport ... fresh` | `RUNNING/TO_E8+` | e4 `31.244/38.396`，相对原 decoder `-3.062/-0.194`，相对 position/product e4 `+0.821/+0.267`；只登记早期信号，PGID `1016336` 继续 e8/e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3525,3 +3525,34 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `1.8245 s/iter`、loss `21.3980`、grad `127.8108`，7 个成员、GPU2/3 各约 19.2 GiB，
   总、DN、Encoder proposal 均有限且无致命错误，五门槛通过。状态 `RUNNING/TO_E4+`；继续
   e4/e8/e12，不用 e4/e8 直接否决。
+
+## 2026-08-04 19:09 CST：历史心跳审计、四线成熟节点与 0803_29 启动
+
+- 252 心跳点名的历史 `0803_01 fresh` 和 `0801_09 e56 resume` 均无训练进程或 screen。
+  前者 `last_checkpoint` 为 e12，e4/e8/e12 三组评测产物保留；后者为 e64，e60/e64 检测与
+  TrackEval 产物保留。当前唯一合法 252 训练仍是固定 GPU0/1 的 `0803_13` PGID `419164`；
+  GPU2/3 为 `1 MiB/0%`，未被本任务使用。
+- `0803_13` e56 cls HOTA/DetA/AssA `54.980/45.191/68.675`，det
+  `62.009/54.194/73.397`；cls 超最终 Encoder `+0.543`，det 仍低 `0.384`，总和
+  `116.989` 距严格 `>118.330` 差 `1.341`。e60 回落到 `54.855/61.870`，DetA/AssA 为
+  cls `45.293/68.240`、det `54.355/72.865`。e56/e60 checkpoint、检测、50 序列、28 CSV、
+  108 文件与完整 TrackEval 均闭环；PGID 已到 e62，只保留 e64 平台确认。
+- 178 `0803_23` e36 为 `52.856/60.111`，e40 为 `52.689/60.163`；e36→e40 cls
+  `-0.167`、det `+0.052`，且 e40 相对原 decoder 为 `-1.370/-0.939`。两节点 AP 与完整
+  TrackEval 齐全，当前动态 GPU0、PGID `3151184` 已到 e43，继续到 e44 成熟确认；GPU1 外部
+  任务不动。
+- 99 `0803_27` e8 `41.889/48.165`、e12 `46.017/52.755`；e12 相对原 decoder
+  `-1.378/-1.681`，DetA/AssA 与 AP 未形成成熟反转。该结论来自完整 e4/e8/e12 三节点，故
+  精确 TERM PGID `1470665`，成员 `23→0`，不是 e4/e8 早停。
+- 动态空闲 GPU0/1 上，`0803_29` 四步真数据 smoke loss
+  `12.9379/19.4607/19.5619/21.2173`，grad
+  `102.7358/123.0885/106.2158/116.3757`；DN/Encoder 与 642 个浮点 checkpoint tensor
+  全有限，错误扫描为 0。fresh formal clean HEAD `4738c27`，screen
+  `1582834.pm_0803_29_formal_99`、PGID `1582836`；iter50 `0.9770 s/iter`、loss
+  `21.3957`、grad `109.0853`，7 个进程、GPU0/1 各约 19.2 GiB，五门槛通过，登记
+  `RUNNING/TO_E4+`。99 仍只占两卡且序号是本次动态选择。
+- 197 `0803_28` e4 cls HOTA/DetA/AssA `31.244/25.433/41.202`，det
+  `38.396/32.487/46.486`；相对原 decoder `-3.062/-0.194`，相对 `0803_27` e4
+  `+0.821/+0.267`。pair mAP/AP50 `0.1307/0.2564`，checkpoint、28 CSV、108 文件和完整
+  TrackEval 齐全。该点只登记 position 分类仍慢、full transport 较 product 略好；动态 GPU2/3
+  的 PGID `1016336` 继续 e8/e12，GPU0/1 外部任务不动。

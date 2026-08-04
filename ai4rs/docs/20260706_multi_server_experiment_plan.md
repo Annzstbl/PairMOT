@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 16:42 CST.
+Last updated: 2026-08-04 19:09 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,27 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 19:09 CST, fixed-252 `0803_13` has complete e56/e60 results. Epoch 56 is the
+current best at `54.980/62.009`: cls is `+0.543` above final Encoder, det is still
+`0.384` below, and the sum `116.989` remains `1.341` short of `>118.330`. Epoch 60
+receded to `54.855/61.870`; the same PGID `419164` is retained only through e64 for a
+platform confirmation. Historical 252 `0803_01` and `0801_09` resume have no process or
+screen; their last checkpoints remain e12 and e64 with mature evaluations preserved.
+
+At 19:09 CST, 178 `0803_23` completed e36/e40 at `52.856/60.111` and
+`52.689/60.163`; only det improved slightly at e40, so the current single-GPU PGID
+`3151184` is retained to e44 for a mature plateau decision. On 99, `0803_27` completed
+e4/e8/e12 and remained dual-negative at e12 (`46.017/52.755` versus the original
+decoder `47.395/54.436`), so exact PGID `1470665` was stopped (`23 -> 0`). Prepared
+`0803_29` then passed a real four-iteration DDP smoke and fresh formal iter50 on
+dynamically selected GPU0/1; formal PGID `1582836` has seven processes, finite total,
+DN, encoder-proposal and gradient values, and no fatal error. It is RUNNING to e4/e8/e12.
+
+At the same audit, 197 `0803_28` closed e4 at `31.244/38.396`. This is
+`-3.062/-0.194` versus the original decoder but `+0.821/+0.267` versus position/product
+`0803_27` at e4, so it is recorded only as an early structural signal and continues on
+the dynamically selected GPU2/3 to e8/e12; GPU0/1 external work remains untouched.
 
 At 16:42 CST, shape-only `0803_24` closed epoch 12 at `47.512/53.757`, or
 `+0.117/-0.679` against the original decoder. After its complete e4/e8/e12 trajectory and
