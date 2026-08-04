@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 01:31 CST。
+更新时间：2026-08-05 01:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,6 +22,15 @@
 | 252 | 无训练（固定 GPU0/1 空闲） | NONE；`0803_30` e12 `45.089/51.741` 成熟双负后 STOPPED | 仅保留成熟路线或严格复验；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_01 factorized product-tangent`（当前 GPU0） | RUNNING/TO_E12+；e8 `46.673/53.922` 强同点双正，PGID `3555710` 已继续 e9 | `0804_04 body-frame product-tangent` PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 01:36 CST：实时资源与历史任务复核
+
+- 178/99/197 三条正式线分别在 epoch10 iter50、epoch9 iter700、epoch6 iter750 健康运行；
+  GPU 使用仍为动态 GPU0、GPU0/1、GPU2/3，正式损失、DN、Encoder proposal 与 grad 有限，
+  无 fatal。外部 GPU1、GPU2、GPU5 未动。
+- 252 GPU0/1/2/3 均为 `1 MiB/0%`。历史 `0803_01 fresh` 与 `0801_09 e56 resume`
+  均无进程或 screen；前者 last checkpoint 为 e12，后者为 e64，点名的 checkpoint 与
+  TrackEval 目录均保留。252 继续固定只用 GPU0/1，当前不抢占用于弱候选筛选。
 
 ## 2026-08-05 01:31 CST：178/99 e8 完整评估与 0804_04 静态准备
 

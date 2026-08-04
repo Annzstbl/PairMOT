@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 01:31 CST
+更新时间：2026-08-05 01:36 CST
 
 ## 当前研究原则
 
@@ -19,6 +19,17 @@
 | 197 当前 GPU 2,3 | `0804_03 ... terminal log-size-only ... fresh` | `RUNNING/TO_E8+` | e4 `31.938/38.765` 为 cls 慢、det 仅微正的尺度单因素信号；完整产物闭环后 PGID `2540932` 已继续 e5→e8/e12，不以 e4 直接否决。GPU5 外部任务不动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+## 2026-08-05 01:36 CST：运行健康与 252 历史点名任务复核
+
+- 178 `0804_01` 在动态 GPU0、PGID `3555710` 健康进入 epoch10 iter50；99 `0804_02`
+  在动态 GPU0/1、PGID `1673454` 到 epoch9 iter700；197 `0804_03` 在动态 GPU2/3、
+  PGID `2540932` 到 epoch6 iter750。三线正式日志的 total/DN/Encoder/grad 均有限且无 fatal，
+  继续分别等待 e12、e12 和 e8/e12；外部 GPU1（178）、GPU2（99）、GPU5（197）未被改动。
+- 252 四卡均为 `1 MiB/0%`，没有本任务训练或 screen。点名历史 `0803_01 fresh` 仍无进程，
+  `last_checkpoint=epoch_12.pth`，e4/e8/e12 checkpoint 与三组 TrackEval 保留；`0801_09`
+  e56 resume 仍无进程，`last_checkpoint=epoch_64.pth`，e60/e64 checkpoint 与两组 TrackEval
+  保留。252 继续只允许固定 GPU0/1，并保留给成熟路线或严格复验。
 
 ## 2026-08-05 01:31 CST：178/99 epoch 8 完整评估；body-frame 后继静态就绪
 

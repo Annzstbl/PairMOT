@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 01:31 CST.
+Last updated: 2026-08-05 01:36 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,16 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:36 CST, the three screening/trajectory lanes remain healthy: 178
+`0804_01` is at epoch 10 iter 50 on dynamic GPU0, 99 `0804_02` is at epoch 9
+iter 700 on dynamic GPU0/1, and 197 `0804_03` is at epoch 6 iter 750 on
+dynamic GPU2/3. Formal total, DN, encoder-proposal, and gradient values are
+finite with no fatal signature. The next required closures remain 178/99 e12
+and 197 e8/e12. Fixed-252 is fully idle at 1 MiB/0% on all four GPUs; the
+heartbeat-named historical `0803_01` and `0801_09` resume have no process or
+screen, while their last checkpoints e12 and e64 and corresponding TrackEval
+artifacts remain preserved. No weak screening job is moved onto the slow lane.
 
 At 01:31 CST, 178 `0804_01` factorized product-tangent completed e8 at
 `46.673/53.922`, which is `+4.701/+5.744` versus the original decoder,
