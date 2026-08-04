@@ -120,6 +120,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder:
+                    bool = False,
                     pair_shared_terminal_transport_tangent_refinement_decoder:
                     bool = False,
                     pair_shared_terminal_transport_plane_refinement_decoder:
@@ -230,6 +232,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_se2_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder=(
             pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder),
+        pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder=(
+            pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_tangent_refinement_decoder=(
             pair_shared_terminal_transport_tangent_refinement_decoder),
         pair_shared_terminal_transport_plane_refinement_decoder=(
@@ -1825,6 +1829,124 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             body[0], frenet[0], atol=2e-6, rtol=1e-5))
         self.assertTrue(torch.allclose(
             body[1], frenet[1], atol=2e-6, rtol=1e-5))
+
+    def test_axis_frenet_product_tangent_is_terminal_parameter_free_and_swap_equivariant(
+            self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        center_projection = (
+            projected._pair_transport_axis_frenet_center_tangent_residual)
+        shape_projection = projected._pair_transport_shape_tangent_residual
+        call_order = []
+
+        def record_center(*args, **kwargs):
+            call_order.append('center')
+            return center_projection(*args, **kwargs)
+
+        def record_shape(*args, **kwargs):
+            call_order.append('shape')
+            return shape_projection(*args, **kwargs)
+
+        with mock.patch.object(
+                projected,
+                '_pair_transport_axis_frenet_center_tangent_residual',
+                side_effect=record_center) as center_mock, mock.patch.object(
+                    projected,
+                    '_pair_transport_shape_tangent_residual',
+                    side_effect=record_shape) as shape_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(center_mock.call_count, 1)
+        self.assertEqual(shape_mock.call_count, 1)
+        self.assertEqual(call_order, ['center', 'shape'])
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        torch.manual_seed(80407)
+        reference_prev = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        reference_curr = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        residual_prev = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        residual_curr = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        num_dn = 2
+        centered = center_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, num_dn)
+        expected = shape_projection(
+            centered[0], centered[1], reference_prev, reference_curr, num_dn)
+        swapped_centered = center_projection(
+            residual_curr, residual_prev,
+            reference_curr, reference_prev, num_dn)
+        swapped = shape_projection(
+            swapped_centered[0], swapped_centered[1],
+            reference_curr, reference_prev, num_dn)
+        self.assertTrue(torch.equal(
+            expected[0][:, :num_dn], residual_prev[:, :num_dn]))
+        self.assertTrue(torch.equal(
+            expected[1][:, :num_dn], residual_curr[:, :num_dn]))
+        self.assertTrue(torch.allclose(
+            expected[0], swapped[1], atol=2e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            expected[1], swapped[0], atol=2e-5, rtol=1e-5))
+        (expected[0].sum() + expected[1].sum()).backward()
+        self.assertTrue(torch.isfinite(expected[0]).all())
+        self.assertTrue(torch.isfinite(expected[1]).all())
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_transport_product_tangent_refinement_decoder=(
+                    True),
+                pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_axis_frenet_center_tangent_reduces_to_product_at_zero_turn(self):
+        product_projection = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_center_tangent_residual)
+        axis_frenet_projection = (
+            PairRotatedRTDETRTransformerDecoder.
+            _pair_transport_axis_frenet_center_tangent_residual)
+        torch.manual_seed(80701)
+        reference_prev = (
+            torch.rand(2, 6, 5, device=self.device) * 0.6 + 0.2)
+        reference_curr = (
+            torch.rand(2, 6, 5, device=self.device) * 0.6 + 0.2)
+        shared_angle = (
+            torch.rand(2, 6, 1, device=self.device) * 0.6 + 0.2)
+        reference_prev[..., 4:] = shared_angle
+        reference_curr[..., 4:] = shared_angle
+        residual_prev = torch.randn(2, 6, 5, device=self.device) * 0.2
+        residual_curr = torch.randn(2, 6, 5, device=self.device) * 0.2
+        product = product_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, 1)
+        axis_frenet = axis_frenet_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, 1)
+        self.assertTrue(torch.allclose(
+            product[0], axis_frenet[0], atol=2e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            product[1], axis_frenet[1], atol=2e-6, rtol=1e-5))
 
     def test_position_tangent_feature_projection_is_swap_equivariant(self):
         torch.manual_seed(27)
