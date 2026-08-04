@@ -114,6 +114,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_plane_refinement_decoder:
+                    bool = False,
                    terminal_position_tangent_product_decoder: bool = False,
                    terminal_position_tangent_transport_decoder: bool = False,
                    terminal_position_tangent_plane_decoder: bool = False,
@@ -214,6 +216,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_tangent_refinement_decoder=(
             pair_shared_terminal_transport_tangent_refinement_decoder),
+        pair_shared_terminal_transport_plane_refinement_decoder=(
+            pair_shared_terminal_transport_plane_refinement_decoder),
         terminal_position_tangent_product_decoder=(
             terminal_position_tangent_product_decoder),
         terminal_position_tangent_transport_decoder=(
@@ -1556,6 +1560,56 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             _build_decoder(
                 terminal_position_tangent_plane_decoder=True,
                 terminal_position_tangent_transport_decoder=True,
+                device=self.device)
+
+    def test_transport_plane_geometry_only_is_terminal_and_parameter_free(
+            self):
+        parent, _, _ = _build_decoder(num_layers=3, device=self.device)
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            pair_shared_terminal_transport_plane_refinement_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in decoder.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in decoder.state_dict().items()})
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        feature_projection = decoder._pair_position_tangent_feature_detail
+        plane_projection = decoder._pair_transport_osculating_plane_residual
+        with mock.patch.object(
+                decoder, '_pair_position_tangent_feature_detail',
+                side_effect=feature_projection) as feature_mock, \
+                mock.patch.object(
+                    decoder, '_pair_transport_osculating_plane_residual',
+                    side_effect=plane_projection) as plane_mock:
+            output = decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr)
+        self.assertEqual(feature_mock.call_count, 0)
+        self.assertEqual(plane_mock.call_count, 1)
+        hidden, refs_prev, refs_curr, hidden_prev, hidden_curr = output
+        for lid in range(decoder.num_layers):
+            self.assertTrue(torch.equal(hidden_prev[lid], hidden[lid]))
+            self.assertTrue(torch.equal(hidden_curr[lid], hidden[lid]))
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_transport_plane_refinement_decoder=True,
+                pair_shared_terminal_transport_tangent_refinement_decoder=True,
                 device=self.device)
 
     def test_transport_plane_is_swap_equivariant_and_preserves_dn(self):

@@ -325,6 +325,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_plane_refinement_decoder:
+                   bool = False,
                    terminal_position_tangent_product_decoder: bool = False,
                    terminal_position_tangent_transport_decoder: bool = False,
                    terminal_position_tangent_plane_decoder: bool = False,
@@ -412,6 +414,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
+        self.pair_shared_terminal_transport_plane_refinement_decoder = bool(
+            pair_shared_terminal_transport_plane_refinement_decoder)
         self.terminal_position_tangent_product_decoder = bool(
             terminal_position_tangent_product_decoder)
         self.terminal_position_tangent_transport_decoder = bool(
@@ -489,6 +493,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
+                self.
+                pair_shared_terminal_transport_plane_refinement_decoder,
                 self.terminal_position_tangent_product_decoder,
                 self.terminal_position_tangent_transport_decoder,
                 self.terminal_position_tangent_plane_decoder,
@@ -504,7 +510,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'angle, terminal-normalized-center, terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
-                'tangent, terminal-transport-tangent, terminal-position-'
+                'tangent, terminal-transport-tangent, '
+                'terminal-transport-plane, '
                 'tangent-product, terminal-position-tangent-transport, '
                 'terminal-position-tangent-plane, '
                 'progressive-log-shape-'
@@ -2142,7 +2149,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self._pair_transport_shape_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
-            elif (self.terminal_position_tangent_plane_decoder
+            elif ((
+                    self.
+                    pair_shared_terminal_transport_plane_refinement_decoder
+                    or self.terminal_position_tangent_plane_decoder)
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = (
