@@ -3471,3 +3471,34 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 第一次 bundle clone 因无关 Git LFS 演示 GIF 下载 EOF 中断；使用 `GIT_LFS_SKIP_SMUDGE=1`
   在 `_retry1` 隔离路径恢复，未触碰活动 checkout。当前 `PREPARED/NO_GPU`，没有 smoke/formal
   workdir 或队列；99 仍只运行动态双卡 `0803_27`。
+
+## 2026-08-04 15:49 CST：0803_13 terminal geometry epoch-52 仍未满足严格目标
+
+- e52 cls HOTA/DetA/AssA `54.807/45.165/68.197`，det
+  `61.986/54.139/73.360`。相对 e48 `+0.274/+0.399`，相对原 decoder e52
+  `54.695/62.388` 为 `+0.112/-0.402`；cls 超最终 Encoder `54.437` 达 `+0.370`，det 仍低
+  最终 Encoder `62.393` 达 `0.407`，同一 checkpoint 没有双过线。
+- 绝对和 `116.793`，距严格 `>118.330` 尚差 `1.537`。pair mAP/AP50
+  `0.3206/0.5408`，both-independent `0.3604/0.5771`；436,067,574-byte checkpoint、
+  5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 原 decoder 的 det 在 e56 达到 `62.456` 峰值，且本线 e48→e52 两项均恢复，因此固定 252
+  GPU0/1 的 PGID `419164` 已自然进入 e53，继续到 e56；GPU2/3 不用于本任务。
+
+## 2026-08-04 15:52 CST：0803_27 position/product epoch-4 仅登记早期负信号
+
+- e4 cls HOTA/DetA/AssA `30.423/26.178/37.810`，det
+  `38.129/34.332/43.541`；相对原 decoder e4 `34.306/38.590` 为 `-3.883/-0.461`。
+  position-tangent 分类细节在早期明显拖累 cls，但 e4 不作为 decoder 直接否决。
+- pair mAP/AP50 `0.1333/0.2615`，both-independent `0.1777/0.3340`；369,970,934-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 99 动态 GPU0/1、PGID `1470665` 已进入 e5，继续 e8/e12；GPU2 空闲，序号不是一般固定规则。
+
+## 2026-08-04 16:04 CST：0803_23 full-tangent epoch-32 继续上升
+
+- e32 cls HOTA/DetA/AssA `52.627/44.100/64.897`，det
+  `59.424/52.308/69.943`。较 e28 `51.971/58.914` 为 `+0.656/+0.510`；相对原 decoder
+  e32 `52.566/59.955` 为 `+0.061/-0.531`。分类已略超原 decoder，检测仍是瓶颈，但曲线没有回落。
+- pair mAP/AP50 `0.2989/0.5139`，both-independent `0.3421/0.5580`；408,725,620-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 178 当前动态 GPU0、PGID `3151184` 已进入 e33，继续 e36；GPU1 外部任务保持不动。该保留由
+  e28→e32 双升的成熟趋势决定，不是因为忽略最终门槛。

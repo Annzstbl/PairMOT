@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 15:14 CST。
+更新时间：2026-08-04 16:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0803_27 position-tangent evidence + product geometry`（当前 GPU0/1） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1470665` | `0803_26 product-tangent` 与 `0803_29 position-tangent plane` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0803_27 position-tangent evidence + product geometry`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `30.423/38.129` 为早期负信号但不作否决，PGID `1470665` | `0803_26 product-tangent` 与 `0803_29 position-tangent plane` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E12+；e8 `41.910/47.783` 接近原 decoder，PGID `712277` 继续 e12 | `0803_28 position-tangent + full transport` 已迁移到 clean checkout，PREPARED/NO_GPU；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.533/61.587`，cls 过线但 det 未过，绝对和 `116.120`，PGID `419164` | 成熟长轨迹继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
-| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E32+；e28 `51.971/58.914`，det 较 e24 继续改善，PGID `3151184` | 保留至 e32；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E56+；e52 `54.807/61.986`，cls 过线但 det 未过，绝对和 `116.793`，PGID `419164` | 成熟长轨迹继续 e56；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
+| 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E36+；e32 `52.627/59.424`，两项较 e28 继续改善，PGID `3151184` | 保留至 e36；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 16:05 CST：e52/e32/e4 三节点闭环
+
+- 252 固定 GPU0/1 的 `0803_13` e52 为 `54.807/61.986`；cls 超最终 Encoder `+0.370`，det
+  仍低 `0.407`，绝对和 `116.793` 距严格 `>118.330` 仍差 `1.537`。相对原 decoder e52
+  为 `+0.112/-0.402`。checkpoint、50 序列、28 CSV、108 文件和 `async_done=1` 完整；原
+  decoder det 峰值仍在 e56，PGID `419164` 已进入 e53，继续 e56。
+- 178 动态 GPU0 的 `0803_23` e32 为 `52.627/59.424`，较 e28 `+0.656/+0.510`，相对原
+  decoder e32 为 `+0.061/-0.531`。det 仍落后但两项继续上升，完整评测后 PGID `3151184`
+  已进入 e33，继续 e36；GPU1 外部任务不动。
+- 99 动态 GPU0/1 的 `0803_27` e4 为 `30.423/38.129`，相对原 decoder e4
+  `-3.883/-0.461`。该点仅作早期结构信号，不作 decoder 否决；完整评测后 PGID `1470665`
+  已进入 e5，继续 e8/e12，99 仍只使用两卡且不固定一般序号。
 
 ## 2026-08-04 15:14 CST：0803_29 终层切平面运输已静态准备
 

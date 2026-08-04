@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 15:14 CST.
+Last updated: 2026-08-04 16:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,17 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 16:04 CST, three complete checkpoints closed. Mature 252 `0803_13` epoch 52 reached
+`54.807/61.986`: classification is `0.370` above final Encoder, but detection is `0.407`
+below and the sum `116.793` remains `1.537` short of `>118.330`. It continues on fixed
+GPU0/1 to epoch 56, the original decoder's detection-peak region. Full transported tangent
+`0803_23` epoch 32 reached `52.627/59.424`, improving `+0.656/+0.510` from epoch 28 and
+running on the dynamically selected 178 GPU0 to epoch 36. Position/product `0803_27`
+epoch 4 reached `30.423/38.129`; this early negative signal is recorded without rejection,
+and the dynamically selected 99 GPU0/1 job continues to epochs 8 and 12. All three nodes
+have complete checkpoints, detection outputs, 50-sequence TrackEval, 28 CSV files, 108
+evaluation files, and async completion markers.
 
 At 15:14 CST, `0803_29` added a zero-state terminal osculating-plane successor for the
 99 lane. It retains position-aligned classification detail and projects 5D box detail onto
