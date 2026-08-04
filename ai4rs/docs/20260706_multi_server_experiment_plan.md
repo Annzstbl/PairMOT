@@ -2677,3 +2677,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   到 e8/e12，不能用该点直接否决或提前换成 product-tangent。
 - 下一决策仍先等 178 full-tangent e20 与 197 shape-only e4/e8；若 center/shape 的成熟证据
   证明跨维内积干扰存在，再部署已准备的 0803_26，而不是扫描 scale、gate、loss 或类别权重。
+
+## 2026-08-04 12:11 CST：shape-only e4 保留成熟窗口
+
+- 0803_24 e4 cls/det HOTA `31.487/37.808`，相对原 decoder `-2.819/-0.782`、相对
+  full-tangent `-4.855/-6.931`；只比 center-only `31.262/37.687` 高 `0.225/0.121`。
+  DetA/AssA 与 AP 同样未给出单独 shape 的早期主效应。
+- 完整 checkpoint、5416/50/28/108 与异步完成证据齐全，但继续 197 动态 GPU2/3 到 e8/e12，
+  不用 e4 淘汰。GPU0/1 外部任务不动，卡号只记录本次动态选择。
+- 当前设计解释是 full-tangent 的早期收益依赖 center–shape 联合几何；是否需要 product-space
+  分块投影必须由 e8/e12 与 full-tangent e20 共同决定，不能由两个 e4 单点直接确认。

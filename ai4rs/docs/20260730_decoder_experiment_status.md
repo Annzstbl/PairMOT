@@ -3301,3 +3301,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `async_done=1` 完整。
 - e4 只作结构归因，不是成熟否决。99 当前动态 GPU1/2、PGID `1442845` 已进入 e5，继续
   e8/e12；GPU0 外部任务不动。product-tangent `0803_26` 保持 PREPARED，不因单个 e4 抢占。
+
+## 2026-08-04 12:11 CST：0803_24 shape-only epoch-4 早期负向
+
+- shape-only transported tangent e4 cls HOTA/DetA/AssA `31.487/25.126/42.524`，det
+  `37.808/32.338/45.300`。相对原始 decoder e4 `34.306/38.590` 为
+  `-2.819/-0.782`，相对 full-tangent e4 `36.342/44.739` 为 `-4.855/-6.931`；相对
+  center-only e4 仅高 `+0.225/+0.121`，单独 shape 同样没有解释 full-tangent 早期增益。
+- pair mAP/AP50 `0.1277/0.2485`，both-independent mAP/AP50 `0.1699/0.3198`；
+  369,969,127-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件及
+  `async_done=1` 完整。
+- e4 仍只作分量归因。197 动态 GPU2/3、PGID `712277` 继续 e8/e12，GPU0/1 外部任务不动；
+  center/shape 两项成熟结果到齐前不把早期联合效应直接外推为 product-tangent 成功。

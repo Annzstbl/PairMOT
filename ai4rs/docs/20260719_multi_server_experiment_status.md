@@ -2415,3 +2415,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   e8/e12，GPU0 外部任务保持不动。
 - `0803_26` product-tangent 仍为 PREPARED/NO_GPU，不根据单个 e4 提前切换；99 只限制两卡
   总量，不固定序号的规则不变。
+
+## 2026-08-04 12:11 CST：197 0803_24 e4 完整归因
+
+- shape-only e4 cls/det HOTA `31.487/37.808`，DetA/AssA 分别为
+  `25.126/42.524` 与 `32.338/45.300`；相对原 decoder e4 `-2.819/-0.782`，相对
+  full-tangent e4 `-4.855/-6.931`。pair mAP/AP50 `0.1277/0.2485`，both-independent
+  `0.1699/0.3198`。
+- 369,969,127-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空文件和
+  `async_done=1` 完整。shape-only 只比 center-only 同点高 `+0.225/+0.121`，两项分量早期
+  都未复现 full-tangent 的联合增益。
+- e4 不直接否决。动态 GPU2/3、PGID `712277` 继续 e8/e12；GPU0/1 外部任务保持不动，197
+  仍仅限制两卡总量而不固定序号。
