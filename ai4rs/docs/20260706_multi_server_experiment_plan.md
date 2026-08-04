@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 10:11 CST.
+Last updated: 2026-08-04 10:39 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -2627,3 +2627,22 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   四步 smoke 的 loss/grad、DN/Encoder 分量和 642 个 checkpoint 浮点 tensor 全有限；fresh
   formal PGID `1384944` 的 iter50 为 `0.9814 s/iter`、loss/grad `21.3915/104.8633`，五门槛
   通过。继续收集 e4/e8/e12，不把当前数值稳定等同于性能成功。
+
+## 2026-08-04 10:33 CST：transported semantic margin 成熟收口
+
+- 0803_21 e12 cls/det HOTA `44.179/52.106`，相对原 decoder 同点
+  `-3.216/-2.330`、相对 Encoder 同点 `-5.501/-4.435`；pair mAP/AP50
+  `0.2260/0.3924`，both-independent `0.2668/0.4433`。checkpoint、5416/50/28/108 和异步
+  完成标志全部闭环。
+- e4/e8/e12 三节点持续双负，允许精确停止，不是早期 epoch 否决。释放 99 后不沿用旧卡号，
+  连续核验全机再动态给 center-only `0803_25` 选择两张卡；`0803_26` 继续排在其后。
+
+## 2026-08-04 10:39 CST：center-only transported tangent 进入 99 formal
+
+- 0803_21 PGID `1384944` 精确停止后成员 `23→0`，GPU0 外部任务未动。GPU1/2 两轮空闲检查
+  均通过，因此本次动态选用这两张卡；99 仍只固定两卡上限，不固定序号。
+- 0803_25 四步真实 DDP smoke 的 loss/grad、DN/Encoder 分量、642 个 checkpoint 浮点 tensor、
+  iterative-cls/DN 语义和错误扫描全部通过。fresh formal screen `1442843`、PGID `1442845`；
+  iter50 `0.9843 s/iter`、loss/grad `21.4116/114.8470`，五门槛通过。
+- 保持该零参数、class-agnostic center-only 正交轨迹到 e4/e8/e12，不以早期节点直接否决；
+  product-tangent `0803_26` 继续作为下一后继，不并发抢占 99 两卡。
