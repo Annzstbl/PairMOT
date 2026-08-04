@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:44 CST
+更新时间：2026-08-04 14:49 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
-| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E32+` | e28 `51.971/58.914`，较 e24 `-0.041/+0.363`，相对原 decoder e28 `-0.206/-0.366`；det 仍改善，PGID `3151184` 继续 e32。GPU 序号不固定，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0803_27 ... terminal position-tangent evidence + product geometry ... fresh` | `RUNNING/TO_E4+` | center-only e12 成熟双负后精确停止 PGID `1442845`；动态空闲 GPU0/1 完成 smoke 并启动新线，formal PGID `1470665` 的 iter50 数值与显存五门槛通过。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
 | 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动；`0803_28 position-tangent + full transport` PREPARED/NO_GPU。 |
 
@@ -3439,3 +3439,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `/data/users/wangying01/lth/PairMOT_positiontransport_0803_28_99` 固定 clean HEAD `11d6b2f`；
   状态 `PREPARED/NO_GPU`。待 197 shape-only e12 闭环后再迁移到 197，启动器只要求当时两张
   空闲卡，不固定 GPU 序号。
+
+## 2026-08-04 14:49 CST：0803_23 full-tangent epoch-28 检测继续改善
+
+- full transported tangent e28 cls HOTA/DetA/AssA `51.971/43.572/64.105`，det
+  `58.914/51.980/69.156`。相对 e24 `52.012/58.551` 为 `-0.041/+0.363`，分类基本平台、检测
+  继续改善；相对原始 decoder e28 `52.177/59.280` 为 `-0.206/-0.366`，差距较小但仍未形成优势。
+- pair mAP/AP50 `0.2959/0.5116`，both-independent mAP/AP50 `0.3393/0.5561`；
+  403,196,980-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和
+  `async_done=1` 完整。
+- e28 未达最终门槛，但 det 尚未回落，不能把分类单点平台作为慢收敛 decoder 的否决依据。178
+  当前动态 GPU0、PGID `3151184` 已自然进入 e29，继续到 e32；GPU1 新出现的外部显存占用不动，
+  本任务仍只使用一张卡且不固定其序号。
