@@ -326,6 +326,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
                    terminal_position_tangent_product_decoder: bool = False,
+                   terminal_position_tangent_transport_decoder: bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
@@ -412,6 +413,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             pair_shared_terminal_transport_tangent_refinement_decoder)
         self.terminal_position_tangent_product_decoder = bool(
             terminal_position_tangent_product_decoder)
+        self.terminal_position_tangent_transport_decoder = bool(
+            terminal_position_tangent_transport_decoder)
         self.pair_shared_progressive_log_shape_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder))
@@ -484,6 +487,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
                 self.terminal_position_tangent_product_decoder,
+                self.terminal_position_tangent_transport_decoder,
                 self.
                 pair_shared_progressive_log_shape_periodic_angle_refinement_decoder,
                 self.pair_shared_normalized_center_refinement_decoder,
@@ -497,7 +501,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-transport-center-tangent, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
                 'tangent, terminal-transport-tangent, terminal-position-'
-                'tangent-product, progressive-log-shape-'
+                'tangent-product, terminal-position-tangent-transport, '
+                'progressive-log-shape-'
                 'periodic-angle, and '
                 'normalized-center '
                 'refinement decoders are mutually exclusive')
@@ -840,6 +845,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             self.terminal_midpoint_regression_enveloped_detail_decoder,
             self.terminal_factorized_evidence_decoder,
             self.terminal_position_tangent_product_decoder,
+            self.terminal_position_tangent_transport_decoder,
         )
         if sum(bool(mode) for mode in terminal_detail_modes) > 1:
             raise ValueError(
@@ -903,7 +909,13 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             or self.terminal_regression_enveloped_detail_decoder
             or self.terminal_midpoint_regression_enveloped_detail_decoder
             or self.terminal_factorized_evidence_decoder
-            or self.terminal_position_tangent_product_decoder)
+            or self.terminal_position_tangent_product_decoder
+            or self.terminal_position_tangent_transport_decoder)
+
+    @property
+    def _terminal_position_tangent_enabled(self) -> bool:
+        return (self.terminal_position_tangent_product_decoder
+                or self.terminal_position_tangent_transport_decoder)
 
     @property
     def _common_evidence_bypass_enabled(self) -> bool:
@@ -968,7 +980,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 for _ in range(self.num_layers)
             ])
         if (self._terminal_enveloped_detail_enabled
-                and not self.terminal_position_tangent_product_decoder):
+                and not self._terminal_position_tangent_enabled):
             # Only the final prediction layer needs a gate.  Allocating gates
             # for earlier layers would create intentionally unused DDP
             # parameters and obscure the structural invariant.
@@ -1408,7 +1420,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             for gate in self.enveloped_detail_gates:
                 nn.init.zeros_(gate.weight)
         if (self._terminal_enveloped_detail_enabled
-                and not self.terminal_position_tangent_product_decoder):
+                and not self._terminal_position_tangent_enabled):
             for gate in self.terminal_enveloped_detail_gates:
                 if isinstance(gate, nn.Parameter):
                     nn.init.zeros_(gate)
@@ -1736,15 +1748,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     layer_output_curr = layer_output + frame_detail
                     tmp_prev = reg_branches_prev[lid](layer_output)
                     tmp_curr = reg_branches_curr[lid](layer_output)
-                elif self.terminal_position_tangent_product_decoder:
+                elif self._terminal_position_tangent_enabled:
                     # The recurrent query and all auxiliary outputs remain on
                     # the parent shared path. At the terminal layer, retain
                     # only frame evidence detail aligned with the detached
                     # positional displacement already encoded by the two
                     # references. The orthogonal projection cannot increase
                     # detail energy and is swap equivariant. Regression starts
-                    # from the parent heads here and is factorized in the
-                    # product tangent block below.
+                    # from the parent heads here and is projected by the
+                    # selected terminal geometry tangent block below.
                     layer_output_prev = layer_output
                     layer_output_curr = layer_output
                     tmp_prev = reg_branches_prev[lid](layer_output)
@@ -2122,10 +2134,11 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                     self._pair_transport_shape_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
-            elif (
+            elif ((
                     self.
                     pair_shared_terminal_transport_tangent_refinement_decoder
-                    and lid == self.num_layers - 1):
+                    or self.terminal_position_tangent_transport_decoder)
+                  and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 tmp_prev, tmp_curr = (
                     self._pair_transport_full_tangent_residual(

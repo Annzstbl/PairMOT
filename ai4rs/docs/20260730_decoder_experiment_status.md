@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-04 14:33 CST
+更新时间：2026-08-04 14:44 CST
 
 ## 当前研究原则
 
@@ -17,7 +17,7 @@
 | 252 GPU 0,1 | `0803_13 ... terminal-log-size + periodic-angle ... resume e24` | `RUNNING/TO_E52+` | e48 `54.533/61.587`，cls 超最终 Encoder `+0.096`，det 仍低 `-0.806`；绝对和 `116.120` 距严格目标 `118.330` 仍差 `2.210`，PGID `419164` 继续 e52。 |
 | 178 当前 GPU 0 | `0803_23 ... terminal transported full tangent ... finite fresh` | `RUNNING/TO_E28+` | e24 `52.012/58.551`，较 e20 `+0.893/+0.582`，相对原 decoder `+0.303/-0.230`、相对 Encoder同点 `+0.298/-0.968`；PGID `3151184` 继续 e28。GPU 序号不固定，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0803_27 ... terminal position-tangent evidence + product geometry ... fresh` | `RUNNING/TO_E4+` | center-only e12 成熟双负后精确停止 PGID `1442845`；动态空闲 GPU0/1 完成 smoke 并启动新线，formal PGID `1470665` 的 iter50 数值与显存五门槛通过。GPU 序号不固定；`0803_26 product-tangent` 保持 PREPARED/NO_GPU。 |
-| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动。 |
+| 197 当前 GPU 2,3 | `0803_24 ... transported shape tangent ... fresh` | `RUNNING/TO_E12+` | e8 `41.910/47.783`，相对原 decoder `-0.062/-0.395`，较 center-only `+0.551/+0.852`，但低于 full-tangent `-4.373/-5.972`；PGID `712277` 继续 e12。GPU 序号不固定，GPU0/1 外部任务不动；`0803_28 position-tangent + full transport` PREPARED/NO_GPU。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -3424,3 +3424,18 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `1470665`。iter50 为 `1.0201 s/iter`、loss `21.4337`、grad `92.6051`，总、DN、Encoder
   proposal 均有限，GPU0/1 各约 19.2 GiB，致命错误为 0，五门槛通过。状态
   `RUNNING/TO_E4+`；继续收 e4/e8/e12，不用 e4/e8 直接否决。
+
+## 2026-08-04 14:44 CST：0803_28 position-tangent + full transport 已准备
+
+- e8 的 full transported tangent `46.283/53.755` 分别比 center-only 高 `4.924/6.824`、比
+  shape-only 高 `4.373/5.972`，说明跨中心与形状坐标的 5D 耦合可能是早期增益来源，不能只把
+  product 分块作为后继。`0803_28` 保留 full 5D transported geometry，只把 `0803_27` 已验证的
+  position-tangent feature detail 加到终层分类输出；递归 query、辅助层、DN 和回归输入仍走父线。
+- 结构仍零参数、交换等变、class-agnostic，无 reweight、新 layer、attention 或 loss。远端 py310
+  三项 position-tangent 定向测试全部通过：feature/full transport 各在终层调用一次，center/shape
+  分块调用为零，参数/state 精确等于父线，输出有限且互斥配置生效。
+- 197 2xb4 正式/四步 smoke 配置深拷贝、两份 launcher Bash 语法与专用整模构建审计通过：
+  `22,771,111` 参数、增量 0、711 状态张量。99 CPU 隔离验证工作树
+  `/data/users/wangying01/lth/PairMOT_positiontransport_0803_28_99` 固定 clean HEAD `11d6b2f`；
+  状态 `PREPARED/NO_GPU`。待 197 shape-only e12 闭环后再迁移到 197，启动器只要求当时两张
+  空闲卡，不固定 GPU 序号。

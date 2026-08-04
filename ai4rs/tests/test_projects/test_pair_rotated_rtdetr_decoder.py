@@ -115,6 +115,7 @@ def _build_decoder(num_layers: int = 2,
                     pair_shared_terminal_transport_tangent_refinement_decoder:
                     bool = False,
                    terminal_position_tangent_product_decoder: bool = False,
+                   terminal_position_tangent_transport_decoder: bool = False,
                    pair_shared_progressive_log_shape_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_normalized_center_refinement_decoder:
@@ -214,6 +215,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_tangent_refinement_decoder),
         terminal_position_tangent_product_decoder=(
             terminal_position_tangent_product_decoder),
+        terminal_position_tangent_transport_decoder=(
+            terminal_position_tangent_transport_decoder),
         pair_shared_progressive_log_shape_periodic_angle_refinement_decoder=(
             pair_shared_progressive_log_shape_periodic_angle_refinement_decoder),
         pair_shared_normalized_center_refinement_decoder=(
@@ -1430,6 +1433,69 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 terminal_position_tangent_product_decoder=True,
                 pair_shared_terminal_transport_product_tangent_refinement_decoder=(
                     True),
+                device=self.device)
+
+    def test_position_tangent_transport_is_terminal_and_parameter_free(self):
+        parent, _, _ = _build_decoder(num_layers=3, device=self.device)
+        decoder, reg_prev, reg_curr = _build_decoder(
+            num_layers=3,
+            device=self.device,
+            terminal_position_tangent_transport_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in decoder.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in decoder.state_dict().items()})
+
+        spatial_shapes, level_start_index, num_value = _spatial_meta(
+            self.device)
+        memory_prev, memory_curr = _random_memories(
+            1, num_value, decoder.embed_dims, self.device)
+        feature_projection = decoder._pair_position_tangent_feature_detail
+        full_projection = decoder._pair_transport_full_tangent_residual
+        center_projection = decoder._pair_transport_center_tangent_residual
+        shape_projection = decoder._pair_transport_shape_tangent_residual
+        with mock.patch.object(
+                decoder, '_pair_position_tangent_feature_detail',
+                side_effect=feature_projection) as feature_mock, \
+                mock.patch.object(
+                    decoder, '_pair_transport_full_tangent_residual',
+                    side_effect=full_projection) as full_mock, \
+                mock.patch.object(
+                    decoder, '_pair_transport_center_tangent_residual',
+                    side_effect=center_projection) as center_mock, \
+                mock.patch.object(
+                    decoder, '_pair_transport_shape_tangent_residual',
+                    side_effect=shape_projection) as shape_mock:
+            output = decoder(
+                memory_prev=memory_prev,
+                memory_curr=memory_curr,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index,
+                reg_branches_prev=reg_prev,
+                reg_branches_curr=reg_curr)
+        self.assertEqual(feature_mock.call_count, 1)
+        self.assertEqual(full_mock.call_count, 1)
+        self.assertEqual(center_mock.call_count, 0)
+        self.assertEqual(shape_mock.call_count, 0)
+        self.assertEqual(len(output), 5)
+        hidden, refs_prev, refs_curr, hidden_prev, hidden_curr = output
+        for lid in range(decoder.num_layers - 1):
+            self.assertTrue(torch.equal(hidden_prev[lid], hidden[lid]))
+            self.assertTrue(torch.equal(hidden_curr[lid], hidden[lid]))
+        self.assertTrue(torch.allclose(
+            0.5 * (hidden_prev[-1] + hidden_curr[-1]),
+            hidden[-1], atol=1e-6, rtol=1e-5))
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                terminal_position_tangent_transport_decoder=True,
+                pair_shared_terminal_transport_tangent_refinement_decoder=True,
                 device=self.device)
 
     def test_transport_tangent_is_swap_equivariant_and_preserves_dn(self):
