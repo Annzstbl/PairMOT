@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 04:23 CST.
+Last updated: 2026-08-05 04:40 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -47,6 +47,24 @@ complete. The `-2.327/-0.662` aligned deficit to the original decoder and
 lack of AssA compensation identify overly strong early angle-coupled center
 motion, but epoch 4 is attribution only. Keep PGID `1715384` through
 e8/e12 and mature evidence.
+
+At 04:40 CST, `0804_07` axis-Frenet product tangent is statically
+PREPARED/NO_GPU for the next 178 decision. It preserves `0804_01`'s strong
+width/height-normalized axis metric and shape tangent, changing only the
+center chord projector into previous/current constant-turn endpoint tangents
+from the detached pi-periodic reference turn. Zero turn reduces exactly to
+`0804_01`. The operation is parameter-free, class agnostic, contains no
+reweighting, and adds no layer, attention, or loss.
+
+Swap equivariance, exact DN preservation, finite gradients, terminal-only
+dispatch, and zero-turn reduction tests passed. Formal/smoke config deep
+copies, both launcher syntax checks, and complete parent/candidate builds
+passed at `22,771,111` parameters, zero delta, and 711 state tensors. Clean
+detached HEAD `fe7e9fe` is isolated at
+`/data1/users/litianhao01/PairMOT_terminalaxisfrenet_0804_07`; the live
+`0804_04` repository was not modified. Do not create smoke/formal workdirs
+or call it RUNNING until `0804_04` reaches e8/e12 mature evidence and the
+single dynamic GPU is truly released.
 
 At 03:54 CST, 197 `0804_03` closed its mature e4/e8/e12 window. Epoch 12
 cls/det HOTA is `44.836/51.366`, with DetA/AssA

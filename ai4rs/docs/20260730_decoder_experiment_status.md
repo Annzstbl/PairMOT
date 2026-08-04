@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 04:23 CST
+更新时间：2026-08-05 04:40 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,33 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E20+` | e16 cls/det `51.220/57.370`，相对原 decoder 联合 `+1.621`，但严格绝对门槛未过；PGID `823929` 已进入 e17，继续 e20/e24+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det HOTA `34.117/39.239`，det 较原 decoder 同点 `+0.649`；PGID `3652382` 已进入 e6，继续 e8/e12。 |
-| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.979/37.928`，定位/AP 早期下降且无 AssA 补偿；PGID `1715384` 已进入 e5，继续 e8/e12，不以 e4 否决。 |
-| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实双卡 smoke/checkpoint/formal iter50 五门槛通过；PGID `482699` 已进入 e2，GPU2/3 各约 19.3 GiB，其他卡未动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E20+` | e16 cls/det `51.220/57.370`，相对原 decoder 联合 `+1.621`，但严格绝对门槛未过；PGID `823929` 已进入 e18，继续 e20/e24+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_04 ... body-frame product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det HOTA `34.117/39.239`，det 较原 decoder 同点 `+0.649`；PGID `3652382` 已进入 e7，继续 e8/e12。 |
+| 99 当前 GPU 0,1 | `0804_05 ... SE(2) midpoint Lie-twist product-tangent ... fresh` | `RUNNING/TO_E8+` | e4 cls/det `31.979/37.928`，定位/AP 早期下降且无 AssA 补偿；PGID `1715384` 已进入 e6，继续 e8/e12，不以 e4 否决。 |
+| 197 当前 GPU 2,3 | `0804_06 ... Frenet endpoint-tangent product-tangent ... fresh` | `RUNNING/TO_E4+` | 真实双卡 smoke/checkpoint/formal iter50 五门槛通过；PGID `482699` 已进入 e3，GPU2/3 各约 19.3 GiB，其他卡未动。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
+
+`0804_07 axis-Frenet product tangent` 已在 178 独立 checkout 静态闭环，状态严格为
+`PREPARED/NO_GPU`；它不进入当前运行表、不抢占 `0804_04`。
+
+## 2026-08-05 04:40 CST：axis-Frenet product tangent 静态就绪
+
+- 证据表明轴向 `0804_01` 在 e16 相对原 decoder 保留联合 `+1.621`，而 body-frame
+  e4 丢失大部分早期优势、SE(2) e4 的 DetA/AP 又继续下降。因此准备 `0804_07`：
+  保留 `0804_01` 的 width/height 轴向归一化与 shape tangent，只把单一共享弦方向按
+  参考框 π 周期转角旋转为前/后 constant-turn endpoint tangent；零转角严格退化为
+  `0804_01`。
+- 该结构零参数、class-agnostic、无 reweight，不改分类、DN、辅助输出、递归 reference、
+  layer、attention 或 loss，只在终层增加逐元素三角函数。交换等变、DN 精确保留、
+  有限梯度、终层唯一调用、零转角退化两项定向测试全部通过。
+- 本地提交 `452b629` 与审计修复 `fe7e9fe` 已送入 178 全新隔离 checkout
+  `/data1/users/litianhao01/PairMOT_terminalaxisfrenet_0804_07`；活跃
+  `0804_04` 仓库未修改。正式/烟测配置均完成 `copy.deepcopy`，两份 launcher
+  `bash -n` 通过，父/候选完整构建均为 `22,771,111` 参数、711 states、增量 0。
+- 当前只登记 `PREPARED/NO_GPU`：没有 smoke/formal workdir 或训练进程。先等待
+  `0804_04` e8/e12 成熟证据；只有动态单卡真实释放后才执行 smoke、checkpoint 与
+  formal iter50 五门槛，绝不把静态构建写成 RUNNING。
 
 ## 2026-08-05 04:23 CST：SE(2) Lie-twist e4 完整归因
 

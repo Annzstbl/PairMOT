@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 04:23 CST。
+更新时间：2026-08-05 04:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E8+；e4 `31.979/37.928` 完整，PGID `1715384` 已进入 e5 | 继续 e8/e12，不以 e4 早停；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E4+；五门槛通过并进入 e2，PGID `482699` | `0804_03` e4/e8/e12 成熟双负后 STOPPED；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E20+；e16 `51.220/57.370`，较原 decoder 联合 `+1.621`，PGID `823929` 已进入 e17 | 继续 e20/e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E8+；e4 cls/det `34.117/39.239`，PGID `3652382` 已进入 e6 | 继续 e8/e12，不以 e4 早停 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_05 SE(2) midpoint Lie-twist product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E8+；e4 `31.979/37.928` 完整，PGID `1715384` 已进入 e6 | 继续 e8/e12，不以 e4 早停；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_06 Frenet endpoint-tangent product-tangent`（当前动态 GPU2/3） | RUNNING/TO_E4+；五门槛通过并进入 e3，PGID `482699` | `0804_03` e4/e8/e12 成熟双负后 STOPPED；其他卡未动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E20+；e16 `51.220/57.370`，较原 decoder 联合 `+1.621`，PGID `823929` 已进入 e18 | 继续 e20/e24+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_04 body-frame product-tangent`（当前动态 GPU0） | RUNNING/TO_E8+；e4 cls/det `34.117/39.239`，PGID `3652382` 已进入 e7 | `0804_07 axis-Frenet` PREPARED/NO_GPU；先等 e8/e12 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 04:40 CST：0804_07 axis-Frenet 静态准备完成
+
+- `0804_07` 仅在强轴向 product-tangent 的中心块中，把共享 chord projector 改成由
+  参考 π 周期转角确定的前/后 endpoint tangent；shape tangent 与其余模型不变，零转角
+  严格退化到 `0804_01`。该选择直接针对 body-frame/SE(2) e4 的 DetA/AP 损失，同时
+  保留 `0804_01` e16 联合 `+1.621` 的轴向 metric。
+- 结构零参数、class-agnostic、无 reweight、无新层/attention/loss。交换等变、DN 保留、
+  有限梯度、终层唯一调用与零转角退化测试通过；正式/烟测配置 deepcopy、launcher
+  `bash -n` 与父/候选完整构建通过，均为 `22,771,111` 参数、711 states、增量 0。
+- clean detached HEAD `fe7e9fe` 位于独立
+  `/data1/users/litianhao01/PairMOT_terminalaxisfrenet_0804_07`；活跃
+  `0804_04` checkout 未热更新。当前无 smoke/formal workdir、无进程，严格状态
+  `PREPARED/NO_GPU`；178 继续当前 e8/e12 窗口，释放后才进入真实 smoke 和五门槛。
 
 ## 2026-08-05 04:23 CST：99 SE(2) Lie-twist e4 完整评估
 
