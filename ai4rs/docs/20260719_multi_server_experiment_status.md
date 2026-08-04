@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-04 16:05 CST。
+更新时间：2026-08-04 16:42 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,10 +18,24 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0803_27 position-tangent evidence + product geometry`（当前 GPU0/1） | RUNNING/TO_E8+；e4 `30.423/38.129` 为早期负信号但不作否决，PGID `1470665` | `0803_26 product-tangent` 与 `0803_29 position-tangent plane` PREPARED/NO_GPU；GPU 序号不固定 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0803_24 transported shape tangent`（当前 GPU2/3） | RUNNING/TO_E12+；e8 `41.910/47.783` 接近原 decoder，PGID `712277` 继续 e12 | `0803_28 position-tangent + full transport` 已迁移到 clean checkout，PREPARED/NO_GPU；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0803_28 position-tangent + full transport`（当前 GPU2/3） | RUNNING/TO_E4+；smoke 与 formal iter50 五门槛通过，PGID `1016336` | `0803_24 shape-only` e12 完整后 STOPPED；GPU 序号不固定，GPU0/1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0803_13 terminal geometry` 从 e24 恢复（固定 GPU0/1） | RUNNING/TO_E56+；e52 `54.807/61.986`，cls 过线但 det 未过，绝对和 `116.793`，PGID `419164` | 成熟长轨迹继续 e56；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252/0803_13_terminal_log_size_periodic_angle_resume252_from_epoch24` |
 | 178 | `0803_23 transported full tangent finite-fresh`（当前 GPU0） | RUNNING/TO_E36+；e32 `52.627/59.424`，两项较 e28 继续改善，PGID `3151184` | 保留至 e36；GPU 序号不固定，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-04 16:42 CST：shape-only 成熟停止，0803_28 接替 197
+
+- `0803_24` e12 完整结果为 `47.512/53.757`，相对原 decoder e12
+  `+0.117/-0.679`；pair mAP/AP50 `0.2459/0.4382`、both-independent
+  `0.2925/0.4978`。它在 e4/e8/e12 三个完整节点均未取得 det 优势，因此完成分量归因后精确
+  TERM PGID `712277`，成员 `23→0`；该决定不是 e4/e8 直接否决。
+- GPU2/3 连续三次和 formal 前两次均为 `1 MiB/0%`，因此按动态规则再次选择 2/3；GPU0/1
+  外部任务保持不动。`0803_28` 四步 smoke loss
+  `12.9435/19.4797/19.5753/21.1677`，grad
+  `102.5861/118.0605/117.2151/111.1674`，DN/Encoder 与 642 个浮点 checkpoint tensor 全有限。
+- fresh formal clean HEAD `1e2be85`，screen `1016334.pm_0803_28_formal_197`、PGID
+  `1016336`；iter50 `1.8245 s/iter`、loss `21.3980`、grad `127.8108`，7 个成员、GPU2/3
+  各约 19.2 GiB，五门槛通过。状态 `RUNNING/TO_E4+`，继续 e4/e8/e12，不在早期节点否决。
 
 ## 2026-08-04 16:05 CST：e52/e32/e4 三节点闭环
 

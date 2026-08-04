@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-04 16:05 CST.
+Last updated: 2026-08-04 16:42 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,16 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 16:42 CST, shape-only `0803_24` closed epoch 12 at `47.512/53.757`, or
+`+0.117/-0.679` against the original decoder. After its complete e4/e8/e12 trajectory and
+all artifacts were verified, exact PGID `712277` was stopped (`23 -> 0`). This mature stop
+released the dynamically selected 197 GPU2/3; GPU0/1 external work remained untouched.
+Following repeated free-card checks, `0803_28` position-tangent classification plus full 5D
+transport passed a real four-iteration DDP smoke and fresh formal iter50 at clean HEAD
+`1e2be85`. Formal PGID `1016336` has seven members, finite total/DN/encoder/gradient values,
+about 19.2 GiB on each selected GPU, and no fatal error. It is RUNNING to e4/e8/e12; the
+choice of GPU2/3 is dynamic and does not establish fixed indices for 197.
 
 At 16:04 CST, three complete checkpoints closed. Mature 252 `0803_13` epoch 52 reached
 `54.807/61.986`: classification is `0.370` above final Encoder, but detection is `0.407`

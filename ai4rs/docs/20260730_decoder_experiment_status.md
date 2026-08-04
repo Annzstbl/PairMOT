@@ -3502,3 +3502,26 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
 - 178 当前动态 GPU0、PGID `3151184` 已进入 e33，继续 e36；GPU1 外部任务保持不动。该保留由
   e28→e32 双升的成熟趋势决定，不是因为忽略最终门槛。
+
+## 2026-08-04 16:36 CST：0803_24 shape-only epoch-12 成熟停止
+
+- e12 cls HOTA/DetA/AssA `47.512/39.186/60.080`，det
+  `53.757/48.086/61.961`。相对原 decoder e12 `47.395/54.436` 为 `+0.117/-0.679`；分类
+  刚转为小幅正向，但 det 在 e4/e8/e12 三个完整节点始终没有优势，也远低于 full-tangent 早期信号。
+- pair mAP/AP50 `0.2459/0.4382`，both-independent `0.2925/0.4978`；381,036,199-byte
+  checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件和 `async_done=1` 完整。
+- 该分量归因已跨过 e4/e8 并完成 e12 成熟节点，故精确 TERM PGID `712277`，成员 `23→0`；
+  GPU2/3 显存回到 1 MiB，GPU0/1 外部任务未动。资源转给保留 5D 耦合的 `0803_28`。
+
+## 2026-08-04 16:42 CST：197 动态 GPU2/3 启动 0803_28
+
+- shape-only 停止后 GPU2/3 连续三次为 `1 MiB/0%`，formal 前又连续两次通过；按 197 只限制
+  两卡数的规则动态选择 2/3，不写死一般序号。远端 clean HEAD `1e2be85`、formal/smoke workdir
+  fresh、两份 launcher Bash 语法和目标配置均再次核验。
+- 四步真数据 DDP smoke loss `12.9435/19.4797/19.5753/21.1677`，grad
+  `102.5861/118.0605/117.2151/111.1674`；DN/Encoder proposal 全有限，364,503,143-byte
+  checkpoint 的 642 个浮点 tensor 全有限，错误扫描为 0，完成后 GPU2/3 释放。
+- fresh formal screen `1016334.pm_0803_28_formal_197`、PGID `1016336`；iter50
+  `1.8245 s/iter`、loss `21.3980`、grad `127.8108`，7 个成员、GPU2/3 各约 19.2 GiB，
+  总、DN、Encoder proposal 均有限且无致命错误，五门槛通过。状态 `RUNNING/TO_E4+`；继续
+  e4/e8/e12，不用 e4/e8 直接否决。
