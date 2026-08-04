@@ -3289,3 +3289,15 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   严格 `>118.330`，距最终 cls/det 门槛 `54.437/62.393` 尚差 `0.380/1.143`。252 固定
   GPU0/1、PGID `419164` 已自然进入 e41，继续到 e44；GPU2/3 保持空闲，不在最慢资源上并发
   新筛选结构。
+
+## 2026-08-04 11:54 CST：0803_25 center-only epoch-4 早期负向
+
+- center-only transported tangent e4 cls HOTA/DetA/AssA `31.262/25.476/41.269`，det
+  `37.687/32.938/44.208`。相对原始 decoder e4 `34.306/38.590` 为
+  `-3.044/-0.903`，相对 full-tangent e4 `36.342/44.739` 为 `-5.080/-7.052`；中心分量
+  单独使用尚未解释 full-tangent 的早期强增益。
+- pair mAP/AP50 `0.1330/0.2521`，both-independent mAP/AP50 `0.1742/0.3207`；
+  369,968,758-byte checkpoint、5416 条检测、50 序列、28 CSV、108 个非空评测文件及
+  `async_done=1` 完整。
+- e4 只作结构归因，不是成熟否决。99 当前动态 GPU1/2、PGID `1442845` 已进入 e5，继续
+  e8/e12；GPU0 外部任务不动。product-tangent `0803_26` 保持 PREPARED，不因单个 e4 抢占。

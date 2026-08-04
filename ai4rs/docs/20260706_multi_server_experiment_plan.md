@@ -2668,3 +2668,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   并发新筛选，也不把同点双正误写为最终达成。
 - 快资源继续完成 178 full-tangent e20、99 center-only e4+、197 shape-only e4+；只有成熟证据
   支持时才切换到已准备的 product-tangent，仍禁止 class-aware、reweight、额外 layer/attention/loss。
+
+## 2026-08-04 11:54 CST：center-only e4 不提前切换
+
+- 0803_25 e4 cls/det HOTA `31.262/37.687`，相对原 decoder同点 `-3.044/-0.903`、
+  相对 full-tangent 同点 `-5.080/-7.052`；DetA、AssA 与 AP 也没有给出中心分量的早期主效应。
+- checkpoint、5416/50/28/108 与异步完成证据完整，但 e4 只用于归因。99 动态 GPU1/2 保持
+  到 e8/e12，不能用该点直接否决或提前换成 product-tangent。
+- 下一决策仍先等 178 full-tangent e20 与 197 shape-only e4/e8；若 center/shape 的成熟证据
+  证明跨维内积干扰存在，再部署已准备的 0803_26，而不是扫描 scale、gate、loss 或类别权重。
