@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 02:56 CST
+更新时间：2026-08-06 03:12 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E78/TO_E80` | e76 完整 `55.233/62.255`、同点和 `117.488`，较 e72 双升但 det/总和仍差 `0.138/0.842`；02:55 到 e78 iter400，继续 e80。GPU2/3 始终不用。 |
-| 178 动态 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `STOPPED/E12/MATURE_NEGATIVE` | e12 完整 `46.594/52.528`，相对强父线 `-1.695/-2.011`；checkpoint、检测、TrackEval 和 50/50 轨迹齐全后精确停止，GPU0 已释放，GPU1 外部作业不动。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E5/TO_E8+` | e4 完整 `31.620/38.330`，det 早期优势来自 AssA 而 DetA/AP 仍弱；只作诊断，02:55 到 e5 iter250 并继续 e8/e12+，GPU2 未用。 |
-| 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
+| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E79/TO_E80` | e76 完整 `55.233/62.255`、同点和 `117.488`，det/总和仍差 `0.138/0.842`；03:12 到 e79 iter200，继续 e80。GPU2/3 始终不用。 |
+| 178 动态 GPU 0 | `0806_03 ... Householder product-tangent ... e8→e12` | `RUNNING/E9/TO_E12` | 从 197 的已审计 e8 精确迁移；1×8 保持全局 batch 8。静态构建、真实 smoke、checkpoint 兼容与正式五门槛均通过，03:11 到 e9 iter50；GPU1 外部作业不动。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E6/TO_E8+` | e4 完整 `31.620/38.330`，det 早期优势来自 AssA 而 DetA/AP 仍弱；只作诊断，03:12 到 e6 iter200 并继续 e8/e12+，GPU2 未用。 |
+| 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -29,6 +29,23 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
+
+- 197 的 `0804_09` 因主机 CPU 持续降频中断，而不是科学否决；其 e8 checkpoint 为
+  375,529,191 bytes，meta `8/8304`，包含 model、EMA、optimizer、scheduler 与 message hub。
+  178 GPU0 连续多次为 `1 MiB/0%`，GPU1 外部任务约 `14.1 GiB/93%+`，始终未触碰。
+- 新实验登记为 `0806_03`，只把物理执行从 197 的 2×4 改为 178 的 1×8，全局 batch 仍为
+  8，不使用梯度累积；Householder 模型逐键保持 711 个同形 state，参数均为 `22,771,111`，
+  新增参数/state 为 0。formal/smoke 配置均通过 deepcopy，两个 launcher 通过 `bash -n`。
+- 隔离 checkout `/data1/users/litianhao01/PairMOT_householder_resume_0806_03_178` 固定在 clean
+  detached `36ddea5`，没有热更新存活仓库。真实单卡 1×8 四步 smoke 的 total、DN、Encoder
+  proposal 与 grad 全有限，`iter_4.pth` 中 642 个浮点张量全有限；结束后 GPU0 回到 1 MiB。
+- formal screen/PGID `112694/112696` 从 e8/8304 精确恢复；e9 iter50 的 loss/grad 为
+  `10.8587/39.1599`，DN 与 Encoder proposal 全有限，GPU0 约 31.4 GiB，五项门槛齐全后登记
+  `RUNNING/E9/TO_E12`。该实验只补完既有候选的成熟窗口，不提前部署 `0806_02`。
+- 同期 252 固定 GPU0/1 到 e79 iter200，GPU2/3 为 1 MiB；99 动态 GPU0/1 到 e6 iter200，
+  GPU2 为 10 MiB。两路关键项均有限，分别继续 e80 与 e8/e12+。
 
 ## 2026-08-06 02:56 CST：99 的 0804_17 e4 完整早期诊断，继续 e8/e12+
 

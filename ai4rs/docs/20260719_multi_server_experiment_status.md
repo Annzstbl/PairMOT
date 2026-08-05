@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 02:56 CST。
+更新时间：2026-08-06 03:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,26 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E5/TO_E8+；e4 完整 `31.620/38.330`，det 的早期正值来自 AssA，DetA/AP 仍弱 | e4 只诊断，继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E78/TO_E80；e76 完整 `55.233/62.255`、同点和 `117.488`，02:55 到 e78 iter400 | 保持连续轨迹到 e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus` | STOPPED/E12/MATURE_NEGATIVE；e12 完整 `46.594/52.528`，相对强父线 `-1.695/-2.011`；GPU0 已释放 | 保留完整 checkpoint/检测/TrackEval；GPU1 外部作业不动，0806_02 仍等待 0804_17 成熟 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E6/TO_E8+；e4 完整 `31.620/38.330`，det 的早期正值来自 AssA，DetA/AP 仍弱；03:12 到 e6 iter200 | e4 只诊断，继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E79/TO_E80；e76 完整 `55.233/62.255`、同点和 `117.488`，03:12 到 e79 iter200 | 保持连续轨迹到 e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_03 Householder product-tangent e8→e12`（动态 GPU0） | RUNNING/E9/TO_E12；1×8 保持全局 batch 8，03:11 正式到 e9 iter50并通过五门槛 | 继续取得 e12 checkpoint、检测与双 TrackEval；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 03:12 CST：178 安全恢复 0804_09 的成熟窗口
+
+- 178 GPU0 连续多次为 `1 MiB/0%`，GPU1 外部任务约 `14.1 GiB/93%+`；仅选择动态空闲的
+  GPU0。`0806_03` 从 197 `0804_09` 的 375,529,191-byte e8 checkpoint（meta `8/8304`）
+  恢复到 e12，物理 batch 从 2×4 改为 1×8但全局 batch 仍为 8，无梯度累积。
+- 隔离 clean detached checkout `36ddea5` 中，formal/smoke 配置 deepcopy、远端 `bash -n`、
+  Householder 完整构建和源/目标 checkpoint 兼容均通过：`22,771,111` 参数、711 个同形 state、
+  增量 0。真实 1×8 smoke 四步的 total、DN、Encoder proposal、grad 和 642 个 checkpoint
+  浮点张量均有限。
+- formal screen/PGID `112694/112696` 从 e8/8304 精确加载，e9 iter50 的 loss/grad
+  `10.8587/39.1599`，GPU0 约 31.4 GiB，五项门槛通过后登记 `RUNNING/E9/TO_E12`。
+  这是被硬件中断的既有候选成熟化，不构成对 e8 的否决，也不提前部署 `0806_02`。
+- 03:12 同期：252 固定 GPU0/1 到 e79 iter200，GPU2/3 为 1 MiB；99 动态 GPU0/1 到
+  e6 iter200，GPU2 为 10 MiB，两路均继续既定成熟节点。
 
 ## 2026-08-06 02:56 CST：99 的 0804_17 e4 仅作诊断并继续
 
