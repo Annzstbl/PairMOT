@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 04:55 CST
+更新时间：2026-08-06 05:00 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:44 到 e82 iter900；GPU2/3 均为 1 MiB。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E83/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:56 到 e83 iter450；GPU2/3 均为 1 MiB。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 无 GPU | `0806_05 ... scale-orientation split product-tangent ... fallback` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 保留强父线 center transport，只在终层把 shape 分为二维 log-size 与周期角；尺度 detail 独立投影、逐帧 proposed angle 原样保留。clean detached `bf3fb3a` 已通过 deepcopy、远端 `bash -n`、22,771,111 参数/711 states 零增量构建和定向单测；未占 GPU，严格排在成熟证据之后。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E11/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:43 到 e11 iter150 并继续 e12+，GPU2 未用。 |
+| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fallback` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 保留强父线 center transport，只在终层把 shape 分为二维 log-size 与周期角；尺度 detail 独立投影、逐帧 proposed angle 原样保留。clean detached `bf3fb3a` 的静态闭环与真实 1×8 四步 smoke 均通过；GPU 已释放，严格等待成熟证据后再决定 formal。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E12/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:59 到 e12 iter50 并继续完成 e12 checkpoint/评测，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -121,6 +121,22 @@
   参数同为 `22,771,111`、state 同为 711，增量 0。定向单测验证终层唯一调用、DN/center 精确保留、
   angle 保留、scale 投影、pair-swap 等变和梯度有限。尚未创建 smoke/formal workdir、未占 GPU，
   也不登记 RUNNING；先等待 99 e12+ 与 252 e84 的成熟证据决定 `0806_02/0806_05` 的后继顺序。
+
+## 2026-08-06 05:00 CST：0806_05 完成真实 smoke；99 进入 e12
+
+- 178 两张物理卡连续核验均为 `1 MiB/0%`，按总计 1 卡上限动态选择 GPU0，只运行
+  `0806_05` 的真实 1×8 四步 smoke。四步 total loss 为
+  `21.3692/20.6400/20.9566/21.2581`，grad norm 为
+  `60.1735/60.6046/64.2854/67.0694`；所有 DN 与 Encoder proposal 项有限，无
+  Traceback/OOM/NaN/NCCL/DDP/unused-parameter 错误。
+- 364,507,636-byte `iter_4.pth` 通过 iterative-cls residual、DN absolute 已训练语义检查，
+  642 个浮点 checkpoint 张量全有限。smoke screen 与训练/数据成员自然结束，GPU0/1 均回到
+  `1 MiB/0%`；formal workdir 仍不存在，所以状态只提升为
+  `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`，不登记 RUNNING。
+- 同期 99 `0804_17` 已在 04:59 进入 e12 iter50，loss/grad `11.5063/44.2850`，动态
+  GPU0/1 正常、GPU2 10 MiB；必须完成 e12 checkpoint、检测、双 TrackEval、AP 与完整性审计后
+  才形成成熟结论。252 `0806_04` 在 04:56 到 e83 iter450，固定 GPU0/1 正常且 GPU2/3 为
+  1 MiB，继续等待 e84。当前不抢跑任何新 formal。
 
 ## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
 

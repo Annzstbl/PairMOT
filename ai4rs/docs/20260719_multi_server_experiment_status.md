@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 04:55 CST。
+更新时间：2026-08-06 05:00 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E11/TO_E12+；e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；04:43 到 e11 iter150 | e8 只诊断，继续 e12+；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E12/TO_E12+；e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；04:59 到 e12 iter50 | 继续完成 e12 checkpoint/检测/双 TrackEval；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E82/TO_E84+；前序 e80 完整 `55.446/62.342`、同点和 `117.788`，严格仍差 det/总和 `0.051/0.542`；04:44 到 e82 iter900 | 同模型 duration-only 到 e84/e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_02 log-SPD product-tangent`（短 smoke 动态 GPU0） | SMOKE_VALIDATED/NO_FORMAL/GPU_FREE；1×8 四步、checkpoint 与有限性全通过 | `0806_05 scale-orientation split` 已零 GPU 静态闭环；两者均等 99 e12+/252 e84 后排序 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E83/TO_E84+；前序 e80 完整 `55.446/62.342`、同点和 `117.788`，严格仍差 det/总和 `0.051/0.542`；04:56 到 e83 iter450 | 同模型 duration-only 到 e84/e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_02 log-SPD` 与 `0806_05 scale-orientation split` | SMOKE_VALIDATED/NO_FORMAL/GPU_FREE；两者真实 1×8 四步、checkpoint 与有限性均通过 | 等 99 e12+/252 e84 后按 DetA/AssA/AP 排正式顺序 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-06 04:16 CST：252 duration-only 延长与 99 e8 诊断闭环
@@ -82,6 +82,18 @@
   scale detail，并逐帧保留 proposed periodic angle；parameter-free、class-agnostic、无 reweight、
   无明显计算量增长。未运行 smoke、未创建 formal、未占 GPU，严格等待 99 e12+ 与 252 e84
   后再决定 `0806_02/0806_05` 的正式先后。
+
+## 2026-08-06 05:00 CST：178 完成 0806_05 smoke，不启动 formal
+
+- 178 连续两轮全卡空闲后按总计 1 卡上限动态选择 GPU0。`0806_05` 真实 1×8 四步 smoke
+  的 loss 为 `21.3692/20.6400/20.9566/21.2581`，grad 为
+  `60.1735/60.6046/64.2854/67.0694`；DN/Encoder proposal 全有限，无致命错误。
+- 364,507,636-byte `iter_4.pth` 通过 iterative-cls/DN 语义和 642 浮点张量有限性检查；
+  screen/process 自然结束，GPU0/1 回到 1 MiB。formal 目录不存在，故只登记
+  `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`。
+- 99 `0804_17` 于 04:59 到 e12 iter50，252 `0806_04` 于 04:56 到 e83 iter450；两条正式
+  训练的 total、DN、Encoder proposal 与 grad 均有限。先等 99 e12 全量和 252 e84，不抢跑
+  `0806_02/0806_05` formal。
 
 ## 2026-08-06 03:12 CST：178 安全恢复 0804_09 的成熟窗口
 
