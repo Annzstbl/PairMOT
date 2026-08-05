@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 04:38 CST
+更新时间：2026-08-06 04:55 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:35 到 e82 iter400；GPU2/3 均为 1 MiB。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:44 到 e82 iter900；GPU2/3 均为 1 MiB。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E10/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:35 到 e10 iter700 并继续 e12+，GPU2 未用。 |
+| 178 无 GPU | `0806_05 ... scale-orientation split product-tangent ... fallback` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 保留强父线 center transport，只在终层把 shape 分为二维 log-size 与周期角；尺度 detail 独立投影、逐帧 proposed angle 原样保留。clean detached `bf3fb3a` 已通过 deepcopy、远端 `bash -n`、22,771,111 参数/711 states 零增量构建和定向单测；未占 GPU，严格排在成熟证据之后。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E11/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:43 到 e11 iter150 并继续 e12+，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -98,6 +99,28 @@
 - smoke 后 GPU0/1 均回到 `1 MiB/0%`，formal 目录仍不存在。因此状态只提升为
   `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`；仍等待 `0804_17` e12+ 完整结果，再基于相邻机制
   的 DetA/AssA/AP 决定是否把 `0806_02` 作为下一单因素正式实验。
+
+## 2026-08-06 04:55 CST：两条主线健康推进；0806_05 仅完成非占卡静态闭环
+
+- 252 `0806_04` 的 screen/PGID `1087790/1087792` 与两个训练 rank 均存活；04:44 正式日志到
+  e82 iter900，loss/grad `7.9193/44.6804`，total、DN、Encoder proposal 均有限。固定
+  GPU0/1 各约 19.4 GiB，GPU2/3 均为 `1 MiB/0%`；e84 checkpoint 尚未产生，因此不提前
+  推断 e84 HOTA/AP，也不改变 duration-only 轨迹。
+- 99 `0804_17` 的 screen/PGID `1995832/1995834` 与两个训练 rank 均存活；04:43 到 e11
+  iter150，loss/grad `10.2649/40.1892`，total、DN、Encoder proposal 均有限。动态 GPU0/1
+  各约 21.4 GiB，GPU2 仅 10 MiB；当前仍只有 e4/e8 checkpoint，继续到 e12+，未以 e8
+  作否决。
+- 等待窗口内准备 `0806_05 scale-orientation split product-tangent`：沿用强父线的 center
+  tangent，只把 shape 视为 `R² log-size × S¹ orientation`。log-size pair detail 仅沿 detached
+  reference log-size transport 投影，每帧 proposed periodic angle 原样保留，避免直接 3D shape
+  tangent 中角度与 log-scale 的单位竞争；它不同于保留 log-area 的 quotient-anisotropy，也不把
+  trace/deviatoric 共同投影为 log-SPD，故不是现有候选的重复实现。
+- 新结构为 parameter-free、class-agnostic、无 reweight，仅增加终层常数次逐元素运算。178 新隔离
+  checkout `/data1/users/litianhao01/PairMOT_scaleorientation_0806_05_178` 为 clean detached
+  `bf3fb3a`；formal/smoke 配置 deepcopy、两个 launcher 远端 `bash -n`、完整父子构建均通过，
+  参数同为 `22,771,111`、state 同为 711，增量 0。定向单测验证终层唯一调用、DN/center 精确保留、
+  angle 保留、scale 投影、pair-swap 等变和梯度有限。尚未创建 smoke/formal workdir、未占 GPU，
+  也不登记 RUNNING；先等待 99 e12+ 与 252 e84 的成熟证据决定 `0806_02/0806_05` 的后继顺序。
 
 ## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
 
