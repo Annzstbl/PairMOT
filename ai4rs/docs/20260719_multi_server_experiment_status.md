@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 18:58 CST。
+更新时间：2026-08-05 19:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,23 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.261/47.265`，相对强父线 `-3.741/-1.818`；到 e10 iter100 | e8 不直接否决，继续 e12+；GPU2 不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.261/47.265`，相对强父线 `-3.741/-1.818`；到 e12 iter450 | e8 不直接否决，继续 e12+；GPU2 不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E60+；e56 `54.574/61.316`，严格总和仍差 `2.440`；到 e57 iter450 | e52→e56 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；五门槛通过，PGID `4074056`，到 e3 iter450 | 继续 e4/e8/e12+，GPU1 外部任务不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E60+；e56 `54.574/61.316`，严格总和仍差 `2.440`；到 e60 iter200 | e52→e56 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `33.145/37.230`，相对强父线 `+0.296/-0.089`；到 e5 iter350 | e4 只作归因，继续 e8/e12+；GPU1 外部任务不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 19:40 CST：178 的 0804_14 e4 完整闭环
+
+- e4 cls HOTA/DetA/AssA `33.145/26.651/44.064`，det `37.230/33.238/43.278`；相对强父线
+  HOTA `+0.296/-0.089`，cls DetA/AssA `-0.031/+0.143`，det `-1.710/+2.035`。最近半球
+  边界恢复了 fold 丢失的分类信号，但检测侧仍以 DetA 换 AssA，尚未形成同点双正。
+- pair mAP/AP50 `0.1430/0.2685`、both-independent `0.1871/0.3400`；checkpoint 语义与
+  642 张量有限性通过，5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 和 219.6 秒
+  TrackEval 完整。e4 不直接否决，动态 GPU0、PGID `4074056` 已续到 e5 iter350，GPU1 外部
+  任务不动。
+- 19:40 并行进度为 99 e12 iter450、252 固定 GPU0/1 e60 iter200；99 GPU2、252 GPU2/3
+  均未触碰。`0804_15` 继续严格保持静态验证、未部署、无 GPU。
 
 ## 2026-08-05 18:58 CST：0804_15 quotient log-shape 静态后继就绪
 
