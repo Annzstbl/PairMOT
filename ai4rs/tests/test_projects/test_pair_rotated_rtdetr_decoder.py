@@ -127,6 +127,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_product_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder:
+                    bool = False,
                     pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder:
                     bool = False,
                     pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder:
@@ -263,6 +265,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_shape_tangent_refinement_decoder),
         pair_shared_terminal_transport_product_tangent_refinement_decoder=(
             pair_shared_terminal_transport_product_tangent_refinement_decoder),
+        pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder=(
+            pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder=(
             pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder),
         pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder=(
@@ -1666,6 +1670,108 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder=(
                     True),
                 pair_shared_terminal_transport_product_tangent_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_stratified_product_tangent_preserves_zero_motion_detail(self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        center_projection = projected._pair_transport_center_tangent_residual
+        shape_projection = projected._pair_transport_shape_tangent_residual
+        with mock.patch.object(
+                projected, '_pair_transport_center_tangent_residual',
+                side_effect=center_projection) as center_mock, mock.patch.object(
+                    projected, '_pair_transport_shape_tangent_residual',
+                    side_effect=shape_projection) as shape_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(center_mock.call_count, 1)
+        self.assertEqual(shape_mock.call_count, 1)
+        self.assertTrue(
+            center_mock.call_args.kwargs['preserve_degenerate_detail'])
+        self.assertTrue(
+            shape_mock.call_args.kwargs['preserve_degenerate_detail'])
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        reference_prev = torch.tensor([[[
+            0.31, 0.42, 0.18, 0.27, 0.23], [
+            0.50, 0.45, 0.20, 0.30, 0.40], [
+            0.34, 0.38, 0.16, 0.24, 0.20]]], device=self.device)
+        reference_curr = reference_prev.detach().clone()
+        reference_curr[:, 2] = torch.tensor(
+            [0.57, 0.61, 0.29, 0.17, 0.63], device=self.device)
+        torch.manual_seed(607)
+        residual_prev = (
+            torch.randn(1, 3, 5, device=self.device) * 0.12).requires_grad_()
+        residual_curr = (
+            torch.randn(1, 3, 5, device=self.device) * 0.12).requires_grad_()
+
+        direct = center_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, 1)
+        direct = shape_projection(
+            direct[0], direct[1], reference_prev, reference_curr, 1)
+        stratified = center_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, 1,
+            preserve_degenerate_detail=True)
+        stratified = shape_projection(
+            stratified[0], stratified[1], reference_prev, reference_curr, 1,
+            preserve_degenerate_detail=True)
+
+        def decode(reference, residual):
+            return (residual + torch.logit(reference)).sigmoid()
+
+        proposed_prev = decode(reference_prev, residual_prev)
+        proposed_curr = decode(reference_curr, residual_curr)
+        decoded_prev = decode(reference_prev, stratified[0])
+        decoded_curr = decode(reference_curr, stratified[1])
+        self.assertTrue(torch.equal(stratified[0][:, :1], residual_prev[:, :1]))
+        self.assertTrue(torch.equal(stratified[1][:, :1], residual_curr[:, :1]))
+        self.assertTrue(torch.allclose(
+            decoded_prev[:, 1], proposed_prev[:, 1], atol=2e-6, rtol=2e-6))
+        self.assertTrue(torch.allclose(
+            decoded_curr[:, 1], proposed_curr[:, 1], atol=2e-6, rtol=2e-6))
+        self.assertTrue(torch.allclose(
+            stratified[0][:, 2], direct[0][:, 2], atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            stratified[1][:, 2], direct[1][:, 2], atol=1e-6, rtol=1e-5))
+
+        swapped = center_projection(
+            residual_curr, residual_prev,
+            reference_curr, reference_prev, 1,
+            preserve_degenerate_detail=True)
+        swapped = shape_projection(
+            swapped[0], swapped[1], reference_curr, reference_prev, 1,
+            preserve_degenerate_detail=True)
+        self.assertTrue(torch.allclose(
+            stratified[0], swapped[1], atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            stratified[1], swapped[0], atol=1e-6, rtol=1e-5))
+        (stratified[0].sum() + stratified[1].sum()).backward()
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_transport_product_tangent_refinement_decoder=(
+                    True),
+                pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder=(
                     True),
                 device=self.device)
 

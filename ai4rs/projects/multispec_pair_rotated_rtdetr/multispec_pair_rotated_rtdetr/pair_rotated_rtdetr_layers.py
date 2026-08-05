@@ -337,6 +337,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder:
@@ -466,6 +468,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder))
@@ -590,6 +595,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder,
@@ -638,7 +645,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-transport-hemisphere-boundary-center-log-shape-'
                 'consensus, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
-                'tangent, terminal-transport-shared-metric-product-tangent, '
+                'tangent, terminal-transport-stratified-product-tangent, '
+                'terminal-transport-shared-metric-product-tangent, '
                 'terminal-transport-Householder-product-tangent, '
                 'terminal-transport-body-frame-product-tangent, '
                 'terminal-transport-SE2-product-tangent, '
@@ -2559,6 +2567,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif ((
                     self.
+                    pair_shared_terminal_transport_stratified_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # The transport axis is undefined on the zero-motion stratum.
+                # Preserve frame detail there instead of collapsing it toward
+                # the common update through the projection epsilon. All
+                # positive-rank samples use the parent product-tangent map.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn, preserve_degenerate_detail=True))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn, preserve_degenerate_detail=True))
+            elif ((
+                    self.
                     pair_shared_terminal_transport_product_tangent_refinement_decoder
                     or self.terminal_position_tangent_product_decoder)
                   and lid == self.num_layers - 1):
@@ -4015,7 +4040,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
     def _pair_transport_center_tangent_residual(
             residual_prev: Tensor, residual_curr: Tensor,
             reference_prev: Tensor, reference_curr: Tensor,
-            num_dn: int) -> Tuple[Tensor, Tensor]:
+            num_dn: int, *,
+            preserve_degenerate_detail: bool = False
+    ) -> Tuple[Tensor, Tensor]:
         """Transport terminal center detail along established translation.
 
         Final normal-query center updates are expressed as displacement in
@@ -4025,6 +4052,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         Width, height, angle, and the DN prefix remain exactly frame-specific.
 
         This is a zero-state, swap-equivariant, class-agnostic projection.
+        When ``preserve_degenerate_detail`` is enabled, a reference pair on
+        the numerically zero-motion stratum keeps its proposed frame detail,
+        because that stratum has no defined transport direction.
         """
         if residual_prev.shape != residual_curr.shape:
             raise ValueError(
@@ -4065,11 +4095,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         pair_size = torch.sqrt(size_prev * size_curr).clamp_min(1e-6)
         transport = (
             (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
-        transport_energy = transport.square().sum(
-            dim=-1, keepdim=True).clamp_min(1e-6)
+        transport_energy = transport.square().sum(dim=-1, keepdim=True)
         transported_detail = transport * (
             (detail_tangent * transport).sum(dim=-1, keepdim=True)
-            / transport_energy)
+            / transport_energy.clamp_min(1e-6))
+        if preserve_degenerate_detail:
+            transported_detail = torch.where(
+                transport_energy <= 1e-6,
+                detail_tangent,
+                transported_detail)
         tangent_prev = common_tangent - transported_detail
         tangent_curr = common_tangent + transported_detail
 
@@ -4800,7 +4834,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
     def _pair_transport_shape_tangent_residual(
             residual_prev: Tensor, residual_curr: Tensor,
             reference_prev: Tensor, reference_curr: Tensor,
-            num_dn: int) -> Tuple[Tensor, Tensor]:
+            num_dn: int, *,
+            preserve_degenerate_detail: bool = False
+    ) -> Tuple[Tensor, Tensor]:
         """Transport terminal size/angle detail along established shape motion.
 
         Center residuals remain exactly frame-specific. Size and angle updates
@@ -4812,7 +4848,10 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         transport and suppresses only transverse shape jitter.
 
         The projection is parameter-free, swap-equivariant, class agnostic,
-        and leaves the DN prefix unchanged.
+        and leaves the DN prefix unchanged. When
+        ``preserve_degenerate_detail`` is enabled, the numerically zero shape-
+        motion stratum keeps its proposed frame detail because no shape
+        transport direction is defined there.
         """
         if residual_prev.shape != residual_curr.shape:
             raise ValueError(
@@ -4861,11 +4900,15 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             torch.log(size_curr / size_prev),
             wrap_period(ref_curr[..., 4:] - ref_prev[..., 4:])),
             dim=-1).detach()
-        transport_energy = transport.square().sum(
-            dim=-1, keepdim=True).clamp_min(1e-6)
+        transport_energy = transport.square().sum(dim=-1, keepdim=True)
         transported_detail = transport * (
             (detail_tangent * transport).sum(dim=-1, keepdim=True)
-            / transport_energy)
+            / transport_energy.clamp_min(1e-6))
+        if preserve_degenerate_detail:
+            transported_detail = torch.where(
+                transport_energy <= 1e-6,
+                detail_tangent,
+                transported_detail)
         tangent_prev = common_tangent - transported_detail
         tangent_curr = common_tangent + transported_detail
 
