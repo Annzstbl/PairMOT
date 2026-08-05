@@ -323,6 +323,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_shape_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_product_tangent_refinement_decoder:
@@ -429,6 +431,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder))
+        self.pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder))
         self.pair_shared_terminal_transport_shape_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder))
@@ -536,6 +541,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder,
                 self.
+                pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder,
+                self.
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
@@ -573,6 +580,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
                 'terminal-transport-center-tangent-log-shape-consensus, '
+                'terminal-transport-spherical-midpoint-center-log-shape-'
+                'consensus, '
                 'terminal-transport-shape-tangent, terminal-transport-product-'
                 'tangent, terminal-transport-shared-metric-product-tangent, '
                 'terminal-transport-Householder-product-tangent, '
@@ -2189,6 +2198,28 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif (
                     self.
+                    pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder
+                    and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Retain the mature terminal log-shape consensus, but move
+                # center-detail direction only to the spherical midpoint
+                # between its learned direction and established motion. This
+                # preserves detail norm and avoids the transverse-energy
+                # deletion of a rank-one projection or the complete
+                # realignment of Householder transport.
+                tmp_prev, tmp_curr = (
+                    self._pair_spherical_midpoint_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = self._pair_shared_log_size_residual(
+                    tmp_prev, tmp_curr, reference_prev, reference_curr,
+                    num_dn)
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (
+                    self.
                     pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder
                     and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -3064,6 +3095,45 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                  & (reflector_energy > 1e-12))
         return torch.where(valid, reflected, detail)
 
+    @staticmethod
+    def _spherical_midpoint_transport_detail(
+            detail: Tensor, transport: Tensor) -> Tensor:
+        """Move detail halfway toward transport without changing its norm.
+
+        The sign of the detached transport direction is selected to make the
+        shorter turn from the detached detail direction. Their normalized
+        sum is the canonical spherical midpoint, so this operation turns the
+        learned detail only halfway toward established motion. Degenerate
+        details or transport axes use the identity map. Simultaneously
+        reversing detail and transport reverses the result exactly.
+        """
+        if detail.shape != transport.shape:
+            raise ValueError(
+                'spherical-midpoint detail and transport must have equal '
+                'shapes')
+        detail_energy = detail.square().sum(dim=-1, keepdim=True)
+        transport_energy = transport.square().sum(dim=-1, keepdim=True)
+        detail_direction = (
+            detail.detach()
+            / detail_energy.detach().clamp_min(1e-12).sqrt())
+        transport_direction = (
+            transport.detach()
+            / transport_energy.detach().clamp_min(1e-12).sqrt())
+        alignment = (detail_direction * transport_direction).sum(
+            dim=-1, keepdim=True)
+        target_direction = torch.where(
+            alignment >= 0, transport_direction, -transport_direction)
+        midpoint_direction = detail_direction + target_direction
+        midpoint_energy = midpoint_direction.square().sum(
+            dim=-1, keepdim=True)
+        midpoint_direction = (
+            midpoint_direction / midpoint_energy.clamp_min(1e-12).sqrt())
+        transported = detail_energy.clamp_min(1e-12).sqrt() * midpoint_direction
+        valid = ((detail_energy > 1e-12)
+                 & (transport_energy > 1e-12)
+                 & (midpoint_energy > 1e-12))
+        return torch.where(valid, transported, detail)
+
     @classmethod
     def _pair_householder_center_tangent_residual(
             cls, residual_prev: Tensor, residual_curr: Tensor,
@@ -3116,6 +3186,81 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         transport = (
             (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
         transported_detail = cls._householder_transport_detail(
+            detail_tangent, transport)
+        tangent_prev = common_tangent - transported_detail
+        tangent_curr = common_tangent + transported_detail
+
+        def encode_center(tangent: Tensor, reference: Tensor,
+                          reference_logit: Tensor,
+                          reference_size: Tensor,
+                          original_residual: Tensor) -> Tensor:
+            target_center = (
+                reference[..., :2] + tangent * reference_size).clamp(
+                    1e-3, 1 - 1e-3)
+            center_residual = (
+                inverse_sigmoid(target_center, eps=1e-3)
+                - reference_logit[..., :2])
+            return torch.cat(
+                (center_residual, original_residual[..., 2:]), dim=-1)
+
+        normal_prev = encode_center(
+            tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
+        normal_curr = encode_center(
+            tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @classmethod
+    def _pair_spherical_midpoint_center_tangent_residual(
+            cls, residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Half-transport complete center detail toward pair translation."""
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair spherical-midpoint center refinement requires '
+                'aligned residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair spherical-midpoint center refinement requires '
+                'aligned references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair spherical-midpoint center refinement requires '
+                'residual and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair spherical-midpoint center refinement requires 5D '
+                'boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+
+        tangent_prev = (
+            proposed_prev[..., :2] - ref_prev[..., :2]) / size_prev
+        tangent_curr = (
+            proposed_curr[..., :2] - ref_curr[..., :2]) / size_curr
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        pair_size = torch.sqrt(size_prev * size_curr).clamp_min(1e-6)
+        transport = (
+            (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
+        transported_detail = cls._spherical_midpoint_transport_detail(
             detail_tangent, transport)
         tangent_prev = common_tangent - transported_detail
         tangent_curr = common_tangent + transported_detail
