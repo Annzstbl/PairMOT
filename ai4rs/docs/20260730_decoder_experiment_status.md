@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 07:39 CST
+更新时间：2026-08-06 07:58 CST
 
 ## 当前研究原则
 
@@ -18,7 +18,7 @@
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
 | 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E7/TO_E8+` | e4 完整 cls/det `33.531/35.929`，相对直接 product-tangent e4 低 `1.743/7.920`；定位和关联两侧均弱。e4 仅作机制诊断，继续 e8/e12，不以 e4 否决；07:38 到 e7 iter800。GPU1 新有外部作业，本任务未触碰。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E20/TO_E20+` | e16 完整 cls/det `48.315/55.584`，相对 e12 再升 `+2.054/+2.153`，与直接 product-tangent 父线 e16 的差距收窄到 `1.721/1.349`；但严格三门槛仍差 `6.122/6.809/14.431`。因 DetA/AssA/AP 同升，继续 e20/e24；07:37 到 e20 iter550，GPU2 未用。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E21/TO_E24` | e20 完整 cls/det `48.948/56.926`，较 e16 再升 `+0.633/+1.342`，但相对直接 product-tangent 父线 e20 仍低 `3.250/1.206`，严格三门槛差 `5.489/5.467/12.456`。DetA/AssA/AP 仍全升，故继续 e24；07:56 到 e21 iter300，GPU2 未用。 |
 | 99 不占 GPU | `0806_07 ... stratified product-tangent ... fresh` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在参考 transport 能量不超过既有 `1e-6` 数值阈值、切线轴未定义时保留原 frame detail；非退化样本精确等于直接 product-tangent。定向单测、配置 deepcopy、远端 `bash -n` 与 22,771,111 参数/711 states 完整父子构建通过；等待成熟结果与资源交接，不登记 RUNNING。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
@@ -32,6 +32,25 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 07:58 CST：99 e20 完整闭环，保持恢复但仍弱于强父线
+
+- 99 `0804_17 quotient-anisotropy product-tangent` e20 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `48.948/40.416/61.552`，det 为 `56.926/49.543/67.702`，绝对和
+  `105.874`。相对 e16，HOTA `+0.633/+1.342`，DetA `+0.474/+0.561`，AssA
+  `+0.767/+2.470`，说明结构仍在收敛，不能在 e20 以慢收敛理由停止。
+- pair mAP/AP50 从 e16 `0.2530/0.4489` 升至 `0.2606/0.4598`，both-independent 从
+  `0.2972/0.5026` 升至 `0.3037/0.5110`。但相对直接 product-tangent 父线 e20
+  `52.198/58.132` 仍低 `3.250/1.206`；相对严格 cls/det/和门槛分别差
+  `5.489/5.467/12.456`，远未达目标。
+- 392,024,246-byte `epoch_20.pth` meta `20/20760`，model/EMA 711/712 states、各 642
+  个浮点张量全有限，optimizer 497 states、单 scheduler 与 loss scaler 完整；iterative-cls
+  residual 和 DN absolute heads 有限且已训练。检测为 5416 records/50 sequences，TrackEval
+  目录 28 CSV、108 个非空文件、50 个非空预测，`async_done=1`；异步评测于 07:56:11
+  自然完成，耗时 275.4 秒。
+- formal 已自然恢复并于 07:56 到 e21 iter300，loss/grad `9.8864/49.5497`，动态
+  GPU0/1 保持约 21.4 GiB，GPU2 未用。由于 e12→e16→e20 的两项绝对 HOTA、DetA、AssA
+  与 AP 尚持续上升，按 decoder 慢收敛约束继续到 e24，再做成熟判定和资源交接。
 
 ## 2026-08-06 07:39 CST：三线健康推进；0806_07 完成非占卡静态闭环
 

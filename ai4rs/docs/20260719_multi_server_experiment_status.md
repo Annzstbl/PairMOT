@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 07:39 CST。
+更新时间：2026-08-06 07:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,23 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E20/TO_E20+；e16 完整 `48.315/55.584`，07:37 到 e20 iter550 | 继续 e20/e24；`0806_07 stratified product-tangent` 已 STATIC_VALIDATED/NO_GPU；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E21/TO_E24；e20 完整 `48.948/56.926`，07:56 到 e21 iter300 | e20 仍双升但低父线 `3.250/1.206`，继续 e24；`0806_07` 已 STATIC_VALIDATED/NO_GPU；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E90/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；07:37 到 e90 iter200 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E7/TO_E8+；e4 完整 `33.531/35.929`，07:38 到 e7 iter800 | e4 早期负诊断但不否决，继续 e8/e12；`0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 07:58 CST：99 e20 全量结果继续上升，保留到 e24
+
+- `0804_17` e20 cls HOTA/DetA/AssA `48.948/40.416/61.552`，det
+  `56.926/49.543/67.702`，较 e16 HOTA `+0.633/+1.342`，两侧 DetA、AssA 也全升；
+  pair mAP/AP50 `0.2606/0.4598`、both-independent `0.3037/0.5110`，均继续改善。
+- 相对直接 product-tangent 父线 e20 `52.198/58.132` 仍低 `3.250/1.206`；绝对和
+  `105.874`，距严格 cls/det/和门槛 `5.489/5.467/12.456`，目标未达。
+- 392,024,246-byte checkpoint meta `20/20760`，model/EMA 711/712 states、各 642 浮点
+  张量全有限，optimizer 497 states、scheduler、loss scaler 与 iterative-cls/DN 语义完整；
+  5416/50、28 CSV、108 非空文件、50/50 非空预测及 `async_done=1` 齐全，TrackEval
+  耗时 275.4 秒。训练已自然进入 e21，继续 e24，不以 e20 未达标提前停止。
 
 ## 2026-08-06 07:39 CST：三条资源健康；0806_07 静态就绪
 
