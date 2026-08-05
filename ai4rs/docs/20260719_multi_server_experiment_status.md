@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 12:27 CST。
+更新时间：2026-08-05 12:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,23 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 `30.433/37.650` 仅作早期归因，PGID `1791967` 已到 e5 iter500 | 继续 e8/e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e39 iter800 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已到 e7 iter600 | e4 不早停，继续 e8/e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E44+；e40 `53.450/59.649`，严格总和仍差 `5.231`，PGID `823929` 已恢复 e41 | e36→e40 双升，继续 e44 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 checkpoint 与语义/有限性审计通过，检测评估中 | 不以 e8 早停，继续完整 e8/e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 12:55 CST：252 e40 完整闭环；178 e8 checkpoint 就绪
+
+- 252 `0804_01` e40 cls HOTA/DetA/AssA `53.450/45.021/65.541`，det
+  `59.649/53.232/69.133`，和 `113.099`；距严格三门槛仍差
+  `0.987/2.744/5.231`。相对 e36 HOTA `+0.124/+0.356`；pair mAP/AP50
+  `0.3087/0.5282`、both-independent `0.3508/0.5711`，四项也小幅提高，故 PGID
+  `823929` 已恢复 e41并继续 e44，固定 GPU0/1，GPU2/3 不动。
+- 419,513,398-byte e40 checkpoint meta `40/41520`，iterative-cls/DN 已训练且有限，
+  642 个浮点张量全有限；5416/50、28 CSV、108 个非空文件、50 preds、`async_done=1`
+  完整，TrackEval payload→metrics 约 356 秒。
+- 178 `0804_10` e8 checkpoint 为 375,572,468 bytes，meta `8/8304`，12 个 residual
+  最大绝对值 `0.0757188`；iterative-cls/DN 和 642 个浮点张量审计通过。e8 检测仍在进行，
+  不使用半成品 HOTA，也不以 e8 直接否决。
 
 ## 2026-08-05 12:27 CST：0804_12 补齐 178 单卡静态路径
 

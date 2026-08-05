@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 12:27 CST
+更新时间：2026-08-05 12:55 CST
 
 ## 当前研究原则
 
@@ -14,8 +14,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E40+` | e36 完整 `53.326/59.293`，同点和 `112.619`、严格仍差 `5.711`；较 e32 为 `+0.017/-0.027`，轨迹指标近平台但 AP 微升；PGID `823929` 已到 e39 iter800，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`，相对直接 product-tangent 为 `-1.085/-7.237`；不以 e4 否决，PGID `3856480` 已到 e6 iter800，GPU1 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E44+` | e40 完整 `53.450/59.649`，同点和 `113.099`、严格仍差 `5.231`；较 e36 双升 `+0.124/+0.356`，PGID `823929` 已恢复 e41，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`；e8 checkpoint 与语义/有限性审计通过，检测评估进行中；不以 e8 否决，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `30.433/37.650`；det AssA 提升但 cls 与 AP/DetA 受损，只作早期归因；PGID `1791967` 已到 e5 iter500，继续 e8/e12，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -27,6 +27,24 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 12:55 CST：product-tangent e40 完整闭环，继续 e44 成熟复核
+
+- 252 `0804_01 product-tangent` e40 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `53.450/45.021/65.541`，det 为 `59.649/53.232/69.133`，同点和 `113.099`；
+  距严格 `54.437/62.393/118.330` 三门槛仍差 `0.987/2.744/5.231`，不得登记成功。
+  相对 e36 HOTA 双升 `+0.124/+0.356`、总和 `+0.480`；pair mAP/AP50
+  `0.3087/0.5282`，both-independent `0.3508/0.5711`，较 e36 四项分别提高约
+  `0.0030/0.0040/0.0029/0.0033`。成熟曲线仍有小幅恢复，因此保留到 e44，而不是把
+  e36 的近平台单点外推成停线结论。
+- `epoch_40.pth` 为 419,513,398 bytes，meta `40/41520`；iterative-cls residual 与 DN
+  已训练且有限，642 个浮点张量全有限。检测为 5416 records/50 sequences；TrackEval
+  `val_track_0007` 产出 28 CSV、108 个非空文件、50 个非空预测，`async_done=1`，
+  payload→metrics 约 356 秒。正式 PGID `823929` 已恢复 e41，仍固定 GPU0/1，
+  GPU2/3 保持 `1 MiB/0%`。
+- 同步节点：178 `0804_10` e8 checkpoint 为 375,572,468 bytes，meta `8/8304`，
+  12 个 residual 最大绝对值 `0.0757188`，iterative-cls/DN 与 642 个浮点张量审计通过；
+  e8 检测正在执行，尚无完整 HOTA，不作半成品判断，也不以 e8 直接否决。
 
 ## 2026-08-05 12:27 CST：球面中点候选补齐 178 单卡接替路径
 
