@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 15:53 CST
+更新时间：2026-08-05 15:57 CST
 
 ## 当前研究原则
 
@@ -61,6 +61,10 @@ checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`�
   285.9 秒 TrackEval 完整。共享日志已到 e17 iter250；99 直连再次超时，保持
   `RUNNING/CONTROL_UNREACHABLE`，不通过共享盘注入控制，SSH 恢复后精确 TERM PGID
   `1791967` 并连续核验两张动态卡释放。
+- 197 于 15:56 再次只读复核：短命令仍需约 24–32 秒，load `16.95`，抽样 12 核仅
+  `131–157 MHz`；GPU0–3 空闲而 GPU4/5 有外部任务。主机级 CPU 降频未恢复，继续登记
+  `STOPPED/HOST_CPU_THROTTLED`，不因空闲 GPU 启动/恢复实验，也不为 `0804_13` 创建动态
+  workdir；现有 99/178 两个静态端口保持 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`。
 
 ## 2026-08-05 15:04 CST：三线真实进度复核；0804_13 补齐 178 等价端口
 

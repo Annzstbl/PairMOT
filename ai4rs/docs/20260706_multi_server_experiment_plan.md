@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 15:53 CST.
+Last updated: 2026-08-05 15:57 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -43,6 +43,13 @@ also lower by roughly `0.04396/0.07773/0.04755/0.07743`. Checkpoint semantics,
 the 285.9-second TrackEval are complete. The shared log is at epoch 17 iter
 250, but direct SSH still times out. Do not inject control through shared
 storage; exactly terminate PGID `1791967` when SSH returns.
+
+Server 197 is still unsafe at 15:56 CST: read-only commands take roughly
+24–32 seconds, load is `16.95`, and twelve sampled cores report only
+`131–157 MHz`. GPU0–3 being idle does not override this host-level fault;
+GPU4/5 also carry external work. Keep `STOPPED/HOST_CPU_THROTTLED`, do not
+resume or deploy there, and leave `0804_13` statically validated on its 99/178
+routes until a legal healthy lane is released.
 
 At 15:04 CST, a live audit found fixed-252 `0804_01` at epoch 47 iter 450
 with screen/PGID `823928/823929`, seven members, GPU0/1 residency near
