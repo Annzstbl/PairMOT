@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 12:15 CST
+更新时间：2026-08-05 12:27 CST
 
 ## 当前研究原则
 
@@ -27,6 +27,22 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 12:27 CST：球面中点候选补齐 178 单卡接替路径
+
+- 为避免 99 双卡长线占用使下一候选闲置，`0804_12` 新增与 99 物理 `2x4`、全局 batch 8
+  等价的 178 物理 `1x8` 配置、四步 smoke 配置和 formal/smoke launcher；训练日程、EMA、
+  scheduler、模型、DN、loss 与评估协议均不变，仅批拓扑沿用已验证的 178 单卡协议。
+- 新隔离 checkout
+  `/data1/users/litianhao01/PairMOT_sphericalmidpointcenterlogshape_0804_12_178`
+  固定 clean HEAD `d85e837`，未修改正在运行的 `0804_10` 仓库。目标球面中点单测
+  `1/1 OK`；178 配置 deepcopy、父/新完整构建和两份 launcher 语法通过，父/新均为
+  `22,771,111` 参数、711 states、增量 0，smoke 为 4 iter。
+- 该路径仍严格为 `PREPARED/NO_GPU`：没有抢占 178 当前 GPU0，没有创建 smoke/formal
+  workdir，也没有 checkpoint 或 formal iter50 证据。只有 `0804_10` 至少完成 e8/e12
+  成熟窗口并合法释放单卡后，才依次执行真实 smoke、checkpoint 审计和 formal iter50 五门槛。
+- 12:27 现场复核：252 固定 GPU0/1 到 e40 iter400、GPU2/3 不用；178 仅本线 GPU0 到
+  e7 iter600，GPU1 外部任务不动；两线 total/DN/Encoder/grad 有限。
 
 ## 2026-08-05 12:15 CST：center-tangent e4 闭环；球面中点候选静态就绪
 

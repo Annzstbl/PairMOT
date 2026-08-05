@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 12:15 CST。
+更新时间：2026-08-05 12:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,21 @@
 | 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 `30.433/37.650` 仅作早期归因，PGID `1791967` 已到 e5 iter500 | 继续 e8/e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e39 iter800 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已到 e6 iter800 | e4 不早停，继续 e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已到 e7 iter600 | e4 不早停，继续 e8/e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 12:27 CST：0804_12 补齐 178 单卡静态路径
+
+- `0804_12` 已新增 178 物理 `1x8`、全局 batch 8 的正式配置、四步 smoke 配置及两份安全
+  launcher，与 99 `2x4` 候选保持同模型和训练协议。隔离 checkout
+  `/data1/users/litianhao01/PairMOT_sphericalmidpointcenterlogshape_0804_12_178` 为 clean
+  HEAD `d85e837`；球面中点定向单测 `1/1 OK`，配置 deepcopy、完整父/新构建和 launcher
+  语法通过：`22,771,111` 参数、711 states、增量 0、smoke 4 iter。
+- 当前仍为 `PREPARED/NO_GPU`，未创建动态 workdir、未做 smoke/checkpoint/formal iter50，
+  也未热更新存活 `0804_10` 仓库。待 `0804_10` 完成 e8/e12 成熟窗口并释放动态单卡后，
+  才按五项门槛接替。
+- 12:27 资源复核：252 固定 GPU0/1 到 e40 iter400，GPU2/3 不用；178 仅本线 GPU0 到
+  e7 iter600，GPU1 外部任务不动；正式 total/DN/Encoder/grad 有限。
 
 ## 2026-08-05 12:15 CST：99 e4 闭环与下一候选静态准备
 
