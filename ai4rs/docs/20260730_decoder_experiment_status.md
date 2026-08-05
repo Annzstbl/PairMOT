@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 07:16 CST
+更新时间：2026-08-06 07:39 CST
 
 ## 当前研究原则
 
@@ -14,11 +14,12 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E89/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；07:14 e89 iter50。 |
+| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E90/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；07:37 e90 iter200，GPU2/3 未用。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E6/TO_E8+` | e4 完整 cls/det `33.531/35.929`，相对直接 product-tangent e4 低 `1.743/7.920`；定位和关联两侧均弱。e4 仅作机制诊断，继续 e8/e12，不以 e4 否决；07:15 到 e6 iter300，GPU1 未用。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E19/TO_E20+` | e16 完整 cls/det `48.315/55.584`，相对 e12 再升 `+2.054/+2.153`，与直接 product-tangent 父线 e16 的差距收窄到 `1.721/1.349`；但严格三门槛仍差 `6.122/6.809/14.431`。因 DetA/AssA/AP 同升，继续 e20/e24；07:15 到 e19 iter250，GPU2 未用。 |
+| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E7/TO_E8+` | e4 完整 cls/det `33.531/35.929`，相对直接 product-tangent e4 低 `1.743/7.920`；定位和关联两侧均弱。e4 仅作机制诊断，继续 e8/e12，不以 e4 否决；07:38 到 e7 iter800。GPU1 新有外部作业，本任务未触碰。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E20/TO_E20+` | e16 完整 cls/det `48.315/55.584`，相对 e12 再升 `+2.054/+2.153`，与直接 product-tangent 父线 e16 的差距收窄到 `1.721/1.349`；但严格三门槛仍差 `6.122/6.809/14.431`。因 DetA/AssA/AP 同升，继续 e20/e24；07:37 到 e20 iter550，GPU2 未用。 |
+| 99 不占 GPU | `0806_07 ... stratified product-tangent ... fresh` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在参考 transport 能量不超过既有 `1e-6` 数值阈值、切线轴未定义时保留原 frame detail；非退化样本精确等于直接 product-tangent。定向单测、配置 deepcopy、远端 `bash -n` 与 22,771,111 参数/711 states 完整父子构建通过；等待成熟结果与资源交接，不登记 RUNNING。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -31,6 +32,33 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 07:39 CST：三线健康推进；0806_07 完成非占卡静态闭环
+
+- 活体复核显示：99 `0804_17` 到 e20 iter550，loss/grad `10.3128/56.3629`，动态
+  GPU0/1 各约 21.4 GiB，GPU2 仅 10 MiB；178 `0806_05` 到 e7 iter800，loss/grad
+  `9.5888/41.7790`，仍只占动态 GPU0，GPU1 新出现约 13.1 GiB 外部作业且未触碰；252
+  `0806_06` 到 e90 iter200，loss/grad `8.1544/39.9541`，固定 GPU0/1 各约 19.4 GiB，
+  GPU2/3 均为 1 MiB。三条 screen/进程、正式日志与 GPU 一致，训练分量有限。
+- 在不占 GPU、不修改任何存活 checkout 的前提下准备 `0806_07 stratified product-tangent`。
+  它在 center 与 shape reference transport 的原始平方能量不超过既有 `1e-6` 数值阈值时，
+  将未定义的一维投影替换为该退化 stratum 上的恒等映射；其余样本逐元素保持直接
+  product-tangent 结果。该单因素零参数、零状态、class-agnostic，无 loss/reweight、attention、
+  layer 或明显计算量增加，DN prefix、递归 reference 与分类路径不变。
+- 定向单测覆盖零运动 detail 保留、非退化父线等价、帧交换等变、DN 精确保留、有限梯度、
+  终层单次调用和互斥配置并通过。99 隔离部署为 clean detached `ead7e1e`；129,378,205-byte
+  完整 bundle 双端 SHA-256 均为
+  `d68c34da75a3595f5edf07b44afab2cc52b3ed242105a4b0303003466c63242f`。formal/smoke 配置
+  deepcopy、两个 launcher 远端 `bash -n`、父/子完整构建均通过，模型仍为 22,771,111 参数、
+  711 states、增量 0。
+- 首次完整 bundle clone 错放到目标根下的 `ai4rs` 子目录，形成一层多余嵌套；确认 clean HEAD、
+  无进程和无 workdir 后，将其可恢复地归档为
+  `/data/users/wangying01/lth/PairMOT_stratifiedproducttangent_0806_07_99_layout_failed`，再按远端布局
+  正确克隆。第一次构建又因未显式覆盖隔离 `PYTHONPATH` 导入旧 checkout 而失败；按 launcher
+  实际环境固定 `PYTHONPATH` 后完整构建通过，确认均为部署环境问题而非结构回归。
+- `0806_07` 当前严格为 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`。99 仍由 `0804_17`
+  独占两张动态卡；等待 e20 完整 checkpoint、检测与 TrackEval，再继续既定 e24 成熟窗口，
+  不因 e20 尚未生成而提前切换。178 e8、252 e92 同样按各自成熟门槛收集。
 
 ## 2026-08-06 07:16 CST：252 e88 严格未达标；e96 纯时长接续通过五项门槛
 

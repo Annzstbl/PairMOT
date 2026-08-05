@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 07:16 CST。
+更新时间：2026-08-06 07:39 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,26 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E19/TO_E20+；e16 完整 `48.315/55.584`，07:15 到 e19 iter250 | e12→e16 双升且缩小父线差距，继续 e20/e24；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E20/TO_E20+；e16 完整 `48.315/55.584`，07:37 到 e20 iter550 | 继续 e20/e24；`0806_07 stratified product-tangent` 已 STATIC_VALIDATED/NO_GPU；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E89/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；07:14 formal iter50 五门槛通过 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E6/TO_E8+；e4 完整 `33.531/35.929`，07:15 到 e6 iter300 | e4 早期负诊断但不否决，继续 e8/e12；`0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E90/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；07:37 到 e90 iter200 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E7/TO_E8+；e4 完整 `33.531/35.929`，07:38 到 e7 iter800 | e4 早期负诊断但不否决，继续 e8/e12；`0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 07:39 CST：三条资源健康；0806_07 静态就绪
+
+- 99 `0804_17` 到 e20 iter550，178 `0806_05` 到 e7 iter800，252 `0806_06` 到 e90
+  iter200；loss、grad、DN 与 Encoder proposal 均有限。99 仍只用动态 GPU0/1，178 只用
+  动态 GPU0 且未触碰 GPU1 新出现的外部作业，252 严格只用固定 GPU0/1、GPU2/3 仍为 1 MiB。
+- 新候选 `0806_07 stratified product-tangent` 在零 reference-motion stratum 保留 frame detail，
+  非退化样本与直接 product-tangent 完全相同；零参数、class-agnostic、无 reweight 或明显计算
+  增量。99 clean detached `ead7e1e` 已通过定向单测、目标/smoke 配置 deepcopy、两个 launcher
+  `bash -n` 与父子完整构建；模型均为 22,771,111 参数、711 states。
+- 完整 bundle 双端 SHA-256 为
+  `d68c34da75a3595f5edf07b44afab2cc52b3ed242105a4b0303003466c63242f`。首次 clone 的多余
+  目录层已在确认 clean、无进程和无 workdir 后归档为 `_layout_failed`；显式设置隔离
+  `PYTHONPATH` 后构建闭环。当前状态严格为 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`，
+  不占用 99 正式训练资源，也不登记 RUNNING。
 
 ## 2026-08-06 07:16 CST：252 e88 严格未达标并安全续到 e96
 
