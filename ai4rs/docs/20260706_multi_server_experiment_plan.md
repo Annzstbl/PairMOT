@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 00:34 CST.
+Last updated: 2026-08-06 00:50 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,21 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 00:50 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
+completed its epoch-8 diagnostic at cls HOTA/DetA/AssA
+`42.399/34.082/55.489` and det `47.599/41.760/56.323`. Versus strong parent
+`0803_13` at the same epoch, HOTA is `-2.603/-1.484`; AssA is
+`+1.492/+2.969`, while DetA is `-5.055/-4.965`. Pair mAP/AP50
+`0.2031/0.3667` and both-independent `0.2475/0.4243` are also lower than the
+parent by about `0.0304/0.0581/0.0384/0.0702`, confirming an association gain
+obtained at the cost of detection coverage. The finite 375,558,516-byte
+checkpoint meta `8/8304`, 5416/50 detections, 28 CSVs, 108 nonempty files, 50
+predictions, async completion, and 233.2-second TrackEval are complete. Epoch
+8 remains diagnostic rather than a rejection point. The same PGID has resumed
+epoch 9 iter250 with finite total, DN, encoder-proposal, and gradient values on
+GPU0 only and continues to epoch 12+; the external GPU1 job remains untouched.
+Keep `0804_17` statically validated and undeployed until that mature handoff.
 
 At 00:34 CST, fixed-252 `0804_01 factorized product-tangent` completed its
 final epoch-72 same-checkpoint audit at cls HOTA/DetA/AssA

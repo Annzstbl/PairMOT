@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 00:34 CST。
+更新时间：2026-08-06 00:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,20 @@
 | 99 本机 | `0804_17 quotient-anisotropy product-tangent` | STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；99 双卡端口静态闭环，参数/state 增量 0 | 等待 178 的 0804_16 e12+ 合法交接；当前不创建 workdir、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | COMPLETED/E72_AUDITED/NOT_TARGET；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995` | GPU0/1 已释放；GPU2/3 始终未用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 checkpoint meta `8/8304`、642 张量有限，检测评估中 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `42.399/47.599`，已恢复 e9 iter250 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 00:50 CST：178 的 0804_16 e8 完整评估
+
+- e8 cls HOTA/DetA/AssA `42.399/34.082/55.489`、det
+  `47.599/41.760/56.323`；相对强父线 e8 HOTA `-2.603/-1.484`，AssA
+  `+1.492/+2.969`，但 DetA `-5.055/-4.965`，呈明显检测覆盖到关联的交换。
+- pair mAP/AP50 `0.2031/0.3667`、both-independent `0.2475/0.4243`，相对父线四项约
+  `-0.0304/-0.0581/-0.0384/-0.0702`。375,558,516-byte checkpoint meta `8/8304`，
+  iterative-cls/DN 已训练且 642 张量有限；5416/50、28 CSV、108 非空文件、50 preds、
+  `async_done=1` 和 233.2 秒 TrackEval 完整。
+- e8 只登记为机制诊断，不直接否决。PGID `4175891` 已恢复 e9 iter250，仍仅占 GPU0，
+  所有关键训练分量有限并继续 e12+；GPU1 外部作业未动。0804_17 保持静态未部署。
 
 ## 2026-08-06 00:34 CST：252 的 0804_01 e72 最终闭环
 

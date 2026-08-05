@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 00:34 CST
+更新时间：2026-08-06 00:50 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `COMPLETED/E72_AUDITED/NOT_TARGET` | e72 完整 `55.170/62.165`，cls 过线但 det 仍差 `0.228`，同点和 `117.335` 距严格目标仍差 `0.995`；GPU0/1 已释放，GPU2/3 始终未用。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.257/37.860`；e8 checkpoint meta `8/8304`、642 张量有限，正在检测评估，且继续保留到 e12+。GPU1 外部作业不动。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；已恢复 e9 iter250，继续到 e12+。GPU1 外部作业不动。 |
 | 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -29,6 +29,22 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 00:50 CST：178 的 0804_16 e8 完整诊断，继续 e12+
+
+- 动态 178 GPU0 的 `0804_16 quotient-anisotropy shape consensus` e8 同一 checkpoint
+  cls HOTA/DetA/AssA 为 `42.399/34.082/55.489`，det 为
+  `47.599/41.760/56.323`。相对强父线 `0803_13` e8，HOTA 为 `-2.603/-1.484`；
+  cls/det AssA 分别高 `1.492/2.969`，但 DetA 分别低 `5.055/4.965`，说明当前主要是
+  关联增强换取检测覆盖，而非双侧均衡改善。
+- pair mAP/AP50 `0.2031/0.3667`、both-independent `0.2475/0.4243`；相对父线四项约
+  `-0.0304/-0.0581/-0.0384/-0.0702`，与 DetA 回落同向。375,558,516-byte checkpoint
+  meta `8/8304`，前/末 iterative-cls 分支和 DN 已训练，642 个浮点张量全部有限；
+  5416/50、28 CSV、108 个非空文件、50 preds、`async_done=1` 完整，TrackEval 233.2 秒。
+- e4 的早期双正到 e8 转为 DetA/AP 回落，但这仍只是中期机制节点，不构成 decoder 否决。
+  原 screen/PGID `4175889/4175891` 已恢复到 e9 iter250，GPU0 训练总损失、DN、Encoder
+  proposal 与 grad 均有限，继续收集 e12+；GPU1 外部作业保持不动。0804_17 仍严格保持
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不得越过成熟交接门槛。
 
 ## 2026-08-06 00:34 CST：252 的 0804_01 e72 最终完整但未达严格目标
 
