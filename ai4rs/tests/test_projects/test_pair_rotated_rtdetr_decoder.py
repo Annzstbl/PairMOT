@@ -110,6 +110,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_center_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder:
+                    bool = False,
                     pair_shared_terminal_transport_shape_tangent_refinement_decoder:
                     bool = False,
                     pair_shared_terminal_transport_product_tangent_refinement_decoder:
@@ -228,6 +230,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_full_tangent_refinement_decoder),
         pair_shared_terminal_transport_center_tangent_refinement_decoder=(
             pair_shared_terminal_transport_center_tangent_refinement_decoder),
+        pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder=(
+            pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder),
         pair_shared_terminal_transport_shape_tangent_refinement_decoder=(
             pair_shared_terminal_transport_shape_tangent_refinement_decoder),
         pair_shared_terminal_transport_product_tangent_refinement_decoder=(
@@ -1972,6 +1976,108 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
             product_unequal[0][:, 1:], shared_metric_unequal[0][:, 1:]))
         self.assertFalse(torch.allclose(
             product_unequal[1][:, 1:], shared_metric_unequal[1][:, 1:]))
+
+    def test_center_tangent_log_shape_consensus_is_terminal_parameter_free_and_swap_equivariant(
+            self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        center_projection = projected._pair_transport_center_tangent_residual
+        size_consensus = projected._pair_shared_log_size_residual
+        angle_consensus = projected._pair_shared_periodic_angle_residual
+        call_order = []
+
+        def record_center(*args, **kwargs):
+            call_order.append('center')
+            return center_projection(*args, **kwargs)
+
+        def record_size(*args, **kwargs):
+            call_order.append('size')
+            return size_consensus(*args, **kwargs)
+
+        def record_angle(*args, **kwargs):
+            call_order.append('angle')
+            return angle_consensus(*args, **kwargs)
+
+        with mock.patch.object(
+                projected, '_pair_transport_center_tangent_residual',
+                side_effect=record_center) as center_mock, mock.patch.object(
+                    projected, '_pair_shared_log_size_residual',
+                    side_effect=record_size) as size_mock, mock.patch.object(
+                        projected, '_pair_shared_periodic_angle_residual',
+                        side_effect=record_angle) as angle_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(center_mock.call_count, 1)
+        self.assertEqual(size_mock.call_count, 1)
+        self.assertEqual(angle_mock.call_count, 1)
+        self.assertEqual(call_order, ['center', 'size', 'angle'])
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        torch.manual_seed(80411)
+        reference_prev = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        reference_curr = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        residual_prev = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        residual_curr = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        num_dn = 2
+
+        centered = center_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, num_dn)
+        sized = size_consensus(
+            centered[0], centered[1],
+            reference_prev, reference_curr, num_dn)
+        expected = angle_consensus(
+            sized[0], sized[1], reference_prev, reference_curr, num_dn)
+
+        swapped_centered = center_projection(
+            residual_curr, residual_prev,
+            reference_curr, reference_prev, num_dn)
+        swapped_sized = size_consensus(
+            swapped_centered[0], swapped_centered[1],
+            reference_curr, reference_prev, num_dn)
+        swapped = angle_consensus(
+            swapped_sized[0], swapped_sized[1],
+            reference_curr, reference_prev, num_dn)
+        self.assertTrue(torch.equal(
+            expected[0][:, :num_dn], residual_prev[:, :num_dn]))
+        self.assertTrue(torch.equal(
+            expected[1][:, :num_dn], residual_curr[:, :num_dn]))
+        self.assertTrue(torch.allclose(
+            expected[0], swapped[1], atol=2e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            expected[1], swapped[0], atol=2e-5, rtol=1e-5))
+        (expected[0].sum() + expected[1].sum()).backward()
+        self.assertTrue(torch.isfinite(expected[0]).all())
+        self.assertTrue(torch.isfinite(expected[1]).all())
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                pair_shared_terminal_transport_center_tangent_log_shape_consensus_refinement_decoder=(
+                    True),
+                device=self.device)
 
     def test_householder_product_tangent_is_terminal_norm_preserving_and_swap_equivariant(
             self):
