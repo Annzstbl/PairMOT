@@ -311,6 +311,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_quotient_anisotropy_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_log_area_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_periodic_angle_refinement_decoder:
@@ -423,6 +425,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder))
+        self.pair_shared_terminal_quotient_anisotropy_refinement_decoder = (
+            bool(
+                pair_shared_terminal_quotient_anisotropy_refinement_decoder))
         self.pair_shared_terminal_log_area_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_terminal_log_area_periodic_angle_refinement_decoder))
@@ -544,6 +549,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder,
                 self.
+                pair_shared_terminal_quotient_anisotropy_refinement_decoder,
+                self.
                 pair_shared_terminal_log_area_periodic_angle_refinement_decoder,
                 self.
                 pair_shared_terminal_periodic_angle_refinement_decoder,
@@ -597,6 +604,7 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'log-size-periodic-angle, log-area-periodic-angle, '
                 'late-log-size-periodic-angle, terminal-log-size-periodic-'
                 'angle, terminal-quotient-log-size-periodic-angle, '
+                'terminal-quotient-anisotropy, '
                 'terminal-log-area-periodic-angle, terminal-periodic-'
                 'angle, terminal-log-size, terminal-normalized-center, '
                 'terminal-full-tangent, '
@@ -2176,8 +2184,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
             elif (self.
-                  pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder
-                  and lid == self.num_layers - 1):
+                   pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder
+                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
                 # Align the unordered principal axes of the two rotated-box
                 # references before sharing multiplicative size increments.
@@ -2190,6 +2198,19 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
                 tmp_prev, tmp_curr = (
                     self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (self.
+                  pair_shared_terminal_quotient_anisotropy_refinement_decoder
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Encode physical shape as log-area plus a double-angle
+                # anisotropy vector.  This is invariant to the exact rotated-
+                # box relabeling (w, h, theta) ~ (h, w, theta + pi/2) and
+                # naturally removes meaningless orientation corrections as a
+                # box approaches a square.
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_quotient_anisotropy_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
             elif (self.
@@ -3026,6 +3047,143 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         normal_curr = torch.cat((
             normal_curr[..., :2], shared_residual_curr,
             normal_curr[..., 4:]), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_quotient_anisotropy_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share terminal shape increments in a physical rectangle quotient.
+
+        The quotient coordinates are log-area and the double-angle
+        anisotropy vector::
+
+            a = log(w) + log(h)
+            q = (log(w) - log(h)) * (cos(2 theta), sin(2 theta))
+
+        They are unchanged by the equivalent rotated-box parameterization
+        ``(w, h, theta) ~ (h, w, theta + pi / 2)``.  Each frame's proposed
+        quotient displacement from its own reference is computed, the two
+        displacements are averaged, and the shared displacement is lifted
+        back using the closest axis labeling to that frame's detached
+        reference.  Orientation vanishes continuously with anisotropy, so a
+        nearly square box does not impose an arbitrary angle correction.
+
+        Centers and the DN prefix remain untouched.  The operation adds no
+        state or parameters and is class agnostic and pair-swap equivariant.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared quotient-anisotropy refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-shared quotient-anisotropy refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-shared quotient-anisotropy refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared quotient-anisotropy refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        reference_normal_prev = reference_prev[:, num_dn:]
+        reference_normal_curr = reference_curr[:, num_dn:]
+        reference_logit_prev = inverse_sigmoid(
+            reference_normal_prev, eps=1e-3)
+        reference_logit_curr = inverse_sigmoid(
+            reference_normal_curr, eps=1e-3)
+        proposed_prev = (normal_prev + reference_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + reference_logit_curr).sigmoid()
+
+        def quotient_coordinates(box: Tensor) -> Tensor:
+            log_size = torch.log(box[..., 2:4].clamp_min(1e-6))
+            log_area = log_size.sum(dim=-1, keepdim=True)
+            log_aspect = log_size[..., :1] - log_size[..., 1:2]
+            phase = math.tau * box[..., 4:5]
+            anisotropy = log_aspect * torch.cat(
+                (torch.cos(phase), torch.sin(phase)), dim=-1)
+            return torch.cat((log_area, anisotropy), dim=-1)
+
+        reference_shape_prev = quotient_coordinates(reference_normal_prev)
+        reference_shape_curr = quotient_coordinates(reference_normal_curr)
+        proposed_shape_prev = quotient_coordinates(proposed_prev)
+        proposed_shape_curr = quotient_coordinates(proposed_curr)
+        shared_delta = 0.5 * (
+            proposed_shape_prev - reference_shape_prev
+            + proposed_shape_curr - reference_shape_curr)
+
+        def lift_shape(target_shape: Tensor,
+                       reference_angle: Tensor) -> Tuple[Tensor, Tensor]:
+            log_area = target_shape[..., :1]
+            anisotropy = target_shape[..., 1:]
+            magnitude = torch.linalg.vector_norm(
+                anisotropy, dim=-1, keepdim=True)
+            nondegenerate = magnitude.detach() > 1e-6
+            safe_x = torch.where(
+                nondegenerate, anisotropy[..., :1],
+                torch.ones_like(anisotropy[..., :1]))
+            safe_y = torch.where(
+                nondegenerate, anisotropy[..., 1:2],
+                torch.zeros_like(anisotropy[..., 1:2]))
+            angle_primary = torch.remainder(
+                torch.atan2(safe_y, safe_x) / math.tau, 1.0)
+            angle_swapped = torch.remainder(angle_primary + 0.5, 1.0)
+
+            def wrap_period(value: Tensor) -> Tensor:
+                return torch.remainder(value + 0.5, 1.0) - 0.5
+
+            detached_reference_angle = reference_angle.detach()
+            use_swapped = (
+                wrap_period(angle_swapped - detached_reference_angle).abs()
+                < wrap_period(
+                    angle_primary - detached_reference_angle).abs())
+            target_angle = torch.where(
+                nondegenerate,
+                torch.where(use_swapped, angle_swapped, angle_primary),
+                reference_angle)
+            signed_aspect = torch.where(
+                use_swapped, -magnitude, magnitude)
+            signed_aspect = torch.where(
+                nondegenerate, signed_aspect,
+                torch.zeros_like(signed_aspect))
+            target_log_size = 0.5 * torch.cat(
+                (log_area + signed_aspect, log_area - signed_aspect), dim=-1)
+            target_size = torch.exp(target_log_size).clamp(
+                min=1e-6, max=1 - 1e-6)
+            return target_size, target_angle
+
+        target_size_prev, target_angle_prev = lift_shape(
+            reference_shape_prev + shared_delta,
+            reference_normal_prev[..., 4:5])
+        target_size_curr, target_angle_curr = lift_shape(
+            reference_shape_curr + shared_delta,
+            reference_normal_curr[..., 4:5])
+        shared_size_prev = inverse_sigmoid(
+            target_size_prev, eps=1e-6) - reference_logit_prev[..., 2:4]
+        shared_size_curr = inverse_sigmoid(
+            target_size_curr, eps=1e-6) - reference_logit_curr[..., 2:4]
+        shared_angle_prev = inverse_sigmoid(
+            target_angle_prev, eps=1e-3) - reference_logit_prev[..., 4:5]
+        shared_angle_curr = inverse_sigmoid(
+            target_angle_curr, eps=1e-3) - reference_logit_curr[..., 4:5]
+
+        normal_prev = torch.cat((
+            normal_prev[..., :2], shared_size_prev, shared_angle_prev), dim=-1)
+        normal_curr = torch.cat((
+            normal_curr[..., :2], shared_size_curr, shared_angle_curr), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (

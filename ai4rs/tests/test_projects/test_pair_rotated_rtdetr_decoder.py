@@ -2,6 +2,7 @@
 """Unit tests for PairRotatedRTDETRTransformerDecoder (M3j / M3-2)."""
 
 import copy
+import math
 import os.path as osp
 import sys
 import unittest
@@ -99,6 +100,8 @@ def _build_decoder(num_layers: int = 2,
                    pair_shared_terminal_log_size_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
+                   pair_shared_terminal_quotient_anisotropy_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_log_area_periodic_angle_refinement_decoder:
                    bool = False,
@@ -228,6 +231,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_log_size_periodic_angle_refinement_decoder),
         pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder=(
             pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder),
+        pair_shared_terminal_quotient_anisotropy_refinement_decoder=(
+            pair_shared_terminal_quotient_anisotropy_refinement_decoder),
         pair_shared_terminal_log_area_periodic_angle_refinement_decoder=(
             pair_shared_terminal_log_area_periodic_angle_refinement_decoder),
         pair_shared_terminal_periodic_angle_refinement_decoder=(
@@ -947,6 +952,120 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
 
         swapped_curr, swapped_prev = (
             decoder._pair_shared_quotient_log_size_residual(
+                residual_curr, residual_prev,
+                reference_curr, reference_prev, num_dn=1))
+        self.assertTrue(torch.allclose(output_prev, swapped_prev, atol=1e-6))
+        self.assertTrue(torch.allclose(output_curr, swapped_curr, atol=1e-6))
+        (output_prev.sum() + output_curr.sum()).backward()
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+    def test_terminal_quotient_anisotropy_is_parameter_free_and_exclusive(self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_quotient_anisotropy_refinement_decoder=True)
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        quotient_shape = (
+            projected._pair_shared_quotient_anisotropy_residual)
+        with mock.patch.object(
+                projected, '_pair_shared_quotient_anisotropy_residual',
+                side_effect=quotient_shape) as shape_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(shape_mock.call_count, 1)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                pair_shared_terminal_quotient_anisotropy_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_quotient_anisotropy_shares_physical_shape_tangent(self):
+        decoder, _, _ = _build_decoder(device=self.device)
+        reference_prev = torch.tensor(
+            [[[0.3, 0.4, 0.20, 0.10, 0.10],
+              [0.3, 0.4, 0.22, 0.11, 0.15],
+              [0.3, 0.4, 0.16, 0.16, 0.33]]],
+            device=self.device)
+        reference_curr = torch.tensor(
+            [[[0.3, 0.4, 0.21, 0.12, 0.10],
+              [0.3, 0.4, 0.13, 0.25, 0.62],
+              [0.3, 0.4, 0.15, 0.15, 0.81]]],
+            device=self.device)
+        proposed_prev = torch.tensor(
+            [[[0.3, 0.4, 0.20, 0.10, 0.10],
+              [0.3, 0.4, 0.24, 0.10, 0.20],
+              [0.3, 0.4, 0.17, 0.17, 0.36]]],
+            device=self.device)
+        proposed_curr = torch.tensor(
+            [[[0.3, 0.4, 0.21, 0.12, 0.10],
+              [0.3, 0.4, 0.11, 0.27, 0.57],
+              [0.3, 0.4, 0.14, 0.14, 0.76]]],
+            device=self.device)
+
+        def residual_from_box(reference, proposed):
+            return (torch.logit(proposed.clamp(1e-4, 1 - 1e-4))
+                    - torch.logit(reference.clamp(1e-4, 1 - 1e-4)))
+
+        residual_prev = residual_from_box(
+            reference_prev, proposed_prev).requires_grad_(True)
+        residual_curr = residual_from_box(
+            reference_curr, proposed_curr).requires_grad_(True)
+        output_prev, output_curr = (
+            decoder._pair_shared_quotient_anisotropy_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, num_dn=1))
+
+        def decode(reference, residual):
+            return (residual + torch.logit(reference)).sigmoid()
+
+        def quotient(box):
+            log_size = torch.log(box[..., 2:4])
+            log_area = log_size.sum(dim=-1, keepdim=True)
+            log_aspect = log_size[..., :1] - log_size[..., 1:2]
+            phase = math.tau * box[..., 4:5]
+            return torch.cat((
+                log_area,
+                log_aspect * torch.cos(phase),
+                log_aspect * torch.sin(phase)), dim=-1)
+
+        decoded_prev = decode(reference_prev, output_prev)
+        decoded_curr = decode(reference_curr, output_curr)
+        expected_delta = 0.5 * (
+            quotient(proposed_prev[:, 1:]) - quotient(reference_prev[:, 1:])
+            + quotient(proposed_curr[:, 1:])
+            - quotient(reference_curr[:, 1:]))
+        actual_delta_prev = (
+            quotient(decoded_prev[:, 1:]) - quotient(reference_prev[:, 1:]))
+        actual_delta_curr = (
+            quotient(decoded_curr[:, 1:]) - quotient(reference_curr[:, 1:]))
+        self.assertTrue(torch.allclose(
+            actual_delta_prev, expected_delta, atol=2e-5, rtol=2e-5))
+        self.assertTrue(torch.allclose(
+            actual_delta_curr, expected_delta, atol=2e-5, rtol=2e-5))
+        self.assertTrue(torch.equal(output_prev[:, :1], residual_prev[:, :1]))
+        self.assertTrue(torch.equal(output_curr[:, :1], residual_curr[:, :1]))
+        self.assertTrue(torch.equal(
+            output_prev[..., :2], residual_prev[..., :2]))
+        self.assertTrue(torch.equal(
+            output_curr[..., :2], residual_curr[..., :2]))
+
+        swapped_curr, swapped_prev = (
+            decoder._pair_shared_quotient_anisotropy_residual(
                 residual_curr, residual_prev,
                 reference_curr, reference_prev, num_dn=1))
         self.assertTrue(torch.allclose(output_prev, swapped_prev, atol=1e-6))
