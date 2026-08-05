@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 02:35 CST
+更新时间：2026-08-06 02:56 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E77/TO_E80` | e76 完整 `55.233/62.255`、同点和 `117.488`，较 e72 双升但 det/总和仍差 `0.138/0.842`；完整 checkpoint、AP 与 TrackEval 闭环后继续 e80。GPU2/3 始终不用。 |
+| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E78/TO_E80` | e76 完整 `55.233/62.255`、同点和 `117.488`，较 e72 双升但 det/总和仍差 `0.138/0.842`；02:55 到 e78 iter400，继续 e80。GPU2/3 始终不用。 |
 | 178 动态 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `STOPPED/E12/MATURE_NEGATIVE` | e12 完整 `46.594/52.528`，相对强父线 `-1.695/-2.011`；checkpoint、检测、TrackEval 和 50/50 轨迹齐全后精确停止，GPU0 已释放，GPU1 外部作业不动。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E4/TO_E4_EVAL+` | 真实 DDP smoke、checkpoint 审计与 formal iter50 五门槛均通过；02:35 到 e4 iter400，关键项全有限，GPU2 未用。e4/e8 仅诊断并继续 e12+。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E5/TO_E8+` | e4 完整 `31.620/38.330`，det 早期优势来自 AssA 而 DetA/AP 仍弱；只作诊断，02:55 到 e5 iter250 并继续 e8/e12+，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -29,6 +29,24 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 02:56 CST：99 的 0804_17 e4 完整早期诊断，继续 e8/e12+
+
+- e4 同一 checkpoint 的 cls HOTA/DetA/AssA 为 `31.620/25.920/41.202`，det 为
+  `38.330/33.740/44.778`。相对强父线 `0803_13` e4 `32.849/37.319`，HOTA 为
+  `-1.229/+1.011`；cls DetA/AssA 为 `-0.762/-2.719`，det 为 `-1.208/+3.535`。
+  因此 det 的早期正值来自 AssA 补偿检测覆盖，cls 两分量仍慢。
+- pair mAP/AP50 `0.1325/0.2594`、both-independent `0.1741/0.3271`，相对强父线
+  `0.1399/0.2613/0.1881/0.3391` 分别低 `0.0074/0.0019/0.0140/0.0120`；相对
+  shape-consensus `0804_16` e4 的 AP 也全面更低。该点是明确早期机制风险，但不是成熟否决。
+- 369,972,470-byte `epoch_4.pth` meta `4/4152`；model/EMA 分别 711/712 states，
+  各 642 个浮点张量全有限，optimizer 497 states 完整。5416/50 检测、28 CSV、108 个
+  非空文件、50/50 非空预测和 `async_done=1` 齐全，TrackEval 耗时 254.2 秒。
+- screen/PGID `1995832/1995834` 已自然到 e5 iter250，total、DN、Encoder proposal 与
+  grad 全有限，动态 GPU0/1 继续运行、GPU2 为 10 MiB。按约束继续 e8/e12+，不得据 e4
+  AP/cls 慢收敛停止。
+- 同期 252 固定 GPU0/1 的 `0806_01` 已到 e78 iter400，关键项有限，GPU2/3 仍为 1 MiB；
+  保持连续到 e80 同 checkpoint 终判。
 
 ## 2026-08-06 02:35 CST：252 的 0806_01 e76 双升但严格仍未达标
 

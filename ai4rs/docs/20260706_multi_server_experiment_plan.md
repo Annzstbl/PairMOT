@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 02:35 CST.
+Last updated: 2026-08-06 02:56 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 02:56 CST, dynamic-99 `0804_17 quotient-anisotropy product-tangent`
+completed its epoch-4 diagnostic at cls HOTA/DetA/AssA
+`31.620/25.920/41.202` and det `38.330/33.740/44.778`. Versus the strong
+epoch-4 parent, HOTA is `-1.229/+1.011`, but det DetA/AssA is
+`-1.208/+3.535`: its early detection-side gain is association compensation,
+while classification remains slower. Pair mAP/AP50 `0.1325/0.2594` and
+both-independent `0.1741/0.3271` are below both the parent and `0804_16` at
+the same point. The finite 369,972,470-byte checkpoint has meta `4/4152`,
+711 model and 712 EMA states, 642 finite floating tensors in each, and 497
+optimizer states. Detection and TrackEval close with 5416/50, 28 CSVs, 108
+nonempty files, 50/50 predictions, `async_done=1`, and 254.2 seconds. Treat
+this only as an early mechanism warning: the same PGID is healthy at epoch 5
+iteration 250 and must continue through epoch 8 and epoch 12+.
+
+Fixed-252 `0806_01` is concurrently at epoch 78 iteration 400 on GPU0/1 with
+finite formal signals; continue unchanged to its epoch-80 strict audit and
+leave GPU2/3 unused. Keep `0806_02` static/no-GPU until `0804_17` has mature
+e12+ evidence.
 
 At 02:35 CST, fixed-252 `0806_01` completed its epoch-76 same-checkpoint
 audit at cls HOTA/DetA/AssA `55.233/45.956/68.400` and det
