@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 02:56 CST.
+Last updated: 2026-08-06 03:15 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,27 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 03:15 CST, dynamic-178 `0806_03 Householder product-tangent` is the safe
+migration of CPU-throttled 197 `0804_09` from its audited epoch-8 checkpoint
+to epoch 12. Physical batch changes from 2x4 to 1x8, so global batch remains
+eight without accumulation. The clean detached checkout is `36ddea5`; both
+configs passed deepcopy, both launchers passed `bash -n`, source and target
+models have the same 22,771,111 parameters and 711 state tensors, and the
+375,529,191-byte checkpoint has meta `8/8304` with compatible model, EMA,
+optimizer, and scheduler state. A real 1x8 four-iteration smoke produced 642
+finite floating checkpoint tensors. Formal screen/PGID `112694/112696`
+resumed exactly from epoch 8 and is healthy at epoch 9 iteration 250 with
+finite total, DN, encoder-proposal losses and gradient norm. Only GPU0 is used;
+the external GPU1 task remains untouched. Continue to the complete epoch-12
+checkpoint, detection, and both TrackEval views. This completes a previously
+interrupted mature window and does not advance the static `0806_02` fallback.
+
+At the same 03:15 audit, fixed-252 `0806_01` is healthy at epoch 79 iteration
+350 on GPU0/1 only, with GPU2/3 at 1 MiB; prioritize its epoch-80 checkpoint
+and complete same-checkpoint dual evaluation. Dynamic-99 `0804_17` is healthy
+at epoch 6 iteration 350 on GPU0/1, with GPU2 idle; continue through epoch 8
+and epoch 12+ without early rejection.
 
 At 02:56 CST, dynamic-99 `0804_17 quotient-anisotropy product-tangent`
 completed its epoch-4 diagnostic at cls HOTA/DetA/AssA
