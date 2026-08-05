@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 23:58 CST
+更新时间：2026-08-06 00:10 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E72` | e68 完整 `54.853/61.883`，同点和 `116.736`、严格仍差 `1.594`；较 e64 双升，已到 e71 iter700，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.257/37.860`，相对强父线 `+1.408/+0.541`，四项 AP 同升；仅作早期正信号，继续 e8/e12+。GPU1 外部作业不动，0804_17 仅静态验证。 |
-| 99 | `0804_15 ... quotient log-shape consensus ... fresh` | `STOPPED/MATURE_NEGATIVE` | e12 完整 `44.473/52.042`，相对强父线 `-3.816/-2.497`；e4/e8/e12 成熟负证据后精确停止，GPU0/1 已释放，GPU2 未动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/E72_FINAL` | e68 完整 `54.853/61.883`，同点和 `116.736`、严格仍差 `1.594`；已进入最终 e72 iter450，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.257/37.860`，相对强父线 `+1.408/+0.541`，四项 AP 同升；已到 e7 iter450，继续 e8/e12+。GPU1 外部作业不动。 |
+| 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -29,6 +29,26 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 00:10 CST：0804_17 的 99 双卡静态端口闭环
+
+- 为避免 99 在等待 178 成熟节点期间空转，同时不越过 0804_17 的 GPU 交接门槛，新增其 99
+  `2xb4` formal/smoke 配置与启动器。科学结构与 178 端口完全一致：保留 0804_01 的中心切线，
+  只把 shape detail 改为轴交换不变的双角各向异性运输，并逐帧保持 proposed log-area；仍为
+  零参数/state、class-agnostic、无 reweight，仅含终层常数逐元素运算。
+- 99 新隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_quotientanisotropytangent_0804_17_99`
+  为 clean detached `a4914d0`。两份远端 MMEngine 配置均成功加载和 `deepcopy`，两启动器
+  `bash -n` 通过；精确 `unittest` 为 `1/1 OK`，父/候选完整构建均为 `22,771,111`
+  参数、711 state tensors、增量 0。smoke/formal workdir 均不存在，未使用 GPU。
+- 首次隔离 clone 仅因历史 README 的缺失 LFS GIF 在 checkout 阶段失败；现场保留并改名为
+  `..._failed_lfs_20260806_0005`，随后用 `GIT_LFS_SKIP_SMUDGE=1` 对同一提交重建成功。
+  模型代码、数据、预训练权重与 checkpoint 均不依赖该动图。当前状态仍严格为
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`；只有 178 `0804_16` 形成 e12+ 成熟负结论并合法
+  释放 GPU0 后，才允许在届时动态空闲的两张 99 卡上依次执行真实 smoke、checkpoint 更新与
+  formal iter50 五门槛。
+- 并行现场：252 固定 GPU0/1 已进入最终 e72 iter450，GPU2/3 仍为 `1 MiB/0%`；178
+  `0804_16` 仅用 GPU0 到 e7 iter450，GPU1 外部作业未触碰；99 三卡均为 `10 MiB/0%`。
 
 ## 2026-08-05 23:58 CST：99 的 0804_15 e12 成熟负闭环并释放资源
 

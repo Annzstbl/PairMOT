@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 23:58 CST.
+Last updated: 2026-08-06 00:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,19 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 00:10 CST, `0804_17 quotient-anisotropy product-tangent` also has a clean
+detached `a4914d0` static port on 99. Both remote MMEngine configs load and
+deep-copy, both launchers pass `bash -n`, the exact unit test passes 1/1, and
+full parent/candidate builds match at 22,771,111 parameters and 711 state
+tensors with zero delta. The smoke and formal workdirs do not exist and no GPU
+was used. A first clone failed only on an unrelated missing README LFS GIF and
+is preserved as `..._failed_lfs_20260806_0005`; rebuilding with LFS smudge
+disabled produced the clean authoritative checkout. Keep this route
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` until 178 `0804_16` has mature e12+
+negative evidence and a legal handoff. Fixed-252 has entered final epoch 72 at
+iter 450 on GPU0/1 only; dynamic-178 is at epoch 7 iter 450 on GPU0 only, and
+99 remains idle.
 
 At 23:58 CST, dynamic-99 `0804_15 quotient log-shape consensus` completed
 its mature epoch-12 loop at cls HOTA/DetA/AssA `44.473/36.631/56.799` and

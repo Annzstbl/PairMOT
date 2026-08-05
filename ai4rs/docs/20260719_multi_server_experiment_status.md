@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 23:58 CST。
+更新时间：2026-08-06 00:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,22 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_15 quotient log-shape consensus` | STOPPED/MATURE_NEGATIVE；e12 完整 `44.473/52.042`，相对强父线 `-3.816/-2.497` | e4/e8/e12 成熟负闭环后精确停止；GPU0/1 已释放，GPU2 未动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent` | STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；99 双卡端口静态闭环，参数/state 增量 0 | 等待 178 的 0804_16 e12+ 合法交接；当前不创建 workdir、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E72；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e71 iter700 | e64→e68 双升，继续最终 e72；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 完整 `34.257/37.860`，相对强父线双正且四项 AP 同升 | e4 仅作早期正信号，继续 e8/e12+；0804_17 仅静态验证，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/E72_FINAL；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e72 iter450 | 等待最终 checkpoint、AP 与 TrackEval；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 完整双正且四项 AP 同升，到 e7 iter450 | 继续 e8/e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 00:10 CST：0804_17 的 99 静态端口就绪
+
+- clean detached `a4914d0` 的 99 隔离 checkout 已补齐 `2xb4` formal/smoke 配置与启动器；
+  两配置远端加载和 `deepcopy`、两 launcher `bash -n`、精确单测 `1/1` 及父/候选完整构建
+  全部通过。父/候选均为 `22,771,111` 参数、711 states、增量 0，两个目标 workdir 均不存在。
+- 初次 clone 因无关 README 的缺失 LFS GIF 失败，现场保留为 `..._failed_lfs_20260806_0005`；
+  `GIT_LFS_SKIP_SMUDGE=1` 重建后仓库 clean。未执行 smoke、未创建正式目录、未占 GPU，状态仍为
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，只在 178 的 0804_16 e12+ 成熟交接后进入五门槛。
+- 00:08 现场为 252 固定 GPU0/1 e72 iter450、178 GPU0 e7 iter450；99 三卡空闲，178 GPU1
+  外部作业与 252 GPU2/3 均未触碰。
 
 ## 2026-08-05 23:58 CST：99 的 0804_15 e12 成熟停止
 
