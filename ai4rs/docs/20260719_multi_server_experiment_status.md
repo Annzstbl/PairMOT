@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 10:58 CST。
+更新时间：2026-08-05 11:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,22 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；零参数/state，真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `1791967` | 继续 e4/e8/e12 和成熟节点；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `42.596/47.448`，PGID `2390925` e12 | e8 不早停，继续完整 e12；外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E36+；e32 `53.309/59.320`，严格总和仍差 `5.701`，PGID `823929` e36 | 较 e28 双升，继续 e36+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e37 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480` | GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 11:27 CST：252 product-tangent e36 完整闭环
+
+- e36 同一 checkpoint 的 cls HOTA/DetA/AssA `53.326/44.846/65.452`，det
+  `59.293/52.962/68.706`，和 `112.619`；距严格 `54.437/62.393/118.330` 仍差
+  `1.111/3.100/5.711`。相对 e32 为 `+0.017/-0.027`，但 pair mAP/AP50 升到
+  `0.3057/0.5242`、both-independent 升到 `0.3479/0.5678`，故 PGID `823929` 已恢复 e37，
+  固定 GPU0/1 继续 e40+，GPU2/3 不动。
+- 414,028,918-byte checkpoint meta `36/37368`，12 个 residual 最大绝对值 `0.1192054`，
+  642 个浮点张量全有限；5416/50 检测记录、28 CSV、108 个非空评估文件、50 个非空预测、
+  `async_done=1` 完整，TrackEval 415.6 秒。
+- 同步进度：178 `0804_10` 到 e4 iter350，99 `0804_11` 到 e2 iter800；197 `0804_09`
+  GPU0/1 主进程仍活跃但共享盘 I/O 拥塞，未稳定产出 e12 checkpoint，保持原进程等待完整节点。
 
 ## 2026-08-05 10:58 CST：99 启动 center-tangent + log-shape consensus
 

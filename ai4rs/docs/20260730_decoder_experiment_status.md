@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 10:58 CST
+更新时间：2026-08-05 11:27 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E36+` | e32 完整 `53.309/59.320`，同点和 `112.629`、严格仍差 `5.701`；较 e28 双升且 AP/DetA 继续升，PGID `823929` 已到 e36，GPU2/3 不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E40+` | e36 完整 `53.326/59.293`，同点和 `112.619`、严格仍差 `5.711`；较 e32 为 `+0.017/-0.027`，轨迹指标近平台但 AP 微升，PGID `823929` 已恢复 e37，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | axis-Frenet e12 成熟停止；新线真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480`，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | 保留成熟 terminal log-size/周期角共识，只新增 center product-tangent；零参数/state，真实 DDP smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1791967`，GPU2 外部任务不动。 |
 | 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.596/47.448`，相对直接 product-tangent 为 `-4.077/-6.474`；不以 e8 否决，PGID `2390925` 已到 e12，继续完整评测。 |
@@ -27,6 +27,24 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 11:27 CST：product-tangent e36 完整闭环，继续 e40 成熟复核
+
+- 252 `0804_01 product-tangent` e36 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `53.326/44.846/65.452`，det 为 `59.293/52.962/68.706`，同点和 `112.619`；距离严格
+  `54.437/62.393/118.330` 三门槛仍差 `1.111/3.100/5.711`，不得登记成功。相对 e32 HOTA
+  仅 `+0.017/-0.027`、总和 `-0.010`，说明成熟轨迹曲线已经接近平台；但 pair mAP/AP50
+  升至 `0.3057/0.5242`，both-independent 升至 `0.3479/0.5678`，因此保留 e40+ 复核，
+  不按单点波动提前停止。
+- `epoch_36.pth` 为 414,028,918 bytes，meta `36/37368`；12 个 iterative-cls residual
+  均已训练且有限，最大绝对值 `0.1192054`，642 个浮点张量全有限。检测为 5416 records/
+  50 sequences；TrackEval 产出 28 个 CSV、108 个非空文件、50 个非空预测，
+  `async_done=1`，用时 415.6 秒。正式 PGID `823929` 已恢复 e37，仍固定 GPU0/1，
+  GPU2/3 保持空闲。
+- 同步审计：178 `0804_10` 到 e4 iter350，99 `0804_11` 到 e2 iter800；两线日志的
+  total/DN/Encoder/grad 有限。197 `0804_09` 主进程及 GPU0/1 仍活跃，但共享盘 I/O 拥塞，
+  尚未稳定产出 e12 checkpoint；不重启、不迁移，继续等待同点完整评估。各机外部 GPU 任务
+  均未触碰。
 
 ## 2026-08-05 10:58 CST：center-tangent + log-shape consensus 通过 99 五项门槛
 
