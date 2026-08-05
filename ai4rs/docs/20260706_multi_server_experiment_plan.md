@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 20:06 CST.
+Last updated: 2026-08-05 20:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,18 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 20:11 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 60
+at cls HOTA/DetA/AssA `54.713/45.662/67.571` and det
+`61.540/54.262/72.360`. Classification is `0.276` above the final Encoder,
+but detection remains `0.853` below it and the sum `116.253` is `2.077` short
+of the strict target. Relative to epoch 56, HOTA rose `0.139/0.224`; only cls
+AssA moved slightly down by `0.034`, while both DetA values and det AssA rose.
+The trajectory therefore retains fixed GPU0/1 through epoch 64+, with GPU2/3
+unused. Its trained/finite 446,932,022-byte checkpoint, four AP diagnostics,
+5416/50 detections, 28 CSVs, 108 nonempty files, 50 predictions, and
+`async_done=1` are complete; TrackEval took 412.6 seconds. Current progress is
+epoch 61 iter 350.
 
 At 20:06 CST, dynamic-99 `0804_13 hemisphere-fold center + log-shape
 consensus` was stopped only after complete epoch-12 evidence. Epoch 12 is cls

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 20:06 CST
+更新时间：2026-08-05 20:11 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/E60_EVALUATING/TO_E64+` | e60 的 446,932,022-byte checkpoint 已训练且 642 张量有限，同点检测/TrackEval 尚未闭环；GPU2/3 不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E64+` | e60 完整 `54.713/61.540`，同点和 `116.253`、严格仍差 `2.077`；较 e56 双升 `+0.139/+0.224`，已到 e61 iter350，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `33.145/37.230`；相对强父线 `+0.296/-0.089`，检测侧 AssA 净增但 DetA 回落，不以 e4 否决；已到 e6 iter1000，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_15 ... quotient log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_13 在 e12 成熟负差后停止；新线真实 smoke/checkpoint 与 formal iter50 五门槛通过，已到 iter100，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
@@ -29,6 +29,22 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 GPU0 通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛；e4 已完整闭环，当前登记 `RUNNING/TO_E8+`，
 不触碰 GPU1 外部任务。
+
+## 2026-08-05 20:11 CST：252 e60 继续双升但未过严格门槛
+
+- 固定 GPU0/1 的 `0804_01 factorized product-tangent` e60 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `54.713/45.662/67.571`，det 为 `61.540/54.262/72.360`。cls 严格高于
+  Encoder `54.437` 达 `0.276`，det 仍低于 `62.393` 达 `0.853`；同点和 `116.253`，距严格
+  `>118.330` 尚差 `2.077`，因此未达目标。
+- 相对 e56，HOTA 双升 `+0.139/+0.224`；cls DetA/AssA 为 `+0.164/-0.034`，det 为
+  `+0.116/+0.376`。除 cls AssA 的极小波动外，检测覆盖与关联仍共同改善，未形成成熟平台；
+  该慢线继续 e64+，而不是在最近完整节点提前停止。
+- e60 pair mAP/AP50 `0.313658/0.528289`、both-independent `0.354370/0.567988`，相对 e56
+  为 `+0.000287/-0.000615/+0.001002/+0.000392`，总体持平。446,932,022-byte checkpoint 的
+  iterative-cls/DN 已训练，642 个浮点张量有限；5416/50、28 CSV、108 非空文件、50 preds、
+  `async_done=1` 完整，TrackEval 用时 412.6 秒。
+- 20:10 原 PGID `823929` 已在 e61 iter350，固定 GPU0/1 各约 21.6 GiB，GPU2/3 为
+  `1 MiB/0%`。99 的 `0804_15` 与 178 的 `0804_14` 同时保持各自合规资源运行。
 
 ## 2026-08-05 20:06 CST：0804_13 e12 成熟停止，0804_15 在 99 五门槛接替
 

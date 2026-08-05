@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 20:06 CST。
+更新时间：2026-08-05 20:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,19 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 smoke、checkpoint 与 formal iter50 五门槛通过，到 iter100 | 继续 e4/e8/e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/E60_EVALUATING/TO_E64+；e60 checkpoint 已训练且 642 张量有限 | 等同点检测/TrackEval；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E64+；e60 `54.713/61.540`，严格和仍差 `2.077`；到 e61 iter350 | e56→e60 双升，继续 e64+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `33.145/37.230`，相对强父线 `+0.296/-0.089`；到 e6 iter1000 | e4 只作归因，继续 e8/e12+；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 20:11 CST：252 e60 同点闭环
+
+- e60 cls HOTA/DetA/AssA `54.713/45.662/67.571`，det `61.540/54.262/72.360`；cls 过最终
+  Encoder `0.276`，det 仍低 `0.853`，同点和 `116.253` 距严格门槛尚差 `2.077`。
+- 较 e56 HOTA `+0.139/+0.224`，cls DetA/AssA `+0.164/-0.034`，det
+  `+0.116/+0.376`；成熟曲线尚未平台，固定 GPU0/1 继续 e64+，GPU2/3 未用。
+- pair mAP/AP50 `0.313658/0.528289`、both-independent `0.354370/0.567988`；
+  446,932,022-byte checkpoint、训练语义、642 张量、5416/50、28 CSV、108 非空文件、50 preds、
+  `async_done=1` 和 412.6 秒 TrackEval 完整。20:10 已到 e61 iter350。
 
 ## 2026-08-05 20:06 CST：99 成熟交接到 0804_15
 
