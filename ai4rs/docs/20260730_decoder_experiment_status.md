@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 17:36 CST
+更新时间：2026-08-05 18:22 CST
 
 ## 当前研究原则
 
@@ -15,8 +15,8 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E56+` | e52 完整 `54.314/60.978`，同点和 `115.292`、严格仍差 `3.038`；较 e48 双升 `+0.146/+0.369`，已到 e53 iter1000，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `43.401/48.520`，相对强父线 e8 `-1.601/-0.563`；e4 早期双正未保持，但不以 e8 直接否决，已到 e11 iter500。 |
-| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `30.896/37.806`，相对强父线 e4 `-1.953/+0.487`；分类/AP 较弱但不以 e4 直接否决，已到 e5 iter300。 |
+| 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_12 e12 成熟为 `47.019/52.807` 后停止；新线真实 smoke、checkpoint 与 formal iter50 五门槛通过，PGID `4074056`。GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `30.896/37.806`，相对强父线 e4 `-1.953/+0.487`；不以 e4 直接否决，18:22 已到 e8 iter350，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -25,8 +25,33 @@
 `0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
 
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
-`0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
-checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+`0804_12 spherical-midpoint center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；接替者
+`0804_14 hemisphere-boundary center + log-shape consensus` 已在 GPU0 通过真实单卡 smoke、
+checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 18:22 CST：0804_12 e12 成熟停止，0804_14 五门槛接替
+
+- `0804_12 spherical-midpoint center + log-shape consensus` e12 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `47.019/37.990/60.804`，det 为 `52.807/46.629/61.984`；相对强父线
+  `0803_13` e12 分别低 `1.270/1.732`，其中 DetA 低 `3.445/3.162`，而 AssA 为
+  `+2.639/+0.174`。pair mAP/AP50 `0.2436/0.4206`、both-independent
+  `0.2865/0.4717`，相对父线四项低 `0.017939/0.044163/0.023210/0.051163`。e4 的关联型
+  早期增益到 e8/e12 已转为稳定定位损伤，因此这是完整成熟窗口后的停止，不是 e4/e8 早停。
+- e12 checkpoint 为 381,071,860 bytes，iterative-cls/DN 已训练，642 个浮点张量全部有限；
+  5416 records/50 sequences、50 detection files、28 CSV、108 nonempty files、50 preds、
+  `async_done=1` 完整，TrackEval 用时 241.2 秒。确认 9 个成员属于 PGID `3968124` 后仅对该
+  进程组发送 TERM，成员 `9→0`，GPU0 连续空闲；GPU1 外部负载未触碰。
+- `0804_14 hemisphere-boundary center + mature log-shape consensus` 随后在隔离 clean HEAD
+  `6666085` 的 GPU0 运行四步真数据 smoke：loss `21.3728/20.6239/20.8790/21.1618`、grad
+  `59.6014/67.0472/75.8907/78.8500`，DN/Encoder 全有限；364,506,676-byte checkpoint 的
+  iterative-cls/DN 已训练且 642 个浮点张量有限，致命扫描 0。
+- fresh formal screen/PGID `4074054/4074056` 于 18:19 启动；iter50 `0.9456 s/iter`、
+  loss/grad `21.0279/103.0120`，total、DN、Encoder proposal 全有限，GPU0 约 31.4 GiB，
+  GPU1 外部任务保持不动，致命扫描 0。screen/process、GPU、正式日志、iter50、有限值五门槛
+  全部通过后才登记 `RUNNING/TO_E4+`；继续收集 e4/e8/e12+，不得以早期节点直接否决。
+- 并行审计：252 固定 GPU0/1 到 e55 iter300，GPU2/3 仍为 `1 MiB/0%`；99 使用正确的
+  `WY10.106.14.99` 入口，动态 GPU0/1 到 e8 iter350，GPU2 未触碰；197 仍保持
+  `STOPPED/HOST_CPU_THROTTLED`。
 
 ## 2026-08-05 17:36 CST：0804_14 的 178 隔离动态 checkout 就绪但不占卡
 

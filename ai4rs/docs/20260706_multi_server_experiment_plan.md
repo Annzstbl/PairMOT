@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 17:36 CST.
+Last updated: 2026-08-05 18:22 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,31 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 18:22 CST, dynamic-178 `0804_12 spherical-midpoint center + log-shape
+consensus` was stopped only after its complete epoch-12 checkpoint, detector,
+and TrackEval closure. Epoch 12 is cls HOTA/DetA/AssA
+`47.019/37.990/60.804` and det `52.807/46.629/61.984`, respectively
+`1.270/1.732` HOTA below the mature parent; the main regression is DetA while
+AssA is slightly or clearly positive. All four AP diagnostics are also below
+the parent. This e4/e8/e12 window supports a mature localization-loss
+diagnosis, not an early rejection. Its 381,071,860-byte checkpoint, trained
+iterative-cls/DN heads, 642 finite tensors, 5416/50 detections, 28 CSVs, 108
+nonempty files, 50 predictions, and `async_done=1` are retained. Exact PGID
+`3968124` reached zero members and GPU0 was released without touching the
+external GPU1 job.
+
+The zero-state `0804_14 hemisphere-boundary center + mature log-shape
+consensus` then passed a real four-step GPU0 smoke with finite total, DN,
+encoder, and gradient values; its 364,506,676-byte checkpoint has trained
+iterative-cls/DN heads and 642 finite tensors. Fresh formal screen/PGID
+`4074054/4074056` reached iter 50 at `0.9456 s/iter`, loss/grad
+`21.0279/103.0120`, finite total/DN/encoder proposal terms, real GPU0
+residency, and zero fatal signatures. It is now `RUNNING/TO_E4+`; retain
+epochs 4/8/12+ before a mature decision. Fixed-252 is at epoch 55 iter 300 on
+GPU0/1 with GPU2/3 unused. Dynamic-99 is at epoch 8 iter 350 on GPU0/1 through
+the configured `WY10.106.14.99` route, with GPU2 untouched. Server 197 remains
+prohibited by host CPU throttling.
 
 At 17:36 CST, the 178 dynamic checkout for `0804_14` is prepared at
 `/data1/users/litianhao01/PairMOT_hemisphereboundarycenterlogshape_0804_14_178`,
