@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 16:13 CST。
+更新时间：2026-08-05 16:26 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke/checkpoint/formal iter50 五门槛通过，PGID `1891973` | 收集 e4/e8/e12+；不得用 e4/e8 直接淘汰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke/checkpoint/formal iter50 五门槛通过，到 e1 iter900 | 收集 e4/e8/e12+；`0804_14` 双端口 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.168/60.609`，严格总和仍差 `3.553`；到 e50 iter650 | e44→e48 双升且 DetA/AssA/AP 全升，继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `34.909/42.639`，相对强父线 `+2.060/+5.320`，四项 AP 全正；到 e6 iter1000 | e4 仅早期归因，继续 e8/e12+；即使 GPU1 空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.168/60.609`，严格总和仍差 `3.553`；到 e51 iter250 | e44→e48 双升且 DetA/AssA/AP 全升，继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `34.909/42.639`，相对强父线 `+2.060/+5.320`，四项 AP 全正；到 e7 iter800 | e4 仅早期归因，继续 e8/e12+；`0804_14` 静态端口不占 GPU | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 16:26 CST：0804_14 球面半空间最近投影静态就绪
+
+- 新单因素 `0804_14 hemisphere-boundary center + mature log-shape consensus` 只处理中心
+  detail 的运动反向样本：已经可行的 detail 恒等；反向 detail 去掉负纵向分量并把横向分量
+  归一到原范数，从而落在球面闭半空间的最近边界；严格反平行使用确定性二维垂直方向。它避免
+  `0804_13` 折返的等幅过冲，不是类别感知、reweight、gate 或 scale 扫描。
+- terminal-only、零参数/state、交换等变、范数保持，DN/分类/loss/attention/层数/reference
+  全不变，额外开销仅二维投影与归一化。99/178 隔离静态 checkout 分别为 clean HEAD
+  `66e38e8/6666085`；定向测试、config deepcopy、launcher 语法和完整父/新构建均通过，
+  参数/state `22,771,111/711`、增量 0、smoke 4 iter。
+- 两端 smoke/formal workdir 均不存在，严格登记 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`；不抢占
+  当前 99/178 训练。16:26 审计为 99 e1 iter900、178 e7 iter800、252 e51 iter250，均有限；
+  先闭环 178 e8 与 252 e52，再选择合法动态端口。
 
 ## 2026-08-05 16:13 CST：99 正确端口恢复与 0804_13 五门槛启动
 

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 16:13 CST
+更新时间：2026-08-05 16:26 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E52+` | e48 完整 `54.168/60.609`，同点和 `114.777`、严格仍差 `3.553`；较 e44 双升 `+0.284/+0.415`，已到 e50 iter650，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.909/42.639`，相对强父线 e4 `+2.060/+5.320`，AP 四项全正；仅作早期正归因，已到 e6 iter1000，继续 e8/e12+。 |
-| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 正确 SSH 端口恢复控制后，成熟负线 `0804_11` 已精确停止；新线真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1891973`。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E52+` | e48 完整 `54.168/60.609`，同点和 `114.777`、严格仍差 `3.553`；较 e44 双升 `+0.284/+0.415`，已到 e51 iter250，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.909/42.639`，相对强父线 e4 `+2.060/+5.320`，AP 四项全正；仅作早期正归因，已到 e7 iter800，继续 e8/e12+。 |
+| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 正确 SSH 端口恢复控制后，成熟负线 `0804_11` 已精确停止；新线真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过，已到 e1 iter900。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,28 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 16:26 CST：0804_14 最近球面半空间投影完成双端口静态闭环
+
+- `0804_11` 的 rank-one 删除会同时损伤 DetA/AssA/AP，而 `0804_12` 的球面中点在 e4 给出
+  双正信号；`0804_13` 的折返虽保留范数和横向细节，但会把负纵向分量等幅翻到正侧。因此
+  下一单因素 `0804_14 hemisphere-boundary center + mature log-shape consensus` 对已经位于
+  运动一致闭半空间的 detail 完全恒等，只把运动反向 detail 移到球面半空间边界：去掉负纵向
+  分量后将横向分量归一到原范数；严格反平行时采用确定性的二维垂直方向。这是球面测地距离下
+  的最近可行方向，而不是 scale/gate/reweight 扫描。
+- 结构仍仅在 terminal normal query 生效，保留成熟 log-size/周期角共识；DN、分类、loss、
+  attention、层数、递归 reference 与辅助输出不变。实现零参数/state、交换等变、完整范数
+  保持、class-agnostic，额外计算只有二维内积、投影与归一化，无明显计算量增长。
+- 99 隔离静态 checkout
+  `/data/users/wangying01/lth/PairMOT_hemisphereboundarycenterlogshape_0804_14_static99`
+  clean detached HEAD `66e38e8`；178 等价物理 `1x8` 端口在
+  `/data1/users/litianhao01/PairMOT_hemisphereboundarycenterlogshape_0804_14_static178`
+  clean detached HEAD `6666085`。两端定向测试 `1/1 OK`、配置 deepcopy、launcher `bash -n`
+  与父/新完整构建通过：`22,771,111` 参数、711 states、增量 0、smoke 4 iter；99/178 的
+  smoke/formal 目标 workdir 均不存在，状态严格为 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`。
+- 当前不抢占任何训练卡：99 `0804_13` 到 e1 iter900；178 `0804_12` 到 e7 iter800，仅用
+  GPU0；252 `0804_01` 到 e51 iter250，固定 GPU0/1。关键 total/DN/Encoder/grad 全有限，
+  继续优先收集 e8/e52 与同 checkpoint 异步评测，再决定 `0804_14` 的动态部署。
 
 ## 2026-08-05 16:13 CST：99 控制恢复，0804_11 成熟停止并由 0804_13 接替
 

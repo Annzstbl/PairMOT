@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 16:13 CST.
+Last updated: 2026-08-05 16:26 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,22 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 16:26 CST, a zero-state successor `0804_14 hemisphere-boundary center +
+mature log-shape consensus` was statically completed on isolated 99 and 178
+routes. It leaves already feasible detail unchanged and sends only
+motion-opposing center detail to the nearest point on the spherical closed
+hemisphere boundary while preserving its full norm. This is a geometric
+projection, not a class-aware, reweight, gate, or scale scan; DN,
+classification, losses, attention, depth, and recurrent references stay
+unchanged. Both routes pass the targeted swap/DN/gradient test, config
+deepcopy, launcher syntax, and complete parent/candidate construction at
+`22,771,111` parameters and 711 state tensors with zero delta. Their target
+workdirs are absent, so the state is strictly
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`. Do not consume a GPU until the active
+178 epoch-8 and 252 epoch-52 same-checkpoint evaluations are collected. The
+live snapshot is 99 epoch 1 iter 900, 178 epoch 7 iter 800 on one GPU, and
+fixed-252 epoch 51 iter 250, all finite.
 
 At 16:13 CST, control of server 99 was restored through its configured SSH
 alias on port 2367; the earlier probes had incorrectly used port 22. The
