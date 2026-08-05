@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 18:22 CST。
+更新时间：2026-08-05 18:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E8+；e4 `30.896/37.806`，相对强父线 `-1.953/+0.487`；到 e8 iter350 | e4 不直接否决，继续 e8/e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.261/47.265`，相对强父线 `-3.741/-1.818`；到 e9 iter350 | e8 不直接否决，继续 e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E56+；e52 `54.314/60.978`，严格总和仍差 `3.038`；到 e53 iter1000 | e48→e52 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E60+；e56 `54.574/61.316`，严格总和仍差 `2.440`；到 e57 iter450 | e52→e56 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `4074056` | 0804_12 e12 成熟负差后已停止；继续新线 e4/e8/e12+，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 18:45 CST：252 e56 与 99 e8 同 checkpoint 闭环
+
+- 252 `0804_01` e56 cls HOTA/DetA/AssA `54.574/45.498/67.605`，det
+  `61.316/54.146/71.984`；cls 过最终 Encoder `0.137`，det 仍低 `1.077`，同点和
+  `115.890` 距严格门槛仍差 `2.440`。相对 e52 HOTA `+0.260/+0.338` 且 DetA/AssA 全升，
+  固定 GPU0/1 继续 e60+；GPU2/3 未用。
+- e56 pair mAP/AP50 `0.313371/0.528904`、both-independent `0.353368/0.567596`；
+  441,451,318-byte checkpoint 的 iterative-cls/DN 与 642 张量检查通过，5416/50、28 CSV、
+  108 非空文件、50 preds、`async_done=1` 和 382.3 秒 TrackEval 完整。
+- 99 `0804_13` e8 cls HOTA/DetA/AssA `41.261/34.161/52.333`，det
+  `47.265/42.563/54.363`；相对强父线 HOTA `-3.741/-1.818`，定位/覆盖损伤仍是主因，但不以
+  e8 直接否决，动态 GPU0/1 继续 e12+，GPU2 不动。
+- e8 pair mAP/AP50 `0.199485/0.367706`、both-independent `0.244864/0.430787`；
+  375,530,998-byte checkpoint、iterative-cls/DN、642 张量、5416/50、28/108、50 preds、
+  `async_done=1` 和 280.1 秒 TrackEval 完整。18:45 进度为 252 e57 iter450、99 e9 iter350、
+  178 `0804_14` e2 iter600，三线关键数值有限且资源边界未变。
 
 ## 2026-08-05 18:22 CST：178 e12 成熟交接到 0804_14
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 18:22 CST.
+Last updated: 2026-08-05 18:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 18:45 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 56
+at cls HOTA/DetA/AssA `54.574/45.498/67.605` and det
+`61.316/54.146/71.984`. Classification is `0.137` above the final Encoder,
+but detection remains `1.077` below it and the sum `115.890` is still `2.440`
+short of the strict target. Since both HOTA values and all DetA/AssA values
+rose from epoch 52, retain fixed GPU0/1 through epoch 60+ and leave GPU2/3
+unused. The 441,451,318-byte checkpoint, trained iterative-cls/DN heads, 642
+finite tensors, AP diagnostics, 5416/50 detections, 28 CSVs, 108 nonempty
+files, 50 predictions, and `async_done=1` are complete.
+
+Dynamic-99 `0804_13 hemisphere-fold center + log-shape consensus` closed
+epoch 8 at `41.261/47.265`, respectively `3.741/1.818` below the strong parent
+at the same point. DetA is substantially lower, while only det AssA is
+slightly positive; all four AP diagnostics are below the parent. This remains
+an epoch-8 diagnosis, so keep GPU0/1 through epoch 12+ and do not touch GPU2.
+Its 375,530,998-byte checkpoint, trained heads, 642 finite tensors, and full
+detection/TrackEval artifacts are verified. Current progress is 252 epoch 57
+iter 450, 99 epoch 9 iter 350, and dynamic-178 `0804_14` epoch 2 iter 600 on
+GPU0; the external 178 GPU1 job remains untouched.
 
 At 18:22 CST, dynamic-178 `0804_12 spherical-midpoint center + log-shape
 consensus` was stopped only after its complete epoch-12 checkpoint, detector,

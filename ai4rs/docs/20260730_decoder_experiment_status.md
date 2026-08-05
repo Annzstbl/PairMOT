@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 18:22 CST
+更新时间：2026-08-05 18:45 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E56+` | e52 完整 `54.314/60.978`，同点和 `115.292`、严格仍差 `3.038`；较 e48 双升 `+0.146/+0.369`，已到 e53 iter1000，GPU2/3 不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E60+` | e56 完整 `54.574/61.316`，同点和 `115.890`、严格仍差 `2.440`；较 e52 双升 `+0.260/+0.338`，已到 e57 iter450，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_12 e12 成熟为 `47.019/52.807` 后停止；新线真实 smoke、checkpoint 与 formal iter50 五门槛通过，PGID `4074056`。GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `30.896/37.806`，相对强父线 e4 `-1.953/+0.487`；不以 e4 直接否决，18:22 已到 e8 iter350，GPU2 不动。 |
+| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.261/47.265`，相对强父线 e8 `-3.741/-1.818`；不以 e8 直接否决，已到 e9 iter350，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -28,6 +28,28 @@
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；接替者
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 GPU0 通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 18:45 CST：252 e56 延续双升；99 e8 中期负差但不早停
+
+- 252 固定 GPU0/1 的 `0804_01 factorized product-tangent` e56 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `54.574/45.498/67.605`，det 为 `61.316/54.146/71.984`。cls 已严格超过
+  Encoder `0.137`，det 仍低 `1.077`；同点和 `115.890`，距严格 `>118.330` 仍差 `2.440`，
+  因而未达标。相对 e52 HOTA 双升 `+0.260/+0.338`，DetA/AssA 也全部上升，曲线未平台，
+  固定 GPU0/1 继续 e60+；18:45 已到 e57 iter450，GPU2/3 保持 `1 MiB/0%`。
+- e56 pair mAP/AP50 `0.313371/0.528904`、both-independent
+  `0.353368/0.567596`，较 e52 四项仅轻微回落，但 tracking 的 DetA/AssA 同步上升。441,451,318-byte
+  checkpoint 的 iterative-cls/DN 已训练，642 个浮点张量有限；5416/50、28 CSV、108 非空文件、
+  50 preds、`async_done=1` 完整，TrackEval 用时 382.3 秒。
+- 99 动态 GPU0/1 的 `0804_13 hemisphere-fold center + log-shape consensus` e8 cls
+  HOTA/DetA/AssA `41.261/34.161/52.333`，det `47.265/42.563/54.363`；相对强父线 `0803_13`
+  e8 HOTA `-3.741/-1.818`，cls DetA/AssA `-4.976/-1.664`，det `-4.162/+1.009`。折返仍表现为
+  定位损伤，只在 det AssA 留下小幅正差；但 e8 不是 decoder 的直接否决点，继续到 e12+。
+- e8 pair mAP/AP50 `0.199485/0.367706`、both-independent `0.244864/0.430787`，相对父线四项
+  `-0.033994/-0.057097/-0.041002/-0.063699`。375,530,998-byte checkpoint 的 iterative-cls/DN
+  已训练且 642 张量有限；5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 完整，
+  TrackEval 用时 280.1 秒。18:45 已到 e9 iter350，GPU2 未触碰。
+- 178 的 `0804_14` 同期只用 GPU0 到 e2 iter600，total/DN/Encoder/grad 有限；GPU1 外部任务
+  未动。三线均保留各自下一成熟节点，不将“checkpoint 有效”或“单侧过线”误写为目标成功。
 
 ## 2026-08-05 18:22 CST：0804_12 e12 成熟停止，0804_14 五门槛接替
 
