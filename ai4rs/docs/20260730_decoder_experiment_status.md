@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 14:32 CST
+更新时间：2026-08-05 14:43 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E48+` | e44 完整 `53.884/60.194`，同点和 `114.078`、严格仍差 `4.252`；较 e40 双升 `+0.434/+0.545`，PGID `823929` 已进 e45，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | `0804_10` e12 成熟双负后精确停止；新候选真 smoke、checkpoint 和 formal iter50 五门槛通过，screen/PGID `3968121/3968124`，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `39.410/46.043`，较自身 e4 双升但相对成熟父线仍为 `-5.592/-3.040`，主要损伤 DetA；不以 e8 否决，PGID `1791967` 已恢复 e9，GPU2 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e12 完整 `44.100/51.014`，相对成熟父线仍为 `-4.189/-3.525`；正式共享日志已进 e13，但 99 SSH 控制链路超时，待恢复后精确停止，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,30 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 14:43 CST：99 center-tangent e12 成熟负差；控制链路待恢复
+
+- 99 `0804_11 center-tangent + log-shape consensus` e12 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `44.100/36.004/56.845`，det 为 `51.014/46.188/58.474`，同点和
+  `95.114`，距严格 cls/det/总和仍差 `10.337/11.379/23.216`。相对成熟 terminal
+  log-shape 父线 `0803_13` e12 的 cls `48.289/41.435/58.165`、det
+  `54.539/49.791/61.810`，HOTA 为 `-4.189/-3.525`，cls DetA/AssA 为
+  `-5.431/-1.320`，det 为 `-3.603/-3.336`。pair mAP/AP50
+  `0.219747/0.394447`、both-independent `0.262616/0.449127`，相对父线四项也低
+  `0.041793/0.070316/0.047094/0.073736`。虽然自身 e8→e12 HOTA 继续回升
+  `+4.690/+4.971`，e8/e12 的定位、关联与 AP 均被强父线同步支配，e4/e8/e12 完整窗口已
+  足以形成成熟负结论；这不是 e4/e8 直接否决。
+- `epoch_12.pth` 为 381,012,982 bytes，meta `12/12456`；12 个 iterative-cls residual
+  最大绝对值 `0.0877105`，DN 两帧绝对头差异最大值 `0.0846600`，iterative-cls/DN 已训练，
+  642 个浮点张量全有限。检测与 TrackEval 为 5416 records、50 sequences、28 CSV、
+  108 个非空文件、50 preds、`async_done=1`，用时 279.2 秒。
+- 99 正式共享日志仍在 14:36 更新至 e13 iter300，说明训练未静默退出；但从控制机及 178
+  到 `10.106.14.99:22` 的两条独立 SSH 探针均在 banner/连接阶段超时，无法安全核验 PGID/GPU
+  或执行精确 TERM。因此状态登记为 `RUNNING/CONTROL_UNREACHABLE`，不伪报已停止，也不通过
+  共享盘注入控制操作；链路恢复后优先精确停止 PGID `1791967` 并连续核验动态卡释放。
+- 197 可连接但每次短命令约 26 秒；抽样 CPU 仍仅约 `129–140 MHz`、load 约 14，GPU0–3
+  空闲而 GPU4 有外部任务。该主机仍不登记为安全可用资源，不在异常 CPU 状态下恢复训练或
+  启动新候选。
 
 ## 2026-08-05 14:32 CST：covariant-Frenet e12 成熟停止；spherical-midpoint 五门槛接替；252 e44 继续上升
 

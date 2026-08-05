@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 14:32 CST.
+Last updated: 2026-08-05 14:43 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 14:43 CST, dynamic-99 `0804_11` closed epoch 12 at cls HOTA/DetA/AssA
+`44.100/36.004/56.845` and det `51.014/46.188/58.474`. Relative to mature
+terminal-log-shape parent `0803_13` at the same checkpoint, HOTA is
+`-4.189/-3.525`; DetA, AssA, pair AP, and both-independent AP all decrease.
+The candidate itself still rises `+4.690/+4.971` from epoch 8, but the complete
+epoch-4/8/12 window and aligned parent dominance now support a mature negative
+decision rather than an early-epoch rejection. The 381,012,982-byte checkpoint
+is meta `12/12456`, iterative-cls/DN and all 642 floating tensors are finite,
+and evaluation closed with 5416/50, 28 CSVs, 108 nonempty files, 50 predictions,
+and `async_done=1` in 279.2 seconds.
+
+The 99 shared formal log continued into epoch 13, but both the controller and
+178 timed out connecting to `10.106.14.99:22`. Until control recovers, do not
+claim PGID `1791967` stopped and do not inject control through shared storage;
+record it as `RUNNING/CONTROL_UNREACHABLE`, then issue exact TERM and perform
+consecutive dynamic-GPU release checks as soon as SSH returns. Server 197 is
+also still unsafe: command round trips are about 26 seconds and sampled CPU
+frequency remains only `129–140 MHz` at load about 14, so idle GPUs there do
+not justify a resume or new launch.
 
 At 14:32 CST, dynamic-178 `0804_10` closed its mature epoch-12 window at
 cls/det HOTA `46.788/53.443`. Its aligned direct-product-tangent parent is

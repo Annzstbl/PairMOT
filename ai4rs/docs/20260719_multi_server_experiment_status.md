@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 14:32 CST。
+更新时间：2026-08-05 14:43 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `39.410/46.043`，较自身 e4 双升、相对成熟父线仍为 `-5.592/-3.040`，PGID `1791967` 已恢复 e9 | 继续 e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志已进 e13 | SSH 恢复后精确停止 PGID `1791967` 并核验释放；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E48+；e44 `53.884/60.194`，严格总和仍差 `4.252`，PGID `823929` 已进 e45 | e40→e44 双升，继续 e48 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真 smoke、checkpoint、fresh formal iter50 五门槛通过，PGID `3968124` | 收集 e4/e8/e12+；`0804_10` 已按 e4/e8/e12 成熟双负停止；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 14:43 CST：99 e12 闭环与控制链路异常
+
+- `0804_11` e12 cls HOTA/DetA/AssA `44.100/36.004/56.845`、det
+  `51.014/46.188/58.474`；相对成熟 `0803_13` e12 HOTA `-4.189/-3.525`，cls
+  DetA/AssA `-5.431/-1.320`，det `-3.603/-3.336`。pair mAP/AP50
+  `0.219747/0.394447`、both-independent `0.262616/0.449127`，四项相对父线也全部下降。
+  自身 e8→e12 HOTA 仍回升 `+4.690/+4.971`，但 e4/e8/e12 完整窗口和强父线支配已支持
+  成熟停止，不属于 e4/e8 早停。
+- 381,012,982-byte checkpoint meta `12/12456`，residual 最大绝对值 `0.0877105`，
+  iterative-cls/DN 与 642 个浮点张量通过；5416/50、28 CSV、108 非空文件、50 preds、
+  `async_done=1` 与 279.2 秒 TrackEval 完整。
+- 共享正式日志在 14:36 到 e13 iter300，但控制机和 178 到 99 的 SSH 均超时，当前无法安全
+  核验/TERM PGID `1791967`。不伪报停止，也不通过共享盘热注入控制；状态暂记
+  `RUNNING/CONTROL_UNREACHABLE`，链路恢复后立即精确停止并连续复核动态卡释放。
+- 197 14:42 可连接但短命令约 26 秒，CPU 仍约 `129–140 MHz`、load 约 14；GPU0–3 空闲、
+  GPU4 外部任务存在。继续视为 `STOPPED/HOST_CPU_THROTTLED`，不恢复或启动实验。
 
 ## 2026-08-05 14:32 CST：178 成熟接替与 252 e44 完整闭环
 
