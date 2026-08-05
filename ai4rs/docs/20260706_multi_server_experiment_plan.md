@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 01:03 CST.
+Last updated: 2026-08-06 01:28 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:28 CST, `0806_02 log-Euclidean SPD shape product-tangent` completed
+static validation on isolated 99 and 178 checkouts at clean detached `9c5018a`.
+It preserves the successful center tangent and expresses shape by the orthogonal
+log-SPD coordinates `(log(wh), log(w/h)cos(2theta), log(w/h)sin(2theta))` before
+projecting terminal pair detail along detached reference-shape transport. It is
+class-agnostic, adds zero parameters/state, performs no reweighting, and adds
+only constant terminal elementwise work. Both target configs pass deep-copy,
+all launchers pass remote `bash -n`, the exact unit test passes 1/1, and full
+builds report 22,771,111 parameters and 711 state tensors with delta zero.
+Formal and smoke workdirs are absent and no GPU was used. Keep it
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU/FALLBACK_AFTER_0804_17`; do not bypass
+`0804_17` or the mature epoch-12+ handoff of active `0804_16`.
+
+The concurrent live audit at 01:27 CST found fixed-252 `0806_01` at epoch 74
+iteration 300 on GPU0/1 only, while 178 `0804_16` was at epoch 11 iteration 700
+on GPU0 and left the external GPU1 job untouched. Both formal logs remain
+finite in total, DN, Encoder proposal losses, and gradient norm. Continue to
+the scheduled epoch-76/80 and epoch-12+ mature checkpoints respectively.
 
 At 01:03 CST, fixed-252 started `0806_01`, a duration-only continuation of
 the mature `0804_01 factorized product-tangent` from audited epoch 72 to epoch

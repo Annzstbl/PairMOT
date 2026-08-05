@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 01:03 CST。
+更新时间：2026-08-06 01:28 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,22 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_17 quotient-anisotropy product-tangent` | STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；99 双卡端口静态闭环，参数/state 增量 0 | 等待 178 的 0804_16 e12+ 合法交接；当前不创建 workdir、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E73/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；纯时长延长且 optimizer/EMA/LR 连续 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `42.399/47.599`，已到 e9 后段 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E74/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；01:27 到 e74 iter300 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/E11/TO_E12+；e8 完整 `42.399/47.599`，01:27 到 e11 iter700 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 01:28 CST：0806_02 log-SPD product-tangent 静态就绪
+
+- `0806_02` 用 `(log(wh), log(w/h)cos(2θ), log(w/h)sin(2θ))` 的 log-SPD 正交形状坐标，
+  在不改中心切线的前提下做终层 product-tangent transport。结构零参数/state、class-agnostic、
+  无 reweight、无明显计算量增长，严格排在 `0804_17` 之后作为 fallback。
+- 99/178 隔离仓库均 clean detached `9c5018a`；双端配置 deepcopy、launcher `bash -n`、
+  精确单测 `1/1` 与完整构建通过，模型 `22,771,111` 参数、`711` state tensors、增量 0。
+  formal/smoke workdir 均不存在，未使用 GPU，登记
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU/FALLBACK_AFTER_0804_17`。
+- 同时复核存活作业：252 固定 GPU0/1 的 `0806_01` 到 e74 iter300，GPU2/3 未用；178
+  GPU0 的 `0804_16` 到 e11 iter700，GPU1 外部作业未动。正式日志的 total、DN、Encoder
+  proposal loss 与 grad norm 均有限；当前没有 e76/e12 新 checkpoint，继续等待成熟节点。
 
 ## 2026-08-06 01:03 CST：252 的 0806_01 e72→e80 成熟续训启动
 

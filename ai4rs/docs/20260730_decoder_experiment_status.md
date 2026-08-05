@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 01:03 CST
+更新时间：2026-08-06 01:28 CST
 
 ## 当前研究原则
 
@@ -14,8 +14,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E73/TO_E76+` | e72 完整 `55.170/62.165`、同点和 `117.335`，仍差严格目标 `0.995`；因 e68→e72 双 HOTA、DetA/AssA 与 AP 均升，保持模型/优化器/EMA/LR 完全连续延至 e80，e76/e80 完整复核。GPU2/3 始终不用。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；已到 e9 后段，继续到 e12+。GPU1 外部作业不动。 |
+| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E74/TO_E76+` | e72 完整 `55.170/62.165`、同点和 `117.335`，仍差严格目标 `0.995`；01:27 已到 e74 iter300，保持模型/优化器/EMA/LR 完全连续延至 e80，e76/e80 完整复核。GPU2/3 始终不用。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/E11/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；01:27 已到 e11 iter700，继续到 e12+。GPU1 外部作业不动。 |
 | 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -29,6 +29,25 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 01:28 CST：0806_02 log-SPD product-tangent 双端静态闭环
+
+- 在 `0804_17` 之后准备零状态 fallback `0806_02 log-Euclidean SPD shape product-tangent`：保留
+  `0804_01` 成功的中心切线，只把矩形形状写成
+  `(log(wh), log(w/h)cos(2θ), log(w/h)sin(2θ))` 三维 log-SPD 正交坐标，并沿 detached
+  reference shape transport 投影终层 pair detail。它 class-agnostic、无 reweight、零新增参数/state，
+  只增加终层常数逐元素运算；不改变 encoder、proposal、PairDN、head 或训练协议。
+- 最终隔离 checkout 为 99
+  `/data/users/wangying01/lth/PairMOT_logspdproduct_0806_02_99` 与 178
+  `/data1/users/litianhao01/PairMOT_logspdproduct_0806_02_178`，均 clean detached `9c5018a`。
+  两端 formal/smoke 配置均通过 `deepcopy`，四个 launcher 均通过远端 `bash -n`，精确单测
+  `1/1 OK`；父/候选完整构建均为 `22,771,111` 参数、`711` state tensors、增量 0。
+  两端 smoke/formal workdir 均不存在，静态检查显式隐藏 CUDA；状态严格登记为
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU/FALLBACK_AFTER_0804_17`。
+- 01:27 活体复核：252 `0806_01` screen/PGID `1025566/1025568` 到 e74 iter300，GPU0/1
+  各约 19.4 GiB，GPU2/3 仍为 1 MiB；178 `0804_16` screen/PGID `4175889/4175891`
+  到 e11 iter700，PairMOT 只用 GPU0，GPU1 外部任务仍在。两路总 loss、DN、Encoder proposal、
+  grad norm 均有限，尚未出现新的成熟 checkpoint 或异步评测结果。
 
 ## 2026-08-06 01:03 CST：252 成熟 product-tangent 延至 e80 并通过五项门槛
 
