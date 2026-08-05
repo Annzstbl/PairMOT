@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 01:28 CST.
+Last updated: 2026-08-06 01:38 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:38 CST, the independent 99 lane began parallel maturation of `0804_17
+quotient-anisotropy product-tangent` without stopping or rejecting active 178
+`0804_16`. All three 99 GPUs were at 10 MiB with no training process for three
+consecutive checks, so GPU0/1 were selected dynamically; this does not create
+a fixed-index rule for 99. A real two-GPU four-iteration smoke produced a
+364,503,990-byte checkpoint with finite total, DN, Encoder-proposal losses and
+gradient norm, trained iterative-cls/DN state, 642 finite floating tensors, and
+no fatal signature. Fresh formal screen/PGID `1995832/1995834` reached epoch 1
+iteration 50 with lr/loss/grad `2.5488e-6/21.3951/128.3636`, finite DN and
+Encoder-proposal terms, about 19.2 GiB per GPU0/1, and idle GPU2. It therefore
+passes all five gates and is `RUNNING/E1/TO_E4+`; epoch 4 and 8 remain diagnostic
+and cannot directly reject the decoder.
+
+The parallel live audit keeps 178 `0804_16` on GPU0 through epoch 12 iteration
+300 and leaves its external GPU1 job untouched; its epoch-12 checkpoint,
+detection, and TrackEval remain required for a mature conclusion. Fixed-252
+`0806_01` is at epoch 74 iteration 800 on GPU0/1 only and continues toward its
+epoch-76/80 strict audits, with GPU2/3 unused.
 
 At 01:28 CST, `0806_02 log-Euclidean SPD shape product-tangent` completed
 static validation on isolated 99 and 178 checkouts at clean detached `9c5018a`.

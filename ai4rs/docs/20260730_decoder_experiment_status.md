@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 01:28 CST
+更新时间：2026-08-06 01:38 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E74/TO_E76+` | e72 完整 `55.170/62.165`、同点和 `117.335`，仍差严格目标 `0.995`；01:27 已到 e74 iter300，保持模型/优化器/EMA/LR 完全连续延至 e80，e76/e80 完整复核。GPU2/3 始终不用。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/E11/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；01:27 已到 e11 iter700，继续到 e12+。GPU1 外部作业不动。 |
-| 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
+| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E74/TO_E76+` | e72 完整 `55.170/62.165`、同点和 `117.335`，仍差严格目标 `0.995`；01:37 已到 e74 iter800，保持模型/优化器/EMA/LR 完全连续延至 e80，e76/e80 完整复核。GPU2/3 始终不用。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/E12/TO_E12_EVAL` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；01:36 已到 e12 iter300，继续取得 e12 checkpoint、检测和 TrackEval。GPU1 外部作业不动。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | 独立双卡资源连续空闲后并行成熟化；真实 DDP smoke、checkpoint 审计与 formal iter50 五门槛均通过，GPU2 未用。178 的 0804_16 仍完整继续到 e12+，并未因 e8 被否决。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -29,6 +29,22 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 01:38 CST：99 并行启动 0804_17，178 仍完整推进 e12+
+
+- 99 GPU0/1/2 连续三次均为 `10 MiB/0%`（最后一次 GPU2 仅瞬时 `1%`），无 PairMOT
+  或外部训练进程；`0804_17` 隔离仓库仍为 clean detached `a4914d0`，smoke/formal fresh
+  目录均不存在。为避免独立双卡资源空转，在不停止、不否决 178 `0804_16` 的前提下，动态
+  选择当时空闲的 GPU0/1 并行成熟化 `0804_17`；99 的卡号仍是动态选择而非固定授权。
+- 真实两卡 4-iter smoke 的四步 total、DN、Encoder proposal loss 与 grad norm 全有限；
+  364,503,990-byte `iter_4.pth` 通过 iterative-cls/DN 已训练及 642 个浮点张量有限性审计，
+  无 Traceback/OOM/NaN/NCCL/DDP 异常，结束后 GPU0/1 回到 `10 MiB`。
+- fresh formal screen/PGID `1995832/1995834` 在同一 clean checkout 上启动；01:37 正式
+  e1 iter50 的 lr/loss/grad 为 `2.5488e-6/21.3951/128.3636`，全部 DN 与 Encoder proposal
+  项有限，GPU0/1 各约 19.2 GiB、GPU2 `10 MiB`，screen、worker、正式 workdir/log 五门槛
+  齐全，因此登记 `RUNNING/E1/TO_E4+`。首轮科学节点为 e4，但不会以 e4/e8 直接否决。
+- 并行现场保持安全：178 `0804_16` 仅用 GPU0 到 e12 iter300，GPU1 外部作业未触碰；
+  252 `0806_01` 固定 GPU0/1 到 e74 iter800，GPU2/3 仍为 1 MiB。两路正式日志仍有限。
 
 ## 2026-08-06 01:28 CST：0806_02 log-SPD product-tangent 双端静态闭环
 

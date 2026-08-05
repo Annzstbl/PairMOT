@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 01:28 CST。
+更新时间：2026-08-06 01:38 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent` | STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；99 双卡端口静态闭环，参数/state 增量 0 | 等待 178 的 0804_16 e12+ 合法交接；当前不创建 workdir、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E1/TO_E4+；真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过 | 并行成熟化但不停止 178；e4/e8 仅诊断并继续 e12+ | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E74/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；01:27 到 e74 iter300 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/E11/TO_E12+；e8 完整 `42.399/47.599`，01:27 到 e11 iter700 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E74/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；01:37 到 e74 iter800 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/E12/TO_E12_EVAL；e8 完整 `42.399/47.599`，01:36 到 e12 iter300 | 继续完成 e12 checkpoint、检测与 TrackEval；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 01:38 CST：99 的 0804_17 通过动态五门槛
+
+- 99 三卡连续三次低占用且没有训练进程后，动态选择当时空闲的 GPU0/1；这不把 99 变成
+  固定卡号资源。`0804_17` 在 clean detached `a4914d0` 上完成真实双卡 4-iter smoke：
+  total/DN/Encoder proposal/grad 全有限，364,503,990-byte checkpoint 的 iterative-cls/DN
+  已训练，642 个浮点张量全有限，fatal=0。
+- fresh formal screen/PGID `1995832/1995834` 到 e1 iter50，lr/loss/grad
+  `2.5488e-6/21.3951/128.3636`，DN/Encoder proposal 全有限，GPU0/1 各约 19.2 GiB、
+  GPU2 空闲；五门槛通过后登记 `RUNNING/E1/TO_E4+`。
+- 这是独立空闲资源上的并行成熟化，不构成对 178 e8 的早停判断：178 `0804_16` 仍在
+  GPU0 到 e12 iter300并继续完整 e12 检测/TrackEval，GPU1 外部作业未动。252 固定 GPU0/1
+  到 e74 iter800，GPU2/3 未用。
 
 ## 2026-08-06 01:28 CST：0806_02 log-SPD product-tangent 静态就绪
 
