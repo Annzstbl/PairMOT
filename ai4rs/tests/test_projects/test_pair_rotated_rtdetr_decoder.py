@@ -131,6 +131,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_scale_orientation_product_tangent_refinement_decoder:
+                    bool = False,
                     pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder:
                     bool = False,
                     pair_shared_terminal_transport_householder_product_tangent_refinement_decoder:
@@ -265,6 +267,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder),
         pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder=(
             pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder),
+        pair_shared_terminal_transport_scale_orientation_product_tangent_refinement_decoder=(
+            pair_shared_terminal_transport_scale_orientation_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder=(
             pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder),
         pair_shared_terminal_transport_householder_product_tangent_refinement_decoder=(
@@ -1662,6 +1666,113 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder=(
                     True),
                 pair_shared_terminal_transport_product_tangent_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_scale_orientation_product_tangent_splits_metric_and_preserves_angle(
+            self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_transport_scale_orientation_product_tangent_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        center_projection = projected._pair_transport_center_tangent_residual
+        shape_projection = (
+            projected._pair_transport_scale_orientation_shape_tangent_residual)
+        with mock.patch.object(
+                projected, '_pair_transport_center_tangent_residual',
+                side_effect=center_projection) as center_mock, mock.patch.object(
+                    projected,
+                    '_pair_transport_scale_orientation_shape_tangent_residual',
+                    side_effect=shape_projection) as shape_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(center_mock.call_count, 1)
+        self.assertEqual(shape_mock.call_count, 1)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        torch.manual_seed(608)
+        reference_prev = (
+            torch.rand(2, 6, 5, device=self.device) * 0.4 + 0.3)
+        reference_curr = (
+            torch.rand(2, 6, 5, device=self.device) * 0.4 + 0.3)
+        residual_prev = (
+            torch.randn(2, 6, 5, device=self.device) * 0.08).requires_grad_()
+        residual_curr = (
+            torch.randn(2, 6, 5, device=self.device) * 0.08).requires_grad_()
+        output_prev, output_curr = shape_projection(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, 2)
+
+        def decode(reference, residual):
+            return (residual + torch.logit(reference)).sigmoid()
+
+        proposed_prev = decode(reference_prev, residual_prev)
+        proposed_curr = decode(reference_curr, residual_curr)
+        decoded_prev = decode(reference_prev, output_prev)
+        decoded_curr = decode(reference_curr, output_curr)
+        ref_log_prev = torch.log(reference_prev[:, 2:, 2:4])
+        ref_log_curr = torch.log(reference_curr[:, 2:, 2:4])
+        tangent_prev = (
+            torch.log(proposed_prev[:, 2:, 2:4]) - ref_log_prev)
+        tangent_curr = (
+            torch.log(proposed_curr[:, 2:, 2:4]) - ref_log_curr)
+        common = 0.5 * (tangent_prev + tangent_curr)
+        detail = 0.5 * (tangent_curr - tangent_prev)
+        transport = ref_log_curr - ref_log_prev
+        projected_detail = transport * (
+            (detail * transport).sum(dim=-1, keepdim=True)
+            / transport.square().sum(
+                dim=-1, keepdim=True).clamp_min(1e-6))
+        actual_prev = torch.log(decoded_prev[:, 2:, 2:4]) - ref_log_prev
+        actual_curr = torch.log(decoded_curr[:, 2:, 2:4]) - ref_log_curr
+        self.assertTrue(torch.allclose(
+            actual_prev, common - projected_detail,
+            atol=2e-5, rtol=2e-5))
+        self.assertTrue(torch.allclose(
+            actual_curr, common + projected_detail,
+            atol=2e-5, rtol=2e-5))
+        self.assertTrue(torch.allclose(
+            decoded_prev[:, 2:, 4:], proposed_prev[:, 2:, 4:],
+            atol=2e-6, rtol=2e-6))
+        self.assertTrue(torch.allclose(
+            decoded_curr[:, 2:, 4:], proposed_curr[:, 2:, 4:],
+            atol=2e-6, rtol=2e-6))
+        self.assertTrue(torch.equal(output_prev[:, :2], residual_prev[:, :2]))
+        self.assertTrue(torch.equal(output_curr[:, :2], residual_curr[:, :2]))
+        self.assertTrue(torch.equal(
+            output_prev[:, 2:, :2], residual_prev[:, 2:, :2]))
+        self.assertTrue(torch.equal(
+            output_curr[:, 2:, :2], residual_curr[:, 2:, :2]))
+
+        swapped_curr, swapped_prev = shape_projection(
+            residual_curr, residual_prev,
+            reference_curr, reference_prev, 2)
+        self.assertTrue(torch.allclose(
+            output_prev, swapped_prev, atol=1e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            output_curr, swapped_curr, atol=1e-6, rtol=1e-5))
+        (output_prev.sum() + output_curr.sum()).backward()
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_transport_product_tangent_refinement_decoder=(
+                    True),
+                pair_shared_terminal_transport_scale_orientation_product_tangent_refinement_decoder=(
                     True),
                 device=self.device)
 
