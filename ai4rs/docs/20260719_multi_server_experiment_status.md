@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 13:06 CST。
+更新时间：2026-08-05 13:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 `30.433/37.650` 仅作早期归因，PGID `1791967` 已到 e5 iter500 | 继续 e8/e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `39.410/46.043`，较自身 e4 双升、相对成熟父线仍为 `-5.592/-3.040`，PGID `1791967` 已恢复 e9 | 继续 e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E44+；e40 `53.450/59.649`，严格总和仍差 `5.231`，PGID `823929` 已恢复 e41 | e36→e40 双升，继续 e44 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `41.791/48.125`，PGID `3856480` 已恢复 e9 | 不以 e8 早停，继续 e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 13:25 CST：99 center-tangent e8 完整闭环
+
+- `0804_11` e8 cls HOTA/DetA/AssA `39.410/32.941/49.304`，det
+  `46.043/41.679/52.688`；相对成熟父线 `0803_13` e8 HOTA `-5.592/-3.040`，
+  cls DetA/AssA `-6.196/-4.693`，det `-5.046/-0.666`。相对自身 e4 HOTA 则回升
+  `+8.977/+8.393`，故只记录中期定位/覆盖损伤，不以 e8 直接否决，继续 e12。
+- pair mAP/AP50 `0.188469/0.346839`、both-independent `0.235004/0.416619`；
+  375,519,798-byte checkpoint meta `8/8304`，12 个 residual 最大绝对值 `0.0704144`，
+  PairDN 与 642 个浮点张量审计通过。5416/50、28 CSV、108 个非空文件、50 preds、
+  `async_done=1` 完整，TrackEval 275.8 秒。PGID `1791967` 已恢复 e9；GPU2 外部任务不动。
+- 13:24 资源现场为：252 固定 GPU0/1 到 e42 iter900、GPU2/3 不用；178 仅本任务 GPU0
+  到 e10 iter500、GPU1 外部任务不动；99 GPU0/1 到 e9 iter350；197 13:08 仍连接超时。
+  `0804_12` 保持 PREPARED/NO_GPU，未越过动态五门槛登记 RUNNING。
 
 ## 2026-08-05 13:06 CST：178 covariant-Frenet e8 完整闭环
 

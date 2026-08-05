@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 13:06 CST
+更新时间：2026-08-05 13:25 CST
 
 ## 当前研究原则
 
@@ -16,7 +16,7 @@
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E44+` | e40 完整 `53.450/59.649`，同点和 `113.099`、严格仍差 `5.231`；较 e36 双升 `+0.124/+0.356`，PGID `823929` 已恢复 e41，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.791/48.125`，相对直接 product-tangent 为 `-4.882/-5.797`；不以 e8 否决，PGID `3856480` 已恢复 e9，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `30.433/37.650`；det AssA 提升但 cls 与 AP/DetA 受损，只作早期归因；PGID `1791967` 已到 e5 iter500，继续 e8/e12，GPU2 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `39.410/46.043`，较自身 e4 双升但相对成熟父线仍为 `-5.592/-3.040`，主要损伤 DetA；不以 e8 否决，PGID `1791967` 已恢复 e9，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,30 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 13:25 CST：center-tangent e8 完整闭环，继续 e12
+
+- 99 `0804_11 center-tangent + log-shape consensus` e8 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `39.410/32.941/49.304`，det 为 `46.043/41.679/52.688`，同点和
+  `85.453`，距严格总和 `118.330` 仍差 `32.877`。相对成熟 terminal log-shape 父线
+  `0803_13` e8 的 `45.002/39.137/53.997` 与 `49.083/46.725/53.354`，HOTA 为
+  `-5.592/-3.040`，cls DetA/AssA 为 `-6.196/-4.693`，det 为 `-5.046/-0.666`；中心
+  product-tangent 在 e8 的主要问题是检测覆盖/定位损伤，且分类关联也下降，不是只把
+  DetA 搬运到 AssA。
+- 相对自身 e4，HOTA 回升 `+8.977/+8.393`，cls DetA/AssA 回升
+  `+7.979/+9.885`，det 回升 `+9.164/+7.924`，模型仍处于正常追赶段，不能用 e8
+  直接否决。pair mAP/AP50 `0.188469/0.346839`、both-independent
+  `0.235004/0.416619`；相对父线 e8 四项为
+  `-0.045010/-0.077964/-0.050862/-0.077867`，与 DetA/HOTA 损伤方向一致。
+- `epoch_8.pth` 为 375,519,798 bytes，meta `8/8304`；12 个 iterative-cls residual
+  最大绝对值 `0.0704144`，PairDN 已训练，642 个浮点张量全有限。检测为 5416 records/
+  50 sequences；TrackEval `val_track_0002` 产出 28 CSV、108 个非空文件、50 个非空预测，
+  `async_done=1`，payload→metrics 用时 275.8 秒。正式 PGID `1791967` 已恢复 e9，13:24
+  到 iter350，继续 e12 及成熟节点；GPU0/1 为本任务，GPU2 外部任务不动。
+- 同步资源审计：252 固定 GPU0/1 到 e42 iter900，GPU2/3 均 `1 MiB/0%`；178 仅本任务
+  GPU0 到 e10 iter500，GPU1 外部任务不动；197 13:08 短连接仍超时，不将其登记为可用。
+  三条活跃正式日志 total/DN/Encoder/grad 有限，未热更新存活训练仓库；`0804_12`
+  继续保持 PREPARED/NO_GPU，等待合法资源释放后再走真实动态五门槛。
 
 ## 2026-08-05 13:06 CST：covariant-Frenet e8 完整闭环，继续 e12
 

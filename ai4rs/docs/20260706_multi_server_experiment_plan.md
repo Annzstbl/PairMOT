@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 07:40 CST.
+Last updated: 2026-08-05 13:25 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,28 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 13:25 CST, dynamic-99 `0804_11` closed its epoch-8 checkpoint, detection,
+and TrackEval artifacts. Same-checkpoint cls HOTA/DetA/AssA is
+`39.410/32.941/49.304`, det is `46.043/41.679/52.688`, pair mAP/AP50 is
+`0.188469/0.346839`, and both-independent is `0.235004/0.416619`.
+Relative to mature terminal log-shape parent `0803_13` at epoch 8, HOTA is
+`-5.592/-3.040` and DetA is `-6.196/-5.046`; the added center tangent is
+primarily damaging detection coverage/localization. However, its own epoch-4
+to epoch-8 HOTA recovery is `+8.977/+8.393`, so PGID `1791967` continues to
+epoch 12 and later mature evidence rather than being rejected at epoch 8.
+The 375,519,798-byte checkpoint is meta `8/8304`; all 642 floating tensors are
+finite, iterative classification and PairDN are trained, and the evaluation
+closed with 5416 detections, 50 sequences, 28 CSVs, 108 nonempty files,
+50 nonempty predictions, and `async_done=1` in 275.8 seconds.
+
+The 13:24 resource audit has fixed-252 GPU0/1 at `0804_01` epoch 42 iter 900,
+dynamic-178 GPU0 at `0804_10` epoch 10 iter 500 with external GPU1 untouched,
+and dynamic-99 GPU0/1 at `0804_11` epoch 9 iter 350 with external GPU2
+untouched. Server 197 still timed out on a short read-only SSH probe at 13:08
+and is not treated as available. Prepared `0804_12` remains `PREPARED/NO_GPU`;
+it must pass real smoke, checkpoint, and formal-iter50 gates after a legal
+resource release before it can be recorded as running.
 
 At 07:40 CST, dynamic-197 `0804_06` closed its mature e4/e8/e12 window.
 Epoch 12 cls HOTA/DetA/AssA is `44.810/36.342/57.539`, det is
