@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 04:34 CST。
+更新时间：2026-08-06 04:38 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E10/TO_E12+；e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；04:33 到 e10 iter600 | e8 只诊断，继续 e12+；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E10/TO_E12+；e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；04:35 到 e10 iter700 | e8 只诊断，继续 e12+；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E82/TO_E84+；前序 e80 完整 `55.446/62.342`、同点和 `117.788`，严格仍差 det/总和 `0.051/0.542`；04:33 到 e82 iter300 | 同模型 duration-only 到 e84/e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_03 Householder product-tangent e8→e12`（动态 GPU0） | COMPLETED/MATURE_NEGATIVE/GPU_FREE；e12 完整 `45.162/52.066`、和 `97.228` | `0806_02` 静态就绪，但等 99 `0804_17` e12+ 成熟归因后再部署 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E82/TO_E84+；前序 e80 完整 `55.446/62.342`、同点和 `117.788`，严格仍差 det/总和 `0.051/0.542`；04:35 到 e82 iter400 | 同模型 duration-only 到 e84/e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_02 log-SPD product-tangent`（短 smoke 动态 GPU0） | SMOKE_VALIDATED/NO_FORMAL/GPU_FREE；1×8 四步、checkpoint 与有限性全通过 | 等 99 `0804_17` e12+ 成熟归因后才决定 formal | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-06 04:16 CST：252 duration-only 延长与 99 e8 诊断闭环
@@ -54,6 +54,19 @@
   `async_done=1` 齐全，TrackEval 耗时 248.4 秒。
 - screen、正式成员与异步进程均自然结束，GPU0/1 均回到 `1 MiB/0%`。178 仍只允许总计
   1 卡；为了先完成最接近的归因，`0806_02` 保持静态就绪，不在 99 `0804_17` e12+ 前抢跑。
+
+## 2026-08-06 04:38 CST：178 完成 0806_02 预部署 smoke，不启动 formal
+
+- 178 两张物理卡连续两轮均为 `1 MiB/0%`，按总计 1 卡上限动态选择 GPU0 做短 smoke。
+  clean detached `9c5018a` 的 formal/smoke 配置 deepcopy、两个 launcher `bash -n`、
+  22,771,111 参数/711 states 父子完整构建和零增量检查均通过。
+- 首次手工构建因未显式设置隔离 `PYTHONPATH` 而从旧 checkout 导入，立即报旧 head 不接受新配置键；
+  没有创建 workdir。按 launcher 的真实环境固定 `PYTHONPATH` 后完整构建通过，确认是环境污染而非
+  结构失败，并把该签名写入记录以避免 formal 前复现。
+- 真 1×8 四步 smoke 的 loss `21.3720/20.6724/20.9473/21.2590`、grad
+  `59.9638/67.2856/78.2630/78.3876`，DN/Encoder proposal 全有限；364,507,508-byte
+  checkpoint 的 iterative-cls/DN 语义和 642 个浮点张量均通过。结束后 GPU0/1 回到 1 MiB，
+  formal 目录不存在，故只登记 `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`。
 
 ## 2026-08-06 03:12 CST：178 安全恢复 0804_09 的成熟窗口
 

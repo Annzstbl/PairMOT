@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 04:34 CST.
+Last updated: 2026-08-06 04:38 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -53,6 +53,22 @@ files/50 predictions and `async_done=1` are complete. All formal and async
 processes ended naturally and both GPUs read 1 MiB, although the PairMOT cap
 remains one GPU. Keep `0806_02` static-only until dynamic-99 `0804_17` reaches
 epoch 12+ so its closest quotient-anisotropy attribution is not duplicated.
+
+At 04:38 CST, use of the otherwise idle 178 lane was limited to pre-validating
+`0806_02`; no formal trajectory was started. Both GPUs were 1 MiB/0% twice,
+so GPU0 was dynamically selected under the one-GPU cap. In clean detached
+`9c5018a`, both configs passed deepcopy, both launchers passed remote `bash -n`,
+and the exact isolated build matched the direct product-tangent parent at
+22,771,111 parameters and 711 state tensors. A first manual build without an
+explicit isolated `PYTHONPATH` imported an old checkout and failed immediately
+before any workdir existed; rerunning under the launcher's exact environment
+passed, identifying environment contamination rather than a model defect.
+The real 1x8 four-step smoke had finite total, DN, encoder-proposal losses and
+gradients, and its 364,507,508-byte checkpoint passed iterative-cls/DN semantics
+with all 642 floating tensors finite. Both GPUs returned to 1 MiB and the
+formal workdir remains absent. Status is therefore
+`SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`; wait for `0804_17` epoch 12+ before a
+formal launch decision.
 
 At 02:56 CST, dynamic-99 `0804_17 quotient-anisotropy product-tangent`
 completed its epoch-4 diagnostic at cls HOTA/DetA/AssA

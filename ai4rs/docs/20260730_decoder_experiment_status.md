@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 04:34 CST
+更新时间：2026-08-06 04:38 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:33 到 e82 iter300；GPU2/3 均为 1 MiB。 |
-| 178 动态 GPU 0 | `0806_03 ... Householder product-tangent ... e8→e12` | `COMPLETED/MATURE_NEGATIVE/GPU_FREE` | e12 完整 `45.162/52.066`、同点和 `97.228`；较 e8 回升但相对直接 product-tangent e12 仍低 `4.622/4.177`。checkpoint、检测、AP 与 TrackEval 全闭环，GPU0/1 均回到 1 MiB。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E10/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:33 到 e10 iter600 并继续 e12+，GPU2 未用。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:35 到 e82 iter400；GPU2/3 均为 1 MiB。 |
+| 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E10/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:35 到 e10 iter700 并继续 e12+，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -77,6 +77,27 @@
 - 正式 screen/process 已自然结束，GPU0/1 均为 `1 MiB/0%`，没有残留异步进程。
   178 总卡数上限仍为 1；`0806_02` 保持静态就绪，等待 99 `0804_17` 的 e12+ 成熟证据后
   再决定是否部署，避免在最接近的 quotient-anisotropy 归因未完成前制造重复轨迹。
+
+## 2026-08-06 04:38 CST：178 预完成 0806_02 真实 smoke，但不抢跑 formal
+
+- 252 与 99 的关键科学节点尚未到齐：前者固定 GPU0/1 在 e82 iter400，后者动态 GPU0/1
+  在 e10 iter700，total、DN、Encoder proposal 与 grad 均有限；252 GPU2/3 为 1 MiB，
+  99 GPU2 为 10 MiB。178 GPU0/1 连续两次均为 `1 MiB/0%`，因此动态选择 GPU0 做短 smoke，
+  但不提前创建正式轨迹。
+- `0806_02 log-Euclidean SPD shape product-tangent` 的隔离 checkout 保持 clean detached
+  `9c5018a`。formal/smoke launcher 均通过远端 `bash -n`，两个配置由构建脚本完成 deepcopy；
+  显式把 `PYTHONPATH` 固定到隔离 checkout 后，完整模型与直接 product-tangent 父结构均为
+  `22,771,111` 参数、711 个同形 state，增量 0。第一次未显式设置 `PYTHONPATH` 的手工构建
+  被旧 `/data1/users/litianhao01/PairMOT/ai4rs` 污染并立即报配置键不兼容；没有创建 workdir，
+  随后按 launcher 的真实隔离环境重跑通过，故不是模型或配置失败。
+- 真实单卡 1×8 四步 smoke 的 total loss 为
+  `21.3720/20.6724/20.9473/21.2590`，grad norm 为
+  `59.9638/67.2856/78.2630/78.3876`；所有 DN 与 Encoder proposal 项有限，无
+  Traceback/OOM/NaN/NCCL/DDP 错误。364,507,508-byte `iter_4.pth` 通过 iterative-cls
+  residual、DN absolute 已训练语义检查，642 个浮点张量全有限。
+- smoke 后 GPU0/1 均回到 `1 MiB/0%`，formal 目录仍不存在。因此状态只提升为
+  `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE`；仍等待 `0804_17` e12+ 完整结果，再基于相邻机制
+  的 DetA/AssA/AP 决定是否把 `0806_02` 作为下一单因素正式实验。
 
 ## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
 
