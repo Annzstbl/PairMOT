@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 20:36 CST。
+更新时间：2026-08-05 20:57 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,20 @@
 | 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 smoke、checkpoint 与 formal iter50 五门槛通过，到 e2 iter850 | 继续 e4/e8/e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E64+；e60 `54.713/61.540`，严格和仍差 `2.077`；到 e62 iter600 | e56→e60 双升，继续 e64+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `33.145/37.230`，相对强父线 `+0.296/-0.089`；到 e8 iter750 | e4 只作归因，继续 e8/e12+；仍遵守单卡上限 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 `41.641/47.227`，相对强父线 `-3.361/-1.856`；到 e9 iter250 | e8 DetA/AP 明显负、AssA 正，但不直接否决；继续 e12+并遵守单卡上限 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 20:57 CST：178 的 0804_14 e8 同点闭环
+
+- e8 cls HOTA/DetA/AssA `41.641/33.189/54.583`，det
+  `47.227/40.661/57.446`；相对强父线 HOTA `-3.361/-1.856`、DetA
+  `-5.948/-6.064`、AssA `+0.586/+4.092`，属于明确的检测覆盖向关联搬运。
+- pair mAP/AP50 `0.197085/0.356198`、both-independent `0.240597/0.414809`，相对父线四项
+  分别低 `0.036394/0.068605/0.045269/0.079677`。375,563,252-byte checkpoint、训练语义、
+  642 张量、5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 和 242.9 秒 TrackEval
+  完整。
+- e8 不直接否决；动态 GPU0、PGID `4074056` 已续到 e9 iter250，继续 e12+，不越过 178
+  单卡授权。20:56 并行进度为 99 e3 iter1000、252 e63 iter600；99 GPU2 与 252 GPU2/3 未用。
 
 ## 2026-08-05 20:36 CST：0804_16 双端静态验证完成
 

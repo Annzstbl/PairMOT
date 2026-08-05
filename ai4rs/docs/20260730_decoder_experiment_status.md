@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 20:36 CST
+更新时间：2026-08-05 20:57 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E64+` | e60 完整 `54.713/61.540`，同点和 `116.253`、严格仍差 `2.077`；较 e56 双升 `+0.139/+0.224`，已到 e62 iter600，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `33.145/37.230`；相对强父线 `+0.296/-0.089`，检测侧 AssA 净增但 DetA 回落，不以 e4 否决；已到 e8 iter750，GPU1 空闲且仍不越过单卡上限。 |
+| 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.641/47.227`；相对强父线 `-3.361/-1.856`，AssA 增但 DetA/AP 明显回落；不以 e8 否决，已到 e9 iter250，仍不越过单卡上限。 |
 | 99 当前 GPU 0,1 | `0804_15 ... quotient log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_13 在 e12 成熟负差后停止；新线真实 smoke/checkpoint 与 formal iter50 五门槛通过，已到 e2 iter850，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -29,6 +29,21 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 GPU0 通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛；e4 已完整闭环，当前登记 `RUNNING/TO_E8+`，
 不触碰 GPU1 外部任务。
+
+## 2026-08-05 20:57 CST：0804_14 e8 完整闭环，DetA→AssA 搬运继续
+
+- 178 动态 GPU0 的 `0804_14 hemisphere-boundary center + log-shape consensus` e8 同一
+  checkpoint 的 cls HOTA/DetA/AssA 为 `41.641/33.189/54.583`，det 为
+  `47.227/40.661/57.446`。相对强父线 `0803_13` e8，HOTA 为 `-3.361/-1.856`，DetA 为
+  `-5.948/-6.064`，AssA 为 `+0.586/+4.092`；半球边界仍把检测覆盖搬成关联，未恢复定位。
+- pair mAP/AP50 `0.197085/0.356198`、both-independent `0.240597/0.414809`，相对父线四项
+  `-0.036394/-0.068605/-0.045269/-0.079677`，AP 与 DetA 方向一致，排除只由 TrackEval
+  匹配波动造成的假象。
+- 375,563,252-byte checkpoint 的 iterative-cls/DN 已训练，642 个浮点张量有限；5416/50、
+  28 CSV、108 非空文件、50 preds、`async_done=1` 完整，TrackEval 用时 242.9 秒。
+  e8 只作为中期归因，不直接否决 decoder；原 PGID `4074056` 已安全续到 e9 iter250，仅用
+  GPU0，继续收集 e12+。并行 99 `0804_15` 到 e3 iter1000，252 固定 GPU0/1 到 e63 iter600，
+  其余卡未被本任务占用。
 
 ## 2026-08-05 20:36 CST：0804_16 商空间各向异性后继完成双端静态闭环
 

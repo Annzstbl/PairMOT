@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 20:36 CST.
+Last updated: 2026-08-05 20:57 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,19 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 20:57 CST, dynamic-178 `0804_14 hemisphere-boundary center + log-shape
+consensus` closed epoch 8 at cls HOTA/DetA/AssA
+`41.641/33.189/54.583` and det `47.227/40.661/57.446`. Versus the strong
+parent at the same point, HOTA is `-3.361/-1.856`, DetA is
+`-5.948/-6.064`, and AssA is `+0.586/+4.092`: the mechanism still trades
+detection coverage for association. All four AP diagnostics are also lower by
+`0.036394/0.068605/0.045269/0.079677`. The trained/finite 375,563,252-byte
+checkpoint, 5416/50 detections, 28 CSVs, 108 nonempty files, 50 predictions,
+and 242.9-second asynchronous TrackEval are complete. This is an epoch-8
+diagnosis rather than a rejection; retain dynamic GPU0 through epoch 12+ and
+keep the one-GPU cap. Current progress is epoch 9 iter 250; dynamic-99 is epoch
+3 iter 1000 and fixed-252 is epoch 63 iter 600.
 
 At 20:36 CST, the zero-state `0804_16 terminal quotient-anisotropy shape
 consensus` is statically ready on isolated 99 and 178 routes. It represents
