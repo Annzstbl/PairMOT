@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 14:43 CST。
+更新时间：2026-08-05 14:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,26 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志已进 e13 | SSH 恢复后精确停止 PGID `1791967` 并核验释放；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志已进 e13 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E48+；e44 `53.884/60.194`，严格总和仍差 `4.252`，PGID `823929` 已进 e45 | e40→e44 双升，继续 e48 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真 smoke、checkpoint、fresh formal iter50 五门槛通过，PGID `3968124` | 收集 e4/e8/e12+；`0804_10` 已按 e4/e8/e12 成熟双负停止；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 14:55 CST：0804_13 静态后继就绪但未部署
+
+- 新单因素 `0804_13 hemisphere-fold center + mature log-shape consensus` 只在中心 detail
+  与运动方向内积为负时反射纵向分量；内积非负和全部横向 detail 保持原样，完整范数不变。
+  它直接针对 `0804_11` 的 DetA/AssA/AP 同步损伤，同时避免 rank-one 删除横向能量和每样本
+  强制旋转。零参数/state、swap-equivariant、class-agnostic、无 reweight、新层、attention
+  或 loss，额外开销只有二维内积与条件反射。
+- commit `84ad131` 在 178 全新隔离静态 checkout
+  `/data1/users/litianhao01/PairMOT_hemispherefoldcenterlogshape_0804_13_static178` clean；定向测试
+  `1/1 OK`，配置 deepcopy、launcher 语法和父/新完整构建通过，参数/state
+  `22,771,111/711`、增量 0，99 目标 smoke/formal workdir 均不存在。
+- 状态严格为 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`。99 SSH 未恢复，因此未创建 99 checkout，
+  未做真 DDP smoke/checkpoint/formal；只有 `0804_11` 精确停止、动态双卡连续空闲并完成五项
+  门槛后才能登记 RUNNING。178 `0804_12` 同期正常到 e2 iter800，活跃仓库未热更新。
 
 ## 2026-08-05 14:43 CST：99 e12 闭环与控制链路异常
 

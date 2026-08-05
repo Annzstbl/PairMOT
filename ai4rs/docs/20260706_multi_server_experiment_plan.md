@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 14:43 CST.
+Last updated: 2026-08-05 14:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,28 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 14:55 CST, evidence from `0804_11` motivated a parameter-free orthogonal
+successor, `0804_13 hemisphere-fold center + mature log-shape consensus`.
+Instead of deleting transverse detail through rank-one projection or rotating
+every nondegenerate sample, it reflects only a negative longitudinal center
+component into the motion-consistent closed hemisphere. Positive-alignment
+detail and every transverse component are unchanged, the complete norm is
+preserved, and simultaneous frame reversal remains exactly equivariant. This
+is a single discrete geometric operation rather than a scale/gate scan; it is
+class agnostic, contains no reweighting, layer, attention, or loss, and adds
+only a two-dimensional inner product and conditional reflection.
+
+Commit `84ad131` passed syntax checks and was installed only into the new 178
+static checkout
+`/data1/users/litianhao01/PairMOT_hemispherefoldcenterlogshape_0804_13_static178`.
+The targeted test is `1/1 OK`, config deepcopy and both launchers pass, and full
+parent/new builds are exactly `22,771,111` parameters and 711 state tensors
+with zero delta. Both intended 99 workdirs are absent. Keep the status
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`: do not touch the active 178 repository
+or current 99 shared workdir, and do not claim RUNNING until 99 control returns,
+`0804_11` is exactly stopped, two dynamic GPUs pass consecutive idle checks,
+and real smoke/checkpoint/formal-iter50 gates all close.
 
 At 14:43 CST, dynamic-99 `0804_11` closed epoch 12 at cls HOTA/DetA/AssA
 `44.100/36.004/56.845` and det `51.014/46.188/58.474`. Relative to mature

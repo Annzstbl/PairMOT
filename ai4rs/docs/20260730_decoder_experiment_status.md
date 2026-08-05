@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 14:43 CST
+更新时间：2026-08-05 14:55 CST
 
 ## 当前研究原则
 
@@ -51,6 +51,29 @@ checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`�
 - 197 可连接但每次短命令约 26 秒；抽样 CPU 仍仅约 `129–140 MHz`、load 约 14，GPU0–3
   空闲而 GPU4 有外部任务。该主机仍不登记为安全可用资源，不在异常 CPU 状态下恢复训练或
   启动新候选。
+
+## 2026-08-05 14:55 CST：0804_13 hemisphere-fold 后继完成隔离静态闭环
+
+- `0804_11` e12 表明 rank-one center tangent 同时损伤 DetA、AssA 与 AP；既有 Householder
+  与 spherical-midpoint 又会对每个非退化 detail 做完整轴对齐或半程旋转。因此下一单因素
+  `0804_13 hemisphere-fold center + mature log-shape consensus` 只在中心反对称 detail 与
+  已建立运动方向内积为负时，反射其纵向分量；内积非负的 detail 完全不动，所有横向分量始终
+  保留，范数严格不变。它不是幅度/scale 扫描，而是投影到运动一致闭半球的最小离散几何操作。
+- 结构仍只作用于 terminal normal query，并保留成熟 log-size/周期角共识；分类、DN、loss、
+  attention、层数、递归 reference 与辅助输出不变。实现零参数/state 增量、swap-equivariant、
+  class-agnostic、无 reweight，计算仅为二维内积与条件反射，无明显计算量增长。
+- 本地隔离 commit `84ad131` 已通过 Python 语法和两份 launcher `bash -n`；增量 bundle 部署到
+  178 全新静态 checkout
+  `/data1/users/litianhao01/PairMOT_hemispherefoldcenterlogshape_0804_13_static178`，clean HEAD
+  `84ad131`，未修改活跃 `0804_12` 仓库。定向测试 `1/1 OK`，覆盖 terminal 调用顺序、DN
+  精确保留、只折返负纵向分量、范数保持、交换等变、有限梯度与互斥。配置 deepcopy、父/新
+  完整构建通过：均为 `22,771,111` 参数、711 states、增量 0；smoke 仍为 4 iter。
+- 99 的目标 smoke/formal workdir 均确认不存在，当前严格登记
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`：99 SSH 未恢复，未在 99 创建 checkout，未运行
+  smoke、未产生 checkpoint、更未启动 formal。只有控制恢复、`0804_11` 精确停止且动态双卡
+  连续空闲后，才部署并依次通过真实 DDP smoke、checkpoint、fresh formal iter50 五项门槛。
+- 同步现场：178 `0804_12` 正式日志 14:54 到 e2 iter800，total、DN、Encoder 与 grad 有限；
+  其 GPU0 活跃、GPU1 外部任务未动。252 与 99 的现有正式长线均未热更新。
 
 ## 2026-08-05 14:32 CST：covariant-Frenet e12 成熟停止；spherical-midpoint 五门槛接替；252 e44 继续上升
 
