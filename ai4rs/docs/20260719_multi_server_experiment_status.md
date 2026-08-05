@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 11:27 CST。
+更新时间：2026-08-05 11:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,10 +18,24 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；零参数/state，真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `1791967` | 继续 e4/e8/e12 和成熟节点；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `42.596/47.448`，PGID `2390925` e12 | e8 不早停，继续完整 e12；外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e37 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480` | GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已恢复 e5 | e4 不早停，继续 e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 11:55 CST：178 e4 闭环与 197 主机保护停线
+
+- 178 `0804_10` e4 cls HOTA/DetA/AssA `34.189/27.630/45.087`，det
+  `36.612/33.119/41.820`；相对直接 product-tangent e4 HOTA `-1.085/-7.237`，其中 det
+  AssA 低 `16.280`。pair mAP/AP50 `0.1436/0.2761`、both-independent
+  `0.1884/0.3473`，四项也低于父线。369,974,324-byte checkpoint meta `4/4152`，12 个
+  residual 最大绝对值 `0.0634495`，642 个浮点张量全有限；5416/50、28 CSV、108 个非空文件、
+  50 个预测与 `async_done=1` 完整。该点不作 e4 早停，PGID `3856480` 已恢复 e5，继续 e8/e12。
+- 197 原 PGID `2390925` 在 e12 step12418 后超过 39 分钟无更新且 GPU0/1 近空闲；全机 80 核
+  实测仅约 `118–167 MHz`，独立 PyTorch import 超时。TERM 后成员归零、GPU0/1 为
+  `1 MiB/0%`；从可信 e8 的隔离恢复也未达到 formal iter50，故停止恢复 PGID `4191760` 与
+  screen `4191757`。保留 e8、step12418 scalars 与全量 e4/e8 产物，等待主机恢复；GPU4/5
+  外部任务与整机 governor 均未触碰。
 
 ## 2026-08-05 11:27 CST：252 product-tangent e36 完整闭环
 

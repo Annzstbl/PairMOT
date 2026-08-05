@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 11:27 CST
+更新时间：2026-08-05 11:55 CST
 
 ## 当前研究原则
 
@@ -15,9 +15,9 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E40+` | e36 完整 `53.326/59.293`，同点和 `112.619`、严格仍差 `5.711`；较 e32 为 `+0.017/-0.027`，轨迹指标近平台但 AP 微升，PGID `823929` 已恢复 e37，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | axis-Frenet e12 成熟停止；新线真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480`，GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`，相对直接 product-tangent 为 `-1.085/-7.237`；不以 e4 否决，PGID `3856480` 已恢复 e5，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | 保留成熟 terminal log-size/周期角共识，只新增 center product-tangent；零参数/state，真实 DDP smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1791967`，GPU2 外部任务不动。 |
-| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.596/47.448`，相对直接 product-tangent 为 `-4.077/-6.474`；不以 e8 否决，PGID `2390925` 已到 e12，继续完整评测。 |
+| 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -27,6 +27,28 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 11:55 CST：covariant-Frenet e4 闭环；197 主机降频保护停线
+
+- 178 `0804_10 covariant-Frenet product-tangent` e4 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `34.189/27.630/45.087`，det 为 `36.612/33.119/41.820`。相对直接
+  product-tangent e4 `35.274/43.849`，HOTA 为 `-1.085/-7.237`；cls DetA/AssA 为
+  `-0.899/-0.038`，det 为 `-1.214/-16.280`，早期损失主要来自 det 关联崩落，而不是单纯
+  定位交换。pair mAP/AP50 `0.1436/0.2761`，both-independent `0.1884/0.3473`，相对父线
+  四项分别低约 `0.0157/0.0204/0.0185/0.0231`。
+- 369,974,324-byte checkpoint meta `4/4152`；12 个 iterative-cls residual 最大绝对值
+  `0.0634495`，iterative-cls/DN 已训练且有限，642 个浮点张量全有限。5416 records/
+  50 sequences、28 CSV、108 个非空文件、50 个非空预测和 `async_done=1` 完整，TrackEval
+  227.1 秒。该点只作早期归因，不以 e4 否决；PGID `3856480` 已到 e5 iter450，继续 e8/e12，
+  仍仅使用动态 GPU0，GPU1 外部任务不动。
+- 197 `0804_09` 原训练在 e12 step12418 后超过 39 分钟无 scalar/checkpoint 更新，GPU0/1
+  降至 0–2%，两个 rank 在用户态持续自旋。进一步只读审计确认全机 80 核仅约
+  `118–167 MHz`、温度 `44–46°C`，独立 `import torch` 20 秒超时，属于主机级异常降频而非
+  模型、checkpoint 或共享盘错误。原 PGID `2390925` 经 TERM 后成员归零；GPU0/1 连续为
+  `1 MiB/0%` 后曾从可信 e8 checkpoint 尝试隔离恢复，但 torchrun 同样因降频无法及时生成
+  rank，未达到 formal iter50，故精确停止恢复 PGID `4191760`/screen `4191757`，未登记 RUNNING。
+  e8 checkpoint、截至 step12418 的 scalars 与已有 e4/e8 全量评估均保留；外部 GPU4/5 任务
+  未触碰，不修改整机 governor，等待主机恢复后再续跑 e12。
 
 ## 2026-08-05 11:27 CST：product-tangent e36 完整闭环，继续 e40 成熟复核
 
