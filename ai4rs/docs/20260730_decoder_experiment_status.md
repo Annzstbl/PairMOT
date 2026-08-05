@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 05:00 CST
+更新时间：2026-08-06 05:43 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E83/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:56 到 e83 iter450；GPU2/3 均为 1 MiB。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E85/TO_E88` | e84 完整 `55.474/62.422`，两项单独门槛均过，但同点和仅 `117.896`，严格总和仍差 `0.434`；相对 e80 HOTA/AP 仍双升，继续既定 e88。05:42 到 e85 iter450；GPU2/3 均为 1 MiB。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fallback` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 保留强父线 center transport，只在终层把 shape 分为二维 log-size 与周期角；尺度 detail 独立投影、逐帧 proposed angle 原样保留。clean detached `bf3fb3a` 的静态闭环与真实 1×8 四步 smoke 均通过；GPU 已释放，严格等待成熟证据后再决定 formal。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E12/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:59 到 e12 iter50 并继续完成 e12 checkpoint/评测，GPU2 未用。 |
+| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | 99 e12 与 252 e84 证明 quotient 分解仍弱且强父线总和未过，故选择更贴近父线的 scale-orientation split。05:40 动态选择空闲 GPU0 fresh 启动；screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五项门槛通过；GPU1 未用。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E14/TO_E16+` | e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但仍被直接 product-tangent e12 双侧压低 `3.523/2.812`；因回升显著保留到 e16，不以 e8/e12 的绝对未达标直接否决。05:41 到 e14 iter200；GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -137,6 +137,33 @@
   GPU0/1 正常、GPU2 10 MiB；必须完成 e12 checkpoint、检测、双 TrackEval、AP 与完整性审计后
   才形成成熟结论。252 `0806_04` 在 04:56 到 e83 iter450，固定 GPU0/1 正常且 GPU2/3 为
   1 MiB，继续等待 e84。当前不抢跑任何新 formal。
+
+## 2026-08-06 05:43 CST：e84 双单项过线但总和未过；scale-orientation 正式启动
+
+- 252 `0806_04` e84 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `55.474/46.328/68.477`，det 为 `62.422/54.790/73.568`，绝对和 `117.896`。
+  cls、det 分别严格超过 Encoder `+1.037/+0.029`，但总和仍低严格 `>118.330` 门槛
+  `0.434`，因此目标没有完成。相对 e80 HOTA 仍双升 `+0.028/+0.080`；pair mAP/AP50
+  `0.3235/0.5364`、both-independent `0.3632/0.5740` 也均小幅上升，故保持完全相同的
+  duration-only 轨迹到 e88，而不是在 e84 改模型或提前停止。
+- 479,753,014-byte `epoch_84.pth` meta `84/87192`，model/EMA 为 711/712 states、
+  两者 642 个浮点张量全有限，optimizer 497 states 与 scheduler 完整。检测为 5416 条/50 序列，
+  TrackEval 有 28 CSV、108 个非空文件、50/50 非空预测和 `async_done=1`，耗时 392.1 秒。
+  05:42 正式日志到 e85 iter450，固定 GPU0/1 各约 21.6 GiB，GPU2/3 仍为 1 MiB。
+- 99 `0804_17` e12 同点 cls HOTA/DetA/AssA `46.261/38.506/58.002`，det
+  `53.431/47.832/61.670`，绝对和 `99.692`。相对 e8 HOTA 回升 `+4.869/+5.746`，
+  pair mAP/AP50 `0.2405/0.4271`、both-independent `0.2857/0.4838` 也分别明显回升；
+  但相对直接 product-tangent e12 `49.784/56.243` 仍低 `3.523/2.812`，说明 quotient
+  anisotropy 仍有额外约束损伤。381,033,974-byte checkpoint meta `12/12456`、711/712 states、
+  642 浮点张量、optimizer 497 states、5416/50/28/108/50 与 `async_done=1` 全部闭环。
+  因 e8→e12 仍强回升，继续到 e16 观察，不把 e12 绝对未达标误作平台。
+- 成熟证据同时否定优先启动更强耦合的 log-SPD：`0806_02` 保持
+  `SMOKE_VALIDATED/NO_FORMAL`。选择更贴近强父线的 `0806_05 scale-orientation split`：
+  178 两轮全卡均为 `1 MiB/0%`、formal workdir 不存在、clean detached `bf3fb3a`、launcher
+  `bash -n` 均再次核验后，动态选择 GPU0 于 05:40 fresh 启动；GPU1 保持空闲。
+  screen/PGID `175354/175356`、正式 iter50 的速度/loss/grad 为
+  `0.9508 s/iter / 21.0004 / 106.2984`，iter100 亦有限；total、DN、Encoder proposal、
+  正式日志、单卡占用与错误扫描满足五项门槛，登记 `RUNNING/E1/TO_E4+`。
 
 ## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
 

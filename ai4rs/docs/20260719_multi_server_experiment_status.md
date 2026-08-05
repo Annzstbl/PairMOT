@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 05:00 CST。
+更新时间：2026-08-06 05:43 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E12/TO_E12+；e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；04:59 到 e12 iter50 | 继续完成 e12 checkpoint/检测/双 TrackEval；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E14/TO_E16+；e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但相对直接 product-tangent e12 仍低 `3.523/2.812` | 因回升显著继续到 e16；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E83/TO_E84+；前序 e80 完整 `55.446/62.342`、同点和 `117.788`，严格仍差 det/总和 `0.051/0.542`；04:56 到 e83 iter450 | 同模型 duration-only 到 e84/e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_02 log-SPD` 与 `0806_05 scale-orientation split` | SMOKE_VALIDATED/NO_FORMAL/GPU_FREE；两者真实 1×8 四步、checkpoint 与有限性均通过 | 等 99 e12+/252 e84 后按 DetA/AssA/AP 排正式顺序 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E85/TO_E88；e84 完整 `55.474/62.422`，两项单独过线但同点和 `117.896` 仍差严格总和 `0.434` | 同模型 duration-only 继续 e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；05:40 fresh 启动，screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五门槛通过 | `0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-06 04:16 CST：252 duration-only 延长与 99 e8 诊断闭环
@@ -94,6 +94,28 @@
 - 99 `0804_17` 于 04:59 到 e12 iter50，252 `0806_04` 于 04:56 到 e83 iter450；两条正式
   训练的 total、DN、Encoder proposal 与 grad 均有限。先等 99 e12 全量和 252 e84，不抢跑
   `0806_02/0806_05` formal。
+
+## 2026-08-06 05:43 CST：e84 严格总和未过，178 scale-orientation 接替
+
+- 252 e84 同点 cls HOTA/DetA/AssA `55.474/46.328/68.477`，det
+  `62.422/54.790/73.568`，绝对和 `117.896`。虽然 cls/det 分别过 Encoder
+  `+1.037/+0.029`，总和仍低 `>118.330` 门槛 `0.434`，故目标未完成。pair mAP/AP50
+  `0.3235/0.5364`、both-independent `0.3632/0.5740` 与 HOTA 相对 e80 均仍上升，固定
+  GPU0/1 保持相同 duration-only 轨迹到 e88；05:42 到 e85 iter450，GPU2/3 未用。
+- `epoch_84.pth` 为 479,753,014 bytes、meta `84/87192`，711 model/712 EMA states、
+  642 个浮点张量全有限、optimizer 497 states；5416/50 检测、28 CSV、108 非空文件、
+  50/50 非空预测、`async_done=1` 和 392.1 秒 TrackEval 全部闭环。
+- 99 e12 同点 cls/det HOTA `46.261/53.431`，DetA/AssA 为
+  `38.506/58.002` 与 `47.832/61.670`。相对 e8 回升 `+4.869/+5.746`，AP 也明显恢复；
+  但相对直接 product-tangent e12 仍双低 `3.523/2.812`。381,033,974-byte checkpoint、
+  711/712 states、642 有限张量、optimizer 497 states、5416/50/28/108/50 与异步完成均齐全。
+  因仍在恢复而继续到 e16，当前 05:41 到 e14 iter200，动态 GPU0/1 正常、GPU2 未用。
+- 由成熟机制证据选择较少偏离强父线的 `0806_05 scale-orientation split`，而不是更强耦合的
+  `0806_02 log-SPD`。178 两轮全卡空闲、formal workdir 缺失、clean detached `bf3fb3a` 与
+  launcher `bash -n` 再确认后，动态选择 GPU0 于 05:40 fresh 启动；GPU1 保持 1 MiB。
+  screen/PGID `175354/175356`，iter50 为 `0.9508 s/iter`、loss/grad
+  `21.0004/106.2984`，iter100 亦有限；进程、GPU、正式日志、iter50 与有限性五门槛齐全，
+  登记 `RUNNING/E1/TO_E4+`。`0806_02` 保持 `SMOKE_VALIDATED/NO_FORMAL`。
 
 ## 2026-08-06 03:12 CST：178 安全恢复 0804_09 的成熟窗口
 
