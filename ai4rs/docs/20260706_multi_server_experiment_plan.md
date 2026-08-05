@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 15:57 CST.
+Last updated: 2026-08-05 16:13 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 16:13 CST, control of server 99 was restored through its configured SSH
+alias on port 2367; the earlier probes had incorrectly used port 22. The
+mature-negative `0804_11` PGID `1791967` was exactly terminated after
+confirming GPU0/1 ownership and leaving the external GPU2 process untouched.
+Its members and screen disappeared, and GPU0/1 were idle in two consecutive
+checks. The isolated `0804_13 hemisphere-fold center + log-shape consensus`
+candidate then passed config deepcopy, launcher syntax, targeted geometry
+testing, and complete parent/candidate construction at `22,771,111`
+parameters and 711 state tensors with zero delta. A real GPU0/1 four-step DDP
+smoke produced a 364,505,654-byte checkpoint with trained iterative-cls/DN
+heads and 642 finite tensors. Its fresh formal screen/PGID
+`1891971/1891973` reached iter 50 at `1.0030 s/iter`, finite total/DN/encoder
+proposal losses and gradient norm, and zero fatal signatures. It is therefore
+`RUNNING/TO_E4+`; retain e4/e8/e12+ and do not reject at an early checkpoint.
+The 178 trajectory is at epoch 6 iter 1000 on one dynamic GPU, while fixed-252
+is at epoch 50 iter 650 and continues toward epoch 52; both remain finite and
+within their GPU caps.
 
 At 15:53 CST, dynamic-178 `0804_12` closed epoch 4 at cls HOTA/DetA/AssA
 `34.909/27.213/47.152` and det `42.639/32.932/57.756`. Relative to the mature

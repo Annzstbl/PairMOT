@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 15:57 CST
+更新时间：2026-08-05 16:13 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E52+` | e48 完整 `54.168/60.609`，同点和 `114.777`、严格仍差 `3.553`；较 e44 双升 `+0.284/+0.415`，已到 e49 iter650，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.909/42.639`，相对强父线 e4 `+2.060/+5.320`，AP 四项全正；仅作早期正归因，已到 e5 iter750，继续 e8/e12+。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e16 完整 `46.103/53.390`，相对强父线 e16 `-4.312/-4.066`；共享正式日志到 e17 iter250，但控制机、178、252 路径仍 SSH 超时。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E52+` | e48 完整 `54.168/60.609`，同点和 `114.777`、严格仍差 `3.553`；较 e44 双升 `+0.284/+0.415`，已到 e50 iter650，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.909/42.639`，相对强父线 e4 `+2.060/+5.320`，AP 四项全正；仅作早期正归因，已到 e6 iter1000，继续 e8/e12+。 |
+| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 正确 SSH 端口恢复控制后，成熟负线 `0804_11` 已精确停止；新线真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1891973`。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,31 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 16:13 CST：99 控制恢复，0804_11 成熟停止并由 0804_13 接替
+
+- 99 的实际 SSH 入口是配置别名 `WY10.106.14.99`（端口 `2367`）；此前
+  `RUNNING/CONTROL_UNREACHABLE` 来自误探测默认端口 22，并非训练机宕机。恢复控制后先核实
+  `0804_11` 唯一训练进程组仍为 PGID `1791967`、占用动态 GPU0/1，而 GPU2 为外部任务；随后
+  仅向该 PGID 发送 TERM。进程成员归零、screen 消失，GPU0/1 连续两次均为 `12 MiB/0%`，
+  GPU2 外部任务保持约 `21081 MiB/100%`，未触碰。
+- `0804_11` 的停止依据仍是 e12/e16 成熟窗口以及相对强父线在 HOTA、DetA/AssA 和四项 AP
+  上的全面支配，不属于 e4/e8 早停。其 checkpoint、检测和 TrackEval 产物全部保留。
+- `0804_13 hemisphere-fold center + mature log-shape consensus` 部署到新的隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_hemispherefoldcenterlogshape_0804_13_99_v2`，clean detached
+  HEAD `84ad131`；首次普通 clone 因仓库缺失 LFS 对象导致 checkout 未完成，保留为失败构建
+  证据，未用于训练，也未热更新任何存活仓库。`GIT_LFS_SKIP_SMUDGE=1` 的 v2 checkout 完整。
+- 目标配置 deepcopy、两份 launcher `bash -n`、定向测试与父/新完整构建通过：参数
+  `22,771,111`、state tensors `711`、增量 0。真实 GPU0/1 DDP smoke 四步 loss/grad、DN、
+  Encoder 均有限，364,505,654-byte `iter_4.pth` 的 iterative-cls/DN 语义已训练且 642 个
+  浮点张量全有限，致命扫描 0。
+- fresh formal 于 16:10:57 启动，screen/PGID `1891971/1891973`、两 rank 与动态 GPU0/1
+  驻留一致；iter50 为 `1.0030 s/iter`、loss/grad `21.4104/121.9437`，total、DN、Encoder
+  proposal 全有限，致命扫描 0。五项动态门槛全部通过后才登记 `RUNNING/TO_E4+`；继续收集
+  e4/e8/e12+，不得由早期节点直接淘汰。
+- 同时只读复核：178 `0804_12` 仅用 GPU0，已到 e6 iter1000；252 `0804_01` 固定 GPU0/1，
+  已到 e50 iter650。两线 total/DN/Encoder/grad 均有限且无致命错误；178 等待 e8，252 等待
+  e52 同 checkpoint 检测与 TrackEval，252 GPU2/3 保持未用。
 
 ## 2026-08-05 15:53 CST：0804_12 e4 早期双正；252 e48 继续逼近；99 e16 成熟父线负差
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 15:57 CST。
+更新时间：2026-08-05 16:13 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e16 `46.103/53.390`，相对成熟父线 e16 `-4.312/-4.066`；共享日志到 e17 iter250 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 双端口仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 DDP smoke/checkpoint/formal iter50 五门槛通过，PGID `1891973` | 收集 e4/e8/e12+；不得用 e4/e8 直接淘汰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.168/60.609`，严格总和仍差 `3.553`；到 e49 iter650 | e44→e48 双升且 DetA/AssA/AP 全升，继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `34.909/42.639`，相对强父线 `+2.060/+5.320`，四项 AP 全正 | e4 仅早期归因，继续 e8/e12+；即使 GPU1 空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.168/60.609`，严格总和仍差 `3.553`；到 e50 iter650 | e44→e48 双升且 DetA/AssA/AP 全升，继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `34.909/42.639`，相对强父线 `+2.060/+5.320`，四项 AP 全正；到 e6 iter1000 | e4 仅早期归因，继续 e8/e12+；即使 GPU1 空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 16:13 CST：99 正确端口恢复与 0804_13 五门槛启动
+
+- 99 的正确 SSH 别名走端口 `2367`；此前端口 22 超时被错误解释为控制不可达。恢复后核实
+  `0804_11` 的唯一训练 PGID `1791967` 占用动态 GPU0/1，GPU2 是外部任务；精确 TERM 后
+  PGID 成员归零、screen 消失，GPU0/1 连续两轮为 `12 MiB/0%`，GPU2 未动。
+- `0804_13` 在隔离 v2 checkout、clean detached HEAD `84ad131` 上完成配置 deepcopy、launcher
+  语法、定向测试与父/新完整构建，参数/state `22,771,111/711`、增量 0。首次 clone 因缺失
+  LFS 对象只留下失败构建证据，未用于训练；v2 通过 skip-smudge 安全部署。
+- 真实 GPU0/1 四步 DDP smoke 的 total、DN、Encoder、grad 有限；364,505,654-byte checkpoint
+  中 iterative-cls/DN 已训练且 642 个浮点张量全有限。fresh formal screen/PGID
+  `1891971/1891973` 于 16:10:57 启动，iter50 `1.0030 s/iter`、loss/grad
+  `21.4104/121.9437`，两 rank/GPU/log/有限项和致命扫描五门槛均通过，故登记
+  `RUNNING/TO_E4+`。继续 e4/e8/e12+，不早停。
+- 16:13 并行审计中，178 `0804_12` 仅 GPU0 到 e6 iter1000，252 `0804_01` 固定 GPU0/1
+  到 e50 iter650；均有限且无致命错误。继续分别等待 e8 和 e52 的 checkpoint、检测与
+  TrackEval 同点闭环，252 GPU2/3 仍未使用。
 
 ## 2026-08-05 15:53 CST：178 e4、252 e48 与 99 e16 完整闭环
 
