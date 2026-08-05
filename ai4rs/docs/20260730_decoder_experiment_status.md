@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 13:25 CST
+更新时间：2026-08-05 14:32 CST
 
 ## 当前研究原则
 
@@ -14,8 +14,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E44+` | e40 完整 `53.450/59.649`，同点和 `113.099`、严格仍差 `5.231`；较 e36 双升 `+0.124/+0.356`，PGID `823929` 已恢复 e41，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.791/48.125`，相对直接 product-tangent 为 `-4.882/-5.797`；不以 e8 否决，PGID `3856480` 已恢复 e9，GPU1 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E48+` | e44 完整 `53.884/60.194`，同点和 `114.078`、严格仍差 `4.252`；较 e40 双升 `+0.434/+0.545`，PGID `823929` 已进 e45，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | `0804_10` e12 成熟双负后精确停止；新候选真 smoke、checkpoint 和 formal iter50 五门槛通过，screen/PGID `3968121/3968124`，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `39.410/46.043`，较自身 e4 双升但相对成熟父线仍为 `-5.592/-3.040`，主要损伤 DetA；不以 e8 否决，PGID `1791967` 已恢复 e9，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -24,9 +24,44 @@
 `0804_04 body-frame` 与 `0804_05 SE(2)` 均在 e4/e8/e12 三个完整节点后成熟停止；
 `0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
 
-`0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
-`0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
-五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+`0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
+`0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
+checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 14:32 CST：covariant-Frenet e12 成熟停止；spherical-midpoint 五门槛接替；252 e44 继续上升
+
+- 178 `0804_10 covariant-Frenet product-tangent` e12 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `46.788/38.193/59.523`，det 为 `53.443/47.724/61.963`，同点和
+  `100.231`。相对直接 product-tangent 父线 e12 的 cls `49.784/41.865/61.515`、det
+  `56.243/50.021/65.603`，HOTA 为 `-2.996/-2.800`，cls DetA/AssA 为
+  `-3.672/-1.992`，det 为 `-2.297/-3.640`；pair mAP/AP50
+  `0.237823/0.416006`、both-independent `0.281755/0.469516`，也分别低约
+  `0.03798/0.06259/0.03965/0.06148`。尽管相对自身 e8 HOTA 回升
+  `+4.997/+5.318`，e4/e8/e12 三个完整节点始终被强父线支配，故这是成熟停止而非 e4/e8
+  早停。381,103,476-byte checkpoint meta `12/12456`，12 个 residual 最大绝对值
+  `0.0877797`，PairDN 与 642 个浮点张量全有限；5416/50、28 CSV、108 个非空文件、
+  50 preds、`async_done=1` 与 241.2 秒 TrackEval 完整。TERM PGID `3856480` 后成员
+  `9→0`，GPU0 连续两轮回到 `1 MiB/0%`，GPU1 外部任务未动。
+- `0804_12 spherical-midpoint center + mature log-shape consensus` 只将中心反对称 detail
+  的方向旋转到“学习方向与最短符号运动方向”的球面中点，精确保留原 detail 范数；其余成熟
+  log-size/周期角共识不变。该操作零参数/state 增量、swap-equivariant、class-agnostic、无
+  reweight、无新 layer/attention/loss。178 隔离 checkout clean HEAD `d85e837`；配置
+  deepcopy、完整父/新构建 `22,771,111` 参数、711 states、增量 0 与 launcher 语法均通过。
+  动态 GPU0 的四步真实 smoke loss `21.3696/20.6405/20.9079/21.2148`、grad
+  `59.7293/76.8835/97.5604/94.5484`，total、DN、Encoder 全有限；364,506,164-byte
+  `iter_4.pth` 的 iterative-cls/DN 与 642 个浮点张量审计通过。
+- fresh formal screen `3968121.pm_0804_12_formal_178`、PGID `3968124` 保持 9 个成员；
+  iter50 为 `0.9509 s/iter`、loss/grad `21.0208/137.1233`，正式 workdir/日志持续更新，
+  total、DN、Encoder 与 grad 有限、fatal 0，GPU0 约 31.4 GiB。五门槛通过后才登记
+  `RUNNING/TO_E4+`；GPU1 外部进程约 6.9 GiB，始终未触碰。
+- 252 `0804_01 product-tangent` e44 cls HOTA/DetA/AssA
+  `53.884/45.205/66.371`，det `60.194/53.522/70.058`，同点和 `114.078`；严格 cls、det、
+  总和仍分别差 `0.553/2.199/4.252`，不得登记成功。相对 e40 HOTA 双升
+  `+0.434/+0.545`、总和 `+0.979`；pair mAP/AP50 `0.312939/0.531436`、
+  both-independent `0.354629/0.573133`，四项也较 e40 继续上升。424,999,478-byte
+  checkpoint 的 iterative-cls/DN 与 642 个浮点张量全有限；5416/50、28 CSV、108 个
+  非空文件、50 preds、`async_done=1`，TrackEval 392.3 秒。PGID `823929` 已到 e45，
+  固定只用 GPU0/1，GPU2/3 保持 `1 MiB/0%`；因成熟曲线仍双升，继续 e48 复核。
 
 ## 2026-08-05 13:25 CST：center-tangent e8 完整闭环，继续 e12
 

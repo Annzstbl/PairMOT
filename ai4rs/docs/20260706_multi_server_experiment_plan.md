@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 13:25 CST.
+Last updated: 2026-08-05 14:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,39 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 14:32 CST, dynamic-178 `0804_10` closed its mature epoch-12 window at
+cls/det HOTA `46.788/53.443`. Its aligned direct-product-tangent parent is
+`49.784/56.243`; DetA, AssA, and all four AP measures are also lower. Because
+epochs 4, 8, and 12 all have complete checkpoint, detection, and TrackEval
+artifacts, exact TERM of PGID `3856480` (`9→0`) is a mature decision rather
+than an epoch-4/8 rejection. The epoch-12 checkpoint is 381,103,476 bytes and
+all 642 floating tensors are finite; evaluation closed with 5416 records,
+50 sequences, 28 CSVs, 108 nonempty files, 50 predictions, and
+`async_done=1` in 241.2 seconds.
+
+After two consecutive dynamic-GPU0 idle checks, zero-parameter `0804_12`
+spherical-midpoint center plus mature log-shape consensus passed the 178
+single-GPU four-step real-data smoke, iterative-cls/DN checkpoint audit, and
+fresh-formal iter-50 gates. Smoke loss is
+`21.3696/20.6405/20.9079/21.2148`; the 364,506,164-byte `iter_4.pth` has 642
+finite floating tensors. Formal screen/PGID is `3968121/3968124`, with nine
+members, GPU0 residency near 31.4 GiB, iter-50 time `0.9509 s`, loss
+`21.0208`, grad norm `137.1233`, finite total/DN/encoder components, and zero
+fatal signatures. It is therefore `RUNNING/TO_E4+`; external GPU1 remains
+untouched. The isolated checkout is clean at `d85e837`, configuration
+deepcopy and full construction passed, and parameter/state counts remain
+`22,771,111/711` with zero delta.
+
+Fixed-252 `0804_01` epoch 44 closed at cls HOTA/DetA/AssA
+`53.884/45.205/66.371` and det `60.194/53.522/70.058`. The same-checkpoint
+sum is `114.078`, leaving strict cls/det/sum deficits
+`0.553/2.199/4.252`; it is not success. Relative to epoch 40, HOTA still rises
+`+0.434/+0.545`, while pair mAP/AP50 is `0.312939/0.531436` and
+both-independent is `0.354629/0.573133`. The 424,999,478-byte checkpoint,
+642 finite tensors, 5416/50 detection artifacts, 28 CSVs, 108 nonempty files,
+50 predictions, and 392.3-second async TrackEval are complete. PGID `823929`
+continues on fixed GPU0/1 to epoch 48; GPU2/3 remain unused.
 
 At 13:25 CST, dynamic-99 `0804_11` closed its epoch-8 checkpoint, detection,
 and TrackEval artifacts. Same-checkpoint cls HOTA/DetA/AssA is
