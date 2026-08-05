@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 05:51 CST。
+更新时间：2026-08-06 05:59 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E14/TO_E16+；e12 完整 `46.261/53.431`，05:50 到 e14 iter700 | 因回升显著继续到 e16；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E15/TO_E16+；e12 完整 `46.261/53.431`，05:58 到 e15 iter100 | 因回升显著继续到 e16；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E85/TO_E88；e84 完整 `55.474/62.422`，05:50 到 e85 iter900 | 同模型继续 e88；`0806_06` e88→e96 仅 PREPARED/NOT_DEPLOYED；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；05:40 fresh 启动，五门槛通过；05:50 到 e1 iter650 | `0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E86/TO_E88；e84 完整 `55.474/62.422`，05:58 到 e86 iter200 | 同模型继续 e88；`0806_06` e88→e96 仅 PREPARED/NOT_DEPLOYED；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E2/TO_E4+；05:40 fresh 启动，五门槛通过；05:58 到 e2 iter150 | `0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-06 05:51 CST：活体资源复核与 252 续时长兜底准备
@@ -35,6 +35,10 @@
   `PREPARED/NOT_DEPLOYED/NO_REMOTE_WORKDIR/NO_GPU`，不热更新 `0806_04` 活跃仓库。
   只有 e88 全量同 checkpoint 仍未严格达标时，才在新隔离 checkout 完成 config deepcopy、
   完整构建、真实双卡 smoke、checkpoint 验收和 formal iter50 五门槛后登记 RUNNING。
+- 05:59 已把 `445cac8` 相对 `d664a03` 的增量 bundle 暂存到 252，双端 SHA-256 均为
+  `1cddd6dd997633ff2ae23814c34b6bb90f091f600f2dddf92e3fa7fb55f437b7`。目标 checkout 和
+  formal workdir 均不存在，未 fetch、未构建、未运行 smoke，故这只是可核验传输准备，不改变
+  `PREPARED/NOT_DEPLOYED/NO_GPU` 状态，也不触碰 `0806_04` 活跃 checkout。
 
 ## 2026-08-06 04:16 CST：252 duration-only 延长与 99 e8 诊断闭环
 

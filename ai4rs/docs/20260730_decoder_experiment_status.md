@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 05:51 CST
+更新时间：2026-08-06 05:59 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E85/TO_E88` | e84 完整 `55.474/62.422`，两项单独门槛均过，但同点和仅 `117.896`，严格总和仍差 `0.434`；相对 e80 HOTA/AP 仍双升，继续既定 e88。05:50 到 e85 iter900；GPU2/3 均为 1 MiB。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E86/TO_E88` | e84 完整 `55.474/62.422`，两项单独门槛均过，但同点和仅 `117.896`，严格总和仍差 `0.434`；相对 e80 HOTA/AP 仍双升，继续既定 e88。05:58 到 e86 iter200；GPU2/3 均为 1 MiB。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | 99 e12 与 252 e84 证明 quotient 分解仍弱且强父线总和未过，故选择更贴近父线的 scale-orientation split。05:40 动态选择空闲 GPU0 fresh 启动；screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五项门槛通过；05:50 到 e1 iter650，GPU1 未用。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E14/TO_E16+` | e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但仍被直接 product-tangent e12 双侧压低 `3.523/2.812`；因回升显著保留到 e16，不以 e8/e12 的绝对未达标直接否决。05:50 到 e14 iter700；GPU2 未用。 |
+| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E2/TO_E4+` | 99 e12 与 252 e84 证明 quotient 分解仍弱且强父线总和未过，故选择更贴近父线的 scale-orientation split。05:40 动态选择空闲 GPU0 fresh 启动；screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五项门槛通过；05:58 到 e2 iter150，GPU1 未用。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E15/TO_E16+` | e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但仍被直接 product-tangent e12 双侧压低 `3.523/2.812`；因回升显著保留到 e16，不以 e8/e12 的绝对未达标直接否决。05:58 到 e15 iter100；GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -49,6 +49,11 @@
   未占 GPU，也未登记 RUNNING。只有 e88 同一 checkpoint 全量审计仍未满足三项门槛时，才在
   新隔离 checkout 补做目标 config deepcopy、完整构建、真实双卡 smoke、checkpoint 验收与
   formal iter50 五项门槛；若 e88 已严格达标，则不部署该兜底。
+- 05:59 将提交 `445cac8` 相对 `d664a03` 的增量封装为
+  `0806_06_445cac8_from_d664a03.bundle`，本地与 252 暂存副本 SHA-256 均为
+  `1cddd6dd997633ff2ae23814c34b6bb90f091f600f2dddf92e3fa7fb55f437b7`。252 端只暂存 bundle；
+  目标 checkout 与 formal workdir 再次核验均不存在，未执行 fetch/checkout/build/smoke，
+  所以状态仍是 `PREPARED/NOT_DEPLOYED/NO_GPU`，且没有热更新 `0806_04` 存活仓库。
 
 ## 2026-08-06 04:16 CST：252 e80 严格未达标并无缝延长；99 e8 完整诊断
 
