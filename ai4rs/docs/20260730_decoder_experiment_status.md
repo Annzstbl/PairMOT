@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 05:59 CST
+更新时间：2026-08-06 07:16 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E86/TO_E88` | e84 完整 `55.474/62.422`，两项单独门槛均过，但同点和仅 `117.896`，严格总和仍差 `0.434`；相对 e80 HOTA/AP 仍双升，继续既定 e88。05:58 到 e86 iter200；GPU2/3 均为 1 MiB。 |
+| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E89/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；07:14 e89 iter50。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E2/TO_E4+` | 99 e12 与 252 e84 证明 quotient 分解仍弱且强父线总和未过，故选择更贴近父线的 scale-orientation split。05:40 动态选择空闲 GPU0 fresh 启动；screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五项门槛通过；05:58 到 e2 iter150，GPU1 未用。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E15/TO_E16+` | e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但仍被直接 product-tangent e12 双侧压低 `3.523/2.812`；因回升显著保留到 e16，不以 e8/e12 的绝对未达标直接否决。05:58 到 e15 iter100；GPU2 未用。 |
+| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E6/TO_E8+` | e4 完整 cls/det `33.531/35.929`，相对直接 product-tangent e4 低 `1.743/7.920`；定位和关联两侧均弱。e4 仅作机制诊断，继续 e8/e12，不以 e4 否决；07:15 到 e6 iter300，GPU1 未用。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E19/TO_E20+` | e16 完整 cls/det `48.315/55.584`，相对 e12 再升 `+2.054/+2.153`，与直接 product-tangent 父线 e16 的差距收窄到 `1.721/1.349`；但严格三门槛仍差 `6.122/6.809/14.431`。因 DetA/AssA/AP 同升，继续 e20/e24；07:15 到 e19 iter250，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -30,6 +31,66 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 07:16 CST：252 e88 严格未达标；e96 纯时长接续通过五项门槛
+
+- 252 `0806_04` e88 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `55.397/46.268/68.372`，det 为 `62.403/54.759/73.540`，绝对和 `117.800`。
+  cls、det 分别严格高于 Encoder `0.960/0.010`，但同点和距严格 `>118.330` 仍差
+  `0.530`，因此目标未完成。相对 e84，HOTA `-0.077/-0.019`，DetA
+  `-0.060/-0.031`，AssA `-0.105/-0.028`；pair mAP/AP50
+  `0.3230/0.5346`、both-independent `0.3617/0.5704` 也均回落，故 e84 仍是该段最佳。
+- 485,230,326-byte `epoch_88.pth` meta `88/91344`，model/EMA 711/712 states、各 642
+  个浮点张量全有限，optimizer 497 states 与 scheduler 完整；iterative-cls residual、DN
+  absolute heads 均有限且已训练。5416/50 检测、28 CSV、108 非空文件、50/50 非空预测和
+  `async_done=1` 齐全；TrackEval 于 07:06:56 自然完成，耗时 371.5 秒。原训练与异步进程
+  自然退出后四卡均为 1 MiB。
+- 按预案部署 `0806_06` 纯时长 e88→e96：129,359,336-byte 完整 history bundle 的本地/远端
+  SHA-256 均为 `de41380f6dbc591c3d8f2007cf06844ab41fb1aa01114a39b447b05838df77f0`；新隔离 checkout
+  `/data/users/litianhao01/PairMOT_producttangent_extend_0806_06_252/ai4rs` 为 clean detached
+  `445cac8`，未热更新任何存活仓库。目标与 smoke config 均通过 deepcopy，父/子完整构建均为
+  22,771,111 参数、711 states，模型/数据/优化器/scheduler 完全相同，e88 checkpoint 严格加载；
+  两个 launcher 远端 `bash -n` 通过。
+- 固定 GPU0/1 的真实 DDP 四步 smoke loss 为
+  `12.9389/19.3870/19.5357/21.1102`，grad norm 为
+  `102.9586/84.7106/85.6180/88.6991`；DN、Encoder proposal 与所有训练项有限，无
+  Traceback/OOM/NCCL/DDP 错误。364,503,158-byte `iter_4.pth` 的 iterative-cls/DN 语义
+  与 642 个浮点张量全有限，结束后 GPU0/1 回到 1 MiB。
+- formal screen `1168832.pairmot_0806_06_e96` 从 e88/91344 精确恢复；07:14:36 到
+  e89 iter50，lr/loss/grad `1e-4/8.1478/42.6524`，DN 与 Encoder proposal 有限且 fatal=0。
+  GPU0/1 各约 19.4 GiB、GPU2/3 均为 1 MiB；进程、固定 GPU、正式目录/日志、iter50 与
+  有限性五项门槛齐全，因此登记 `RUNNING/E89/TO_E92+`。
+- 同期 99 `0804_17` 到 e19 iter250，178 `0806_05` 到 e6 iter300；两线训练分量有限并分别
+  遵守总计两卡/一卡上限，继续既定 e20/e24 与 e8/e12 成熟窗口。
+
+## 2026-08-06 06:50 CST：99 e16 保持恢复趋势；178/252 进入关键评估窗口
+
+- 99 `0804_17` e16 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `48.315/39.942/60.785`，det 为 `55.584/48.982/65.232`，绝对和 `103.899`。
+  相对 e12，HOTA 再升 `+2.054/+2.153`，DetA/AssA 也由
+  `38.506/58.002`、`47.832/61.670` 全部回升；pair mAP/AP50 由
+  `0.2405/0.4271` 升至 `0.2530/0.4489`，both-independent 由
+  `0.2857/0.4838` 升至 `0.2972/0.5026`。相对直接 product-tangent 父线 e16
+  `50.036/56.933` 的差距缩小到 `1.721/1.349`，故不能在 e16 提前否决，继续 e20/e24。
+- e16 仍严格未达标：cls、det 与同点和门槛分别差 `6.122`、`6.809`、`14.431`。
+  386,528,054-byte `epoch_16.pth` meta `16/16608`，model/EMA 711/712 states、二者各
+  642 个浮点张量全有限，optimizer 497 states 且 scheduler 存在；iterative-cls residual
+  与 DN absolute heads 均有限且已训练。5416/50 检测和 28 CSV、108 个非空文件、50/50
+  非空预测、`metrics.json` 齐全；TrackEval 于 06:40:52 自然完成，耗时 282.1 秒。
+- 178 `0806_05` e4 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `33.531/27.266/43.909`，det 为 `35.929/33.130/40.522`，绝对和 `69.460`。相对直接
+  product-tangent e4 `35.274/43.849` 低 `1.743/7.920`，DetA 与 AssA 两侧也均弱；pair
+  mAP/AP50 `0.1435/0.2772`、both-independent `0.1888/0.3507`，均低于父线
+  `0.1593/0.2965` 与 `0.2069/0.3704`。这是早期负诊断，但不能作为 decoder 的 e4 否决证据。
+- 369,976,948-byte e4 checkpoint meta `4/4152`，model/EMA 711/712 states、各 642 个
+  浮点张量全有限，optimizer 497 states 与 scheduler 完整；iterative-cls residual、DN absolute
+  heads 均有限且已训练。5416/50 检测、28 CSV、108 非空文件、50/50 非空预测和
+  `async_done=1` 齐全，TrackEval 于 06:58:22 自然完成并耗时 221.2 秒。正式训练已恢复到
+  e5 iter250，继续 e8/e12；GPU1 未用。
+- 252 `0806_04` 于 06:49 到 e88 iter600，固定 GPU0/1 各约 21.6 GiB 且 GPU2/3 仍为
+  1 MiB；正式 loss/grad、DN 与 Encoder proposal 均有限。等待 e88 checkpoint、检测与双
+  TrackEval 的同点全量审计，严格核验 `>54.437/>62.393/>118.330` 后才决定是否部署
+  `0806_06` e88→e96 兜底。
 
 ## 2026-08-06 05:51 CST：三线活体复核；252 纯时长兜底仅静态准备
 
