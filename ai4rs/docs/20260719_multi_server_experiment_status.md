@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 11:55 CST。
+更新时间：2026-08-05 12:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,32 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；零参数/state，真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `1791967` | 继续 e4/e8/e12 和成熟节点；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 `30.433/37.650` 仅作早期归因，PGID `1791967` 已到 e5 iter500 | 继续 e8/e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e37 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已恢复 e5 | e4 不早停，继续 e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E40+；e36 `53.326/59.293`，严格总和仍差 `5.711`，PGID `823929` e39 iter800 | 轨迹近平台但 AP 微升，继续 e40+ 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `34.189/36.612`，PGID `3856480` 已到 e6 iter800 | e4 不早停，继续 e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 12:15 CST：99 e4 闭环与下一候选静态准备
+
+- 99 `0804_11` e4 cls HOTA/DetA/AssA `30.433/24.962/39.419`，det
+  `37.650/32.515/44.764`；相对成熟父线 `0803_13` e4 HOTA `-2.416/+0.331`，cls
+  DetA/AssA `-1.720/-4.502`，det `-2.433/+3.521`，表现为 det 的 DetA→AssA 交换并伴随
+  cls 损伤。pair mAP/AP50 `0.1336/0.2565`、both-independent `0.1748/0.3227`，四项均低于
+  父线。369,965,878-byte checkpoint meta `4/4152`，12 个 residual 最大绝对值
+  `0.0673615`，642 个浮点张量全有限；5416/50、28 CSV、108 个非空文件、50 preds、
+  `async_done=1` 和 242.9 秒 TrackEval 完整。e4 不作直接否决，PGID `1791967` 已恢复 e5，
+  继续 e8/e12 及成熟节点。
+- `0804_12 spherical-midpoint center + mature log-shape consensus` 已在 99 隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_sphericalmidpointcenterlogshape_0804_12_99` 固定 clean
+  HEAD `4f6d563`。只把 center 反对称 detail 方向改为学习方向和运动方向的最短符号球面中点，
+  精确保留原 detail 范数；零参数/state、交换等变、class-agnostic、无 reweight，不增加层、attention 或 loss。
+  定向单测、配置 deepcopy、完整构建与 launcher 语法已通过，父/新均 `22,771,111` 参数、
+  711 states。当前严格为 `PREPARED/NO_GPU`，未做真实 DDP smoke、checkpoint 与 formal iter50，
+  不登记 RUNNING，等待 99 现行成熟线释放双卡后再按五项门槛接替。
+- 12:15 现场复核：252 固定 GPU0/1 到 e39 iter800、GPU2/3 空闲；178 仅本线 GPU0 到
+  e6 iter800、GPU1 外部任务不动；99 仅本线 GPU0/1 到 e5 iter500、GPU2 外部任务不动。
+  三线正式 total/DN/Encoder/grad 有限，未触碰外部任务或热更新存活仓库。
 
 ## 2026-08-05 11:55 CST：178 e4 闭环与 197 主机保护停线
 

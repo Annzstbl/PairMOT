@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 11:55 CST
+更新时间：2026-08-05 12:15 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E40+` | e36 完整 `53.326/59.293`，同点和 `112.619`、严格仍差 `5.711`；较 e32 为 `+0.017/-0.027`，轨迹指标近平台但 AP 微升，PGID `823929` 已恢复 e37，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`，相对直接 product-tangent 为 `-1.085/-7.237`；不以 e4 否决，PGID `3856480` 已恢复 e5，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | 保留成熟 terminal log-size/周期角共识，只新增 center product-tangent；零参数/state，真实 DDP smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1791967`，GPU2 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E40+` | e36 完整 `53.326/59.293`，同点和 `112.619`、严格仍差 `5.711`；较 e32 为 `+0.017/-0.027`，轨迹指标近平台但 AP 微升；PGID `823929` 已到 e39 iter800，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`，相对直接 product-tangent 为 `-1.085/-7.237`；不以 e4 否决，PGID `3856480` 已到 e6 iter800，GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `30.433/37.650`；det AssA 提升但 cls 与 AP/DetA 受损，只作早期归因；PGID `1791967` 已到 e5 iter500，继续 e8/e12，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,34 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 12:15 CST：center-tangent e4 闭环；球面中点候选静态就绪
+
+- 99 `0804_11 center-tangent + log-shape consensus` e4 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `30.433/24.962/39.419`，det 为 `37.650/32.515/44.764`。相对其成熟
+  terminal log-shape 父线 `0803_13` e4 的 `32.849/37.319`，HOTA 为 `-2.416/+0.331`；
+  cls DetA/AssA 为 `-1.720/-4.502`，det 为 `-2.433/+3.521`。这说明 center tangent 在
+  det 侧发生 DetA→AssA 交换，同时损伤 cls，而不是整体优于父线。pair mAP/AP50
+  `0.1336/0.2565`、both-independent `0.1748/0.3227`，相对父线分别为
+  `-0.0063/-0.0048/-0.0133/-0.0164`；相对直接 product-tangent e4，cls/det HOTA 亦低
+  `4.841/6.199`。同点和仅 `68.083`，距严格总和 `118.330` 仍差 `50.247`。
+- `epoch_4.pth` 为 369,965,878 bytes，meta `4/4152`；12 个 iterative-cls residual 最大
+  绝对值 `0.0673615`，iterative-cls/DN 已训练且有限，642 个浮点张量全有限。检测为
+  5416 records/50 sequences；TrackEval 产出 28 CSV、108 个非空文件、50 个非空预测和
+  `async_done=1`，用时 242.9 秒。该点仅作早期机制诊断，不以 e4 否决；正式 PGID
+  `1791967` 已恢复到 e5 iter500，GPU0/1 正常，继续收集 e8/e12 及成熟节点，GPU2 外部任务不动。
+- 下一单因素候选 `0804_12 spherical-midpoint center + mature log-shape consensus` 已在 99
+  全新隔离 checkout `/data/users/wangying01/lth/PairMOT_sphericalmidpointcenterlogshape_0804_12_99`
+  固定 clean HEAD `4f6d563`。它保留成熟 log-size/周期角共识，只把 center 的反对称 detail
+  方向改为学习方向与既有运动方向的最短符号球面中点，并精确保留原 detail 范数；零参数/state、
+  交换等变、class-agnostic、无 reweight，且不增加层、attention、loss 或主矩阵计算。
+  定向单测通过；配置 deepcopy、完整构建与 launcher 语法通过，父/新均为 `22,771,111`
+  参数、711 states，增量 0。当前严格登记 `PREPARED/NO_GPU`：尚未占用 GPU、尚未通过真实
+  DDP smoke、checkpoint 与 formal iter50，不能写作 RUNNING；等现有 99 双卡路线到成熟节点
+  并释放后，再按五项动态门槛决定是否接替。
+- 12:15 资源复核：252 固定 GPU0/1 到 e39 iter800，GPU2/3 均 `1 MiB/0%`；178 仅本线
+  GPU0 到 e6 iter800，GPU1 外部任务不动；99 仅本线 GPU0/1 到 e5 iter500，GPU2 外部任务
+  不动。三线正式日志的 total/DN/Encoder/grad 均有限，未热更新任何存活训练仓库。
 
 ## 2026-08-05 11:55 CST：covariant-Frenet e4 闭环；197 主机降频保护停线
 
