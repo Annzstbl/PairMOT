@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 00:50 CST
+更新时间：2026-08-06 01:03 CST
 
 ## 当前研究原则
 
@@ -14,8 +14,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `COMPLETED/E72_AUDITED/NOT_TARGET` | e72 完整 `55.170/62.165`，cls 过线但 det 仍差 `0.228`，同点和 `117.335` 距严格目标仍差 `0.995`；GPU0/1 已释放，GPU2/3 始终未用。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；已恢复 e9 iter250，继续到 e12+。GPU1 外部作业不动。 |
+| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E73/TO_E76+` | e72 完整 `55.170/62.165`、同点和 `117.335`，仍差严格目标 `0.995`；因 e68→e72 双 HOTA、DetA/AssA 与 AP 均升，保持模型/优化器/EMA/LR 完全连续延至 e80，e76/e80 完整复核。GPU2/3 始终不用。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.399/47.599`，呈 AssA 上升但 DetA/AP 回落；已到 e9 后段，继续到 e12+。GPU1 外部作业不动。 |
 | 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -29,6 +29,26 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 01:03 CST：252 成熟 product-tangent 延至 e80 并通过五项门槛
+
+- `0804_01` e68→e72 的 cls/det HOTA 继续增加 `0.317/0.282`，DetA、AssA 与四项 AP
+  同时上升；e72 已让 cls 严格过线，det 仅差 `0.228`，严格同点和仅差 `0.995`。结合
+  decoder 慢收敛约束，252 作为最慢且只承接成熟路线的固定 GPU0/1 通道，新增
+  `0806_01` 做纯训练时长单因素：从审计过的 e72 延至 e80，在 e76/e80 完整双评测。
+- 远端隔离 checkout
+  `/data/users/litianhao01/PairMOT_producttangent_extend_0806_01_252/ai4rs` 为 clean detached
+  `5cbf438`。新旧完整配置经 `deepcopy` 后，除 max epoch `72→80`、新 workdir 与 TrackEval
+  输出目录外逐项完全一致；只有前 2000 iter 的 LinearLR warmup，e72 checkpoint scheduler
+  已在 `last_step=1999/global_step=74736`，497 个 optimizer state 的 step 均为 74736，EMA
+  712 tensors 完整，故不会重启学习率、优化器或 EMA。完整模型仍为 22,771,111 参数、
+  711 state tensors，增量 0；两启动器 `bash -n` 通过。
+- 真实双卡 4-iter smoke 仅使用 GPU0/1，四步 loss/grad、DN、Encoder proposal 全有限；
+  364,503,158-byte `iter_4.pth` 的模型 711 state、EMA 712 state 全有限，optimizer step
+  `4/4`，fatal=0。正式 screen/PGID `1025566/1025568` 从 meta `72/74736` 精确恢复；
+  e73 iter50 的 lr `1e-4`、loss/grad `7.8670/45.5998`，所有 DN 与 Encoder proposal
+  有限，GPU0/1 各约 19.4 GiB，GPU2/3 为 1 MiB/0%。五门槛全部通过后登记
+  `RUNNING/E73/TO_E76+`；严格目标仍未完成。
 
 ## 2026-08-06 00:50 CST：178 的 0804_16 e8 完整诊断，继续 e12+
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 00:50 CST。
+更新时间：2026-08-06 01:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,23 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_17 quotient-anisotropy product-tangent` | STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；99 双卡端口静态闭环，参数/state 增量 0 | 等待 178 的 0804_16 e12+ 合法交接；当前不创建 workdir、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | COMPLETED/E72_AUDITED/NOT_TARGET；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995` | GPU0/1 已释放；GPU2/3 始终未用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `42.399/47.599`，已恢复 e9 iter250 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E73/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；纯时长延长且 optimizer/EMA/LR 连续 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `42.399/47.599`，已到 e9 后段 | e8 仅诊断并继续 e12+；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 01:03 CST：252 的 0806_01 e72→e80 成熟续训启动
+
+- e72 相对 e68 的双 HOTA、双 DetA/AssA 与四项 AP 全升，cls 已过线、det 只差 `0.228`，
+  同点和离严格目标只差 `0.995`，因此在最慢且只承接成熟路线的 252 固定 GPU0/1 上做
+  纯时长单因素延长到 e80，e76/e80 做完整双评测。
+- clean detached `5cbf438` 的隔离 checkout 完成新旧 config deepcopy 精确比较、两 launcher
+  `bash -n` 与完整构建；除 `max_epochs 72→80`、独立 workdir/TrackEval 目录外配置相同，
+  22,771,111 参数、711 states、增量 0。e72 的 scheduler 已结束 2000-iter warmup，
+  optimizer 497 states 均在 step74736，EMA 712 states 完整，续训不重启任何状态。
+- 双卡真数据 smoke 4/4 步的 loss/grad、DN、Encoder proposal 全有限，364,503,158-byte
+  checkpoint 的 711 model/712 EMA states 全有限。正式 PGID `1025568` 精确恢复
+  `epoch72/iter74736`，e73 iter50 的 lr/loss/grad 为 `1e-4/7.8670/45.5998`，fatal=0；
+  GPU0/1 各约 19.4 GiB，GPU2/3 保持 1 MiB/0%。五门槛通过后登记 RUNNING。
 
 ## 2026-08-06 00:50 CST：178 的 0804_16 e8 完整评估
 

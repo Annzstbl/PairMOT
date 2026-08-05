@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 00:50 CST.
+Last updated: 2026-08-06 01:03 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:03 CST, fixed-252 started `0806_01`, a duration-only continuation of
+the mature `0804_01 factorized product-tangent` from audited epoch 72 to epoch
+80, with full evaluations at epochs 76 and 80. This is justified by the
+simultaneous epoch-68-to-72 gains in both HOTA, both DetA/AssA, and all four AP
+diagnostics; classification already clears the Encoder, detection is only
+`0.228` short, and the strict sum is only `0.995` short. The isolated clean
+detached checkout is `5cbf438`. Exact deep-copy comparison proves that only
+max epoch `72→80` and isolated output paths change; model, data, global batch,
+optimizer, EMA, LR, losses, decoder, and hooks are identical. The model remains
+22,771,111 parameters and 711 state tensors with zero delta. The epoch-72
+checkpoint has completed its only 2000-iter warmup, all 497 optimizer states
+are at step 74736, and 712 EMA tensors are present, so the continuation does
+not restart state. Real GPU0/1 DDP smoke produced a finite 364,503,158-byte
+checkpoint after four finite iterations. Formal PGID `1025568` resumed exact
+meta `72/74736` and passed iter50 at epoch 73 with constant lr `1e-4`, finite
+loss/gradient `7.8670/45.5998`, finite DN and encoder-proposal terms, and no
+fatal pattern. It is therefore `RUNNING/E73/TO_E76+`; GPU2/3 remain unused.
+The strict goal remains active while dynamic-178 independently continues
+`0804_16` to its mature epoch-12+ handoff.
 
 At 00:50 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
 completed its epoch-8 diagnostic at cls HOTA/DetA/AssA
