@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 15:04 CST
+更新时间：2026-08-05 15:53 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E48+` | e44 完整 `53.884/60.194`，同点和 `114.078`、严格仍差 `4.252`；15:03 PGID `823929` 真实 7 成员并到 e47 iter450，GPU0/1 活跃、GPU2/3 `1 MiB/0%`。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 真 smoke、checkpoint 和 formal iter50 五门槛通过；15:03 screen/PGID `3968121/3968124`、9 成员，到 e3 iter350，GPU0 活跃且只按 1 卡上限运行。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e12 完整 `44.100/51.014`；共享正式日志 15:03 仍到 e14 iter850，但控制机、178、252 路径均 SSH 超时，待恢复后精确停止。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E52+` | e48 完整 `54.168/60.609`，同点和 `114.777`、严格仍差 `3.553`；较 e44 双升 `+0.284/+0.415`，已到 e49 iter650，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.909/42.639`，相对强父线 e4 `+2.060/+5.320`，AP 四项全正；仅作早期正归因，已到 e5 iter750，继续 e8/e12+。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e16 完整 `46.103/53.390`，相对强父线 e16 `-4.312/-4.066`；共享正式日志到 e17 iter250，但控制机、178、252 路径仍 SSH 超时。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,40 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 15:53 CST：0804_12 e4 早期双正；252 e48 继续逼近；99 e16 成熟父线负差
+
+- 178 `0804_12 spherical-midpoint center + log-shape consensus` e4 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `34.909/27.213/47.152`，det 为 `42.639/32.932/57.756`。相对成熟
+  terminal log-shape 父线 `0803_13` e4 的 cls `32.849/26.682/43.921`、det
+  `37.319/34.948/41.243`，HOTA 为 `+2.060/+5.320`，cls DetA/AssA 为
+  `+0.531/+3.231`，det 为 `-2.016/+16.513`。det 的早期提升主要来自关联，但不是以 cls
+  或检测 AP 同步退化换取：pair mAP/AP50 `0.1459/0.2774`、both-independent
+  `0.1905/0.3501`，相对父线四项约 `+0.0060/+0.0161/+0.0024/+0.0110`。
+- e4 只作为机制诊断，不能直接通过或淘汰。369,970,612-byte checkpoint 的 12 个
+  iterative-cls residual 最大绝对值 `0.0550922`，DN 隔离头已训练，642 个浮点张量全有限；
+  5416 records、50 sequences、28 CSV、108 个非空文件、50 preds、`async_done=1` 完整，
+  TrackEval 224.3 秒。PGID `3968124` 已恢复 e5 iter750，仅使用 GPU0，继续 e8/e12+；即使
+  GPU1 当前空闲，也严格遵守 178 总计 1 卡上限。
+- 252 `0804_01 product-tangent` e48 cls HOTA/DetA/AssA
+  `54.168/45.451/66.613`，det `60.609/53.693/70.819`，同点和 `114.777`；距严格
+  cls/det/总和仍差 `0.269/1.784/3.553`，不得登记成功。相对 e44 HOTA
+  `+0.284/+0.415`，cls DetA/AssA `+0.246/+0.242`，det `+0.171/+0.761`；pair
+  mAP/AP50 `0.3142/0.5321`、both-independent `0.3556/0.5735`，四项也继续小升。
+  430,483,510-byte checkpoint 的 12 个 residual 最大绝对值 `0.1297024`，DN 与 642 个
+  浮点张量全有限；5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 与 383.8 秒
+  TrackEval 完整。成熟曲线仍在 DetA、AssA、AP 上同步上升，固定 GPU0/1 已到 e49 iter650，
+  因此继续 e52，而不是在最接近门槛且仍双升时截断；GPU2/3 保持未用。
+- 99 `0804_11 center-tangent` e16 cls HOTA/DetA/AssA `46.103/37.228/59.905`，det
+  `53.390/47.668/61.908`；相对自身 e12 回升 `+2.003/+2.376`，证明此前决定不是 e4/e8
+  早停，但相对强父线 `0803_13` e16 `50.415/57.456` 仍低 `4.312/4.066`。pair
+  mAP/AP50 `0.2312/0.4084`、both-independent `0.2731/0.4600`，相对父线四项低约
+  `0.04396/0.07773/0.04755/0.07743`，成熟定位、关联与 AP 仍被全面支配。
+  386,506,998-byte checkpoint 的 residual 最大绝对值 `0.0991428`，iterative-cls/DN 与
+  642 个浮点张量全有限；5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 与
+  285.9 秒 TrackEval 完整。共享日志已到 e17 iter250；99 直连再次超时，保持
+  `RUNNING/CONTROL_UNREACHABLE`，不通过共享盘注入控制，SSH 恢复后精确 TERM PGID
+  `1791967` 并连续核验两张动态卡释放。
 
 ## 2026-08-05 15:04 CST：三线真实进度复核；0804_13 补齐 178 等价端口
 

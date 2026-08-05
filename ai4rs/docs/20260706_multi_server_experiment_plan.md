@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 15:04 CST.
+Last updated: 2026-08-05 15:53 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,37 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 15:53 CST, dynamic-178 `0804_12` closed epoch 4 at cls HOTA/DetA/AssA
+`34.909/27.213/47.152` and det `42.639/32.932/57.756`. Relative to the mature
+terminal-log-shape parent at the same epoch, HOTA is `+2.060/+5.320`, cls
+DetA/AssA is `+0.531/+3.231`, and det is `-2.016/+16.513`. Pair mAP/AP50 is
+`0.1459/0.2774` and both-independent is `0.1905/0.3501`, all four above the
+parent. This is an early association-heavy positive signal, not a success or
+rejection point. The 369,970,612-byte checkpoint has trained iterative-cls/DN
+heads and 642 finite tensors; 5416/50 detections, 28 CSVs, 108 nonempty files,
+50 predictions, and `async_done=1` closed in 224.3 seconds. Keep dynamic GPU0
+through epochs 8/12+; do not use currently idle GPU1 because the host cap is
+one GPU total.
+
+Fixed-252 `0804_01` epoch 48 closed at cls HOTA/DetA/AssA
+`54.168/45.451/66.613` and det `60.609/53.693/70.819`, sum `114.777`. Strict
+cls/det/sum deficits are still `0.269/1.784/3.553`, so this is not success.
+All four DetA/AssA components and pair/both AP continue upward from epoch 44;
+pair mAP/AP50 is `0.3142/0.5321` and both-independent is `0.3556/0.5735`.
+The 430,483,510-byte checkpoint, trained iterative-cls/DN heads, 642 finite
+tensors, 5416/50 detections, 28 CSVs, 108 nonempty files, 50 predictions, and
+`async_done=1` are complete. Because the closest mature trajectory is still
+improving jointly, keep fixed GPU0/1 to epoch 52 while GPU2/3 remain unused.
+
+Unreachable-99 `0804_11` also closed epoch 16 through shared storage at
+`46.103/53.390`, up `+2.003/+2.376` from its own epoch 12 but still
+`-4.312/-4.066` below the mature parent at epoch 16. Its four AP measures are
+also lower by roughly `0.04396/0.07773/0.04755/0.07743`. Checkpoint semantics,
+642 finite tensors, 5416/50, 28 CSVs, 108 nonempty files, 50 predictions, and
+the 285.9-second TrackEval are complete. The shared log is at epoch 17 iter
+250, but direct SSH still times out. Do not inject control through shared
+storage; exactly terminate PGID `1791967` when SSH returns.
 
 At 15:04 CST, a live audit found fixed-252 `0804_01` at epoch 47 iter 450
 with screen/PGID `823928/823929`, seven members, GPU0/1 residency near

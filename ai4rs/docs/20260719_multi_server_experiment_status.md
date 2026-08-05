@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 15:04 CST。
+更新时间：2026-08-05 15:53 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,33 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志 15:03 到 e14 iter850 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 的 99/178 端口仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e16 `46.103/53.390`，相对成熟父线 e16 `-4.312/-4.066`；共享日志到 e17 iter250 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 双端口仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E48+；e44 `53.884/60.194`，严格总和仍差 `4.252`；15:03 到 e47 iter450 | e48 checkpoint 后收齐同点检测/TrackEval；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；五门槛通过；15:03 到 e3 iter350，PGID `3968124` | 收集 e4/e8/e12+；即使 GPU1 当前空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E52+；e48 `54.168/60.609`，严格总和仍差 `3.553`；到 e49 iter650 | e44→e48 双升且 DetA/AssA/AP 全升，继续 e52；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `34.909/42.639`，相对强父线 `+2.060/+5.320`，四项 AP 全正 | e4 仅早期归因，继续 e8/e12+；即使 GPU1 空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 15:53 CST：178 e4、252 e48 与 99 e16 完整闭环
+
+- 178 `0804_12` e4 cls HOTA/DetA/AssA `34.909/27.213/47.152`、det
+  `42.639/32.932/57.756`；相对强父线 `0803_13` e4 HOTA `+2.060/+5.320`，cls
+  DetA/AssA `+0.531/+3.231`，det `-2.016/+16.513`。pair mAP/AP50
+  `0.1459/0.2774`、both-independent `0.1905/0.3501`，相对父线四项均正。checkpoint
+  369,970,612 bytes，iterative-cls residual 最大值 `0.0550922`，DN 与 642 张量有限；
+  5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 和 224.3 秒 TrackEval 完整。
+  e4 只作早期正归因，PGID `3968124` 已到 e5 iter750，仅用动态 GPU0，继续 e8/e12+。
+- 252 `0804_01` e48 cls HOTA/DetA/AssA `54.168/45.451/66.613`、det
+  `60.609/53.693/70.819`，和 `114.777`，严格三门槛仍差 `0.269/1.784/3.553`。相对
+  e44 HOTA `+0.284/+0.415`，两侧 DetA/AssA 与 pair/both AP 四项均升；430,483,510-byte
+  checkpoint、DN/iterative-cls、642 张量、5416/50、28 CSV、108 文件、50 preds、
+  `async_done=1` 和 383.8 秒 TrackEval 全部通过。PGID `823929` 固定 GPU0/1 到 e49
+  iter650，继续 e52；GPU2/3 不动。
+- 99 `0804_11` e16 cls HOTA/DetA/AssA `46.103/37.228/59.905`、det
+  `53.390/47.668/61.908`；自身 e12→e16 回升 `+2.003/+2.376`，但相对强父线 e16
+  `50.415/57.456` 仍低 `4.312/4.066`，四项 AP 也低约
+  `0.04396/0.07773/0.04755/0.07743`。386,506,998-byte checkpoint、DN/iterative-cls、
+  642 张量、5416/50、28 CSV、108 文件、50 preds、`async_done=1` 与 285.9 秒 TrackEval
+  完整。共享日志到 e17 iter250；控制机直连仍超时，不伪报停止，待 SSH 恢复后精确 TERM。
 
 ## 2026-08-05 15:04 CST：运行态复核与 0804_13 双端口静态闭环
 
