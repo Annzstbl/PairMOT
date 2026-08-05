@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 18:58 CST.
+Last updated: 2026-08-05 20:06 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,28 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 20:06 CST, dynamic-99 `0804_13 hemisphere-fold center + log-shape
+consensus` was stopped only after complete epoch-12 evidence. Epoch 12 is cls
+HOTA/DetA/AssA `45.423/37.244/57.850` and det
+`52.430/46.839/60.743`, respectively `2.866/2.109` HOTA below the strong
+parent. Its e4/e8/e12 sequence, all four AP deficits, trained/finite
+checkpoint, and complete 5416/50 detection plus TrackEval artifacts establish
+a mature negative result rather than an early rejection. Exact PGID `1891973`
+went from 23 members to zero; the screen disappeared and dynamic GPU0/1 were
+idle twice without touching GPU2.
+
+The zero-parameter `0804_15 terminal quotient log-shape consensus` then
+passed refreshed config deepcopy, launcher syntax, fresh-workdir, and idle-GPU
+checks on clean detached `491e329`. Its real GPU0/1 four-step DDP smoke has
+finite total, DN, encoder, and gradient values; the 364,505,910-byte checkpoint
+has trained iterative-cls/DN heads and 642 finite tensors. Fresh formal
+screen/PGID `1958427/1958429` reached iter 50 at `0.9888 s/iter`, loss/grad
+`21.4132/114.8830`, real two-GPU residency, finite total/DN/encoder proposal
+terms, and zero fatal signatures. It is now `RUNNING/TO_E4+`; retain epochs
+4/8/12+ before a mature decision. Fixed-252 epoch-60 is checkpoint-healthy and
+still evaluating on GPU0/1; dynamic-178 `0804_14` is at epoch 6 iter 1000 on
+GPU0 with the external GPU1 job untouched.
 
 At 18:58 CST, the next no-GPU successor is `0804_15 terminal quotient
 log-shape consensus`. It leaves centers and the mature periodic-angle path
