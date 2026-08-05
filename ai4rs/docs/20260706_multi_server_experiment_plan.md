@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 18:45 CST.
+Last updated: 2026-08-05 18:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 18:58 CST, the next no-GPU successor is `0804_15 terminal quotient
+log-shape consensus`. It leaves centers and the mature periodic-angle path
+unchanged, but aligns width/height log-size tangents across the exact rotated-
+box equivalence `(w,h,theta) ~ (h,w,theta+pi/2)` before symmetric pair
+averaging. This directly targets representation-mode discontinuities without
+adding parameters, state, class logic, weights, losses, layers, attention, or
+meaningful compute. The operation exactly reduces to the parent log-size mean
+when no principal-axis relabeling is needed.
+
+Isolated 99/178 checkouts are clean detached HEAD `491e329`. Both routes pass
+two targeted geometry tests, formal/smoke config deepcopy, launcher syntax,
+and complete parent/candidate construction at `22,771,111` parameters and 711
+state tensors with zero delta. All four target workdirs are absent, so the
+candidate remains `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`. Do not consume a GPU
+until the active 99 epoch-12 or 178 `0804_14` mature decision supports a
+handoff; then require a real smoke, trained/finite checkpoint, and all five
+formal iter-50 gates. Current progress is fixed-252 epoch 58 iter 100,
+dynamic-99 epoch 10 iter 100, and dynamic-178 epoch 3 iter 450.
 
 At 18:45 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 56
 at cls HOTA/DetA/AssA `54.574/45.498/67.605` and det

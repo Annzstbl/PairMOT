@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 18:45 CST。
+更新时间：2026-08-05 18:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.261/47.265`，相对强父线 `-3.741/-1.818`；到 e9 iter350 | e8 不直接否决，继续 e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 `41.261/47.265`，相对强父线 `-3.741/-1.818`；到 e10 iter100 | e8 不直接否决，继续 e12+；GPU2 不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E60+；e56 `54.574/61.316`，严格总和仍差 `2.440`；到 e57 iter450 | e52→e56 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `4074056` | 0804_12 e12 成熟负差后已停止；继续新线 e4/e8/e12+，GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；五门槛通过，PGID `4074056`，到 e3 iter450 | 继续 e4/e8/e12+，GPU1 外部任务不动；0804_15 STATIC_VALIDATED/NO_GPU | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 18:58 CST：0804_15 quotient log-shape 静态后继就绪
+
+- 新后继仅在终层对旋转框 `(w,h,theta) ~ (h,w,theta+pi/2)` 的等价主轴表示做 quotient
+  对齐：根据 detached reference 的最短主轴 lift 交换必要的 width/height log-size tangent，
+  对称求均值后映回各帧；中心与成熟 periodic-angle 以外的所有路径不变。结构零参数/state、
+  swap-equivariant、class-agnostic、无 reweight 或新增层，额外开销为常数 elementwise 操作。
+- 99/178 隔离 checkout 均为 clean detached `491e329`；两端各 `2/2` 定向测试、两份 config
+  deepcopy、两份 launcher `bash -n` 与父/新整模构建通过，参数/state 均为
+  `22,771,111/711`、增量 0。
+- 四个目标 smoke/formal workdir 均不存在，状态严格为
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`。等待 99 e12 与 178 0804_14 成熟决策，不热更新或抢占
+  存活训练；真正部署时仍需真实 smoke、checkpoint 与 formal iter50 五门槛。
+- 18:58 三线为 252 e58 iter100、99 e10 iter100、178 e3 iter450，资源分配与授权上限一致。
 
 ## 2026-08-05 18:45 CST：252 e56 与 99 e8 同 checkpoint 闭环
 
