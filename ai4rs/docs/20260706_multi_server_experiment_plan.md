@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 00:10 CST.
+Last updated: 2026-08-06 00:34 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,22 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 00:34 CST, fixed-252 `0804_01 factorized product-tangent` completed its
+final epoch-72 same-checkpoint audit at cls HOTA/DetA/AssA
+`55.170/45.881/68.469` and det `62.165/54.560/73.313`. Classification is
+`0.733` above the Encoder, but detection remains `0.228` below it and the sum
+`117.335` is `0.995` short of the strict `>118.330` target. Versus epoch 68,
+both HOTA, both DetA/AssA, and all four AP diagnostics improved; pair mAP/AP50
+is `0.3186/0.5335` and both-independent is `0.3581/0.5709`. The finite
+463,375,734-byte checkpoint meta `72/74736`, 5416/50 detections, 28 CSVs, 108
+nonempty files, 50 predictions, async completion, and 361.6-second TrackEval
+are complete. The training group exited naturally, GPU0/1 are released, and
+GPU2/3 were never used. Keep the goal active and retain `0804_17` as the next
+single-factor shape-transport candidate, but do not deploy it before 178
+`0804_16` has mature e12+ evidence and a legal handoff. Its epoch-8 checkpoint
+already passes semantic audit at meta `8/8304` with 642 finite float tensors;
+epoch 8 remains diagnostic and evaluation continues before the e12+ window.
 
 At 00:10 CST, `0804_17 quotient-anisotropy product-tangent` also has a clean
 detached `a4914d0` static port on 99. Both remote MMEngine configs load and

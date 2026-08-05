@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 00:10 CST
+更新时间：2026-08-06 00:34 CST
 
 ## 当前研究原则
 
@@ -14,8 +14,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/E72_FINAL` | e68 完整 `54.853/61.883`，同点和 `116.736`、严格仍差 `1.594`；已进入最终 e72 iter450，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.257/37.860`，相对强父线 `+1.408/+0.541`，四项 AP 同升；已到 e7 iter450，继续 e8/e12+。GPU1 外部作业不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `COMPLETED/E72_AUDITED/NOT_TARGET` | e72 完整 `55.170/62.165`，cls 过线但 det 仍差 `0.228`，同点和 `117.335` 距严格目标仍差 `0.995`；GPU0/1 已释放，GPU2/3 始终未用。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.257/37.860`；e8 checkpoint meta `8/8304`、642 张量有限，正在检测评估，且继续保留到 e12+。GPU1 外部作业不动。 |
 | 99 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU` | 99 双卡端口已完成 deepcopy、语法、单测与完整构建，参数/state 增量 0；等待 0804_16 e12+ 合法交接，GPU0/1/2 当前空闲。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -28,7 +28,29 @@
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；接替者
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
-与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-06 00:34 CST：252 的 0804_01 e72 最终完整但未达严格目标
+
+- 固定 252 GPU0/1 的 `0804_01 factorized product-tangent` 最终 e72 同一 checkpoint
+  cls HOTA/DetA/AssA 为 `55.170/45.881/68.469`，det 为
+  `62.165/54.560/73.313`。相对 Encoder，cls 严格高 `0.733`，但 det 仍低 `0.228`；
+  同点和 `117.335` 距严格 `>118.330` 仍差 `0.995`，所以目标未完成。
+- 相对 e68，cls/det HOTA 分别继续上升 `0.317/0.282`，DetA 分别上升
+  `0.262/0.181`、AssA 分别上升 `0.256/0.382`。pair mAP/AP50
+  `0.3186/0.5335`、both-independent `0.3581/0.5709`，相对 e68 四项均升
+  `0.0028/0.0016/0.0031/0.0020`；说明长轨迹仍改善检测与关联，但 0804_01 的 det
+  上限不足以满足最终三门槛。
+- 463,375,734-byte checkpoint 内部 meta `72/74736`，前/末 iterative-cls 分支与 DN
+  均已训练，642 个浮点张量全部有限；5416 records/50 sequences、28 CSV、108 个非空文件、
+  50 preds、`async_done=1` 完整，TrackEval 用时 361.6 秒。正式训练 PGID 已自然退出，
+  GPU0/1 释放，GPU2/3 始终未触碰。
+- 下一单因素仍为已完成双端静态闭环的 `0804_17 quotient-anisotropy product-tangent`：
+  e72 的 DetA/AssA 双升但 det 仍短 `0.228`，支持在不改变成功中心切线的前提下，仅修正
+  shape detail 的轴交换不变运输。它继续保持零参数/state、class-agnostic、无 reweight 和
+  常数终层逐元素开销；严格等待 178 的 0804_16 e12+ 成熟交接后才做动态五门槛。
+- 并行 178 的 0804_16 e8 checkpoint 已语义审计：meta `8/8304`、642 个浮点张量全有限，
+  iterative-cls/DN 已训练；检测/TrackEval 正在进行。e8 只作诊断，训练继续到 e12+。
 
 ## 2026-08-06 00:10 CST：0804_17 的 99 双卡静态端口闭环
 
