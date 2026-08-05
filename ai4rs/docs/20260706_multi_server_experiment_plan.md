@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 20:11 CST.
+Last updated: 2026-08-05 20:36 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 20:36 CST, the zero-state `0804_16 terminal quotient-anisotropy shape
+consensus` is statically ready on isolated 99 and 178 routes. It represents
+terminal physical shape by log-area and a double-angle log-aspect vector,
+which is invariant to `(w,h,theta) ~ (h,w,theta+pi/2)` and removes arbitrary
+orientation as a box approaches square. It changes no center, classification,
+DN, loss, attention, depth, recurrent reference, parameter, or state; its only
+overhead is constant elementwise work on terminal normal queries.
+
+Both clean detached `7a2ed53` checkouts pass two targeted quotient/swap/
+gradient tests, formal and smoke config deepcopy, launcher syntax, absent fresh
+workdirs, and complete parent/candidate construction. Both models have
+22,771,111 parameters and 711 state tensors with zero delta. Keep this route
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`; it may take over only after a mature
+active-line decision and must still pass real smoke, checkpoint semantics, and
+all five formal iter-50 gates. Current live progress is fixed-252 epoch 62
+iter 600, dynamic-178 epoch 8 iter 750 on GPU0, and dynamic-99 epoch 2 iter
+850 on GPU0/1; all resource boundaries remain intact.
 
 At 20:11 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 60
 at cls HOTA/DetA/AssA `54.713/45.662/67.571` and det

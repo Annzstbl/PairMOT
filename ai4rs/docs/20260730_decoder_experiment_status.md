@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 20:11 CST
+更新时间：2026-08-05 20:36 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E64+` | e60 完整 `54.713/61.540`，同点和 `116.253`、严格仍差 `2.077`；较 e56 双升 `+0.139/+0.224`，已到 e61 iter350，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `33.145/37.230`；相对强父线 `+0.296/-0.089`，检测侧 AssA 净增但 DetA 回落，不以 e4 否决；已到 e6 iter1000，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_15 ... quotient log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_13 在 e12 成熟负差后停止；新线真实 smoke/checkpoint 与 formal iter50 五门槛通过，已到 iter100，GPU2 不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E64+` | e60 完整 `54.713/61.540`，同点和 `116.253`、严格仍差 `2.077`；较 e56 双升 `+0.139/+0.224`，已到 e62 iter600，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_14 ... hemisphere-boundary center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `33.145/37.230`；相对强父线 `+0.296/-0.089`，检测侧 AssA 净增但 DetA 回落，不以 e4 否决；已到 e8 iter750，GPU1 空闲且仍不越过单卡上限。 |
+| 99 当前 GPU 0,1 | `0804_15 ... quotient log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 0804_13 在 e12 成熟负差后停止；新线真实 smoke/checkpoint 与 formal iter50 五门槛通过，已到 e2 iter850，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -29,6 +29,28 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 GPU0 通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛；e4 已完整闭环，当前登记 `RUNNING/TO_E8+`，
 不触碰 GPU1 外部任务。
+
+## 2026-08-05 20:36 CST：0804_16 商空间各向异性后继完成双端静态闭环
+
+- 多种中心耦合在成熟节点反复表现为 DetA/AP 损失，而 `0804_15` 只处理离散轴交换，仍把尺寸与
+  角度分开共享。下一单因素 `0804_16 terminal quotient-anisotropy shape consensus` 将终层物理
+  形状编码为 `log(w)+log(h)` 与
+  `(log(w)-log(h))·(cos(2θ),sin(2θ))`；该三维坐标对
+  `(w,h,θ)~(h,w,θ+π/2)` 完全不变，并使近正方形框的无意义角度自然消失。两帧只在该商空间
+  共享相对各自 reference 的形状增量，再按最接近各自 detached reference 的主轴 lift 映回。
+- 中心、分类、DN、loss、attention、层数、递归 reference 与辅助输出全部不变；结构零参数/state、
+  frame-swap 等变、class-agnostic、无 reweight/gate/scale 扫描，额外开销仅为最后一层 normal
+  query 的常数个 log/sin/cos/atan2 和逐元素运算，无明显计算量增长。
+- 99/178 新隔离 checkout 分别为
+  `/data/users/wangying01/lth/PairMOT_quotientanisotropy_0804_16_99` 与
+  `/data1/users/litianhao01/PairMOT_quotientanisotropy_0804_16_178`，均为 clean detached
+  `7a2ed53`，未热更新存活仓库。两端定向测试各 `2/2 OK`，formal/smoke config deepcopy、
+  launcher `bash -n`、fresh workdir 不存在与父/新完整构建均通过；模型均为
+  `22,771,111` 参数、711 state tensors，增量 0。
+- 当前严格登记 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`。它只作为 `0804_15` 或 `0804_14`
+  e12+ 成熟负结论后的候选；届时仍须先确认动态空闲卡，再通过真实 smoke、checkpoint 更新和
+  formal iter50 五项门槛，不能因静态通过写作 RUNNING。20:35 正式线为 252 e62 iter600、
+  178 e8 iter750、99 e2 iter850，资源边界正确。
 
 ## 2026-08-05 20:11 CST：252 e60 继续双升但未过严格门槛
 

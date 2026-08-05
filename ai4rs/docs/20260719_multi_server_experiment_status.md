@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 20:11 CST。
+更新时间：2026-08-05 20:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 smoke、checkpoint 与 formal iter50 五门槛通过，到 iter100 | 继续 e4/e8/e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E4+；真实 smoke、checkpoint 与 formal iter50 五门槛通过，到 e2 iter850 | 继续 e4/e8/e12+；GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E64+；e60 `54.713/61.540`，严格和仍差 `2.077`；到 e61 iter350 | e56→e60 双升，继续 e64+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `33.145/37.230`，相对强父线 `+0.296/-0.089`；到 e6 iter1000 | e4 只作归因，继续 e8/e12+；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E64+；e60 `54.713/61.540`，严格和仍差 `2.077`；到 e62 iter600 | e56→e60 双升，继续 e64+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_14 hemisphere-boundary center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 `33.145/37.230`，相对强父线 `+0.296/-0.089`；到 e8 iter750 | e4 只作归因，继续 e8/e12+；仍遵守单卡上限 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 20:36 CST：0804_16 双端静态验证完成
+
+- `0804_16 terminal quotient-anisotropy shape consensus` 以
+  `log-area + (log-aspect·cos2θ, log-aspect·sin2θ)` 表示终层物理形状，在旋转框轴交换商空间共享
+  两帧形状增量；近正方形时角度方向自然退化。中心、分类、DN、loss、attention、层数和递归
+  reference 不变，零参数/state、class-agnostic、无 reweight，只有终层常数逐元素开销。
+- 99/178 隔离 checkout 均 clean detached `7a2ed53`；两端 `2/2` 定向测试、formal/smoke config
+  deepcopy、launcher 语法、fresh workdir 与父/新完整构建全部通过。父/新模型均为
+  `22,771,111` 参数和 711 state tensors，增量 0；未修改三个存活训练仓库。
+- 状态严格为 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不占卡。只有成熟交接后才能重新检查动态
+  卡并依次通过真 smoke、checkpoint 和 formal iter50 五门槛。20:35 三线进度为 252 e62
+  iter600、178 e8 iter750、99 e2 iter850。
 
 ## 2026-08-05 20:11 CST：252 e60 同点闭环
 
