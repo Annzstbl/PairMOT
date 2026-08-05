@@ -337,6 +337,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_covariant_frenet_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_plane_refinement_decoder:
@@ -446,6 +448,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_covariant_frenet_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_covariant_frenet_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_tangent_refinement_decoder = bool(
             pair_shared_terminal_transport_tangent_refinement_decoder)
         self.pair_shared_terminal_transport_plane_refinement_decoder = bool(
@@ -539,6 +544,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_frenet_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder,
+                self.
+                pair_shared_terminal_transport_covariant_frenet_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_tangent_refinement_decoder,
                 self.
@@ -2226,6 +2233,24 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
             elif ((
                     self.
+                    pair_shared_terminal_transport_covariant_frenet_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Parallel-transport both complete center updates into the
+                # midpoint Frenet frame before separating common and detail
+                # motion.  Only transverse *inconsistency* is suppressed;
+                # the full common two-vector is transported back to the two
+                # endpoint frames.  Shape transport is unchanged.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_covariant_frenet_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
                     pair_shared_terminal_transport_axis_frenet_product_tangent_refinement_decoder)
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -3341,6 +3366,118 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             tangent_prev, ref_prev, ref_logit_prev, normal_prev)
         normal_curr = encode_center(
             tangent_curr, ref_curr, ref_logit_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_covariant_frenet_center_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport center updates through a discrete Frenet connection.
+
+        The established product tangent compares width/height-normalized
+        updates directly in image axes and projects their antisymmetric part
+        onto one reference chord.  For curved motion, however, the two
+        endpoint tangent spaces differ by the observed orientation turn.
+        This operation first rotates both complete updates into the midpoint
+        Frenet frame.  It retains their full common two-vector and only
+        projects the aligned antisymmetric inconsistency onto the chord,
+        before parallel-transporting both results back to their endpoints.
+
+        Zero turn is exactly the original product-tangent operation.  Frame
+        reversal swaps the endpoint transports, so the map is swap
+        equivariant.  It is parameter free, class agnostic, preserves the DN
+        prefix, and adds only terminal elementwise trigonometry.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair covariant-Frenet center refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair covariant-Frenet center refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair covariant-Frenet center refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair covariant-Frenet center refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+        size_prev = ref_prev[..., 2:4].clamp_min(1e-6)
+        size_curr = ref_curr[..., 2:4].clamp_min(1e-6)
+
+        tangent_prev = (
+            proposed_prev[..., :2] - ref_prev[..., :2]) / size_prev
+        tangent_curr = (
+            proposed_curr[..., :2] - ref_curr[..., :2]) / size_curr
+        pair_size = torch.sqrt(size_prev * size_curr).clamp_min(1e-6)
+        chord = (
+            (ref_curr[..., :2] - ref_prev[..., :2]) / pair_size).detach()
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        half_turn = (
+            0.5 * wrap_period(ref_curr[..., 4:] - ref_prev[..., 4:])
+            * torch.pi).detach()
+
+        def rotate(vector: Tensor, angle: Tensor) -> Tensor:
+            cosine = torch.cos(angle)
+            sine = torch.sin(angle)
+            return torch.cat((
+                cosine * vector[..., :1] - sine * vector[..., 1:2],
+                sine * vector[..., :1] + cosine * vector[..., 1:2]),
+                dim=-1)
+
+        aligned_prev = rotate(tangent_prev, half_turn)
+        aligned_curr = rotate(tangent_curr, -half_turn)
+        common_aligned = 0.5 * (aligned_prev + aligned_curr)
+        detail_aligned = 0.5 * (aligned_curr - aligned_prev)
+        chord_energy = chord.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = chord * (
+            (detail_aligned * chord).sum(dim=-1, keepdim=True)
+            / chord_energy)
+        tangent_prev = rotate(
+            common_aligned - transported_detail, -half_turn)
+        tangent_curr = rotate(
+            common_aligned + transported_detail, half_turn)
+
+        def encode_center(tangent: Tensor, reference: Tensor,
+                          reference_logit: Tensor,
+                          reference_size: Tensor,
+                          original_residual: Tensor) -> Tensor:
+            target_center = (
+                reference[..., :2] + tangent * reference_size).clamp(
+                    1e-3, 1 - 1e-3)
+            center_residual = (
+                inverse_sigmoid(target_center, eps=1e-3)
+                - reference_logit[..., :2])
+            return torch.cat(
+                (center_residual, original_residual[..., 2:]), dim=-1)
+
+        normal_prev = encode_center(
+            tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
+        normal_curr = encode_center(
+            tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
         if not num_dn:
             return normal_prev, normal_curr
         return (
