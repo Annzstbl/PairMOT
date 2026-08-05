@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 10:40 CST
+更新时间：2026-08-05 10:58 CST
 
 ## 当前研究原则
 
@@ -14,10 +14,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E36+` | e32 完整 `53.309/59.320`，同点和 `112.629`、严格仍差 `5.701`；较 e28 双升且 AP/DetA 继续升，PGID `823929` 已恢复 e33，GPU2/3 不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E36+` | e32 完整 `53.309/59.320`，同点和 `112.629`、严格仍差 `5.701`；较 e28 双升且 AP/DetA 继续升，PGID `823929` 已到 e36，GPU2/3 不动。 |
 | 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | axis-Frenet e12 成熟停止；新线真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480`，GPU1 外部任务不动。 |
-| 99 GPU 0,1 已释放 | `0804_08 ... shared-metric product-tangent ... fresh` | `STOPPED/MATURE_E12` | e12 完整 `44.241/52.755`，相对直接 product-tangent 为 `-5.543/-3.488`；e4/e8/e12 成熟反证后精确停止，GPU2 外部任务不动。 |
-| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.596/47.448`，相对直接 product-tangent 为 `-4.077/-6.474`；不以 e8 否决，PGID `2390925` 已恢复 e9，继续 e12。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | 保留成熟 terminal log-size/周期角共识，只新增 center product-tangent；零参数/state，真实 DDP smoke、checkpoint 与 formal iter50 五门槛通过，PGID `1791967`，GPU2 外部任务不动。 |
+| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `42.596/47.448`，相对直接 product-tangent 为 `-4.077/-6.474`；不以 e8 否决，PGID `2390925` 已到 e12，继续完整评测。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
@@ -27,6 +27,31 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 10:58 CST：center-tangent + log-shape consensus 通过 99 五项门槛
+
+- 现有归因显示：直接 product-tangent 的 shape transport 在 e12 相对原 decoder 为
+  `+0.117/-0.679`，而 terminal log-size/周期角共识在成熟 e56 达到 `54.980/62.009`；
+  shared-metric、axis-Frenet 与 Householder 又分别因尺度混合、横向 detail 删除或过度旋转同步
+  损伤 DetA/AP/AssA。因此 `0804_11` 以成熟 terminal log-shape consensus 为父结构，只在
+  最后一层 normal query 新增原 product-tangent 的 2D center detail 投影；分类、DN、loss、
+  attention、层数、递归 reference 与辅助输出全不变。它是单因素、零参数/state、交换等变、
+  class-agnostic、无 reweight 的轻量候选。
+- 本地 commit `eec6fc9` 部署到 99 全新隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_terminalcenterlogshape_0804_11_99`；定向测试覆盖末层调用顺序
+  `center→log-size→periodic-angle`、DN 精确保留、交换等变、有限梯度与互斥。配置 deepcopy、
+  两份 launcher 语法及父/新完整构建通过：均为 `22,771,111` 参数、711 states，增量 0。
+- 99 GPU0/1 连续两次为 `10 MiB/0%` 后执行真数据 DDP smoke，四步 loss
+  `12.9358/19.4522/19.5966/21.1587`、grad
+  `105.6080/162.7252/154.4735/142.0009`，total、DN、Encoder proposal 全有限；
+  364,505,078-byte `iter_4.pth` 的 iterative-cls/DN 更新与 642 个浮点张量有限性审计通过。
+- fresh formal screen `1791965.formal_0804_11_99`、PGID `1791967`；iter50 为
+  `0.9719 s/iter`、loss/grad `21.4245/134.0124`，7 个进程组成员，GPU0/1 各约
+  19.2 GiB，正式 total/DN/Encoder 有限且无 Traceback/OOM/NaN/NCCL error。五项门槛齐全，
+  登记 `RUNNING/TO_E12+`；e4/e8 只作诊断，不作直接否决，GPU2 约 6 GiB 外部任务始终未动。
+- 10:58 同步审计：252 固定 GPU0/1 已到 e36、GPU2/3 空闲；197 Householder 已到 e12，仍仅
+  使用动态 GPU0/1；178 `0804_10` 已到 e2，仍仅 GPU0；各机外部进程不触碰。继续优先闭环
+  252 e36、197 e12，并按计划收集 178/99 的 e4/e8/e12 与更晚成熟节点。
 
 ## 2026-08-05 10:38 CST：axis/shared-metric e12 成熟收口；covariant-Frenet 正式接替 178
 

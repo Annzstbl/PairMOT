@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 10:40 CST。
+更新时间：2026-08-05 10:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,29 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_08 shared-metric product-tangent` | STOPPED/MATURE_E12；e12 `44.241/52.755`，PGID `1751255` 已退出 | GPU0/1 已释放；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `42.596/47.448`，PGID `2390925` e11 | e8 不早停，继续 e12；GPU5 外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E36+；e32 `53.309/59.320`，严格总和仍差 `5.701`，PGID `823929` e33 | 较 e28 双升，继续 e36+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；零参数/state，真实 smoke/checkpoint/formal iter50 五门槛通过，PGID `1791967` | 继续 e4/e8/e12 和成熟节点；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `42.596/47.448`，PGID `2390925` e12 | e8 不早停，继续完整 e12；外部任务不动 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E36+；e32 `53.309/59.320`，严格总和仍差 `5.701`，PGID `823929` e36 | 较 e28 双升，继续 e36+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；smoke/checkpoint/formal iter50 五门槛通过，PGID `3856480` | GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 10:58 CST：99 启动 center-tangent + log-shape consensus
+
+- `0804_11` 保留成熟 terminal log-size/周期角共识，只在最后 normal query 增加 2D center
+  product-tangent 投影；分类、DN、loss、attention、层数、递归 reference 与辅助输出不变。
+  结构为单因素、零参数/state、交换等变、class-agnostic、无 reweight。隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_terminalcenterlogshape_0804_11_99` 固定 clean HEAD
+  `eec6fc9`；定向测试、配置 deepcopy、launcher 语法及完整父/新构建通过：
+  `22,771,111` 参数、增量 0、711 states。
+- 动态 GPU0/1 连续两次空闲后，真数据 DDP smoke loss
+  `12.9358/19.4522/19.5966/21.1587`、grad
+  `105.6080/162.7252/154.4735/142.0009`；total/DN/Encoder 全有限，364,505,078-byte
+  checkpoint 的 iterative-cls/DN 更新与 642 个浮点张量全有限。fresh formal screen
+  `1791965.formal_0804_11_99`、PGID `1791967`，iter50 `0.9719 s/iter`、loss/grad
+  `21.4245/134.0124`，7 个成员，GPU0/1 各约 19.2 GiB，fatal 0。五门槛齐全，登记
+  `RUNNING/TO_E12+`；GPU2 外部任务不动，e4/e8 不作直接否决。
+- 同步进度：252 固定 GPU0/1 已到 e36，197 Householder 已到 e12，178 covariant-Frenet 已到
+  e2；继续优先闭环 252 e36 和 197 e12，再收集 178/99 e4/e8/e12 与成熟节点。
 
 ## 2026-08-05 10:38 CST：178/99 e12 成熟闭环与 0804_10 动态接替
 
