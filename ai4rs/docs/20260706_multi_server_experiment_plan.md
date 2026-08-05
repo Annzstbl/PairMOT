@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 16:26 CST.
+Last updated: 2026-08-05 17:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,32 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 17:32 CST, all three active trajectories remain real and finite. Fixed-252
+`0804_01 factorized product-tangent` closed epoch 52 at cls/det HOTA
+`54.314/60.978`, sum `115.292`; strict cls/det/sum deficits remain
+`0.123/1.415/3.038`, although the trajectory rose `+0.146/+0.369` from epoch
+48. Keep GPU0/1 through epoch 56+ and leave GPU2/3 unused. Dynamic-178
+`0804_12 spherical-midpoint center + log-shape consensus` closed epoch 8 at
+`43.401/48.520`, respectively `-1.601/-0.563` below the mature parent at the
+same point; because epoch 8 is not a rejection point, keep its single GPU
+through epoch 12 and collect the complete checkpoint, detector, and TrackEval
+artifacts before deciding release. Dynamic-99 `0804_13 hemisphere-fold center
++ log-shape consensus` closed epoch 4 at `30.896/37.806`, respectively
+`-1.953/+0.487` versus the mature parent; keep its two GPUs through epochs
+8/12 and do not touch the external GPU2 job. Current live progress is 252
+epoch 54, 178 epoch 11, and 99 epoch 5.
+
+The next legal successor remains `0804_14 hemisphere-boundary center + mature
+log-shape consensus`, statically clean at 99/178 HEADs `66e38e8/6666085` with
+zero parameter/state delta, passing targeted geometry tests, config deepcopy,
+launcher syntax, and complete construction. Its smoke and formal workdirs are
+absent. Do not deploy until an active trajectory reaches an epoch-12 mature
+decision and its exact PGID is stopped with consecutive GPU-idle checks; then
+require real smoke, trained/finite checkpoint checks, and all five formal
+iter-50 gates before reporting RUNNING. Server 197 remains prohibited: the
+17:31 read-only audit still measured only `132-147 MHz` despite idle GPUs, so
+retain `STOPPED/HOST_CPU_THROTTLED`.
 
 At 16:26 CST, a zero-state successor `0804_14 hemisphere-boundary center +
 mature log-shape consensus` was statically completed on isolated 99 and 178
