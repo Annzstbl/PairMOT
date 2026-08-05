@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 22:17 CST.
+Last updated: 2026-08-05 22:41 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,18 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 22:41 CST, dynamic-99 `0804_15 quotient log-shape consensus` completed its
+same-checkpoint epoch-8 loop at cls HOTA/DetA/AssA `40.836/33.809/52.106`
+and det `46.935/42.481/53.812`. Versus strong parent `0803_13`, HOTA is
+`-4.166/-2.148`; the only positive tracking component is det AssA `+0.458`,
+while both DetA values and all four AP diagnostics are lower. The trained and
+finite 375,529,398-byte checkpoint, 5416/50 detections, 28 CSVs, 108 nonempty
+files, 50 predictions, and 320.5-second async TrackEval are complete. Epoch 8
+is diagnostic rather than a decoder rejection point, so the live GPU0/1 job
+continues through epoch 12+. In parallel, fixed-252 is at epoch 68 iter 300
+on GPU0/1 only, and dynamic-178 `0804_16` is at epoch 2 iter 450 on GPU0 only;
+all reserved or externally occupied GPUs remain untouched.
 
 At 22:17 CST, dynamic-178 `0804_14 hemisphere-boundary center + log-shape
 consensus` was stopped only after complete epoch-12 evidence. Epoch 12 is cls
