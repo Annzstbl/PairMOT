@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 23:36 CST.
+Last updated: 2026-08-05 23:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,21 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 23:58 CST, dynamic-99 `0804_15 quotient log-shape consensus` completed
+its mature epoch-12 loop at cls HOTA/DetA/AssA `44.473/36.631/56.799` and
+det `52.042/46.624/60.223`, respectively `3.816/2.497` HOTA below strong
+parent `0803_13`; the sum `96.515` is `21.815` short of the strict target.
+Pair mAP/AP50 `0.2229/0.4053` and both-independent `0.2644/0.4612` are all
+lower than the parent, matching the DetA deficit. The trained/finite
+381,022,134-byte checkpoint, 5416/50 detections, 28 CSVs, 108 nonempty files,
+50 predictions, async completion, and 277.8-second TrackEval are complete.
+Together with e4/e8, this is a mature negative three-node window rather than
+an early rejection. After verifying all 23 members of PGID `1958429` and no
+remaining async evaluator, the group was terminated precisely; GPU0/1 are at
+10 MiB and GPU2 was untouched. Keep `0804_17` statically validated and no-GPU
+until `0804_16` reaches its required mature e12+ handoff. Fixed-252 is at
+epoch 71 iter 700 on GPU0/1 only and continues to final epoch 72.
 
 At 23:36 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
 closed its same-checkpoint epoch-4 loop at cls HOTA/DetA/AssA

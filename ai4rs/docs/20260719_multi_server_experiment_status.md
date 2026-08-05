@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 23:36 CST。
+更新时间：2026-08-05 23:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,23 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `40.836/46.935`，相对强父线 `-4.166/-2.148`，到 e10 iter950 | e8 只作中期归因；继续 e12+，GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_15 quotient log-shape consensus` | STOPPED/MATURE_NEGATIVE；e12 完整 `44.473/52.042`，相对强父线 `-3.816/-2.497` | e4/e8/e12 成熟负闭环后精确停止；GPU0/1 已释放，GPU2 未动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E72；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e69 iter500 | e64→e68 双升，继续最终 e72；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E72；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e71 iter700 | e64→e68 双升，继续最终 e72；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 完整 `34.257/37.860`，相对强父线双正且四项 AP 同升 | e4 仅作早期正信号，继续 e8/e12+；0804_17 仅静态验证，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 23:58 CST：99 的 0804_15 e12 成熟停止
+
+- e12 cls HOTA/DetA/AssA `44.473/36.631/56.799`、det
+  `52.042/46.624/60.223`，同点和 `96.515`；相对强父线 `0803_13` e12 HOTA
+  `-3.816/-2.497`，距最终 Encoder 与严格总和门槛仍低 `9.964/10.351/21.815`。
+- pair mAP/AP50 `0.2229/0.4053`、both-independent `0.2644/0.4612`，相对父线四项均负；
+  381,022,134-byte checkpoint meta `12/12456`，iterative-cls/DN 已训练且 642 张量有限，
+  5416/50、28 CSV、108 非空文件、50 preds、`async_done=1` 和 277.8 秒 TrackEval 完整。
+- 该结论来自 e4/e8/e12 三个完整节点，不是早停。核验 PGID `1958429` 的 23 个成员与异步
+  评测后精确 TERM，训练组、screen、评测进程归零；GPU0/1 回到 `10 MiB/0%`，GPU2 未动。
+  0804_17 保持静态未部署，等待 178 的 0804_16 e12+ 合法交接；252 已到 e71 iter700。
 
 ## 2026-08-05 23:36 CST：178 的 0804_16 e4 同点双正
 
