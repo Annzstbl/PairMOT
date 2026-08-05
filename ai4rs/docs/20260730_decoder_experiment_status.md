@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 17:28 CST
+更新时间：2026-08-05 17:36 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E56+` | e52 完整 `54.314/60.978`，同点和 `115.292`、严格仍差 `3.038`；较 e48 双升 `+0.146/+0.369`，已到 e53 iter1000，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `43.401/48.520`，相对强父线 e8 `-1.601/-0.563`；e4 早期双正未保持，但不以 e8 直接否决，已到 e10 iter1000。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `43.401/48.520`，相对强父线 e8 `-1.601/-0.563`；e4 早期双正未保持，但不以 e8 直接否决，已到 e11 iter500。 |
 | 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `30.896/37.806`，相对强父线 e4 `-1.953/+0.487`；分类/AP 较弱但不以 e4 直接否决，已到 e5 iter300。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -27,6 +27,22 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 17:36 CST：0804_14 的 178 隔离动态 checkout 就绪但不占卡
+
+- 在不修改存活 `0804_12` 仓库、也不创建任何 smoke/formal workdir 的前提下，从静态副本建立
+  `/data1/users/litianhao01/PairMOT_hemisphereboundarycenterlogshape_0804_14_178`；它是 clean
+  detached HEAD `6666085`，与 launcher 默认路径一致，状态为 `PREPARED/NO_GPU`。
+- 远端副本的 formal/smoke 配置均通过 `copy.deepcopy`，两份 launcher 通过 `bash -n`；定向
+  unittest `1/1 OK`，父/新完整构建通过，均为 `22,771,111` 参数、711 state tensors，增量 0、
+  smoke 4 iter。首次构建检查因 editable 环境误加载旧 `/data1/users/litianhao01/PairMOT/ai4rs`
+  而不认识新 decoder 参数；固定 `PYTHONPATH` 到隔离 checkout 后立即通过，属于路径污染而非
+  模型构建失败。178 环境没有 pytest，故使用测试文件自身的 unittest 入口。
+- 17:36 活跃 `0804_12` 仅用 GPU0 到 e11 iter500，total/DN/Encoder/grad 有限；候选仍不做
+  真实 smoke。只有 e12 checkpoint、检测与 TrackEval 成熟闭环且支持停止、原 PGID 精确退出、
+  授权单卡连续空闲后，才依次执行真实 smoke、checkpoint 检查与 formal iter50 五门槛。
+- 197 同期只读命令仍约 24 秒，12 核仅 `132-147 MHz`；即使 GPU0-5 当前空闲，也继续登记
+  `STOPPED/HOST_CPU_THROTTLED`，不得迁移候选。
 
 ## 2026-08-05 17:28 CST：99 hemisphere-fold e4 完整闭环，继续慢收敛窗口
 

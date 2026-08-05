@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 17:32 CST.
+Last updated: 2026-08-05 17:36 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,18 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 17:36 CST, the 178 dynamic checkout for `0804_14` is prepared at
+`/data1/users/litianhao01/PairMOT_hemisphereboundarycenterlogshape_0804_14_178`,
+clean detached HEAD `6666085`. Remote formal/smoke config deepcopy, both
+launcher syntax checks, the targeted unittest, and complete parent/candidate
+construction pass at `22,771,111` parameters and 711 state tensors with zero
+delta. An initial construction attempt loaded the old editable base repository;
+pinning `PYTHONPATH` to the isolated checkout corrected it, confirming an
+environment-path issue rather than a model failure. Neither smoke nor formal
+workdir exists, so this remains `PREPARED/NO_GPU`. Active 178 `0804_12` is at
+epoch 11 iter 500 on GPU0; wait for its complete epoch-12 evidence and exact
+release before any real candidate smoke.
 
 At 17:32 CST, all three active trajectories remain real and finite. Fixed-252
 `0804_01 factorized product-tangent` closed epoch 52 at cls/det HOTA

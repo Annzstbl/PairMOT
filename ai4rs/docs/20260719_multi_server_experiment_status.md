@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 17:28 CST。
+更新时间：2026-08-05 17:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,20 @@
 | 99 本机 | `0804_13 hemisphere-fold center + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E8+；e4 `30.896/37.806`，相对强父线 `-1.953/+0.487`；到 e5 iter300 | e4 不直接否决，继续 e8/e12+；`0804_14` 双端口 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E56+；e52 `54.314/60.978`，严格总和仍差 `3.038`；到 e53 iter1000 | e48→e52 双升，成熟曲线继续上行；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 `43.401/48.520`，相对强父线 `-1.601/-0.563`；到 e10 iter1000 | e4 早期优势未保持，但不以 e8 直接否决；`0804_14` 静态端口不占 GPU | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E12+；e8 `43.401/48.520`，相对强父线 `-1.601/-0.563`；到 e11 iter500 | e4 早期优势未保持，但不以 e8 直接否决；`0804_14` 隔离动态 checkout PREPARED/NO_GPU | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 17:36 CST：178 的 0804_14 动态 checkout 预置完成
+
+- 新隔离 checkout
+  `/data1/users/litianhao01/PairMOT_hemisphereboundarycenterlogshape_0804_14_178` 为 clean detached
+  HEAD `6666085`，不修改存活 `0804_12` 仓库；0804_14 的 smoke/formal workdir 均不存在，
+  状态严格为 `PREPARED/NO_GPU`。
+- formal/smoke config deepcopy、两份 launcher `bash -n`、定向 unittest 与父/新完整构建均通过；
+  参数/state `22,771,111/711`、增量 0、smoke 4 iter。首次构建检查误加载旧 editable 基仓库，
+  固定隔离 `PYTHONPATH` 后通过；178 无 pytest，改用同一测试文件的 unittest 入口，不是模型失败。
+- 活跃 `0804_12` 到 e11 iter500 且仅用 GPU0；必须等 e12 完整成熟证据、精确停止与连续空闲
+  检查后，才允许 0804_14 真实 smoke/formal。197 17:31 仍仅 `132-147 MHz`，继续禁用。
 
 ## 2026-08-05 17:28 CST：99 0804_13 e4 同 checkpoint 闭环
 
