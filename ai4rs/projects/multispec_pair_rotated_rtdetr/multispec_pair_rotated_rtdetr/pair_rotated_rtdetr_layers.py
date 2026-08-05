@@ -339,6 +339,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_householder_product_tangent_refinement_decoder:
@@ -465,6 +467,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder))
@@ -581,6 +586,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder,
+                self.
+                pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder,
                 self.
@@ -2487,6 +2494,24 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
                 tmp_prev, tmp_curr = (
                     self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
+                    pair_shared_terminal_transport_log_spd_product_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Keep the successful factorized center tangent. Represent
+                # rectangle shape by orthogonal coordinates of its log-SPD
+                # matrix: log-area trace and double-angle anisotropy. This
+                # removes axis labels and the raw angle/log-size unit mix
+                # while retaining coherent scale-anisotropy transport.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_log_spd_shape_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
             elif ((
@@ -4973,6 +4998,145 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             - ref_logit_prev[..., 2:])
         shape_residual_curr = (
             inverse_sigmoid(target_shape_curr, eps=1e-3)
+            - ref_logit_curr[..., 2:])
+        normal_prev = torch.cat(
+            (normal_prev[..., :2], shape_residual_prev), dim=-1)
+        normal_curr = torch.cat(
+            (normal_curr[..., :2], shape_residual_curr), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_log_spd_shape_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport terminal rectangle shape in log-Euclidean SPD space.
+
+        A rectangle is represented by the symmetric matrix whose eigenvalues
+        are its log width and log height. In an orthogonal matrix basis its
+        coordinates, up to one common constant, are
+
+        ``(log(w h), log(w / h) cos(2 theta),
+        log(w / h) sin(2 theta))``.
+
+        This quotient is invariant to relabeling the two rectangle axes and
+        gives log area, aspect, and orientation one coherent log-Euclidean
+        metric. Pair detail is projected onto the detached reference shape
+        transport. Centers and DN queries remain unchanged. The operation is
+        parameter free, class agnostic, and pair-swap equivariant.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'log-SPD shape tangent refinement requires aligned residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'log-SPD shape tangent refinement requires aligned references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'log-SPD shape tangent refinement requires residual and '
+                'reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'log-SPD shape tangent refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+
+        def log_spd_coordinates(box: Tensor) -> Tensor:
+            log_size = torch.log(box[..., 2:4].clamp_min(1e-6))
+            log_area = log_size.sum(dim=-1, keepdim=True)
+            log_aspect = log_size[..., :1] - log_size[..., 1:2]
+            phase = math.tau * box[..., 4:5]
+            anisotropy = log_aspect * torch.cat(
+                (torch.cos(phase), torch.sin(phase)), dim=-1)
+            return torch.cat((log_area, anisotropy), dim=-1)
+
+        ref_shape_prev = log_spd_coordinates(ref_prev)
+        ref_shape_curr = log_spd_coordinates(ref_curr)
+        tangent_prev = (
+            log_spd_coordinates(proposed_prev) - ref_shape_prev)
+        tangent_curr = (
+            log_spd_coordinates(proposed_curr) - ref_shape_curr)
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        transport = (ref_shape_curr - ref_shape_prev).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail_tangent * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        target_shape_prev = (
+            ref_shape_prev + common_tangent - transported_detail)
+        target_shape_curr = (
+            ref_shape_curr + common_tangent + transported_detail)
+
+        def lift_log_spd(target_shape: Tensor,
+                         reference_angle: Tensor) -> Tuple[Tensor, Tensor]:
+            target_log_area = target_shape[..., :1]
+            target_q = target_shape[..., 1:]
+            magnitude = torch.linalg.vector_norm(
+                target_q, dim=-1, keepdim=True)
+            nondegenerate = magnitude.detach() > 1e-6
+            safe_x = torch.where(
+                nondegenerate, target_q[..., :1],
+                torch.ones_like(target_q[..., :1]))
+            safe_y = torch.where(
+                nondegenerate, target_q[..., 1:2],
+                torch.zeros_like(target_q[..., 1:2]))
+            angle_primary = torch.remainder(
+                torch.atan2(safe_y, safe_x) / math.tau, 1.0)
+            angle_swapped = torch.remainder(angle_primary + 0.5, 1.0)
+
+            def wrap_period(value: Tensor) -> Tensor:
+                return torch.remainder(value + 0.5, 1.0) - 0.5
+
+            detached_reference_angle = reference_angle.detach()
+            use_swapped = (
+                wrap_period(angle_swapped - detached_reference_angle).abs()
+                < wrap_period(
+                    angle_primary - detached_reference_angle).abs())
+            target_angle = torch.where(
+                nondegenerate,
+                torch.where(use_swapped, angle_swapped, angle_primary),
+                reference_angle)
+            signed_aspect = torch.where(use_swapped, -magnitude, magnitude)
+            signed_aspect = torch.where(
+                nondegenerate, signed_aspect,
+                torch.zeros_like(signed_aspect))
+            target_log_size = 0.5 * torch.cat((
+                target_log_area + signed_aspect,
+                target_log_area - signed_aspect), dim=-1)
+            target_size = torch.exp(target_log_size).clamp(
+                min=1e-6, max=1 - 1e-6)
+            return target_size, target_angle
+
+        target_size_prev, target_angle_prev = lift_log_spd(
+            target_shape_prev, ref_prev[..., 4:5])
+        target_size_curr, target_angle_curr = lift_log_spd(
+            target_shape_curr, ref_curr[..., 4:5])
+        target_prev = torch.cat(
+            (target_size_prev, target_angle_prev), dim=-1)
+        target_curr = torch.cat(
+            (target_size_curr, target_angle_curr), dim=-1)
+        shape_residual_prev = (
+            inverse_sigmoid(target_prev, eps=1e-3)
+            - ref_logit_prev[..., 2:])
+        shape_residual_curr = (
+            inverse_sigmoid(target_curr, eps=1e-3)
             - ref_logit_curr[..., 2:])
         normal_prev = torch.cat(
             (normal_prev[..., :2], shape_residual_prev), dim=-1)
