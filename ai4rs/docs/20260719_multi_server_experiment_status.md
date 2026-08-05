@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 22:41 CST。
+更新时间：2026-08-05 23:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `40.836/46.935`，相对强父线 `-4.166/-2.148`，已进入 e9 | e8 只作中期归因；继续 e12+，GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `40.836/46.935`，相对强父线 `-4.166/-2.148`，到 e10 iter950 | e8 只作中期归因；继续 e12+，GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E68+；e64 `54.771/61.636`，严格和仍差 `1.923`；到 e68 iter300 | e60→e64 双升，继续 e68+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真实 smoke/checkpoint 与 formal iter50 五门槛通过，到 e2 iter450 | 0804_14 e12 成熟停止；新线继续 e4/e8/e12+，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E72；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e69 iter500 | e64→e68 双升，继续最终 e72；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真实 smoke/checkpoint 与 formal iter50 五门槛通过，到 e4 iter400 | 继续 e4/e8/e12+；0804_17 仅静态验证，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 23:10 CST：252 e68 与 0804_17 静态候选
+
+- 252 e68 cls HOTA/DetA/AssA `54.853/45.619/68.213`，det
+  `61.883/54.379/72.931`；cls 过线 `0.416`，det 仍差 `0.510`，同点和 `116.736` 距严格
+  总和仍差 `1.594`。相对 e64 HOTA `+0.082/+0.247`，det DetA/AssA 与四项 AP 全升，固定
+  GPU0/1 继续最终 e72，23:09 到 e69 iter500，GPU2/3 未用。
+- pair mAP/AP50 `0.3158/0.5319`、both-independent `0.3550/0.5689`；457,893,430-byte
+  checkpoint meta、iterative-cls/DN、642 张量有限性、5416/50、28 CSV、108 非空文件、
+  50 preds、`async_done=1` 与 464.5 秒 TrackEval 完整。只读诊断 PGID `854175` 已精确清理，
+  正式训练 PGID `823929` 不受影响。
+- `0804_17 quotient-anisotropy product-tangent` 仅替换 0804_01 的 shape tangent：中心切线不变，
+  在物理各向异性商空间运输 detail，并保留逐帧 log-area。结构零参数/state、class-agnostic、无
+  reweight。178 隔离 clean detached `bd3f6fc` 已通过定向测试、两配置 deepcopy、两 launcher
+  语法、父/新完整构建与 fresh 目录检查；父/新均 `22,771,111` 参数、711 states、增量 0。
+  当前为 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不抢占仅用 GPU0 到 e4 iter400 的 0804_16，
+  GPU1 外部作业未动。
 
 ## 2026-08-05 22:41 CST：99 的 0804_15 e8 完整评估
 

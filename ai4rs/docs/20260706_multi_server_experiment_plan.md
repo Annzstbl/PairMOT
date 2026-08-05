@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 22:41 CST.
+Last updated: 2026-08-05 23:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,28 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 23:10 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 68
+at cls HOTA/DetA/AssA `54.853/45.619/68.213` and det
+`61.883/54.379/72.931`. Classification exceeds the final Encoder by `0.416`,
+but detection is still `0.510` low and the sum `116.736` is `1.594` short of
+the strict target. HOTA rose `0.082/0.247` from epoch 64; both det components
+and all four AP diagnostics also rose, so fixed GPU0/1 continues through the
+final epoch 72 while GPU2/3 remain unused. The trained/finite 457,893,430-byte
+checkpoint, 5416/50 detections, 28 CSVs, 108 nonempty files, 50 predictions,
+and 464.5-second TrackEval are complete.
+
+The next isolated single-factor candidate is `0804_17 quotient-anisotropy
+product-tangent`. It retains the successful center tangent, transports only
+shape detail in the axis-relabeling-invariant double-angle anisotropy plane,
+and exactly preserves each frame's proposed log area. This removes mixed
+scale/orientation units without adding parameters, state, class awareness,
+reweighting, or meaningful compute. Clean detached `bd3f6fc` on 178 passes
+its targeted test, both config deep copies, both launcher syntax checks,
+fresh-directory checks, and full parent/candidate builds at 22,771,111
+parameters and 711 state tensors. Keep it `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`
+until the active GPU0-only `0804_16` has mature evidence and a legal handoff;
+the external GPU1 job remains untouched.
 
 At 22:41 CST, dynamic-99 `0804_15 quotient log-shape consensus` completed its
 same-checkpoint epoch-8 loop at cls HOTA/DetA/AssA `40.836/33.809/52.106`
