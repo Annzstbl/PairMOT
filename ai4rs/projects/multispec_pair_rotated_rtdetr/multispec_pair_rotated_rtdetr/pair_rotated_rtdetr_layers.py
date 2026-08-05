@@ -309,6 +309,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_log_size_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_log_area_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_periodic_angle_refinement_decoder:
@@ -418,6 +420,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_log_size_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_terminal_log_size_periodic_angle_refinement_decoder))
+        self.pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder = (
+            bool(
+                pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder))
         self.pair_shared_terminal_log_area_periodic_angle_refinement_decoder = (
             bool(
                 pair_shared_terminal_log_area_periodic_angle_refinement_decoder))
@@ -537,6 +542,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 self.
                 pair_shared_terminal_log_size_periodic_angle_refinement_decoder,
                 self.
+                pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder,
+                self.
                 pair_shared_terminal_log_area_periodic_angle_refinement_decoder,
                 self.
                 pair_shared_terminal_periodic_angle_refinement_decoder,
@@ -589,7 +596,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 'pair-shared shape, residual-angle, periodic-angle, '
                 'log-size-periodic-angle, log-area-periodic-angle, '
                 'late-log-size-periodic-angle, terminal-log-size-periodic-'
-                'angle, terminal-log-area-periodic-angle, terminal-periodic-'
+                'angle, terminal-quotient-log-size-periodic-angle, '
+                'terminal-log-area-periodic-angle, terminal-periodic-'
                 'angle, terminal-log-size, terminal-normalized-center, '
                 'terminal-full-tangent, '
                 'terminal-transport-center-tangent, '
@@ -2168,6 +2176,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
             elif (self.
+                  pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Align the unordered principal axes of the two rotated-box
+                # references before sharing multiplicative size increments.
+                # This removes the (w, h, theta) ~ (h, w, theta + pi/2)
+                # representation discontinuity without touching centers,
+                # classification, DN, or recurrent references.
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_quotient_log_size_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_shared_periodic_angle_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif (self.
                   pair_shared_terminal_log_area_periodic_angle_refinement_decoder
                   and lid == self.num_layers - 1):
                 num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
@@ -2890,6 +2915,105 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 min=1e-6, max=1 - 1e-6)
         target_size_curr = (
             reference_size_curr * torch.exp(shared_log_delta)).clamp(
+                min=1e-6, max=1 - 1e-6)
+        shared_residual_prev = inverse_sigmoid(
+            target_size_prev, eps=1e-6) - reference_logit_prev[..., 2:4]
+        shared_residual_curr = inverse_sigmoid(
+            target_size_curr, eps=1e-6) - reference_logit_curr[..., 2:4]
+
+        normal_prev = torch.cat((
+            normal_prev[..., :2], shared_residual_prev,
+            normal_prev[..., 4:]), dim=-1)
+        normal_curr = torch.cat((
+            normal_curr[..., :2], shared_residual_curr,
+            normal_curr[..., 4:]), dim=-1)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_shared_quotient_log_size_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Share log-size increments on the rotated-box quotient space.
+
+        A physical rectangle has the equivalent parameterizations
+        ``(w, h, theta)`` and ``(h, w, theta + pi / 2)``. Independent frame
+        references can therefore label the same principal axes in opposite
+        width/height order. The ordinary pair log-size mean then mixes a
+        width correction from one frame with a height correction from the
+        other. This projection selects the nearest principal-axis lift from
+        the detached reference orientations, aligns the current-frame size
+        tangent, takes the symmetric mean, and maps it back to each frame's
+        own lift. It is parameter free, swap equivariant, and exactly reduces
+        to the ordinary log-size mean when no quarter-turn relabeling occurs.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'pair-shared quotient log-size refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'pair-shared quotient log-size refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'pair-shared quotient log-size refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'pair-shared quotient log-size refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        reference_normal_prev = reference_prev[:, num_dn:]
+        reference_normal_curr = reference_curr[:, num_dn:]
+        reference_logit_prev = inverse_sigmoid(
+            reference_normal_prev, eps=1e-3)
+        reference_logit_curr = inverse_sigmoid(
+            reference_normal_curr, eps=1e-3)
+
+        proposed_size_prev = (
+            normal_prev[..., 2:4]
+            + reference_logit_prev[..., 2:4]).sigmoid()
+        proposed_size_curr = (
+            normal_curr[..., 2:4]
+            + reference_logit_curr[..., 2:4]).sigmoid()
+        reference_size_prev = reference_normal_prev[..., 2:4].clamp_min(1e-6)
+        reference_size_curr = reference_normal_curr[..., 2:4].clamp_min(1e-6)
+        log_delta_prev = torch.log(
+            proposed_size_prev.clamp_min(1e-6) / reference_size_prev)
+        log_delta_curr = torch.log(
+            proposed_size_curr.clamp_min(1e-6) / reference_size_curr)
+
+        def wrap_period(value: Tensor) -> Tensor:
+            return torch.remainder(value + 0.5, 1.0) - 0.5
+
+        reference_angle_delta = wrap_period(
+            reference_normal_curr[..., 4:]
+            - reference_normal_prev[..., 4:]).detach()
+        swap_axes = reference_angle_delta.abs() > 0.25
+        aligned_log_delta_curr = torch.where(
+            swap_axes, log_delta_curr.flip(dims=(-1,)), log_delta_curr)
+        shared_log_delta_prev = 0.5 * (
+            log_delta_prev + aligned_log_delta_curr)
+        shared_log_delta_curr = torch.where(
+            swap_axes,
+            shared_log_delta_prev.flip(dims=(-1,)),
+            shared_log_delta_prev)
+
+        target_size_prev = (
+            reference_size_prev * torch.exp(shared_log_delta_prev)).clamp(
+                min=1e-6, max=1 - 1e-6)
+        target_size_curr = (
+            reference_size_curr * torch.exp(shared_log_delta_curr)).clamp(
                 min=1e-6, max=1 - 1e-6)
         shared_residual_prev = inverse_sigmoid(
             target_size_prev, eps=1e-6) - reference_logit_prev[..., 2:4]

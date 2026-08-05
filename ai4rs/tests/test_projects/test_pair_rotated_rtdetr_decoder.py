@@ -98,6 +98,8 @@ def _build_decoder(num_layers: int = 2,
                    bool = False,
                    pair_shared_terminal_log_size_periodic_angle_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_log_area_periodic_angle_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_periodic_angle_refinement_decoder:
@@ -224,6 +226,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_late_log_size_periodic_angle_refinement_decoder),
         pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
             pair_shared_terminal_log_size_periodic_angle_refinement_decoder),
+        pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder=(
+            pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder),
         pair_shared_terminal_log_area_periodic_angle_refinement_decoder=(
             pair_shared_terminal_log_area_periodic_angle_refinement_decoder),
         pair_shared_terminal_periodic_angle_refinement_decoder=(
@@ -836,6 +840,120 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
                     True),
                 device=self.device)
+
+    def test_terminal_quotient_log_shape_is_terminal_parameter_free_and_exclusive(
+            self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        quotient_size = projected._pair_shared_quotient_log_size_residual
+        periodic_angle = projected._pair_shared_periodic_angle_residual
+        with mock.patch.object(
+                projected, '_pair_shared_quotient_log_size_residual',
+                side_effect=quotient_size) as size_mock, mock.patch.object(
+                    projected, '_pair_shared_periodic_angle_residual',
+                    side_effect=periodic_angle) as angle_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(size_mock.call_count, 1)
+        self.assertEqual(angle_mock.call_count, 1)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                pair_shared_terminal_quotient_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_quotient_log_size_aligns_axes_and_is_swap_equivariant(self):
+        decoder, _, _ = _build_decoder(device=self.device)
+        reference_prev = torch.tensor(
+            [[[0.3, 0.4, 0.20, 0.10, 0.10],
+              [0.3, 0.4, 0.22, 0.11, 0.10],
+              [0.3, 0.4, 0.24, 0.12, 0.10]]],
+            device=self.device)
+        reference_curr = torch.tensor(
+            [[[0.3, 0.4, 0.21, 0.12, 0.10],
+              [0.3, 0.4, 0.23, 0.13, 0.20],
+              [0.3, 0.4, 0.13, 0.25, 0.45]]],
+            device=self.device)
+        delta_prev = torch.tensor(
+            [[[0.0, 0.0], [0.20, -0.10], [0.30, -0.20]]],
+            device=self.device)
+        delta_curr = torch.tensor(
+            [[[0.0, 0.0], [-0.05, 0.15], [-0.40, 0.10]]],
+            device=self.device)
+
+        def residual_from_delta(reference, delta):
+            target = (reference[..., 2:4] * torch.exp(delta)).clamp(
+                1e-4, 1 - 1e-4)
+            residual = torch.zeros_like(reference)
+            residual[..., 2:4] = (
+                torch.logit(target) - torch.logit(reference[..., 2:4]))
+            return residual
+
+        residual_prev = residual_from_delta(
+            reference_prev, delta_prev).requires_grad_(True)
+        residual_curr = residual_from_delta(
+            reference_curr, delta_curr).requires_grad_(True)
+        output_prev, output_curr = (
+            decoder._pair_shared_quotient_log_size_residual(
+                residual_prev, residual_curr,
+                reference_prev, reference_curr, num_dn=1))
+
+        def decode_delta(reference, residual):
+            target = (
+                residual[..., 2:4]
+                + torch.logit(reference[..., 2:4])).sigmoid()
+            return torch.log(target / reference[..., 2:4])
+
+        decoded_prev = decode_delta(reference_prev, output_prev)
+        decoded_curr = decode_delta(reference_curr, output_curr)
+        expected_identity = 0.5 * (
+            delta_prev[:, 1] + delta_curr[:, 1])
+        expected_swapped_prev = 0.5 * (
+            delta_prev[:, 2] + delta_curr[:, 2].flip(dims=(-1,)))
+        self.assertTrue(torch.allclose(
+            decoded_prev[:, 1], expected_identity, atol=1e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            decoded_curr[:, 1], expected_identity, atol=1e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            decoded_prev[:, 2], expected_swapped_prev,
+            atol=1e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            decoded_curr[:, 2], expected_swapped_prev.flip(dims=(-1,)),
+            atol=1e-5, rtol=1e-5))
+        self.assertTrue(torch.equal(output_prev[:, :1], residual_prev[:, :1]))
+        self.assertTrue(torch.equal(output_curr[:, :1], residual_curr[:, :1]))
+        self.assertTrue(torch.equal(
+            output_prev[..., :2], residual_prev[..., :2]))
+        self.assertTrue(torch.equal(
+            output_curr[..., :2], residual_curr[..., :2]))
+
+        swapped_curr, swapped_prev = (
+            decoder._pair_shared_quotient_log_size_residual(
+                residual_curr, residual_prev,
+                reference_curr, reference_prev, num_dn=1))
+        self.assertTrue(torch.allclose(output_prev, swapped_prev, atol=1e-6))
+        self.assertTrue(torch.allclose(output_curr, swapped_curr, atol=1e-6))
+        (output_prev.sum() + output_curr.sum()).backward()
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
 
     def test_terminal_log_area_periodic_angle_only_projects_final_layer(self):
         parent, _, _ = _build_decoder(num_layers=4, device=self.device)
