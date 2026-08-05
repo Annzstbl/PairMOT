@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 23:10 CST。
+更新时间：2026-08-05 23:36 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,21 @@
 | 99 本机 | `0804_15 quotient log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `40.836/46.935`，相对强父线 `-4.166/-2.148`，到 e10 iter950 | e8 只作中期归因；继续 e12+，GPU2 不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E72；e68 `54.853/61.883`，严格和仍差 `1.594`；到 e69 iter500 | e64→e68 双升，继续最终 e72；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真实 smoke/checkpoint 与 formal iter50 五门槛通过，到 e4 iter400 | 继续 e4/e8/e12+；0804_17 仅静态验证，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/TO_E8+；e4 完整 `34.257/37.860`，相对强父线双正且四项 AP 同升 | e4 仅作早期正信号，继续 e8/e12+；0804_17 仅静态验证，GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 23:36 CST：178 的 0804_16 e4 同点双正
+
+- `0804_16 quotient-anisotropy shape consensus` e4 cls HOTA/DetA/AssA
+  `34.257/28.361/43.972`、det `37.860/34.602/43.208`；相对强父线 `0803_13` e4，
+  HOTA `+1.408/+0.541`，cls DetA/AssA `+1.679/+0.051`，det `-0.346/+1.965`。
+- pair mAP/AP50 `0.1505/0.2873`、both-independent `0.1963/0.3615`，相对父线四项
+  `+0.0106/+0.0260/+0.0082/+0.0224`。369,970,548-byte checkpoint meta `4/4152`，
+  iterative-cls/DN 已训练，642 个浮点张量全有限；5416/50、28 CSV、108 非空文件、
+  50 preds、`async_done=1` 和 231.8 秒 TrackEval 完整。
+- e4 只作早期正向机制证据，不直接接受或淘汰。PGID `4175891` 已恢复到 e5 iter300，
+  仍仅占 GPU0 并继续 e8/e12+；GPU1 外部作业未动。99 已进入 e12 iter400，252 固定
+  GPU0/1 到 e70 iter800，0804_17 保持静态未部署。
 
 ## 2026-08-05 23:10 CST：252 e68 与 0804_17 静态候选
 

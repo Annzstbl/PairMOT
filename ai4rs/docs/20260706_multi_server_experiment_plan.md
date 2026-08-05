@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 23:10 CST.
+Last updated: 2026-08-05 23:36 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,22 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 23:36 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
+closed its same-checkpoint epoch-4 loop at cls HOTA/DetA/AssA
+`34.257/28.361/43.972` and det `37.860/34.602/43.208`. Versus strong parent
+`0803_13` at epoch 4, HOTA is `+1.408/+0.541`; cls DetA/AssA is
+`+1.679/+0.051` and det is `-0.346/+1.965`. Pair mAP/AP50
+`0.1505/0.2873` and both-independent `0.1963/0.3615` are all higher than the
+parent by `0.0106/0.0260/0.0082/0.0224`, so the dual HOTA gain is accompanied
+by detection evidence rather than being only a TrackEval matching fluctuation.
+The trained and finite 369,970,548-byte checkpoint, 5416/50 detections, 28
+CSVs, 108 nonempty files, 50 predictions, async completion, and 231.8-second
+TrackEval are complete. Epoch 4 remains an early positive diagnostic rather
+than an acceptance or rejection point; live PGID `4175891` continues on GPU0
+through epoch 8/12+, leaving the external GPU1 job untouched. Dynamic-99 is
+at epoch 12 iter 400, fixed-252 is at epoch 70 iter 800 on GPU0/1, and
+`0804_17` remains statically validated with no GPU deployment.
 
 At 23:10 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 68
 at cls HOTA/DetA/AssA `54.853/45.619/68.213` and det

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 23:10 CST
+更新时间：2026-08-05 23:36 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E72` | e68 完整 `54.853/61.883`，同点和 `116.736`、严格仍差 `1.594`；较 e64 双升，已到 e69 iter500，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E4+` | GPU0 真实 smoke/checkpoint 与 formal iter50 五门槛通过，已到 e4 iter400；GPU1 外部作业不动。后继 0804_17 仅静态验证。 |
+| 178 当前 GPU 0 | `0804_16 ... quotient-anisotropy shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `34.257/37.860`，相对强父线 `+1.408/+0.541`，四项 AP 同升；仅作早期正信号，继续 e8/e12+。GPU1 外部作业不动，0804_17 仅静态验证。 |
 | 99 当前 GPU 0,1 | `0804_15 ... quotient log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `40.836/46.935`，相对强父线 `-4.166/-2.148`，仅作中期归因；已到 e10 iter950，GPU2 不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -29,6 +29,23 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已在 GPU0 通过真实单卡 smoke、checkpoint
 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 23:36 CST：178 的 0804_16 e4 同点双正且 AP 同升
+
+- 动态 178 GPU0 的 `0804_16 terminal quotient-anisotropy shape consensus` e4 同一 checkpoint
+  cls HOTA/DetA/AssA 为 `34.257/28.361/43.972`，det 为 `37.860/34.602/43.208`。
+  相对强父线 `0803_13` e4，HOTA 为 `+1.408/+0.541`，cls DetA/AssA 为
+  `+1.679/+0.051`，det 为 `-0.346/+1.965`。det 仍有轻微 DetA→AssA 交换，但 cls 两分量
+  与双 HOTA 同升，强于仅靠关联抬高单侧指标的早期形态。
+- pair mAP/AP50 `0.1505/0.2873`、both-independent `0.1963/0.3615`，相对父线分别
+  `+0.0106/+0.0260/+0.0082/+0.0224`；AP 与双 HOTA 同向，排除纯 TrackEval 匹配波动。
+  369,970,548-byte checkpoint meta `4/4152`，前/当前 iterative-cls 分支均已训练，DN 正常，
+  642 个浮点张量全有限。5416/50、28 CSV、108 非空文件、50 preds、`async_done=1`
+  完整，TrackEval 用时 231.8 秒。
+- e4 仍只登记为早期正信号，不作为 decoder 通过或否决依据；原 screen/PGID
+  `4175889/4175891` 已恢复到 e5 iter300，仅用 GPU0，继续收集 e8/e12+，GPU1 外部作业不动。
+  并行 99 `0804_15` 已进入 e12 iter400，252 固定 GPU0/1 到 e70 iter800；后继 0804_17
+  保持 `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不得抢占存活训练。
 
 ## 2026-08-05 23:10 CST：252 e68 双升但仍未达标；0804_17 完成 178 静态闭环
 
