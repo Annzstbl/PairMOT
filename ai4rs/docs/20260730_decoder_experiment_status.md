@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 08:11 CST
+更新时间：2026-08-05 08:51 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,49 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E28+` | e24 cls/det `52.478/58.771`，同点和 `111.249`、严格仍差 `7.081`；e20→e24 双升，PGID `823929` 已到 e28 iter500，继续 e28+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整闭环 `35.434/44.417`，只作早期归因；PGID `3752856` 已恢复到 e6 iter50，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整闭环 `31.368/38.646`，只作早期归因；PGID `1751255` 已恢复到 e5 iter250，GPU2 外部任务不动。 |
-| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | Frenet e12 成熟双负后精确停止；新 screen/PGID `2390923/2390925` 五门槛通过，已到 e3 iter100。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E32+` | e28 完整 `52.641/58.986`，同点和 `111.627`、严格仍差 `6.703`；AP/DetA 仍升，PGID `823929` 已到 e30 iter150，继续 e32+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `35.434/44.417`，只作早期归因；PGID `3752856` 已到 e8 iter650，GPU1 不动。 |
+| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `31.368/38.646`，只作早期归因；PGID `1751255` 已到 e7 iter650，GPU2 不用于本任务。 |
+| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `31.605/37.701`，只作早期归因；PGID `2390925` 已恢复到 e5 iter350，继续 e8/e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
 `0804_04 body-frame` 与 `0804_05 SE(2)` 均在 e4/e8/e12 三个完整节点后成熟停止；
 `0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
+
+## 2026-08-05 08:51 CST：Householder e4 完整闭环，范数保持仍未修复早期关联
+
+- 197 `0804_09 norm-preserving Householder product-tangent` e4 cls HOTA/DetA/AssA
+  `31.605/25.498/41.950`，det `37.701/31.744/45.689`。相对原 decoder e4
+  `34.306/38.590` 为 `-2.701/-0.889`，相对 Encoder e4 `36.209/38.753` 为
+  `-4.604/-1.052`；该早期点不满足最终绝对三门槛，但不据此淘汰。
+- 相对直接 product-tangent e4 `35.274/43.849`，cls/det HOTA 为
+  `-3.669/-6.148`；cls DetA/AssA 分别 `-3.031/-3.175`，det 分别
+  `-2.589/-12.411`。pair mAP/AP50 `0.1351/0.2542`、both-independent
+  `0.1753/0.3184`，相对父结构分别下降 `0.0242/0.0423` 与 `0.0316/0.0520`。
+  因此早期瓶颈仍以 det 关联和检测 AP 同时受损为主，单纯把 rank-one 投影换成保范数
+  正交传输尚未恢复父结构的收敛速度。
+- 369,968,615-byte checkpoint 的 12 个 iterative-cls residual 张量已训练且全有限，
+  最大绝对值 `0.0611005`；642 个浮点张量全有限。5416 条检测、50 序列、28 CSV、
+  108 个非空评测文件、50 个预测文件及 `async_done=1` 完整，TrackEval 用时 273.9 秒。
+  该结果只用于早期归因；PGID `2390925` 已恢复到 e5 iter350，继续 e8/e12。
+- 08:50 四机复审：252 固定 GPU0/1 到 e30 iter150，GPU2/3 空闲；178 仅本任务 GPU0
+  到 e8 iter650；99 本任务动态 GPU0/1 到 e7 iter650，GPU2 不用；197 本任务动态
+  GPU0/1 到 e5 iter350。四条正式日志的 total/DN/Encoder/grad 均有限，未改变外部任务。
+
+## 2026-08-05 08:34 CST：252 product-tangent e28 继续检测增长，严格门槛未达
+
+- 252 `0804_01` e28 cls HOTA/DetA/AssA `52.641/44.468/64.147`，det
+  `58.986/52.513/68.606`，同 checkpoint 和 `111.627`。相对严格门槛
+  `54.437/62.393/118.330` 分别仍差 `1.796/3.407/6.703`，因此不得登记成功。
+- 相对 e24，cls/det HOTA `+0.163/+0.215`，DetA `+0.386/+0.437`，AssA
+  `-0.330/-0.071`；pair mAP/AP50 从 `0.2973/0.5127` 升至 `0.3001/0.5156`，
+  both-independent 从 `0.3412/0.5591` 升至 `0.3442/0.5622`。检测与定位仍在增长，
+  关联仅轻微回落，故保留固定 GPU0/1 到 e32+，不在 e28 截断成熟线。
+- 403,042,998-byte checkpoint 的 iterative-cls/DN 语义通过，642 个浮点张量全有限；
+  5416 条检测、50 序列、28 CSV、108 个非空文件、50 个预测文件和 `async_done=1`
+  全部闭环，TrackEval 用时 391.2 秒。训练在异步评估期间持续并已进入 e29/e30，GPU2/3
+  始终未用于本任务。
 
 ## 2026-08-05 08:11 CST：shared-metric e4 完整闭环，保留慢收敛窗口
 

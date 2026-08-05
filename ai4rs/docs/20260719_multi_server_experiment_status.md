@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 08:11 CST。
+更新时间：2026-08-05 08:51 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,36 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.368/38.646`，PGID `1751255` e5 iter250 | e4 不早停，继续 e8/e12；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；screen/PGID `2390923/2390925`，五门槛通过，e3 iter100 | 收 e4/e8/e12；其他 GPU 当前空闲 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E28+；e24 `52.478/58.771`，严格总和仍差 `7.081`，PGID `823929` e28 iter500 | 继续 e28+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `35.434/44.417`，PGID `3752856` e6 iter50 | e4 不早停，继续 e8/e12；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.368/38.646`，PGID `1751255` e7 iter650 | e4 不早停，继续 e8/e12；GPU2 不用于本任务 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.605/37.701`，PGID `2390925` e5 iter350 | e4 不早停，继续 e8/e12；其他 GPU 空闲 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E32+；e28 `52.641/58.986`，严格总和仍差 `6.703`，PGID `823929` e30 iter150 | 继续 e32+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `35.434/44.417`，PGID `3752856` e8 iter650 | e4 不早停，继续 e8/e12；GPU1 不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 08:51 CST：197 Householder e4 与四机进度闭环
+
+- `0804_09` e4 cls HOTA/DetA/AssA `31.605/25.498/41.950`，det
+  `37.701/31.744/45.689`。相对原 decoder e4 为 `-2.701/-0.889`、相对 Encoder
+  为 `-4.604/-1.052`，相对直接 product-tangent 为 `-3.669/-6.148`；后者的 det
+  DetA/AssA 差值为 `-2.589/-12.411`，早期问题仍集中在关联与检测 AP，而非仅范数丢失。
+- pair mAP/AP50 `0.1351/0.2542`、both-independent `0.1753/0.3184`；
+  369,968,615-byte checkpoint 的 12 个 iterative-cls residual 张量已训练且有限，
+  642 个浮点张量全有限。5416/50/28/108、50 个预测文件与 `async_done=1` 全部闭环，
+  TrackEval 用时 273.9 秒。该结果只作 e4 归因，不提前停止；继续 e8/e12。
+- 08:50 四机进度为：252 固定 GPU0/1 e30 iter150；178 本任务 GPU0 e8 iter650；99
+  本任务动态 GPU0/1 e7 iter650；197 本任务动态 GPU0/1 e5 iter350。所有正式日志的
+  total/DN/Encoder/grad 均有限，未分配 GPU 和外部任务均未改变。
+
+## 2026-08-05 08:34 CST：252 product-tangent e28 完整闭环
+
+- `0804_01` e28 cls HOTA/DetA/AssA `52.641/44.468/64.147`，det
+  `58.986/52.513/68.606`，同点和 `111.627`；严格三门槛仍差
+  `1.796/3.407/6.703`，尚未达标。相对 e24，双 HOTA `+0.163/+0.215`、DetA
+  `+0.386/+0.437`，AssA `-0.330/-0.071`。
+- pair mAP/AP50 `0.3001/0.5156`、both-independent `0.3442/0.5622`，均继续高于 e24。
+  403,042,998-byte checkpoint、iterative-cls/DN、642 个有限浮点张量、5416/50/28/108、
+  50 个预测文件及 `async_done=1` 全部闭环，异步评测 391.2 秒。检测/AP 仍增长，故固定
+  GPU0/1 继续 e32+；GPU2/3 不用于本任务。
 
 ## 2026-08-05 08:11 CST：99 shared-metric e4 闭环
 
