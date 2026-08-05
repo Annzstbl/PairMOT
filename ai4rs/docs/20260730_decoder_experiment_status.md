@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 17:15 CST
+更新时间：2026-08-05 17:28 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E56+` | e52 完整 `54.314/60.978`，同点和 `115.292`、严格仍差 `3.038`；较 e48 双升 `+0.146/+0.369`，已到 e53 iter350，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `43.401/48.520`，相对强父线 e8 `-1.601/-0.563`；e4 早期双正未保持，但不以 e8 直接否决，已到 e10 iter150。 |
-| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过；已到 e4 iter850，关键损失有限，等待 e4 checkpoint/检测/TrackEval。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E56+` | e52 完整 `54.314/60.978`，同点和 `115.292`、严格仍差 `3.038`；较 e48 双升 `+0.146/+0.369`，已到 e53 iter1000，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e8 完整 `43.401/48.520`，相对强父线 e8 `-1.601/-0.563`；e4 早期双正未保持，但不以 e8 直接否决，已到 e10 iter1000。 |
+| 99 当前 GPU 0,1 | `0804_13 ... hemisphere-fold center + log-shape consensus ... fresh` | `RUNNING/TO_E8+` | e4 完整 `30.896/37.806`，相对强父线 e4 `-1.953/+0.487`；分类/AP 较弱但不以 e4 直接否决，已到 e5 iter300。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,21 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E12+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 17:28 CST：99 hemisphere-fold e4 完整闭环，继续慢收敛窗口
+
+- 99 `0804_13 hemisphere-fold center + mature log-shape consensus` e4 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `30.896/25.987/39.169`，det 为 `37.806/33.666/43.476`。相对强父线
+  `0803_13` e4 HOTA 为 `-1.953/+0.487`：折返只保住 det 微增，但分类明显受损；相对 178
+  `0804_12` e4 的 `34.909/42.639` 也更弱。
+- 检测 AP 为 pair mAP/AP50 `0.137848/0.264067`、both-independent
+  `0.180727/0.333931`；369,969,782-byte checkpoint 的 iterative-cls/DN 语义已训练且 642
+  个浮点张量全有限。5416 records/50 sequences、28 CSV、108 非空文件、50 preds、
+  `async_done=1` 与 258.3 秒 TrackEval 完整。
+- e4 仅作机制诊断，不作为 decoder 直接否决点；PGID `1891973` 与动态 GPU0/1 继续 e8/e12+，
+  17:28 已到 e5 iter300，GPU2 外部任务未动。同期 252 到 e53 iter1000、178 到 e10
+  iter1000，关键 total/DN/Encoder/grad 均有限。`0804_14` 保持
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不以早期结果抢卡。
 
 ## 2026-08-05 17:15 CST：252 e52 延续双升但未达标；178 e8 早期优势反转
 
