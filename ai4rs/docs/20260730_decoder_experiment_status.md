@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 12:55 CST
+更新时间：2026-08-05 13:06 CST
 
 ## 当前研究原则
 
@@ -15,7 +15,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E44+` | e40 完整 `53.450/59.649`，同点和 `113.099`、严格仍差 `5.231`；较 e36 双升 `+0.124/+0.356`，PGID `823929` 已恢复 e41，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `34.189/36.612`；e8 checkpoint 与语义/有限性审计通过，检测评估进行中；不以 e8 否决，GPU1 外部任务不动。 |
+| 178 当前 GPU 0 | `0804_10 ... covariant-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.791/48.125`，相对直接 product-tangent 为 `-4.882/-5.797`；不以 e8 否决，PGID `3856480` 已恢复 e9，GPU1 外部任务不动。 |
 | 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/TO_E12+` | e4 完整 `30.433/37.650`；det AssA 提升但 cls 与 AP/DetA 受损，只作早期归因；PGID `1791967` 已到 e5 iter500，继续 e8/e12，GPU2 外部任务不动。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
@@ -27,6 +27,24 @@
 `0804_10 covariant-Frenet product-tangent` 已在 178 隔离 checkout 完成静态闭环，并在
 `0804_07` e12 成熟停止、GPU0 真实释放后依次通过单卡 smoke、checkpoint 与 formal iter50
 五项动态门槛；当前登记 `RUNNING/TO_E12+`，只使用 GPU0，不触碰 GPU1 外部任务。
+
+## 2026-08-05 13:06 CST：covariant-Frenet e8 完整闭环，继续 e12
+
+- 178 `0804_10 covariant-Frenet product-tangent` e8 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `41.791/35.146/52.091`，det 为 `48.125/44.414/54.070`；
+  相对直接 product-tangent e8 `46.673/53.922`，HOTA 为 `-4.882/-5.797`，
+  cls DetA/AssA 为 `-4.745/-4.504`，det 为 `-2.848/-10.066`。共同 Frenet 帧在 e8
+  仍同时损伤定位与关联，尤其 det AssA，尚未表现出比直接分块切空间更好的中期归纳偏置。
+- 相对自身 e4，HOTA 回升 `+7.602/+11.513`，cls DetA/AssA 回升
+  `+7.516/+7.004`，det 回升 `+11.295/+12.250`，说明模型仍在正常收敛，不能把 e8
+  的父线负差直接当作成熟否决。pair mAP/AP50 `0.2068/0.3707`，both-independent
+  `0.2538/0.4346`；相对直接 product-tangent 四项分别低约
+  `0.0456/0.0736/0.0501/0.0793`。
+- 375,572,468-byte checkpoint meta `8/8304`，12 个 residual 最大绝对值
+  `0.0757188`，iterative-cls/DN 已训练且有限，642 个浮点张量全有限；5416/50、
+  28 CSV、108 个非空文件、50 个非空预测与 `async_done=1` 完整，TrackEval
+  payload→metrics 约 234 秒。正式 PGID `3856480` 已恢复 e9，继续 e12；仍仅使用
+  动态 GPU0，GPU1 外部任务不动，`0804_12` 保持 PREPARED/NO_GPU。
 
 ## 2026-08-05 12:55 CST：product-tangent e40 完整闭环，继续 e44 成熟复核
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 12:55 CST。
+更新时间：2026-08-05 13:06 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,19 @@
 | 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 `30.433/37.650` 仅作早期归因，PGID `1791967` 已到 e5 iter500 | 继续 e8/e12 和成熟节点；`0804_12` 仅 PREPARED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E44+；e40 `53.450/59.649`，严格总和仍差 `5.231`，PGID `823929` 已恢复 e41 | e36→e40 双升，继续 e44 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 checkpoint 与语义/有限性审计通过，检测评估中 | 不以 e8 早停，继续完整 e8/e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0804_10 covariant-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `41.791/48.125`，PGID `3856480` 已恢复 e9 | 不以 e8 早停，继续 e12；`0804_12` 单卡路径仅 PREPARED/NO_GPU；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 13:06 CST：178 covariant-Frenet e8 完整闭环
+
+- `0804_10` e8 cls HOTA/DetA/AssA `41.791/35.146/52.091`，det
+  `48.125/44.414/54.070`；相对直接 product-tangent e8 HOTA `-4.882/-5.797`，
+  cls DetA/AssA `-4.745/-4.504`，det `-2.848/-10.066`。相对自身 e4 HOTA 则回升
+  `+7.602/+11.513`，所以只登记中期负差，不以 e8 直接否决，继续 e12。
+- pair mAP/AP50 `0.2068/0.3707`、both-independent `0.2538/0.4346`；375,572,468-byte
+  checkpoint meta `8/8304`，12 个 residual 最大绝对值 `0.0757188`，642 个浮点张量
+  全有限；5416/50、28 CSV、108 个非空文件、50 preds、`async_done=1` 完整，TrackEval
+  约 234 秒。PGID `3856480` 已恢复 e9，仅用动态 GPU0；GPU1 外部任务不动。
 
 ## 2026-08-05 12:55 CST：252 e40 完整闭环；178 e8 checkpoint 就绪
 
