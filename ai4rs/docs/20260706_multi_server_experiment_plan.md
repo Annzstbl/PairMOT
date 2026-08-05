@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 01:38 CST.
+Last updated: 2026-08-06 02:08 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,31 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 02:08 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
+completed its full epoch-12 mature audit. Same-checkpoint cls HOTA/DetA/AssA is
+`46.594/36.616/61.916` and det is `52.528/45.194/63.207`, below the strong
+epoch-12 parent by `1.695/2.011`; the absolute sum is only `99.122`. Although
+epoch 8 to 12 recovers HOTA by `4.195/4.929`, both AP protocols remain below
+the parent at pair `0.2299/0.4025` and both-independent `0.2718/0.4529`.
+This is a mature e4/e8/e12 conclusion, not an epoch-4/8 rejection. The audited
+381,077,556-byte checkpoint has meta `12/12456`, trained iterative-cls/DN
+state, and 642 finite floating tensors. Detection and TrackEval contain
+5416 records over 50 sequences, 28 CSVs, 108 nonempty files, 50/50 nonempty
+predictions, `async_done=1`, and a 240.1-second completion. After proving no
+async evaluator remained, PGID `4175891` was terminated exactly; all members
+and its screen disappeared and GPU0 returned to 1 MiB/0%, while the external
+GPU1 job was untouched.
+
+Do not deploy `0806_02` merely because 178 is now free. The independently
+running 99 `0804_17 quotient-anisotropy product-tangent` remains the next
+scientific test and must mature through epoch 12+ first; at 02:07 it is at
+epoch 2 iteration 850 on dynamically selected GPU0/1 with finite total, DN,
+encoder-proposal losses and gradient norm, while GPU2 is idle. Fixed-252
+`0806_01` is at epoch 76 iteration 300 on GPU0/1 only with finite formal
+signals; collect its epoch-76 checkpoint, detection, and TrackEval next, then
+continue to epoch 80 if the strict target is still not proven. GPU2/3 remain
+unused on 252.
 
 At 01:38 CST, the independent 99 lane began parallel maturation of `0804_17
 quotient-anisotropy product-tangent` without stopping or rejecting active 178

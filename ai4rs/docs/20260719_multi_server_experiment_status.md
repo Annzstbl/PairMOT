@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 01:38 CST。
+更新时间：2026-08-06 02:08 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E1/TO_E4+；真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过 | 并行成熟化但不停止 178；e4/e8 仅诊断并继续 e12+ | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E2/TO_E4+；02:07 到 e2 iter850，真实双卡 smoke、checkpoint 与 formal iter50 五门槛通过 | e4/e8 仅诊断并继续 e12+ | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E74/TO_E76+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；01:37 到 e74 iter800 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_16 quotient-anisotropy shape consensus`（当前动态 GPU0） | RUNNING/E12/TO_E12_EVAL；e8 完整 `42.399/47.599`，01:36 到 e12 iter300 | 继续完成 e12 checkpoint、检测与 TrackEval；GPU1 外部作业不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_01 factorized product-tangent e72→e80`（固定 GPU0/1） | RUNNING/E76/TO_E76_EVAL+；e72 `55.170/62.165`、同点和 `117.335`，严格仍差 `0.995`；02:07 到 e76 iter300 | e76/e80 做同 checkpoint 双评测；GPU2/3 始终不用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_16 quotient-anisotropy shape consensus` | STOPPED/E12/MATURE_NEGATIVE；e12 完整 `46.594/52.528`，相对强父线 `-1.695/-2.011`；GPU0 已释放 | 保留完整 checkpoint/检测/TrackEval；GPU1 外部作业不动，0806_02 仍等待 0804_17 成熟 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 02:08 CST：178 的 0804_16 完成 e12 成熟闭环
+
+- e12 cls HOTA/DetA/AssA `46.594/36.616/61.916`、det
+  `52.528/45.194/63.207`；相对强父线 e12 `48.289/54.539` 为
+  `-1.695/-2.011`，绝对和 `99.122`，未通过 cls `>54.437`、det `>62.393` 或
+  同点和 `>118.330` 任一严格门槛。
+- e8→e12 HOTA 虽回升 `+4.195/+4.929`，双 DetA、双 AssA 与四项 AP 也回升，但 e12
+  pair mAP/AP50 `0.2299/0.4025`、both-independent `0.2718/0.4529` 仍全面低于强父线。
+  结论来自 e4/e8/e12 完整窗口，不是 e4/e8 直接否决。
+- 381,077,556-byte checkpoint meta `12/12456`、642 个有限浮点张量、5416/50 检测、
+  28 CSV、108 个非空评测文件、50/50 个非空预测、`async_done=1` 和 240.1 秒 TrackEval
+  均闭环。确认无异步评测残留后精确 TERM PGID `4175891`，成员归零、screen 消失，
+  GPU0 回到 `1 MiB/0%`；GPU1 外部作业未触碰。
+- 02:07 活体复核：252 固定 GPU0/1 的 `0806_01` 到 e76 iter300，99 动态 GPU0/1 的
+  `0804_17` 到 e2 iter850，两路正式 loss、DN、Encoder proposal 与 grad 均有限；252
+  GPU2/3 和 99 GPU2 保持空闲。`0806_02` 不提前部署，仍等待 `0804_17` e12+ 成熟判定。
 
 ## 2026-08-06 01:38 CST：99 的 0804_17 通过动态五门槛
 
