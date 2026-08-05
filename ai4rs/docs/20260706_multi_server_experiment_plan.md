@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 14:55 CST.
+Last updated: 2026-08-05 15:04 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,28 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 15:04 CST, a live audit found fixed-252 `0804_01` at epoch 47 iter 450
+with screen/PGID `823928/823929`, seven members, GPU0/1 residency near
+21.6 GiB, and GPU2/3 at `1 MiB/0%`; epoch 48 is not yet a checkpoint, so wait
+for its same-checkpoint detector and TrackEval outputs. Dynamic-178 `0804_12`
+is at epoch 3 iter 350 with screen/PGID `3968121/3968124`, nine members,
+finite total/DN/encoder/gradient terms, and only GPU0 resident near 31.5 GiB.
+GPU1 currently looks idle, but the 178 authorization is one GPU total, so do
+not start a concurrent successor. The 99 shared formal log is still alive at
+epoch 14 iter 850; direct controller and 252-to-99 SSH probes both time out.
+Keep `RUNNING/CONTROL_UNREACHABLE`, then exactly terminate PGID `1791967` and
+verify two dynamic GPUs idle when control returns.
+
+The `0804_13` successor now also has a protocol-equivalent 178 `1x8` port,
+smoke config, and safe launchers in commit `4bf8964`. The isolated static
+checkout is clean at that HEAD; targeted test, launcher syntax, config
+deepcopy, and complete parent/candidate construction pass at exactly
+`22,771,111` parameters and 711 state tensors with zero delta. Both intended
+178 workdirs are absent. The 99 and 178 routes remain
+`STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`; real smoke, checkpoint semantics and
+finite tensors, and formal iter-50 gates are still mandatory after a legal
+resource release.
 
 At 14:55 CST, evidence from `0804_11` motivated a parameter-free orthogonal
 successor, `0804_13 hemisphere-fold center + mature log-shape consensus`.

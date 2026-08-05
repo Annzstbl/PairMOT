@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 14:55 CST
+更新时间：2026-08-05 15:04 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E48+` | e44 完整 `53.884/60.194`，同点和 `114.078`、严格仍差 `4.252`；较 e40 双升 `+0.434/+0.545`，PGID `823929` 已进 e45，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | `0804_10` e12 成熟双负后精确停止；新候选真 smoke、checkpoint 和 formal iter50 五门槛通过，screen/PGID `3968121/3968124`，GPU1 外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e12 完整 `44.100/51.014`，相对成熟父线仍为 `-4.189/-3.525`；正式共享日志已进 e13，但 99 SSH 控制链路超时，待恢复后精确停止，GPU2 外部任务不动。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E48+` | e44 完整 `53.884/60.194`，同点和 `114.078`、严格仍差 `4.252`；15:03 PGID `823929` 真实 7 成员并到 e47 iter450，GPU0/1 活跃、GPU2/3 `1 MiB/0%`。 |
+| 178 当前 GPU 0 | `0804_12 ... spherical-midpoint center + log-shape consensus ... fresh` | `RUNNING/TO_E4+` | 真 smoke、checkpoint 和 formal iter50 五门槛通过；15:03 screen/PGID `3968121/3968124`、9 成员，到 e3 iter350，GPU0 活跃且只按 1 卡上限运行。 |
+| 99 当前 GPU 0,1 | `0804_11 ... center-tangent + log-shape consensus ... fresh` | `RUNNING/CONTROL_UNREACHABLE` | e12 完整 `44.100/51.014`；共享正式日志 15:03 仍到 e14 iter850，但控制机、178、252 路径均 SSH 超时，待恢复后精确停止。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED` | e8 完整 `42.596/47.448`；e12 step12418 后主机 80 核降至约 118–167 MHz 并持续自旋，精确停止原/恢复 PGID，GPU0/1 释放，保留 e8 等待主机恢复后续跑。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -27,6 +27,25 @@
 `0804_10 covariant-Frenet product-tangent` 已在 e4/e8/e12 三个完整节点后成熟停止；其接替者
 `0804_12 spherical-midpoint center + log-shape consensus` 已在 GPU0 依次通过真实单卡 smoke、
 checkpoint 与 formal iter50 五项动态门槛，当前登记 `RUNNING/TO_E4+`，不触碰 GPU1 外部任务。
+
+## 2026-08-05 15:04 CST：三线真实进度复核；0804_13 补齐 178 等价端口
+
+- 252 `0804_01` 的 screen、PGID `823929` 与 7 个进程成员仍一致，正式日志到 e47 iter450；
+  GPU0/1 分别约 `21620/21644 MiB`，GPU2/3 均 `1 MiB/0%`。e48 checkpoint 尚未出现，
+  因此不读取半成品指标，继续等待同点检测与 TrackEval 完整闭环。
+- 178 `0804_12` 的 screen/PGID `3968121/3968124` 与 9 个成员一致，正式日志到 e3 iter350，
+  total、DN、Encoder 与 grad 有限；GPU0 约 `31475 MiB/95%`，GPU1 当前空闲，但严格遵守
+  178 总计 1 卡上限，不在 GPU1 并发新实验。e4 checkpoint 尚未出现，继续收集 e4/e8/e12+。
+- 99 的共享正式日志 15:03 仍更新到 e14 iter850，有限 loss 与 grad 表明原 PGID 未静默退出；
+  控制机直连及经 252 的独立探针仍在 `10.106.14.99:22` 超时。继续登记
+  `RUNNING/CONTROL_UNREACHABLE`，不伪报 TERM、不通过共享盘注入控制；链路恢复后第一动作仍是
+  精确停止 PGID `1791967` 并连续验证动态双卡释放。
+- `0804_13` 新增 178 物理 `1x8`、全局 batch 8 的等价配置与 formal/smoke launcher；隔离静态
+  checkout 已由增量 bundle 更新为 clean HEAD `4bf8964`。目标单测仍 `1/1 OK`，两份 launcher
+  `bash -n`、配置 deepcopy 与完整父/新构建均通过：`22,771,111` 参数、711 states、增量 0、
+  smoke 4 iter；目标 workdir 均不存在。99 与 178 两条端口都只登记
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，待合法资源释放后才依次执行真实 smoke、checkpoint
+  语义/有限性检查和 fresh formal iter50 五门槛。
 
 ## 2026-08-05 14:43 CST：99 center-tangent e12 成熟负差；控制链路待恢复
 

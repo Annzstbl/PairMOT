@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 14:55 CST。
+更新时间：2026-08-05 15:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,27 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志已进 e13 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_11 center-tangent + log-shape consensus`（当前动态 GPU0/1） | RUNNING/CONTROL_UNREACHABLE；e12 `44.100/51.014`，相对成熟父线 `-4.189/-3.525`；共享日志 15:03 到 e14 iter850 | SSH 恢复后精确停止 PGID `1791967`；`0804_13` 的 99/178 端口仅 STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED；e8 完整 `42.596/47.448`，e12 step12418 后全机 CPU 降至约 118–167 MHz | 保留 e8，等待主机恢复后续跑 e12；GPU0/1 已释放，外部 GPU4/5 不动 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E48+；e44 `53.884/60.194`，严格总和仍差 `4.252`，PGID `823929` 已进 e45 | e40→e44 双升，继续 e48 成熟复核；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；真 smoke、checkpoint、fresh formal iter50 五门槛通过，PGID `3968124` | 收集 e4/e8/e12+；`0804_10` 已按 e4/e8/e12 成熟双负停止；GPU1 外部任务不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E48+；e44 `53.884/60.194`，严格总和仍差 `4.252`；15:03 到 e47 iter450 | e48 checkpoint 后收齐同点检测/TrackEval；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_12 spherical-midpoint center + log-shape consensus`（当前动态 GPU0） | RUNNING/TO_E4+；五门槛通过；15:03 到 e3 iter350，PGID `3968124` | 收集 e4/e8/e12+；即使 GPU1 当前空闲也严格保持本机总计 1 卡 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 15:04 CST：运行态复核与 0804_13 双端口静态闭环
+
+- 252 screen/PGID `823928/823929`、7 个成员和固定 GPU0/1 驻留一致，正式日志到 e47
+  iter450，GPU2/3 为 `1 MiB/0%`；e48 checkpoint 尚未落盘，不对半成品作结论。
+- 178 screen/PGID `3968121/3968124`、9 个成员和动态 GPU0 驻留一致，正式日志到 e3
+  iter350，total、DN、Encoder、grad 有限。GPU1 当前为 `1 MiB/0%`，但 178 的授权是总计
+  1 卡，故不并发启动任何后继；继续等待 e4/e8/e12+ 完整节点。
+- 99 共享正式日志到 15:03 的 e14 iter850，说明训练仍活跃；控制机直连和新增的 252→99
+  探针均连接超时。保持 `RUNNING/CONTROL_UNREACHABLE`，链路恢复后精确 TERM PGID
+  `1791967` 并连续检查两张动态卡释放。
+- `0804_13` 的 178 等价 `1x8` 配置、smoke 配置和两份 launcher 已加入 commit `4bf8964`；
+  静态 checkout clean HEAD `4bf8964`，单测、`bash -n`、配置 deepcopy 与父/新完整构建通过，
+  参数/state `22,771,111/711`、增量 0，目标 workdir 均不存在。99/178 两条部署路由都仍是
+  `STATIC_VALIDATED/NOT_DEPLOYED/NO_GPU`，不得在真实 smoke、checkpoint 和 formal iter50
+  五项动态门槛前写作 RUNNING。
 
 ## 2026-08-05 14:55 CST：0804_13 静态后继就绪但未部署
 
