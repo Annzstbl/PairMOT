@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 05:43 CST。
+更新时间：2026-08-06 05:51 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E14/TO_E16+；e12 完整 `46.261/53.431`，相对 e8 回升 `+4.869/+5.746`，但相对直接 product-tangent e12 仍低 `3.523/2.812` | 因回升显著继续到 e16；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E14/TO_E16+；e12 完整 `46.261/53.431`，05:50 到 e14 iter700 | 因回升显著继续到 e16；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E85/TO_E88；e84 完整 `55.474/62.422`，两项单独过线但同点和 `117.896` 仍差严格总和 `0.434` | 同模型 duration-only 继续 e88；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；05:40 fresh 启动，screen/PGID `175354/175356`，iter50 `0.9508 s/iter`、loss/grad `21.0004/106.2984`，五门槛通过 | `0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_04 factorized product-tangent e80→e88`（固定 GPU0/1） | RUNNING/E85/TO_E88；e84 完整 `55.474/62.422`，05:50 到 e85 iter900 | 同模型继续 e88；`0806_06` e88→e96 仅 PREPARED/NOT_DEPLOYED；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；05:40 fresh 启动，五门槛通过；05:50 到 e1 iter650 | `0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 未用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 05:51 CST：活体资源复核与 252 续时长兜底准备
+
+- 252 `0806_04` 到 e85 iter900，loss/grad `7.7661/34.7581`，固定 GPU0/1 各约
+  21.6 GiB，GPU2/3 均为 1 MiB；99 `0804_17` 到 e14 iter700，loss/grad
+  `10.6477/44.6135`，动态 GPU0/1 各约 21.4 GiB，GPU2 空闲；178 `0806_05` 到
+  e1 iter650，loss/grad `17.2523/193.5542`，动态 GPU0 约 31.4 GiB，GPU1 空闲。
+  三线 screen、正式进程、GPU 与日志一致，total、DN、Encoder proposal 和 grad 均有限。
+- 新增 `0806_06` e88→e96 纯时长 config、smoke config 与固定 252 GPU0/1 launcher；只改训练
+  终点、评估终点和独立输出目录，静态 Python/Bash 检查通过。状态为
+  `PREPARED/NOT_DEPLOYED/NO_REMOTE_WORKDIR/NO_GPU`，不热更新 `0806_04` 活跃仓库。
+  只有 e88 全量同 checkpoint 仍未严格达标时，才在新隔离 checkout 完成 config deepcopy、
+  完整构建、真实双卡 smoke、checkpoint 验收和 formal iter50 五门槛后登记 RUNNING。
 
 ## 2026-08-06 04:16 CST：252 duration-only 延长与 99 e8 诊断闭环
 
