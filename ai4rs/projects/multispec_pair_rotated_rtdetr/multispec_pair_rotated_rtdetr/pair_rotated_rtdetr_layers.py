@@ -337,6 +337,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                    bool = False,
                    pair_shared_terminal_transport_product_tangent_refinement_decoder:
                    bool = False,
+                   pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder:
+                   bool = False,
                    pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder:
                    bool = False,
                    pair_shared_terminal_transport_householder_product_tangent_refinement_decoder:
@@ -460,6 +462,9 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
         self.pair_shared_terminal_transport_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_product_tangent_refinement_decoder))
+        self.pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder = (
+            bool(
+                pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder))
         self.pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder = (
             bool(
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder))
@@ -574,6 +579,8 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                 pair_shared_terminal_transport_shape_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_product_tangent_refinement_decoder,
+                self.
+                pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder,
                 self.
                 pair_shared_terminal_transport_shared_metric_product_tangent_refinement_decoder,
                 self.
@@ -2480,6 +2487,23 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
                         num_dn))
                 tmp_prev, tmp_curr = (
                     self._pair_transport_shape_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+            elif ((
+                    self.
+                    pair_shared_terminal_transport_quotient_anisotropy_tangent_refinement_decoder)
+                  and lid == self.num_layers - 1):
+                num_dn = max(tmp_prev.shape[1] - self.num_queries, 0)
+                # Retain the successful center tangent while moving only
+                # physical anisotropy detail on the rectangle quotient. Log
+                # area remains frame-specific, avoiding the coverage loss
+                # caused by projecting all size/angle coordinates together.
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_center_tangent_residual(
+                        tmp_prev, tmp_curr, reference_prev, reference_curr,
+                        num_dn))
+                tmp_prev, tmp_curr = (
+                    self._pair_transport_quotient_anisotropy_tangent_residual(
                         tmp_prev, tmp_curr, reference_prev, reference_curr,
                         num_dn))
             elif ((
@@ -4816,6 +4840,144 @@ class PairRotatedRTDETRTransformerDecoder(DinoTransformerDecoder):
             tangent_prev, ref_prev, ref_logit_prev, size_prev, normal_prev)
         normal_curr = encode_shape(
             tangent_curr, ref_curr, ref_logit_curr, size_curr, normal_curr)
+        if not num_dn:
+            return normal_prev, normal_curr
+        return (
+            torch.cat((residual_prev[:, :num_dn], normal_prev), dim=1),
+            torch.cat((residual_curr[:, :num_dn], normal_curr), dim=1),
+        )
+
+    @staticmethod
+    def _pair_transport_quotient_anisotropy_tangent_residual(
+            residual_prev: Tensor, residual_curr: Tensor,
+            reference_prev: Tensor, reference_curr: Tensor,
+            num_dn: int) -> Tuple[Tensor, Tensor]:
+        """Transport anisotropy detail on the rectangle quotient space.
+
+        The physical anisotropy coordinate
+
+        ``q = (log(w) - log(h)) * (cos(2 theta), sin(2 theta))``
+
+        is invariant to ``(w, h, theta) ~ (h, w, theta + pi / 2)`` and
+        continuously removes orientation at square boxes. Pair-common
+        anisotropy increments are retained, while pair detail is projected
+        onto the detached anisotropy change already established by the two
+        references. Each frame's proposed log area is preserved exactly, so
+        scale/coverage is not mixed with the anisotropy projection.
+
+        Centers and DN queries remain untouched. The map is parameter free,
+        class agnostic, and pair-swap equivariant.
+        """
+        if residual_prev.shape != residual_curr.shape:
+            raise ValueError(
+                'quotient-anisotropy tangent refinement requires aligned '
+                'residuals')
+        if reference_prev.shape != reference_curr.shape:
+            raise ValueError(
+                'quotient-anisotropy tangent refinement requires aligned '
+                'references')
+        if residual_prev.shape != reference_prev.shape:
+            raise ValueError(
+                'quotient-anisotropy tangent refinement requires residual '
+                'and reference shapes to match')
+        if residual_prev.shape[-1] != 5:
+            raise ValueError(
+                'quotient-anisotropy tangent refinement requires 5D boxes')
+        if num_dn < 0 or num_dn > residual_prev.shape[1]:
+            raise ValueError(
+                f'invalid DN prefix length {num_dn} for pair residuals')
+
+        normal_prev = residual_prev[:, num_dn:]
+        normal_curr = residual_curr[:, num_dn:]
+        ref_prev = reference_prev[:, num_dn:]
+        ref_curr = reference_curr[:, num_dn:]
+        ref_logit_prev = inverse_sigmoid(ref_prev, eps=1e-3)
+        ref_logit_curr = inverse_sigmoid(ref_curr, eps=1e-3)
+        proposed_prev = (normal_prev + ref_logit_prev).sigmoid()
+        proposed_curr = (normal_curr + ref_logit_curr).sigmoid()
+
+        def quotient_anisotropy(box: Tensor) -> Tensor:
+            log_size = torch.log(box[..., 2:4].clamp_min(1e-6))
+            log_aspect = log_size[..., :1] - log_size[..., 1:2]
+            phase = math.tau * box[..., 4:5]
+            return log_aspect * torch.cat(
+                (torch.cos(phase), torch.sin(phase)), dim=-1)
+
+        ref_q_prev = quotient_anisotropy(ref_prev)
+        ref_q_curr = quotient_anisotropy(ref_curr)
+        tangent_prev = quotient_anisotropy(proposed_prev) - ref_q_prev
+        tangent_curr = quotient_anisotropy(proposed_curr) - ref_q_curr
+        common_tangent = 0.5 * (tangent_prev + tangent_curr)
+        detail_tangent = 0.5 * (tangent_curr - tangent_prev)
+        transport = (ref_q_curr - ref_q_prev).detach()
+        transport_energy = transport.square().sum(
+            dim=-1, keepdim=True).clamp_min(1e-6)
+        transported_detail = transport * (
+            (detail_tangent * transport).sum(dim=-1, keepdim=True)
+            / transport_energy)
+        target_q_prev = ref_q_prev + common_tangent - transported_detail
+        target_q_curr = ref_q_curr + common_tangent + transported_detail
+
+        def lift_anisotropy(target_q: Tensor, proposed: Tensor,
+                            reference_angle: Tensor) -> Tuple[Tensor, Tensor]:
+            magnitude = torch.linalg.vector_norm(
+                target_q, dim=-1, keepdim=True)
+            nondegenerate = magnitude.detach() > 1e-6
+            safe_x = torch.where(
+                nondegenerate, target_q[..., :1],
+                torch.ones_like(target_q[..., :1]))
+            safe_y = torch.where(
+                nondegenerate, target_q[..., 1:2],
+                torch.zeros_like(target_q[..., 1:2]))
+            angle_primary = torch.remainder(
+                torch.atan2(safe_y, safe_x) / math.tau, 1.0)
+            angle_swapped = torch.remainder(angle_primary + 0.5, 1.0)
+
+            def wrap_period(value: Tensor) -> Tensor:
+                return torch.remainder(value + 0.5, 1.0) - 0.5
+
+            detached_reference_angle = reference_angle.detach()
+            use_swapped = (
+                wrap_period(angle_swapped - detached_reference_angle).abs()
+                < wrap_period(
+                    angle_primary - detached_reference_angle).abs())
+            target_angle = torch.where(
+                nondegenerate,
+                torch.where(use_swapped, angle_swapped, angle_primary),
+                reference_angle)
+            signed_aspect = torch.where(use_swapped, -magnitude, magnitude)
+            signed_aspect = torch.where(
+                nondegenerate, signed_aspect,
+                torch.zeros_like(signed_aspect))
+            proposed_log_size = torch.log(
+                proposed[..., 2:4].clamp_min(1e-6))
+            proposed_log_area = proposed_log_size.sum(
+                dim=-1, keepdim=True)
+            target_log_size = 0.5 * torch.cat((
+                proposed_log_area + signed_aspect,
+                proposed_log_area - signed_aspect), dim=-1)
+            target_size = torch.exp(target_log_size).clamp(
+                min=1e-6, max=1 - 1e-6)
+            return target_size, target_angle
+
+        target_size_prev, target_angle_prev = lift_anisotropy(
+            target_q_prev, proposed_prev, ref_prev[..., 4:5])
+        target_size_curr, target_angle_curr = lift_anisotropy(
+            target_q_curr, proposed_curr, ref_curr[..., 4:5])
+        target_shape_prev = torch.cat(
+            (target_size_prev, target_angle_prev), dim=-1)
+        target_shape_curr = torch.cat(
+            (target_size_curr, target_angle_curr), dim=-1)
+        shape_residual_prev = (
+            inverse_sigmoid(target_shape_prev, eps=1e-3)
+            - ref_logit_prev[..., 2:])
+        shape_residual_curr = (
+            inverse_sigmoid(target_shape_curr, eps=1e-3)
+            - ref_logit_curr[..., 2:])
+        normal_prev = torch.cat(
+            (normal_prev[..., :2], shape_residual_prev), dim=-1)
+        normal_curr = torch.cat(
+            (normal_curr[..., :2], shape_residual_curr), dim=-1)
         if not num_dn:
             return normal_prev, normal_curr
         return (
