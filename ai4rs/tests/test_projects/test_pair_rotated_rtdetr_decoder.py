@@ -116,6 +116,8 @@ def _build_decoder(num_layers: int = 2,
                     bool = False,
                     pair_shared_terminal_transport_hemisphere_fold_center_log_shape_consensus_refinement_decoder:
                     bool = False,
+                    pair_shared_terminal_transport_hemisphere_boundary_center_log_shape_consensus_refinement_decoder:
+                    bool = False,
                     pair_shared_terminal_transport_shape_tangent_refinement_decoder:
                     bool = False,
                     pair_shared_terminal_transport_product_tangent_refinement_decoder:
@@ -240,6 +242,8 @@ def _build_decoder(num_layers: int = 2,
             pair_shared_terminal_transport_spherical_midpoint_center_log_shape_consensus_refinement_decoder),
         pair_shared_terminal_transport_hemisphere_fold_center_log_shape_consensus_refinement_decoder=(
             pair_shared_terminal_transport_hemisphere_fold_center_log_shape_consensus_refinement_decoder),
+        pair_shared_terminal_transport_hemisphere_boundary_center_log_shape_consensus_refinement_decoder=(
+            pair_shared_terminal_transport_hemisphere_boundary_center_log_shape_consensus_refinement_decoder),
         pair_shared_terminal_transport_shape_tangent_refinement_decoder=(
             pair_shared_terminal_transport_shape_tangent_refinement_decoder),
         pair_shared_terminal_transport_product_tangent_refinement_decoder=(
@@ -2435,6 +2439,97 @@ class TestPairRotatedRTDETRDecoder(unittest.TestCase):
                 pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
                     True),
                 pair_shared_terminal_transport_hemisphere_fold_center_log_shape_consensus_refinement_decoder=(
+                    True),
+                device=self.device)
+
+    def test_hemisphere_boundary_center_is_nearest_norm_preserving_and_swap_equivariant(
+            self):
+        parent, _, _ = _build_decoder(num_layers=4, device=self.device)
+        projected, reg_prev, reg_curr = _build_decoder(
+            num_layers=4,
+            device=self.device,
+            pair_shared_terminal_transport_hemisphere_boundary_center_log_shape_consensus_refinement_decoder=(
+                True))
+        self.assertEqual(
+            sum(parameter.numel() for parameter in parent.parameters()),
+            sum(parameter.numel() for parameter in projected.parameters()))
+        self.assertEqual(
+            {key: tuple(value.shape)
+             for key, value in parent.state_dict().items()},
+            {key: tuple(value.shape)
+             for key, value in projected.state_dict().items()})
+
+        center_transport = (
+            projected._pair_hemisphere_boundary_center_tangent_residual)
+        with mock.patch.object(
+                projected,
+                '_pair_hemisphere_boundary_center_tangent_residual',
+                wraps=center_transport) as center_mock:
+            _, refs_prev, refs_curr, _, _ = self._forward(
+                1, decoder=projected,
+                reg_branches_prev=reg_prev, reg_branches_curr=reg_curr)
+        self.assertEqual(center_mock.call_count, 1)
+        for reference in refs_prev + refs_curr:
+            self.assertTrue(torch.isfinite(reference).all())
+
+        detail = torch.tensor(
+            [[[-2.0, 3.0], [2.0, 3.0], [-2.0, 0.0]]],
+            device=self.device, requires_grad=True)
+        transport = torch.tensor(
+            [[[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]]],
+            device=self.device)
+        transported = projected._hemisphere_boundary_transport_detail(
+            detail, transport)
+        expected = torch.tensor(
+            [[[0.0, 13.0**0.5], [2.0, 3.0], [0.0, 2.0]]],
+            device=self.device)
+        self.assertTrue(torch.allclose(
+            transported, expected, atol=2e-6, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            transported.norm(dim=-1), detail.norm(dim=-1),
+            atol=2e-6, rtol=1e-5))
+        self.assertTrue(torch.all(
+            (transported * transport).sum(dim=-1) >= -2e-6))
+        self.assertTrue(torch.allclose(
+            projected._hemisphere_boundary_transport_detail(
+                -detail, -transport),
+            -transported, atol=2e-6, rtol=1e-5))
+        transported.sum().backward()
+        self.assertTrue(torch.isfinite(detail.grad).all())
+
+        torch.manual_seed(80414)
+        reference_prev = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        reference_curr = (
+            torch.rand(2, 7, 5, device=self.device) * 0.6 + 0.2)
+        residual_prev = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        residual_curr = (
+            torch.randn(2, 7, 5, device=self.device) * 0.2).requires_grad_()
+        num_dn = 2
+        output = center_transport(
+            residual_prev, residual_curr,
+            reference_prev, reference_curr, num_dn)
+        swapped = center_transport(
+            residual_curr, residual_prev,
+            reference_curr, reference_prev, num_dn)
+        self.assertTrue(torch.equal(
+            output[0][:, :num_dn], residual_prev[:, :num_dn]))
+        self.assertTrue(torch.equal(
+            output[1][:, :num_dn], residual_curr[:, :num_dn]))
+        self.assertTrue(torch.allclose(
+            output[0], swapped[1], atol=2e-5, rtol=1e-5))
+        self.assertTrue(torch.allclose(
+            output[1], swapped[0], atol=2e-5, rtol=1e-5))
+        (output[0].sum() + output[1].sum()).backward()
+        self.assertTrue(torch.isfinite(residual_prev.grad).all())
+        self.assertTrue(torch.isfinite(residual_curr.grad).all())
+
+        with self.assertRaisesRegex(ValueError, 'mutually exclusive'):
+            _build_decoder(
+                pair_shared_terminal_log_size_periodic_angle_refinement_decoder=(
+                    True),
+                pair_shared_terminal_transport_hemisphere_boundary_center_log_shape_consensus_refinement_decoder=(
                     True),
                 device=self.device)
 
