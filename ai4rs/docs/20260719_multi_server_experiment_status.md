@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-05 08:51 CST。
+更新时间：2026-08-05 09:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.368/38.646`，PGID `1751255` e7 iter650 | e4 不早停，继续 e8/e12；GPU2 不用于本任务 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.605/37.701`，PGID `2390925` e5 iter350 | e4 不早停，继续 e8/e12；其他 GPU 空闲 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E32+；e28 `52.641/58.986`，严格总和仍差 `6.703`，PGID `823929` e30 iter150 | 继续 e32+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e4 完整 `35.434/44.417`，PGID `3752856` e8 iter650 | e4 不早停，继续 e8/e12；GPU1 不动 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0804_08 shared-metric product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e8 完整 `41.011/46.607`，PGID `1751255` e9 iter350 | e8 不早停，继续 e12；GPU2 外部任务不动 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0804_09 norm-preserving Householder product-tangent`（当前动态 GPU0/1） | RUNNING/TO_E12+；e4 完整 `31.605/37.701`，PGID `2390925` e6 iter1000 | e4 不早停，继续 e8/e12；其他 GPU 空闲 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0804_01 factorized product-tangent resume from e12`（固定 GPU0/1） | RUNNING/TO_E32+；e28 `52.641/58.986`，严格总和仍差 `6.703`，PGID `823929` e31 iter400 | 继续 e32+；GPU2/3 不用于本任务 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0804_07 axis-Frenet product-tangent`（当前动态 GPU0） | RUNNING/TO_E12+；e8 完整 `44.638/51.044`，PGID `3752856` e9 iter400 | e8 不早停，继续 e12；GPU1 不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-05 09:25 CST：178/99 epoch 8 完整闭环
+
+- 178 `0804_07 axis-Frenet` e8 cls HOTA/DetA/AssA `44.638/36.575/57.023`，
+  det `51.044/44.642/60.973`；相对直接 product-tangent e8 为 `-2.035/-2.878`，
+  同点和 `95.682`，严格总和仍差 `22.648`。pair mAP/AP50 `0.2308/0.4073`、
+  both-independent `0.2765/0.4691`。375,568,692-byte checkpoint 的 residual/642 浮点
+  张量全有限，5416/50/28/108、50 preds 与 `async_done=1` 完整，TrackEval 242.4 秒。
+  相对原 decoder e8 仍双正，因此不作 e8 淘汰，继续 e12。
+- 99 `0804_08 shared-metric` e8 cls HOTA/DetA/AssA `41.011/33.708/53.262`，
+  det `46.607/42.601/52.615`；相对直接 product-tangent e8 为 `-5.662/-7.315`，
+  pair mAP/AP50 `0.2001/0.3607`、both-independent `0.2432/0.4210`，定位、关联与 AP
+  同时下降。375,547,190-byte checkpoint meta `8/8304`，residual/642 浮点张量全有限，
+  5416/50/28/108、50 preds 与 `async_done=1` 完整，TrackEval 261.9 秒。仍继续 e12成熟窗。
+- 09:25 进度：252 固定 GPU0/1 e31 iter400，178 本任务 GPU0 e9，99 本任务动态
+  GPU0/1 e9 iter350，197 本任务动态 GPU0/1 e6 iter1000；GPU2/3（252）、GPU1（178）
+  保持空闲，99 GPU2 外部任务不动。四线损失、DN、Encoder proposal 与 grad 均有限。
 
 ## 2026-08-05 08:51 CST：197 Householder e4 与四机进度闭环
 

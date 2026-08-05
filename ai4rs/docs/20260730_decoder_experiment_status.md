@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 08:51 CST
+更新时间：2026-08-05 09:25 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,45 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E32+` | e28 完整 `52.641/58.986`，同点和 `111.627`、严格仍差 `6.703`；AP/DetA 仍升，PGID `823929` 已到 e30 iter150，继续 e32+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `35.434/44.417`，只作早期归因；PGID `3752856` 已到 e8 iter650，GPU1 不动。 |
-| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `31.368/38.646`，只作早期归因；PGID `1751255` 已到 e7 iter650，GPU2 不用于本任务。 |
-| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `31.605/37.701`，只作早期归因；PGID `2390925` 已恢复到 e5 iter350，继续 e8/e12。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E32+` | e28 完整 `52.641/58.986`，同点和 `111.627`、严格仍差 `6.703`；AP/DetA 仍升，PGID `823929` 已到 e31 iter400，继续 e32+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `44.638/51.044`，相对直接 product-tangent 为 `-2.035/-2.878`；PGID `3752856` 已恢复 e9，GPU1 不动。 |
+| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | e8 完整 `41.011/46.607`，相对直接 product-tangent 为 `-5.662/-7.315`；PGID `1751255` 已恢复 e9，GPU2 外部任务不动。 |
+| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整 `31.605/37.701`，只作早期归因；PGID `2390925` 已到 e6 iter1000，继续 e8/e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
 `0804_04 body-frame` 与 `0804_05 SE(2)` 均在 e4/e8/e12 三个完整节点后成熟停止；
 `0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
+
+## 2026-08-05 09:25 CST：axis-Frenet 与 shared-metric e8 同点闭环
+
+- 178 `0804_07 axis-Frenet product-tangent` e8 cls HOTA/DetA/AssA
+  `44.638/36.575/57.023`，det `51.044/44.642/60.973`，同点和 `95.682`，距离严格
+  `54.437/62.393/118.330` 三门槛分别仍差 `9.799/11.349/22.648`。相对直接
+  product-tangent e8，cls/det HOTA 为 `-2.035/-2.878`；cls DetA/AssA 为
+  `-3.316/+0.428`，det 为 `-2.620/-3.163`。方向分解只在 cls AssA 保留轻微正差，
+  并未修复主要定位与 det 关联缺口。
+- axis-Frenet e8 pair mAP/AP50 `0.2308/0.4073`、both-independent
+  `0.2765/0.4691`，相对直接 product-tangent 分别下降 `0.0216/0.0370` 和
+  `0.0274/0.0448`。375,568,692-byte checkpoint 的 12 个 iterative-cls residual
+  张量已训练且有限，最大绝对值 `0.0921249`；642 个浮点张量全有限。5416/50/28/108、
+  50 个预测文件及 `async_done=1` 闭环，TrackEval 用时 242.4 秒。它相对原 decoder e8
+  仍为 `+2.666/+2.866`，所以不在 e8 淘汰，PGID `3752856` 已恢复 e9并继续 e12。
+- 99 `0804_08 shared-metric product-tangent` e8 cls HOTA/DetA/AssA
+  `41.011/33.708/53.262`，det `46.607/42.601/52.615`，同点和 `87.618`，严格总和仍差
+  `30.712`。相对直接 product-tangent e8，cls/det HOTA 为 `-5.662/-7.315`；
+  cls DetA/AssA 为 `-6.183/-3.333`，det 为 `-4.661/-11.521`。共享几何均值度量同时
+  损伤定位与关联，并非只改变一个侧面的尺度噪声。
+- shared-metric e8 pair mAP/AP50 `0.2001/0.3607`、both-independent
+  `0.2432/0.4210`，相对直接 product-tangent 分别下降 `0.0523/0.0836` 与
+  `0.0607/0.0929`。375,547,190-byte checkpoint meta 为 epoch/iter `8/8304`，
+  12 个 iterative-cls residual 张量最大绝对值 `0.0797748`，642 个浮点张量全有限；
+  5416/50/28/108、50 个预测文件及 `async_done=1` 闭环，TrackEval 用时 261.9 秒。
+  按慢收敛规则仍保留 e12 成熟节点，PGID `1751255` 已恢复 e9。
+- 09:25 四机复审：252 固定 GPU0/1 到 e31 iter400，GPU2/3 为 `1 MiB/0%`；178 仅本任务
+  GPU0 到 e9，GPU1 空闲；99 本任务动态 GPU0/1 到 e9 iter350，GPU2 的约 6 GiB 外部任务
+  保持不动；197 本任务动态 GPU0/1 到 e6 iter1000。四条正式日志的 total/DN/Encoder/grad
+  均有限，未热更新存活仓库或改变外部任务。
 
 ## 2026-08-05 08:51 CST：Householder e4 完整闭环，范数保持仍未修复早期关联
 
