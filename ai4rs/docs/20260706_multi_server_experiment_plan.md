@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 20:57 CST.
+Last updated: 2026-08-05 21:40 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,29 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 21:40 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 64
+at cls HOTA/DetA/AssA `54.771/45.792/67.555` and det
+`61.636/54.314/72.466`. Classification is `0.334` above the final Encoder,
+but detection remains `0.757` below it and the sum `116.407` is `1.923` short
+of the strict target. HOTA still rose `0.058/0.096` from epoch 60, so retain
+fixed GPU0/1 through epoch 68+ and leave GPU2/3 unused. The trained/finite
+452,412,790-byte checkpoint, AP diagnostics, 5416/50 detections, 28 CSVs, 108
+nonempty files, 50 predictions, and 421.0-second asynchronous TrackEval are
+complete; training has continued to epoch 65 iter 350.
+
+Dynamic-99 `0804_15 terminal quotient log-shape consensus` closed epoch 4 at
+cls HOTA/DetA/AssA `31.348/25.622/40.778` and det
+`38.373/33.669/45.166`. Relative to the strong parent, HOTA is
+`-1.501/+1.054`; the det gain is an early DetA-to-AssA trade and all four AP
+diagnostics are lower. Its 369,969,398-byte checkpoint has trained heads and
+642 finite tensors; 5416/50 detections, 28 CSVs, 108 nonempty files, 50
+predictions, and the 252.6-second TrackEval are complete. This remains an
+epoch-4 diagnosis, not a rejection; keep GPU0/1 through epoch 8/12+ and do not
+touch GPU2. Current progress is epoch 6 iter 150. Dynamic-178 uses only GPU0
+and has entered epoch 12 iter 50; wait for the actual epoch-12 checkpoint and
+full evaluation before a mature handoff. Keep `0804_16` no-GPU and statically
+validated meanwhile.
 
 At 20:57 CST, dynamic-178 `0804_14 hemisphere-boundary center + log-shape
 consensus` closed epoch 8 at cls HOTA/DetA/AssA
