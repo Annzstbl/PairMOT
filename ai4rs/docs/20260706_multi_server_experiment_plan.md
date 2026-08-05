@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-05 21:40 CST.
+Last updated: 2026-08-05 22:17 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,29 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 22:17 CST, dynamic-178 `0804_14 hemisphere-boundary center + log-shape
+consensus` was stopped only after complete epoch-12 evidence. Epoch 12 is cls
+HOTA/DetA/AssA `45.127/37.940/56.257` and det
+`52.260/46.927/60.484`, respectively `3.162/2.279` HOTA below the strong
+parent; all four DetA/AssA values and AP diagnostics are also lower. Together
+with e4 and e8, this is a mature negative e4/e8/e12 window rather than an
+early rejection. Its trained/finite 381,083,316-byte checkpoint, 5416/50
+detections, 28 CSVs, 108 nonempty files, 50 predictions, and 254.7-second
+TrackEval are complete. Exact PGID `4074056` was terminated after membership
+verification; GPU0 became consecutively idle while the external GPU1 job was
+untouched.
+
+The zero-state `0804_16 terminal quotient-anisotropy shape consensus` then
+passed its real GPU0 four-step smoke on clean detached `7a2ed53`. All four
+loss/gradient, DN, and encoder terms are finite; its 364,506,868-byte
+checkpoint has trained iterative-cls/DN heads and 642 finite tensors. Fresh
+formal screen/PGID `4175889/4175891` reached iter 50 at `0.9817 s/iter`,
+loss/grad `21.0161/111.8280`, real GPU0 residency, finite total/DN/encoder
+proposal terms, and zero fatal signatures. It is now `RUNNING/TO_E4+` on the
+one authorized 178 GPU; retain e4/e8/e12+ before a mature decision and leave
+GPU1 external work untouched. Concurrent progress is dynamic-99 epoch 8 iter
+350 and fixed-252 epoch 67 iter 300, with their unassigned GPUs unused.
 
 At 21:40 CST, fixed-252 `0804_01 factorized product-tangent` closed epoch 64
 at cls HOTA/DetA/AssA `54.771/45.792/67.555` and det
