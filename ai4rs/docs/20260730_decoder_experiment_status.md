@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-05 07:40 CST
+更新时间：2026-08-05 08:11 CST
 
 ## 当前研究原则
 
@@ -14,15 +14,54 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E28+` | e24 cls/det `52.478/58.771`，同点和 `111.249`、严格仍差 `7.081`；e20→e24 双升，PGID `823929` 已到 e26 iter950，继续 e28+，GPU2/3 不动。 |
-| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | PGID `3752856` 五门槛通过，已到 e4 iter800；GPU1 后出现的外部任务不动。 |
-| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | PGID `1751255` 五门槛通过，已到 e3 iter650；GPU2 外部任务不动。 |
-| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | Frenet e12 成熟双负后精确停止；新 screen/PGID `2390923/2390925` 完成配置 deepcopy、整模构建、真实双卡 smoke、checkpoint 与 formal iter50 五门槛。 |
+| 252 固定 GPU 0,1 | `0804_01 ... factorized product-tangent ... resume from e12` | `RUNNING/TO_E28+` | e24 cls/det `52.478/58.771`，同点和 `111.249`、严格仍差 `7.081`；e20→e24 双升，PGID `823929` 已到 e28 iter500，继续 e28+，GPU2/3 不动。 |
+| 178 当前 GPU 0 | `0804_07 ... axis-Frenet product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整闭环 `35.434/44.417`，只作早期归因；PGID `3752856` 已恢复到 e6 iter50，GPU1 外部任务不动。 |
+| 99 当前 GPU 0,1 | `0804_08 ... shared-metric product-tangent ... fresh` | `RUNNING/TO_E12+` | e4 完整闭环 `31.368/38.646`，只作早期归因；PGID `1751255` 已恢复到 e5 iter250，GPU2 外部任务不动。 |
+| 197 当前 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `RUNNING/TO_E12+` | Frenet e12 成熟双负后精确停止；新 screen/PGID `2390923/2390925` 五门槛通过，已到 e3 iter100。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 
 `0804_04 body-frame` 与 `0804_05 SE(2)` 均在 e4/e8/e12 三个完整节点后成熟停止；
 `0804_07 axis-Frenet` 和 `0804_08 shared-metric` 已分别接替 178 与 99 并通过五项动态门槛。
+
+## 2026-08-05 08:11 CST：shared-metric e4 完整闭环，保留慢收敛窗口
+
+- 99 `0804_08 shared-metric product-tangent` e4 cls HOTA/DetA/AssA
+  `31.368/26.157/40.232`，det `38.646/33.488/45.640`。相对原 decoder e4
+  `34.306/38.590` 为 `-2.938/+0.056`，相对 Encoder e4 `36.209/38.753` 为
+  `-4.841/-0.107`；该点显然未满足最终绝对三门槛。
+- 相对直接 product-tangent e4 `35.274/43.849`，cls/det HOTA 为
+  `-3.906/-5.203`；cls DetA/AssA 分别 `-2.372/-4.893`，det 分别
+  `-0.845/-12.460`。共同 geometric-mean metric 在早期尤其损伤轨迹关联；pair mAP/AP50
+  `0.1409/0.2654`、both-independent `0.1843/0.3349` 也相对父结构分别下降
+  `0.0184/0.0311` 与 `0.0226/0.0355`。
+- 369,971,894-byte checkpoint 的 12 个 iterative-cls residual 张量均已训练且有限，
+  642 个浮点张量全有限；5416 条检测、50 序列、28 CSV、108 个非空评测文件及
+  `async_done=1` 完整，TrackEval 用时 234.4 秒。该结果只用于早期归因，不作为 e4
+  淘汰理由；PGID `1751255` 已恢复到 e5 iter250，继续 e8/e12。
+- 08:10 复审：252 固定 GPU0/1 已到 e28 iter500；178 本任务 GPU0 到 e6 iter50；99
+  本任务动态 GPU0/1 到 e5 iter250；197 本任务动态 GPU0/1 到 e3 iter100。GPU2/3（252）、
+  178 GPU1 与 99 GPU2 均未被本任务占用或改动。
+
+## 2026-08-05 08:01 CST：axis-Frenet e4 完整闭环，仅作早期归因
+
+- 178 `0804_07 axis-Frenet product-tangent` e4 cls HOTA/DetA/AssA
+  `35.434/28.624/45.484`，det `44.417/35.116/57.988`。相对原 decoder e4
+  `34.306/38.590` 为 `+1.128/+5.827`，相对 Encoder e4 `36.209/38.753` 为
+  `-0.775/+5.664`；仍远未满足最终绝对门槛，不能登记成功。
+- 相对直接 product-tangent e4 `35.274/43.849`，axis-Frenet 的 cls/det HOTA
+  `+0.160/+0.568`：cls DetA/AssA 分别 `+0.095/+0.359`，det 分别
+  `+0.783/-0.112`。方向分解在早期把一部分 det 关联优势换成了更明显的定位回补；但
+  pair mAP/AP50 `0.1584/0.2908`、both-independent `0.2036/0.3605` 相对父结构仍为
+  `-0.0009/-0.0057` 与 `-0.0033/-0.0099`，因此不能由 e4 的 HOTA 微升推断成熟优势。
+- 369,976,116-byte checkpoint 的 iterative-cls/DN 语义与 642 个浮点张量全有限；
+  5416 条检测、50 序列、28 CSV、108 个非空评测文件及 `async_done=1` 完整，TrackEval
+  用时 221.4 秒。按慢收敛规则不在 e4 淘汰，PGID `3752856` 已恢复到 e5 iter400，继续
+  收集 e8/e12。
+- 08:00 四机审计：252 固定 GPU0/1、PGID `823929` 到 e27 iter1000，GPU2/3 空闲；178
+  仅本任务 GPU0，GPU1 外部任务保持；99 本任务动态 GPU0/1 到 e4 iter1000，GPU2 外部
+  任务保持；197 本任务动态 GPU0/1 到 e2 iter450。正式日志的 total/DN/Encoder/grad
+  均有限，进程、GPU、正式目录一致，未触碰外部任务。
 
 ## 2026-08-05 07:40 CST：Frenet e12 成熟停止；Householder 保能传输接替 197
 
