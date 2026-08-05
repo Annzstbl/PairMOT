@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 02:08 CST.
+Last updated: 2026-08-06 02:35 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 02:35 CST, fixed-252 `0806_01` completed its epoch-76 same-checkpoint
+audit at cls HOTA/DetA/AssA `55.233/45.956/68.400` and det
+`62.255/54.670/73.373`. Both HOTA values improve over epoch 72 by
+`0.063/0.090`, but detection remains `0.138` below the Encoder and the sum
+`117.488` remains `0.842` below strict `>118.330`; the goal is not complete.
+Pair mAP/AP50 is `0.3187/0.5331` and both-independent is
+`0.3577/0.5699`, essentially flat versus epoch 72. The 468,824,374-byte
+checkpoint has meta `76/78888`, 711 model and 712 EMA states, 642 finite
+floating tensors in each, and 497 optimizer states. Detection and TrackEval
+close with 5416/50, 28 CSVs, 108 nonempty files, 50/50 predictions,
+`async_done=1`, and 398.6 seconds. The same PGID `1025568` has naturally
+entered epoch 77 with finite formal signals. Keep model, optimizer, EMA, and
+LR continuous to the scheduled epoch-80 full audit; GPU2/3 remain forbidden.
+
+Dynamic-99 `0804_17` is independently at epoch 4 iteration 400 on GPU0/1
+with finite total, DN, encoder-proposal losses and gradient norm, while GPU2
+is idle. Collect the epoch-4 checkpoint, AP, and TrackEval as a diagnostic,
+then continue through epoch 8 and epoch 12+; neither epoch 4 nor 8 can directly
+reject the decoder. Keep `0806_02` static and no-GPU until this mature result.
 
 At 02:08 CST, dynamic-178 `0804_16 quotient-anisotropy shape consensus`
 completed its full epoch-12 mature audit. Same-checkpoint cls HOTA/DetA/AssA is
