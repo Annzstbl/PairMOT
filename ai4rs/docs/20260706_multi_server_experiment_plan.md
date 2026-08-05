@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 03:15 CST.
+Last updated: 2026-08-06 04:34 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -13,26 +13,46 @@ Current per-server status dashboard:
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
 
-At 03:15 CST, dynamic-178 `0806_03 Householder product-tangent` is the safe
-migration of CPU-throttled 197 `0804_09` from its audited epoch-8 checkpoint
-to epoch 12. Physical batch changes from 2x4 to 1x8, so global batch remains
-eight without accumulation. The clean detached checkout is `36ddea5`; both
-configs passed deepcopy, both launchers passed `bash -n`, source and target
-models have the same 22,771,111 parameters and 711 state tensors, and the
-375,529,191-byte checkpoint has meta `8/8304` with compatible model, EMA,
-optimizer, and scheduler state. A real 1x8 four-iteration smoke produced 642
-finite floating checkpoint tensors. Formal screen/PGID `112694/112696`
-resumed exactly from epoch 8 and is healthy at epoch 9 iteration 250 with
-finite total, DN, encoder-proposal losses and gradient norm. Only GPU0 is used;
-the external GPU1 task remains untouched. Continue to the complete epoch-12
-checkpoint, detection, and both TrackEval views. This completes a previously
-interrupted mature window and does not advance the static `0806_02` fallback.
+At 04:16 CST, fixed-252 `0806_01` completed epoch 80 at cls/det HOTA
+`55.446/62.342`, with DetA/AssA `46.260/68.403` and `54.740/73.466`.
+The same-checkpoint sum is `117.788`: cls passes by `1.009`, but det misses by
+`0.051` and the sum misses by `0.542`. Pair mAP/AP50 `0.3229/0.5361` and
+both-independent `0.3624/0.5738` still improve over epoch 76. The finite
+474,302,646-byte checkpoint has meta `80/83040`, 711/712 model/EMA states,
+642 finite floating tensors in each, 497 optimizer states, and complete
+5416/50 detection plus 28/108/50 TrackEval artifacts. Therefore strict success
+is not claimed, but a same-model duration-only continuation is warranted.
 
-At the same 03:15 audit, fixed-252 `0806_01` is healthy at epoch 79 iteration
-350 on GPU0/1 only, with GPU2/3 at 1 MiB; prioritize its epoch-80 checkpoint
-and complete same-checkpoint dual evaluation. Dynamic-99 `0804_17` is healthy
-at epoch 6 iteration 350 on GPU0/1, with GPU2 idle; continue through epoch 8
-and epoch 12+ without early rejection.
+The continuation is `0806_04`, epoch 80 to 88 with validation at epochs 84 and
+88. Model, optimizer, EMA, LR, global batch, data, and losses are unchanged.
+The clean detached checkout is `3e8dde1`; formal/smoke deepcopy, remote
+`bash -n`, exact 22,771,111-parameter/711-state build, checkpoint compatibility,
+real dual-GPU four-step smoke, and formal iteration-50 gates all passed.
+Screen/PGID `1087790/1087792` is healthy at epoch 81 iteration 350. It uses
+fixed GPU0/1 only; GPU2/3 remain at 1 MiB.
+
+Dynamic-99 `0804_17` completed its epoch-8 diagnostic at cls/det HOTA
+`41.392/47.685`, with DetA/AssA `33.414/54.156` and `42.820/55.100`.
+Pair mAP/AP50 is `0.1933/0.3595` and both-independent is `0.2361/0.4212`.
+Its finite 375,534,838-byte checkpoint has meta `8/8304`, 711/712 states,
+642 finite floating tensors in each and 497 optimizer states; 5416/50 detection,
+28 CSV, 108 nonempty files, 50/50 nonempty predictions and `async_done=1` are
+complete. This is not a mature rejection: the run is healthy at epoch 9
+iteration 600 on dynamic GPU0/1 and continues to epoch 12+; GPU2 stays idle.
+
+Dynamic-178 `0806_03 Householder product-tangent` completed epoch 12 at
+cls/det HOTA `45.162/52.066`, with DetA/AssA `36.909/57.747` and
+`46.731/60.028`. It improved over epoch 8 by `2.566/4.618`, confirming that
+the mature window was necessary, but remains `4.622/4.177` below the direct
+product-tangent epoch-12 parent and misses the strict three gates by
+`9.275/10.327/21.102`. Pair mAP/AP50 is `0.2286/0.4080` and both-independent
+is `0.2721/0.4632`. The finite 381,000,052-byte checkpoint has meta
+`12/12456`, 711/712 model/EMA states, 642 finite floating tensors in each,
+and 497 optimizer states. Detection 5416/50, TrackEval 28 CSV/108 nonempty
+files/50 predictions and `async_done=1` are complete. All formal and async
+processes ended naturally and both GPUs read 1 MiB, although the PairMOT cap
+remains one GPU. Keep `0806_02` static-only until dynamic-99 `0804_17` reaches
+epoch 12+ so its closest quotient-anisotropy attribution is not duplicated.
 
 At 02:56 CST, dynamic-99 `0804_17 quotient-anisotropy product-tangent`
 completed its epoch-4 diagnostic at cls HOTA/DetA/AssA

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 03:12 CST
+更新时间：2026-08-06 04:34 CST
 
 ## 当前研究原则
 
@@ -14,9 +14,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_01 ... factorized product-tangent ... e72→e80` | `RUNNING/E79/TO_E80` | e76 完整 `55.233/62.255`、同点和 `117.488`，det/总和仍差 `0.138/0.842`；03:12 到 e79 iter200，继续 e80。GPU2/3 始终不用。 |
-| 178 动态 GPU 0 | `0806_03 ... Householder product-tangent ... e8→e12` | `RUNNING/E9/TO_E12` | 从 197 的已审计 e8 精确迁移；1×8 保持全局 batch 8。静态构建、真实 smoke、checkpoint 兼容与正式五门槛均通过，03:11 到 e9 iter50；GPU1 外部作业不动。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E6/TO_E8+` | e4 完整 `31.620/38.330`，det 早期优势来自 AssA 而 DetA/AP 仍弱；只作诊断，03:12 到 e6 iter200 并继续 e8/e12+，GPU2 未用。 |
+| 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `RUNNING/E82/TO_E84+` | `0806_01` e80 完整 `55.446/62.342`、同点和 `117.788`，det/总和仍差 `0.051/0.542`；因 HOTA/AP 仍上升，仅延长训练到 e84/e88。五项启动门槛已通过，04:33 到 e82 iter300；GPU2/3 均为 1 MiB。 |
+| 178 动态 GPU 0 | `0806_03 ... Householder product-tangent ... e8→e12` | `COMPLETED/MATURE_NEGATIVE/GPU_FREE` | e12 完整 `45.162/52.066`、同点和 `97.228`；较 e8 回升但相对直接 product-tangent e12 仍低 `4.622/4.177`。checkpoint、检测、AP 与 TrackEval 全闭环，GPU0/1 均回到 1 MiB。 |
+| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E10/TO_E12+` | e8 完整 `41.392/47.685`，DetA/AssA 为 cls `33.414/54.156`、det `42.820/55.100`；检测 AP 仍弱，只作诊断。04:33 到 e10 iter600 并继续 e12+，GPU2 未用。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -29,6 +29,54 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 04:16 CST：252 e80 严格未达标并无缝延长；99 e8 完整诊断
+
+- 252 的 `0806_01` e80 同一 checkpoint cls HOTA/DetA/AssA 为
+  `55.446/46.260/68.403`，det 为 `62.342/54.740/73.466`，绝对和 `117.788`。
+  cls 相对 Encoder 为 `+1.009`，但 det 仍低 `0.051`，总和门槛仍差 `0.542`，所以严格未达标。
+  pair mAP/AP50 `0.3229/0.5361`、both-independent `0.3624/0.5738`，相对 e76
+  仍分别提高 `+0.0042/+0.0030` 与 `+0.0047/+0.0039`；HOTA 也双升
+  `+0.213/+0.087`，因此不是平台或失败证据。
+- 474,302,646-byte `epoch_80.pth` meta `80/83040`，model/EMA 为 711/712 states，
+  两者各 642 个浮点张量全有限，optimizer 497 states 完整。检测为 5416 条/50 序列；
+  TrackEval 含 28 CSV、108 个非空文件、50/50 非空预测和 `async_done=1`，耗时 376.9 秒。
+- duration-only 接续登记为 `0806_04`：模型、优化器、EMA、LR、全局 batch、数据与 loss
+  全部保持，只将 max epoch 改为 88，并在 e84/e88 评估。隔离 checkout 固定在 clean detached
+  `3e8dde1`；formal/smoke 配置 deepcopy、两个 launcher `bash -n`、22,771,111 参数/711 states
+  完整构建和 e80 逐键兼容均通过。真实双卡四步 smoke 的 total、DN、Encoder proposal、grad
+  与 642 个 checkpoint 浮点张量全有限。
+- 252 formal screen/PGID `1087790/1087792` 精确恢复 `80/83040`；e81 iter50 的 loss/grad
+  `8.4533/49.3015`，五项正式门槛齐全。04:15 到 e81 iter350，固定 GPU0/1 约 19.4 GiB，
+  GPU2/3 均为 1 MiB，因此登记 `RUNNING/E81/TO_E84+`。
+- 99 `0804_17` e8 同点 HOTA 为 `41.392/47.685`，cls DetA/AssA
+  `33.414/54.156`、det `42.820/55.100`；pair mAP/AP50 `0.1933/0.3595`，
+  both-independent `0.2361/0.4212`。375,534,838-byte checkpoint meta `8/8304`，
+  model/EMA 711/712 states、各 642 个浮点张量全有限，optimizer 497 states；5416/50 检测、
+  28 CSV、108 个非空文件、50/50 非空预测及 `async_done=1` 齐全，TrackEval 耗时 260.7 秒。
+  该点相对 e4 明显恢复但离绝对目标仍远，按慢收敛约束继续 e12+，不以 e8 否决。
+- 178 `0806_03` 已在 04:14 保存 e12 checkpoint 并进入正式检测；当前只登记
+  `VALIDATING/E12`，必须等待同一 checkpoint 的检测、双 TrackEval、AP、DetA/AssA 和完整性
+  审计后才能形成成熟结论或释放资源。
+
+## 2026-08-06 04:31 CST：178 Householder e12 成熟负结论并自然释放
+
+- `0806_03` e12 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `45.162/36.909/57.747`，det 为 `52.066/46.731/60.028`，绝对和 `97.228`。
+  相对 e8 `42.596/47.448`，HOTA 回升 `+2.566/+4.618`，DetA 回升
+  `+1.934/+3.436`，AssA 回升 `+3.089/+6.140`；这证明没有在 e8 过早否决，且 decoder
+  仍在收敛。但相对直接 product-tangent 父线 e12 `49.784/56.243` 仍低
+  `4.622/4.177`，绝对目标分别差 `9.275/10.327`，总和门槛差 `21.102`，成熟判定为负。
+- pair mAP/AP50 `0.2286/0.4080`，both-independent `0.2721/0.4632`；相对 e8 分别提高
+  `+0.0241/+0.0349` 与 `+0.0218/+0.0274`，但相对直接 product-tangent e12 仍全面偏低，
+  与 DetA/AssA 的父线双负一致：Householder 保范数旋转没有解决覆盖瓶颈，反而持续损伤
+  product-tangent 已建立的方向信息。
+- 381,000,052-byte `epoch_12.pth` meta `12/12456`，model/EMA 为 711/712 states，
+  两者各 642 个浮点张量全有限，optimizer 497 states 完整。检测为 5416 条/50 序列；
+  TrackEval 有 28 CSV、108 个非空文件、50/50 非空预测与 `async_done=1`，耗时 248.4 秒。
+- 正式 screen/process 已自然结束，GPU0/1 均为 `1 MiB/0%`，没有残留异步进程。
+  178 总卡数上限仍为 1；`0806_02` 保持静态就绪，等待 99 `0804_17` 的 e12+ 成熟证据后
+  再决定是否部署，避免在最接近的 quotient-anisotropy 归因未完成前制造重复轨迹。
 
 ## 2026-08-06 03:12 CST：178 迁移 Householder e8→e12 并通过正式五门槛
 
