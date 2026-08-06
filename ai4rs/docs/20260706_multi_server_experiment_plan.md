@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 04:38 CST.
+Last updated: 2026-08-06 09:35 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,50 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 09:24 CST, fixed-252 `0806_06` completed epoch 92 at cls/det HOTA
+`55.534/62.430`, with DetA/AssA `46.365/68.575` and `54.766/73.626`.
+The same-checkpoint sum is `117.964`: both single metrics pass, but the strict
+sum still misses `>118.330` by `0.366`. Because epoch 92 improves both HOTA
+values over epochs 84 and 88, keep the identical continuation to epoch 96 on
+fixed GPU0/1 and leave GPU2/3 unused. The complete finite checkpoint is
+490,678,390 bytes with meta `92/95496`, 711/712 model/EMA states, 497 optimizer
+states, and complete 5416/50 detection plus 28/108 TrackEval artifacts.
+
+Dynamic-99 `0804_17` reached its sixth complete node at epoch 24 with cls/det
+HOTA `49.794/57.460`. It continued to improve over epoch 20, but remains
+`2.684/1.311` below the direct product-tangent epoch-24 parent and misses the
+strict cls/det/sum gates by `4.643/4.933/9.076`. After full checkpoint,
+detection, and TrackEval closure, PGID `1995834` was terminated exactly and
+GPU0/1 were released; this is a mature structural rejection, not epoch-4/8
+early stopping.
+
+The released dynamic GPU0/1 now run `0806_07 stratified product-tangent` from
+clean detached commit `ead7e1e`. It preserves frame detail only on the
+zero-reference-motion stratum and is exactly equal to the direct parent on
+non-degenerate samples; it adds zero parameters/state, no class awareness,
+no reweighting, and no material compute. Config deepcopy, remote launcher
+syntax, the 22,771,111-parameter/711-state parent-child build, real four-step
+DDP smoke, finite 364,503,990-byte checkpoint, and formal iteration-50 gates
+all passed. Screen/PGID `2037141/2037143` is `RUNNING/E1/TO_E4+`; GPU2 remains
+idle and epochs 4/8 are diagnostic only.
+
+Dynamic-178 `0806_05 scale-orientation split product-tangent` completed its
+epoch-12 audit at cls/det HOTA `44.366/49.670`, improving over epoch 8 but
+remaining `5.418/6.573` below the direct product-tangent parent. Its finite
+381,098,996-byte checkpoint, 5416/50 detection output, and 28/108 TrackEval
+artifacts are complete. This is a mature e4/e8/e12 structural rejection, not
+early stopping. PGID `175356` was terminated exactly and GPU0 was released;
+the external GPU1 job was never touched.
+
+The released one-GPU lane now runs `0806_02 log-SPD product-tangent` on
+dynamically selected GPU0 from clean detached commit `9c5018a`. Config
+deepcopy, launcher syntax, the 22,771,111-parameter/711-state complete build,
+real 1x8 four-step smoke, finite 364,507,508-byte smoke checkpoint, and formal
+iteration-50 gates all passed. Screen/main PGID `274432/274434` is
+`RUNNING/E1/TO_E4+`; iteration-50 loss/gradient is `21.0199/112.7436`, all DN
+and encoder-proposal terms are finite, the fatal scan is empty, and GPU1's
+external job remains untouched. Epochs 4 and 8 are diagnostic only.
 
 At 04:16 CST, fixed-252 `0806_01` completed epoch 80 at cls/det HOTA
 `55.446/62.342`, with DetA/AssA `46.260/68.403` and `54.740/73.466`.

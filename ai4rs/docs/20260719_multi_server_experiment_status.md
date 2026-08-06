@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 08:17 CST。
+更新时间：2026-08-06 09:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,51 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E21/TO_E24；e20 完整 `48.948/56.926`，07:56 到 e21 iter300 | e20 仍双升但低父线 `3.250/1.206`，继续 e24；`0806_07` 已 STATIC_VALIDATED/NO_GPU；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0806_07 stratified product-tangent`（动态 GPU0/1） | RUNNING/E1/TO_E4+；真实双卡 smoke/checkpoint 与 formal iter50 五门槛通过 | `0804_17` e24 完整 `49.794/57.460` 后成熟停止；0806_07 GPU2 未用，e4/e8 不作直接否决 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E92/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；08:16 到 e92 iter200 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E9/TO_E12；e8 完整 `41.068/45.001`，08:14 到 e9 iter300 | e8 较 e4 双升但低直接父线 `5.605/8.921`，继续 e12；`0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E93/TO_E96；e92 `55.534/62.430`、总和 `117.964` 严格未过 | e92 较 e84/e88 均双升，继续 e96；GPU2/3 未用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_02 log-SPD product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；真实 1×8 smoke/checkpoint 与 formal iter50 五门槛通过 | `0806_05` e12 完整 `44.366/49.670` 后成熟停止；GPU1 外部作业未触碰，e4/e8 不作直接否决 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 09:35 CST：178 完成 e12 成熟交接，0806_02 正式运行
+
+- `0806_05 scale-orientation split product-tangent` e12 cls HOTA/DetA/AssA
+  `44.366/34.045/60.856`，det `49.670/42.362/60.165`，绝对和 `94.036`。虽然相对 e8
+  HOTA 继续上升 `3.298/4.669`，但相对直接 product-tangent 父线 e12 仍低
+  `5.418/6.573`，父线的四项 DetA/AssA 也全部更高；pair AP/AP50
+  `0.2110/0.3670`、both-independent `0.2509/0.4149` 同样落后。该结论来自完整
+  e4/e8/e12 成熟窗口，而非早期节点否决。
+- 381,098,996-byte checkpoint meta `12/12456`、model/EMA 711/712 states、642 个有限
+  浮点张量、497 optimizer states、scheduler 与 iterative-cls/DN 检查全部通过；检测
+  5416/50、TrackEval 28 CSV/108 非空文件和 `async_done=1` 齐全。PGID `175356` 精确
+  TERM 后成员 `8→0`、screen 消失、GPU0 连续归零，GPU1 外部作业未触碰。
+- `0806_02 log-SPD product-tangent` 随后在 clean detached `9c5018a` 上 fresh 启动。
+  配置 deepcopy、launcher 语法、22,771,111 参数/711 states 完整构建、真实 1×8 四步
+  smoke、364,507,508-byte checkpoint 有限性和 iterative-cls/DN 语义均通过。formal
+  screen/main PGID `274432/274434` 的 iter50 lr/loss/grad
+  `2.5488e-6/21.0199/112.7436`，DN、Encoder proposal、进程、GPU0 与 fatal=0 五门槛
+  一致，登记 `RUNNING/E1/TO_E4+`。GPU1 仍由外部作业使用，未触碰；e4/e8 只作诊断。
+
+## 2026-08-06 09:24 CST：e92 严格未过；99 成熟负线交接 0806_07
+
+- 252 `0806_06` e92 cls/det HOTA `55.534/62.430`，DetA/AssA 为
+  `46.365/68.575` 与 `54.766/73.626`，同点和 `117.964`。单项分别过线
+  `1.097/0.037`，但严格总和仍差 `0.366`；相对 e84/e88 均双升，继续同一状态到 e96。
+  490,678,390-byte checkpoint meta `92/95496`，model/EMA 711/712 states、各 642 浮点
+  张量全有限、optimizer 497 states、scheduler 与 iterative-cls/DN 语义完整；5416/50、
+  28 CSV、108 非空文件和异步完成齐全。固定 GPU0/1，GPU2/3 未用。
+- 99 `0804_17` e24 cls/det `49.794/57.460`，DetA/AssA 为
+  `41.179/62.318` 与 `50.101/68.276`。虽较 e20 继续双升且四项 AP 全升，但相对直接
+  product-tangent e24 仍低 `2.684/1.311`，六个完整节点后成熟判负。397,519,734-byte
+  checkpoint meta `24/24912`、711/712 states、642 浮点张量、497 optimizer states、
+  5416/50、28/108 和异步完成均通过。PGID `1995834` 精确 TERM，成员 `23→0`、screen
+  消失，GPU0/1 连续归零，GPU2 未用。
+- 资源释放后，`0806_07 stratified product-tangent` 在 clean detached `ead7e1e` 重新通过
+  config deepcopy、远端 `bash -n`、22,771,111 参数/711 states 完整构建。动态 GPU0/1
+  四步 smoke 的 loss/grad、DN、Encoder proposal 全有限，364,503,990-byte checkpoint
+  通过有限性与 iterative-cls/DN 语义检查；formal screen/PGID `2037141/2037143` 的
+  iter50 loss/grad `21.4216/101.1440`，两 rank/GPU/正式日志/fatal 扫描五门槛通过，登记
+  `RUNNING/E1/TO_E4+`。GPU2 空闲，e4/e8 不作直接否决。
 
 ## 2026-08-06 08:15 CST：178 e8 完整评估，继续到 e12
 

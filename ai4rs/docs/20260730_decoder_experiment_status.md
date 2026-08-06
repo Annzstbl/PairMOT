@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 08:17 CST
+更新时间：2026-08-06 09:35 CST
 
 ## 当前研究原则
 
@@ -14,12 +14,12 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E92/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；08:16 e92 iter200，GPU2/3 未用。 |
+| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E93/TO_E96` | e92 完整 `55.534/62.430`，单项分别过线 `1.097/0.037`，但同点和 `117.964` 仍差 `0.366`；较 e84/e88 均双升，故纯时长单因素继续 e96。09:24 已自然恢复 e93；固定 GPU0/1，GPU2/3 未用。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
-| 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
-| 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E9/TO_E12` | e8 完整 cls/det `41.068/45.001`，较 e4 上升 `7.537/9.072`，但相对直接 product-tangent e8 低 `5.605/8.921`，DetA/AssA/AP 也均弱。e8 仍只作诊断，继续 e12；08:14 到 e9 iter300。GPU1 外部作业未触碰。 |
-| 99 动态 GPU 0,1 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `RUNNING/E21/TO_E24` | e20 完整 cls/det `48.948/56.926`，较 e16 再升 `+0.633/+1.342`，但相对直接 product-tangent 父线 e20 仍低 `3.250/1.206`，严格三门槛差 `5.489/5.467/12.456`。DetA/AssA/AP 仍全升，故继续 e24；07:56 到 e21 iter300，GPU2 未用。 |
-| 99 不占 GPU | `0806_07 ... stratified product-tangent ... fresh` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在参考 transport 能量不超过既有 `1e-6` 数值阈值、切线轴未定义时保留原 frame detail；非退化样本精确等于直接 product-tangent。定向单测、配置 deepcopy、远端 `bash -n` 与 22,771,111 参数/711 states 完整父子构建通过；等待成熟结果与资源交接，不登记 RUNNING。 |
+| 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | clean detached `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states、真实 1×8 四步 smoke/checkpoint 与 formal iter50 五门槛均通过；09:34 iter50 loss/grad `21.0199/112.7436`，仅占 GPU0，GPU1 外部作业未触碰。 |
+| 178 已释放 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 cls/det `44.366/49.670`，虽较 e8 上升 `3.298/4.669`，但低直接 product-tangent 父线 e12 `5.418/6.573`，DetA/AssA/AP 也均弱；三节点成熟闭环后精确停止，产物保留。 |
+| 99 动态 GPU 0,1 | `0806_07 ... stratified product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | e24 成熟负线 `0804_17` 释放后，clean detached `ead7e1e` 重新通过 deepcopy、构建、真实双卡 smoke/checkpoint 与 formal iter50 五门槛；09:18 iter50 loss/grad `21.4216/101.1440`，现用动态 GPU0/1，GPU2 未用。 |
+| 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
@@ -32,6 +32,61 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 09:35 CST：178 e12 成熟判负并交接 0806_02
+
+- 178 `0806_05 scale-orientation split product-tangent` e12 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `44.366/34.045/60.856`，det 为 `49.670/42.362/60.165`，绝对和
+  `94.036`。相对 e8 HOTA 继续上升 `+3.298/+4.669`，证明保留 e12 成熟窗口是必要的；
+  但相对直接 product-tangent 父线 e12 `49.784/56.243` 仍低 `5.418/6.573`，且父线
+  DetA/AssA `41.865/61.515`、`50.021/65.603` 四项均更强。pair mAP/AP50
+  `0.2110/0.3670`、both-independent `0.2509/0.4149` 也不足，因此这是 e4/e8/e12
+  三个完整节点后的结构性成熟否决，不是以 e4/e8 早停。
+- 381,098,996-byte e12 checkpoint meta `12/12456`，model/EMA 711/712 states、各 642
+  浮点张量全有限，optimizer 497 states、scheduler 与 iterative-cls/DN 语义完整；检测
+  5416 records/50 sequences，TrackEval 28 CSV/108 非空文件和 `async_done=1` 齐全。
+  PGID `175356` 精确 TERM，成员 `8→0`、screen 消失，GPU0 连续回到 1 MiB；GPU1 外部
+  作业约 6.2 GiB，始终未触碰。
+- 释放后按既定单因素顺序启动 `0806_02 log-SPD product-tangent`。隔离 checkout 为 clean
+  detached `9c5018a`；正式目录启动前不存在；两 launcher `bash -n`、配置 deepcopy、
+  22,771,111 参数/711 states 完整构建、既有真实 1×8 四步 smoke 的 364,507,508-byte
+  checkpoint、642 浮点张量有限性与 iterative-cls/DN 语义均重新通过。
+- fresh formal screen/main PGID `274432/274434` 仅使用动态 GPU0。09:34 iter50
+  lr/loss/grad `2.5488e-6/21.0199/112.7436`，所有 DN 与 Encoder proposal 分量有限；
+  iter100 为 `20.4108/90.2805`，正式日志 fatal 扫描为 0。进程、GPU0、正式日志与 iter50
+  五门槛一致，登记 `RUNNING/E1/TO_E4+`；GPU1 外部作业保持约 6.2 GiB/92%，未触碰。
+  e4/e8 只作诊断，不直接否决该 decoder。
+
+## 2026-08-06 09:24 CST：252 e92 新高但严格未过；99 成熟交接至 0806_07
+
+- 252 `0806_06` e92 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `55.534/46.365/68.575`，det 为 `62.430/54.766/73.626`，绝对和 `117.964`。
+  cls、det 分别严格超过 Encoder `1.097/0.037`，但同点和距 `>118.330` 仍差 `0.366`，
+  因此目标未完成。相对 e84 为 `+0.060/+0.008`，相对 e88 为 `+0.137/+0.027`，曲线从
+  e88 回落后再创新高，故保持同模型、同优化状态继续既定 e96，而不是在 e92 停止。
+- e92 pair mAP/AP50 `0.3226/0.5326`、both-independent `0.3609/0.5683`，较 e88 略回落。
+  490,678,390-byte checkpoint meta `92/95496`，model/EMA 711/712 states、各 642 浮点张量
+  全有限，optimizer 497 states、scheduler 与 iterative-cls/DN 语义完整。检测 5416/50、
+  TrackEval 28 CSV/108 非空文件和 `async_done=1` 齐全；异步评测 376.6 秒自然完成。formal
+  已恢复 e93，固定 GPU0/1，GPU2/3 均未使用。
+- 99 `0804_17 quotient-anisotropy product-tangent` e24 cls HOTA/DetA/AssA
+  `49.794/41.179/62.318`，det `57.460/50.101/68.276`，绝对和 `107.254`。相对 e20
+  HOTA `+0.846/+0.534` 且 AP 继续升至 pair `0.2666/0.4706`、both-independent
+  `0.3095/0.5206`，确认慢收敛窗口是必要的；但相对直接 product-tangent e24
+  `52.478/58.771` 仍低 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`。六个完整
+  e4/e8/e12/e16/e20/e24 节点形成稳定结构性落后后，PGID `1995834` 精确 TERM，成员
+  `23→0`、screen 消失，GPU0/1 连续归零，GPU2 始终未用。
+- e24 的 397,519,734-byte checkpoint meta `24/24912`，model/EMA 711/712 states、各 642
+  浮点张量全有限，optimizer 497 states、单 scheduler 与 iterative-cls/DN 语义完整；
+  5416/50、28 CSV、108 非空文件和 `async_done=1` 齐全，TrackEval 自然完成。
+- `0806_07 stratified product-tangent` 在 99 clean detached `ead7e1e` 上重新通过两配置
+  deepcopy、两个 launcher `bash -n`、22,771,111 参数/711 states 父子完整构建。动态
+  GPU0/1 四步真实 smoke loss `12.9372/19.4934/19.6385/21.2074`、grad
+  `102.7695/107.0804/89.4597/90.1460`，DN/Encoder proposal 全有限；364,503,990-byte
+  checkpoint meta `0/4` 的 642 浮点张量与 iterative-cls/DN 语义通过，fatal=0。
+  formal screen/PGID `2037141/2037143` 的 iter50 lr/loss/grad
+  `2.5488e-6/21.4216/101.1440`，GPU0/1 各约 19.2 GiB、GPU2 空闲，五门槛通过后登记
+  `RUNNING/E1/TO_E4+`；e4/e8 只作诊断，不直接否决。
 
 ## 2026-08-06 08:15 CST：178 e8 完整但明显弱于父线，继续 e12 成熟窗口
 
