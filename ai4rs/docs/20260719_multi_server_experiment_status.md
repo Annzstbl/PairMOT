@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 09:35 CST。
+更新时间：2026-08-06 10:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,29 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0806_07 stratified product-tangent`（动态 GPU0/1） | RUNNING/E1/TO_E4+；真实双卡 smoke/checkpoint 与 formal iter50 五门槛通过 | `0804_17` e24 完整 `49.794/57.460` 后成熟停止；0806_07 GPU2 未用，e4/e8 不作直接否决 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0806_07 stratified product-tangent`（动态 GPU0/1） | STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED；PGID `2037143` 成员 `7→0` | 252 e96 严格达标后释放资源；不构成 e4 否决，全部产物保留，GPU2 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E93/TO_E96；e92 `55.534/62.430`、总和 `117.964` 严格未过 | e92 较 e84/e88 均双升，继续 e96；GPU2/3 未用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_02 log-SPD product-tangent`（动态 GPU0） | RUNNING/E1/TO_E4+；真实 1×8 smoke/checkpoint 与 formal iter50 五门槛通过 | `0806_05` e12 完整 `44.366/49.670` 后成熟停止；GPU1 外部作业未触碰，e4/e8 不作直接否决 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED；`55.739/62.616`、总和 `118.355` | 三项严格门槛全部通过；checkpoint/检测/TrackEval 完整，GPU0/1/2/3 已释放 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0806_02 log-SPD product-tangent`（动态 GPU0） | STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED；PGID `274434` 成员 `9→0` | 252 e96 严格达标后释放资源；不构成早期否决，全部产物保留 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-06 10:15 CST：252 e96 通过全部严格门槛，释放并行候选
+
+- `0806_06 factorized product-tangent` e96 cls HOTA/DetA/AssA
+  `55.739/46.578/68.819`，det `62.616/54.836/73.944`。相对 Encoder
+  `54.437/62.393` 的增量为 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，
+  三个严格条件均成立；总和超过 `>118.330` 门槛 `0.025`。e96 相对 e92 HOTA
+  再升 `0.205/0.186`，并成为全轨迹唯一最佳同点。
+- pair mAP/AP50 `0.3247/0.5358`、both-independent `0.3633/0.5718`。496,152,054-byte
+  checkpoint meta `96/99648`，model/EMA 711/712 states、各 642 个浮点张量全有限，
+  optimizer 497 states、scheduler、message hub 与 iterative-cls/DN 语义完整。检测
+  5416/50，TrackEval 28 CSV/108 非空文件/50 预测/`async_done=1`，366.1 秒自然完成。
+  screen、训练与异步进程均自然退出，252 四卡均为 1 MiB/0%。
+- 达标 decoder 为零新增参数/state 的 terminal-only product-tangent 几何输运，class-agnostic，
+  无 reweight、额外 loss、attention 或 layer，只有常数级末层逐元素计算，符合模型设计约束。
+- 99 `0806_07` 健康运行到 e4 iter350 后因目标已达成精确停止，PGID `2037143` 成员
+  `7→0`；178 `0806_02` 健康运行到 e3 iter600 后精确停止，PGID `274434` 成员 `9→0`。
+  两者均为 `GOAL_ACHIEVED_NOT_REJECTED`，不是以 e4/e8 否决；产物保留，外部作业未触碰。
 
 ## 2026-08-06 09:35 CST：178 完成 e12 成熟交接，0806_02 正式运行
 

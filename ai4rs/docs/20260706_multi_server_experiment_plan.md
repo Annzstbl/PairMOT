@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 09:35 CST.
+Last updated: 2026-08-06 10:15 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,30 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
+factorized product-tangent` at epoch 96. The same checkpoint gives cls/det
+HOTA `55.739/62.616`, with DetA/AssA `46.578/68.819` and
+`54.836/73.944`. Relative to the strict Encoder baseline `54.437/62.393`,
+the two gains are `1.302/0.223`; their sum is `1.525` and the absolute sum
+is `118.355`, strictly `0.025` above `>118.330`. This is the unique best
+same-checkpoint sum over epochs 84/88/92/96.
+
+The finite 496,152,054-byte checkpoint has meta `96/99648`, 711/712
+model/EMA states, 642 finite floating tensors in each, 497 optimizer states,
+one scheduler, complete message-hub state, and trained iterative-cls/DN heads.
+Detection closes at 5416 records/50 sequences. TrackEval contains 28 CSVs,
+108 nonempty files, 50 predictions, `async_done=1`, and naturally completed
+in 366.1 seconds. Pair mAP/AP50 is `0.3247/0.5358`; both-independent is
+`0.3633/0.5718`. All fixed-252 GPUs are now 1 MiB/0%.
+
+This terminal-only product-tangent transport adds zero parameters/state, is
+class-agnostic, performs no reweighting, adds no loss/attention/layer, and uses
+only constant terminal elementwise geometry. Because the strict objective is
+proven, dynamic-99 `0806_07` and dynamic-178 `0806_02` were stopped at e4
+iteration 350 and e3 iteration 600 respectively. Their exact PGIDs reached
+zero and all artifacts were retained; status is `GOAL_ACHIEVED_NOT_REJECTED`,
+not an epoch-4/8 rejection. No external GPU job was touched.
 
 At 09:24 CST, fixed-252 `0806_06` completed epoch 92 at cls/det HOTA
 `55.534/62.430`, with DetA/AssA `46.365/68.575` and `54.766/73.626`.

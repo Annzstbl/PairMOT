@@ -1,11 +1,13 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 09:35 CST
+更新时间：2026-08-06 10:15 CST
 
 ## 当前研究原则
 
 - 论文主线保持为：`0719_05 Base 52.417/61.265` → `0723_01 Base+Liquid 53.955/62.032` → `0727_01 +Encoder 54.437/62.393`。
 - decoder 目标是同时超过 `0727_01` 的 cls HOTA 54.437 和 det HOTA 62.393。
+- 该严格目标已由 `0806_06` 的 epoch-96 同一 checkpoint 达成：`55.739/62.616`，
+  绝对和 `118.355`，相对 Encoder 的两项增量和为 `1.525`。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
 - 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡但不固定序号。每台机器同一时间至多使用该总卡数。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
@@ -14,11 +16,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E93/TO_E96` | e92 完整 `55.534/62.430`，单项分别过线 `1.097/0.037`，但同点和 `117.964` 仍差 `0.366`；较 e84/e88 均双升，故纯时长单因素继续 e96。09:24 已自然恢复 e93；固定 GPU0/1，GPU2/3 未用。 |
+| 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
-| 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | clean detached `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states、真实 1×8 四步 smoke/checkpoint 与 formal iter50 五门槛均通过；09:34 iter50 loss/grad `21.0199/112.7436`，仅占 GPU0，GPU1 外部作业未触碰。 |
+| 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
 | 178 已释放 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 cls/det `44.366/49.670`，虽较 e8 上升 `3.298/4.669`，但低直接 product-tangent 父线 e12 `5.418/6.573`，DetA/AssA/AP 也均弱；三节点成熟闭环后精确停止，产物保留。 |
-| 99 动态 GPU 0,1 | `0806_07 ... stratified product-tangent ... fresh` | `RUNNING/E1/TO_E4+` | e24 成熟负线 `0804_17` 释放后，clean detached `ead7e1e` 重新通过 deepcopy、构建、真实双卡 smoke/checkpoint 与 formal iter50 五门槛；09:18 iter50 loss/grad `21.4216/101.1440`，现用动态 GPU0/1，GPU2 未用。 |
+| 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
@@ -32,6 +34,32 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
+
+- `0806_06 factorized product-tangent` e96 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `55.739/46.578/68.819`，det 为 `62.616/54.836/73.944`。相对严格 Encoder 基线
+  `54.437/62.393`，cls 与 det 分别增加 `1.302/0.223`；绝对和 `118.355`，两项增量和
+  `1.525`，因此三个严格条件均成立，并以 `0.025` 的余量超过总和门槛 `>118.330`。
+  相对 e92 两项 HOTA 再升 `0.205/0.186`，四项 DetA/AssA 分别再升
+  `0.213/0.244/0.070/0.318`；e84/e88/e92/e96 的同点和为
+  `117.896/117.800/117.964/118.355`，e96 是唯一最佳点。
+- e96 pair mAP/AP50 `0.3247/0.5358`、both-independent `0.3633/0.5718`，相对 e92
+  分别提高 `0.0021/0.0032` 与 `0.0024/0.0035`。检测产物为 5416 records/50 sequences；
+  `val_track_0002` 含 28 CSV、108 个非空文件、50 个非空预测及 `async_done=1`，异步
+  TrackEval 于 10:11 自然完成，耗时 366.1 秒。
+- 496,152,054-byte `epoch_96.pth` meta 为 `96/99648`；model/EMA 为 711/712 states，
+  各 642 个浮点张量全部有限；optimizer 497 states、单 scheduler 与 message hub 完整，
+  iterative classification residual 和 DN absolute heads 有限且已训练；SHA-256 为
+  `23a0c8ac5d28d4dbb01578a03107246bd687d1f274e422ead66da24992f60af2`。正式 screen、训练进程
+  与异步评测均自然退出；252 GPU0/1/2/3 均为 1 MiB/0%。
+- 该 decoder 仍是 terminal-only product-tangent 几何输运：相对 `0727_01` 模型只改变
+  decoder 形式，零新增参数/state、class-agnostic、无 reweight、无额外 loss/attention/layer，
+  仅增加常数级末层逐元素几何运算，满足轻量与设计约束。
+- 目标达成后，不再消耗资源等待未成熟候选：99 `0806_07` 在 e4 iter350 精确 TERM
+  PGID `2037143`，成员 `7→0`；178 `0806_02` 在 e3 iter600 精确 TERM PGID `274434`，
+  成员 `9→0`。两者均标记为 `GOAL_ACHIEVED_NOT_REJECTED`，明确不是以 e4/e8 性能否决；
+  smoke、checkpoint 与 formal 日志全部保留，99 GPU2 外部作业未触碰。
 
 ## 2026-08-06 09:35 CST：178 e12 成熟判负并交接 0806_02
 
