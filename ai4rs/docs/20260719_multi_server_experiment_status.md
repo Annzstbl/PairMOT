@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 08:15 CST。
+更新时间：2026-08-06 08:17 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0804_17 quotient-anisotropy product-tangent`（动态 GPU0/1） | RUNNING/E21/TO_E24；e20 完整 `48.948/56.926`，07:56 到 e21 iter300 | e20 仍双升但低父线 `3.250/1.206`，继续 e24；`0806_07` 已 STATIC_VALIDATED/NO_GPU；GPU2 未用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E90/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；07:37 到 e90 iter200 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | RUNNING/E92/TO_E92+；e88 `55.397/62.403`、总和 `117.800` 严格未过；08:16 到 e92 iter200 | e92/e96 做完整同点审计；`0806_04` 已 COMPLETED/E88/STRICT_FAIL；GPU2/3 均为 1 MiB | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0806_05 scale-orientation split product-tangent`（动态 GPU0） | RUNNING/E9/TO_E12；e8 完整 `41.068/45.001`，08:14 到 e9 iter300 | e8 较 e4 双升但低直接父线 `5.605/8.921`，继续 e12；`0806_02 log-SPD` 保持 SMOKE_VALIDATED/NO_FORMAL；GPU1 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -35,6 +35,8 @@
   耗时 236.3 秒。
 - 训练已自然进入 e9 iter300，继续 e12，不以 e8 直接否决。任务仍只用动态 GPU0；GPU1
   外部作业约 30.4 GiB/99% 利用率，本任务未触碰。
+- 252 `0806_06` 同期到 e92 iter200，loss/grad `7.9346/40.1549`，固定 GPU0/1 正常、
+  GPU2/3 为 1 MiB；继续等待 e92 同 checkpoint 的完整 checkpoint、检测和 TrackEval。
 
 ## 2026-08-06 07:58 CST：99 e20 全量结果继续上升，保留到 e24
 

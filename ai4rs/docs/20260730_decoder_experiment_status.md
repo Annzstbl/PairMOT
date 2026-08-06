@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 08:15 CST
+更新时间：2026-08-06 08:17 CST
 
 ## 当前研究原则
 
@@ -14,7 +14,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E90/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；07:37 e90 iter200，GPU2/3 未用。 |
+| 252 固定 GPU 0,1 | `0806_06 ... factorized product-tangent ... e88→e96` | `RUNNING/E92/TO_E92+` | e88 完整 `55.397/62.403`，两项单独过线但同点和 `117.800`、严格总和仍差 `0.530`，且较 e84 双降；纯时长单因素续到 e92/e96。隔离部署、真实双卡 smoke、checkpoint 和 formal iter50 五门槛通过；08:16 e92 iter200，GPU2/3 未用。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 动态 GPU 0 | `0806_02 ... log-SPD product-tangent ... fresh` | `SMOKE_VALIDATED/NO_FORMAL/GPU_FREE` | 隔离 checkout `9c5018a` 的 deepcopy、`bash -n`、22,771,111 参数/711 states 完整构建与真实 1×8 四步 smoke 均通过；formal 目录仍不存在，等待 99 `0804_17` e12+ 后再决定是否启动。 |
 | 178 动态 GPU 0 | `0806_05 ... scale-orientation split product-tangent ... fresh` | `RUNNING/E9/TO_E12` | e8 完整 cls/det `41.068/45.001`，较 e4 上升 `7.537/9.072`，但相对直接 product-tangent e8 低 `5.605/8.921`，DetA/AssA/AP 也均弱。e8 仍只作诊断，继续 e12；08:14 到 e9 iter300。GPU1 外部作业未触碰。 |
@@ -51,6 +51,9 @@
 - formal 已恢复到 e9 iter300，loss/grad `9.3874/44.6470`，本任务仍只占动态 GPU0。
   GPU1 的外部作业已增至约 30.4 GiB，本任务未触碰。继续到 e12 获得第三个完整节点，再据
   e4/e8/e12 与强父线的 DetA/AssA/AP 轨迹作成熟交接，不以 e8 早停。
+- 同期 252 `0806_06` 已到 e92 iter200，loss/grad `7.9346/40.1549`，screen、双 rank 与
+  正式日志一致；固定 GPU0/1 各约 19.4 GiB，GPU2/3 均为 1 MiB。等待 e92 checkpoint、
+  检测与双 TrackEval 全量闭环后再作严格三门槛判定。
 
 ## 2026-08-06 07:58 CST：99 e20 完整闭环，保持恢复但仍弱于强父线
 
