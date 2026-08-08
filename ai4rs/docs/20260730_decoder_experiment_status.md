@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 02:34 CST
+更新时间：2026-08-09 02:59 CST
 
 ## 当前研究原则
 
@@ -18,11 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E28I150/E24_COMPLETE/TO_E72` | e24 `50.048/58.669`；det 继续增益但 cls 停滞，保留到 e28 完整成熟节点后再决定交接。 |
-| 99 后备、不占 GPU | `0809_02 ... decoder/head delayed LR + EMA clock ...` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在 `0809_01` 上压缩 EMA 时钟；隔离 checkout、deepcopy、构建与优化器审计通过，待成熟证据释放资源。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E30I200/E28_COMPLETE/TO_E72` | e28 `52.580/58.980`，已几乎复现父线同点但无成熟提前量；继续 e32 检验第二阶段完整窗口。 |
-| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E5I350/E4_COMPLETE/TO_E72` | e4 `32.955/41.857` 仅作 LR 切换前诊断；继续 e8/e12 边界与 e16 首个局部加速窗口。 |
-| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E9I350/E8_COMPLETE/TO_E72` | e8 `40.166/47.240` 为负诊断但较 e4 强恢复；不以 e8 否决，继续 e12+。 |
+| 99 动态 GPU 0,1 | `0809_02 ... decoder/head delayed LR + EMA clock ... fresh` | `RUNNING/E1I50/TO_E72` | 只在 `0809_01` 上压缩 EMA 时钟；真实双卡 smoke、checkpoint 与 formal 五门槛已通过。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E32I350/E28_COMPLETE/TO_E72` | e28 `52.580/58.980`，已几乎复现父线同点但无成熟提前量；继续闭环 e32。 |
+| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E7I400/E4_COMPLETE/TO_E72` | e4 `32.955/41.857` 仅作 LR 切换前诊断；继续 e8/e12 边界与 e16 首个局部加速窗口。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E10I650/E8_COMPLETE/TO_E72` | e8 `40.166/47.240` 为负诊断但较 e4 强恢复；不以 e8 否决，继续 e12+。 |
+| 99 已释放 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `STOPPED/E29I350/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.334/59.149`，第二个切换后成熟点仍低 197/父线的 cls、DetA 与 AP；完整审计后 PGID `2606266` 成员归零。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
@@ -6171,3 +6171,28 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 正式训练已恢复到 e9 iter350，loss、DN、Encoder proposal 与 grad 全有限；固定 GPU0/1
   约 21.4 GiB，GPU2/3 仍为 `1 MiB/0%`。日志中的 `NCCL` 三处仅为 PyTorch 构建/配置文本，
   没有 runtime fatal。继续 e12/e16 观察本候选真正的成熟响应，严格不以 e4/e8 停线。
+
+## 2026-08-09 02:59 CST：99 e28 成熟停线并启动 EMA 时钟候选
+
+- 99 `0808_06` e28 cls HOTA/DetA/AssA 为 `50.334/41.946/62.705`，det 为
+  `59.149/51.441/70.503`，总和 `109.483`；相对 e24 仅升 `0.286/0.480`。同点低 197
+  分阶段 LR `2.246/0.169`、总和低 `2.415`；相对直接父线 e28 cls 低 `2.307`，虽 det 高
+  `0.163`，总和仍低 `2.144`。相对旧 decoder/head-only 局部 LR e28 也低
+  `2.516/0.553`，确认一次性全局跳变的 det AssA 收益无法修复 cls 与定位成熟度。
+- pair mAP/AP50 `0.274416/0.478241`、both-independent `0.315704/0.525997`，四项均低
+  197 e28 `0.285742/0.495156` 与 `0.330566/0.545248`；因此不是阈值或 HOTA 内部交换。
+  403,086,838-byte checkpoint SHA-256 为
+  `9e82553270ec36031fb2b6e6bbfe15b93f9d1fd6766dbd960d0af63777a8008e`，642 个浮点
+  张量全有限且 iterative-cls/DN 已训练；5416/50、28/108/50 完整，TrackEval 289.0 秒。
+- 这是 e20/e24/e28 三个切换后完整成熟点的联合判定，不是 e4/e8 早停。e29 iter350 后精确
+  TERM PGID `2606266`；screen 消失、目标进程连续两次为 0，GPU0/1/2 均回到 10 MiB。
+- 隔离 checkout `adf8308` 的 `0809_02` 随后在 GPU0/1 完成真实四步 DDP smoke：loss
+  `12.9372/19.4908/19.6073/21.2472`、grad
+  `102.9249/97.5250/112.9304/117.4266`，total、DN 与 Encoder proposal 全有限。
+  364,517,174-byte `iter_4.pth` SHA-256 为
+  `0ace5d744d4e1c365f5609c8273c6f7c271cc0ffb12734f6913d27a81401a1a8`，642 个浮点
+  张量全有限且 iterative-cls/DN 已训练。
+- fresh formal screen/main `2652052/2652054` 已到 e1 iter50；LR/loss/grad 为
+  `2.5488e-6/21.4247/94.6118`，DN 与 Encoder proposal 全有限。双 rank 与 workers 存活，
+  GPU0/1 各约 19.2 GiB 且活跃、GPU2 10 MiB，正式 workdir/log 更新，fatal=0；五项门槛齐全后
+  登记 `RUNNING/TO_E72`。该线仅改变 EMA 训练记忆，不改变最终推理模型、参数量或 FLOPs。

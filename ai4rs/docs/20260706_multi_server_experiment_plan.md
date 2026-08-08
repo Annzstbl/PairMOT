@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 02:34 CST.
+Last updated: 2026-08-09 02:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4194,3 +4194,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 下一资源决策仍由 99 e28 和 197 e32 的成熟闭环触发：优先精确释放被成熟证据支配的双卡线，
   再让 `0809_02` 依次通过真实双卡 smoke、有限 checkpoint 和 formal iter50 五项门槛。
   178 保持局部延迟 LR 到 e12/e16，避免所有候选同时只验证全局时钟。
+
+## 2026-08-09 02:59 CST：99 成熟交接完成后的优先级
+
+- 99 e28 已用 e20/e24/e28 三个完整切换后节点证实一次性全局 `1.4×` 不能修复 cls/DetA；
+  完整审计并精确停线后，`0809_02` 已通过真实双卡 smoke、有限 checkpoint 与 formal iter50
+  五项门槛，成为新的零推理开销 EMA-clock 候选。
+- 当前顺序为：先闭环 197 e32 与 178 e8，再收 252 e12；`0809_02` e4/e8 只作诊断，重点
+  比较 e12 同源边界、e16 局部 LR 响应及 e24+ 的 EMA 成熟差异。任何 e4/e8 结果都不直接
+  否决 decoder。
+- 保持 178 的不压缩 EMA 与 99 的压缩 EMA 两条正交局部延迟轨迹同时前进；只有成熟节点在
+  HOTA/DetA/AssA/AP 上形成支配，才释放其中较弱资源。197/252 也分别等 e32/e12+，避免用
+  未完成核心干预的节点过早换线。
