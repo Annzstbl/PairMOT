@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 01:07 CST
+更新时间：2026-08-09 01:12 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E21I300/E20_COMPLETE/TO_E72` | e20 `50.048/57.885`，总和高 197 同点 `0.839` 且近 178 同点；继续 e24+。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E21I350+/E20_COMPLETE/TO_E72` | e20 `50.650/56.444`，cls 高 99、det 低 `1.441`；继续 e24，并保留到第二阶段切换响应。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E24/E20_COMPLETE/TO_E72` | e20 `50.048/57.885`；正在完成 e24，同点后与 197 比较。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E25I850/E24_COMPLETE/TO_E72` | e24 `52.091/58.225`，距父线仅 `0.387/0.546`；第二阶段已生效，继续 e28。 |
 | 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | e1–e12 保持父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；真实 smoke 与 formal 五门槛通过。 |
-| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E1I600/TO_E72` | 只给 decoder/head 压缩 Adam 记忆时钟；formal 健康，继续 e4/e8 诊断及成熟节点。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E4_COMPLETE/TO_E72` | e4 `31.106/37.307` 为负的早期诊断；不以 e4 否决，继续 e8/e12+。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
@@ -6075,3 +6075,23 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `2.5488e-6/21.0057/111.0022`，total、DN、Encoder proposal 均有限，正式日志持续更新、
   fatal=0，GPU0 约 31.4 GiB、GPU1 空闲。五项门槛齐全后登记 `RUNNING/TO_E72`；e4/e8
   仍只作诊断，核心判定在 e12 边界前后和成熟节点。
+## 2026-08-09 01:12 CST：252 局部 Adam e4 与 197 分阶段 LR e24 闭环
+
+- 252 `0808_08` e4 cls HOTA/DetA/AssA 为 `31.106/24.911/41.502`，det 为
+  `37.307/31.243/45.775`，总和 `68.413`；pair mAP/AP50 `0.13298/0.24654`、
+  both-independent `0.17370/0.31179`。相对直接父线 e4 HOTA 低 `4.168/6.542`，相对
+  旧 decoder/head LR×4/3 e4 `34.176/38.801` 也低 `3.070/1.494`，说明压缩 Adam 记忆在
+  最早期进一步扰动形成过程；但它尚未到 e8/e12 成熟窗口，严格继续，不以 e4 否决。
+- 369,970,550-byte e4 checkpoint SHA-256 为
+  `4a6691c7c783f99c7cf423272ab7f141e5a1288f713df6dddcb522ac421e2b04`；642 个浮点张量
+  全有限、iterative-cls/DN 已训练，5416/50、28/108/50 与 `async_done=1` 完整。训练只用
+  固定 GPU0/1 继续，GPU2/3 仍空闲。
+- 197 `0808_07` e24 cls HOTA/DetA/AssA 为 `52.091/43.546/64.231`，det 为
+  `58.225/51.554/68.041`，总和 `110.316`；较 e20 双升 `1.441/1.781`，相对直接父线 e24
+  只低 `0.387/0.546`。pair `0.27739/0.48424`、both-independent
+  `0.32262/0.53496`；e24 也是第二次 LR 提升前的基准，e25 已实际使用 `1.4491e-4`，故明确
+  保留到 e28 评价完整分阶段策略。
+- 197 e24 checkpoint 397,524,007 bytes，SHA-256
+  `2b76c0d2c26a079d43f5df3622f43ef79c0fa65fc8f9bde32ee73f19773213a9`；642 浮点张量
+  全有限、iterative-cls/DN 已训练，5416/50、28/108/50 完整。formal 已恢复 e25 iter850、
+  动态 GPU0/1，fatal=0；其他四卡空闲。

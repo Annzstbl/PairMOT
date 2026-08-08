@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 01:07 CST.
+Last updated: 2026-08-09 01:12 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4145,3 +4145,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   checkpoint 和 formal iter50 五项门槛；screen/main `1605754/1605756`，GPU1 未用。
 - 新线继续 e4/e8 诊断，并重点比较 e12 父线等价点与 e16 首四轮局部 `1.4×` 响应；不得因
   早期节点否决。99/197/252 保持各自合法资源继续，不因 178 换线中断其成熟证据收集。
+## 2026-08-09 01:12 CST：早期 Adam 负信号保留，分阶段 LR 进入核心窗口
+
+- 252 局部 Adam 时钟 e4 `31.106/37.307` 同时低父线和旧局部 LR e4，DetA/AssA/AP 也弱；
+  但按 decoder 晚收敛约束只记录为负诊断，保留固定 GPU0/1 到 e8/e12+，不在 e4 换线。
+- 197 分阶段 LR e24 `52.091/58.225` 已将父线差距收至 `0.387/0.546`；从 e25 起第二阶段
+  `1.4491e-4` 才真正生效，因此继续 e28 是验证核心干预的最低合法窗口。
+- 近期顺序为：99 e24 同点闭环 → 252 e8 → 197 e28 → 178 `0809_01` e4/e8 诊断和 e12
+  边界。四路都继续以同 checkpoint 的 HOTA/DetA/AssA/AP、有限 checkpoint 和完整 TrackEval
+  决策，任何 e4/e8 结果都不直接否决 decoder。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 01:07 CST。
+更新时间：2026-08-09 01:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,9 +17,9 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E21I300/E20_COMPLETE/TO_E72；screen/main `2606264/2606266` | e20 `50.048/57.885`，总和领先 197 同点 `0.839`；继续 e24+ | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E21I350+/E20_COMPLETE/TO_E72；screen/main `3583196/3583197` | e20 `50.650/56.444`；继续 e24/e28 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I600/TO_E72；screen/main `1642666/1642667` | formal 健康；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E24/E20_COMPLETE/TO_E72；screen/main `2606264/2606266` | 正在完成 e24，随后同点比较 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E25I850/E24_COMPLETE/TO_E72；screen/main `3583196/3583197` | e24 `52.091/58.225`；第二阶段已生效，继续 e28 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E4_COMPLETE/TO_E72；screen/main `1642666/1642667` | e4 `31.106/37.307` 仅作诊断，继续 e8/e12+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E1I50/TO_E72；screen/main `1605754/1605756` | `0808_03` e36 成熟停线后正式接替；GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
@@ -4386,3 +4386,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `7930cf68...01e6`，有限性与 iterative-cls/DN 检查通过。fresh formal session/main
   `1605754/1605756` 到 e1 iter50：LR/loss/grad `2.5488e-6/21.0057/111.0022`，进程、
   GPU0、正式日志、有限 total/DN/Encoder 与 fatal=0 五门槛齐全，故登记 RUNNING；GPU1 未用。
+## 2026-08-09 01:12 CST：252 e4 与 197 e24 全量节点
+
+- 252 局部 Adam 时钟 e4 cls/det `31.106/37.307`，DetA/AssA 为
+  `24.911/41.502` 与 `31.243/45.775`；pair `0.13298/0.24654`、both-independent
+  `0.17370/0.31179`。checkpoint 369,970,550 bytes、SHA-256 `4a6691c7...21e2b04`，
+  有限性、5416/50、28/108/50、TrackEval 完整。该点低父线和旧局部 LR e4，但仅为早期
+  诊断，继续 e8/e12+，252 仍严格只用 GPU0/1。
+- 197 分阶段 LR e24 cls/det `52.091/58.225`，DetA/AssA 为
+  `43.546/64.231` 与 `51.554/68.041`；较 e20 双升 `1.441/1.781`，距父线 e24 仅
+  `0.387/0.546`。checkpoint 397,524,007 bytes、SHA-256 `2b76c0d2...73213a9`，有限性与
+  评估产物完整；e25 已使用第二阶段 `1.4491e-4`，继续到 e28。
