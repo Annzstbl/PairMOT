@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 19:54 CST.
+Last updated: 2026-08-08 20:36 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4001,3 +4001,20 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 99/197 的延迟与分阶段延迟 LR 继续到 e8/e12，252 固定 GPU0/1 继续 e20/e24。
   178 GPU1 当前有外部任务，本目标只使用 GPU0；任何后续接替仍须等待当前成熟证据或合法资源
   释放，并完成 deepcopy、完整构建、真实 smoke、checkpoint 和 formal iter50 五门槛。
+
+## 2026-08-08 20:36 CST：延迟调度早期偏弱，decoder/head-only 保持第一优先级
+
+- 99 `0808_06` e8 cls/det HOTA `42.129/46.937`，197 `0808_07` e8 为
+  `40.206/46.565`；二者相对直接 product-tangent 父线 e8 分别低
+  `4.544/6.985` 与 `6.467/7.357`，pair 和 both-independent AP 也同时偏低。分阶段线
+  在 e4 的小优势没有延续，但两条线首次 LR 改变都在 e12，因此 e8 仅作负诊断，继续到
+  e12/e16 后依据 LR 切换响应作成熟判断。
+- 252 `0808_04` e20 `49.772/57.365`，较自身 e16 双升 `1.141/1.128`，但仍低父线
+  `2.426/0.767`，联合差距 `3.193`；它也低 178 同点 `0.741/0.566`。完整时钟压缩仍在
+  恢复，保留固定 GPU0/1 到 e24，但不提升为主候选。
+- 三个新节点的 checkpoint、model/EMA 642 浮点张量、iterative-cls/DN、5416/50 检测、
+  28 CSV、108 非空 TrackEval 文件、50 predictions 和异步完成日志全部闭环。现场进度为
+  99 e9i1000、197 e9i600、178 e23i1000、252 e21i350，资源边界无违规。
+- 下一决策优先级固定为：先闭环 178 e24，随后收集 99/197 e12 及其首次 LR 切换后的 e16，
+  再比较 252 e24。当前不启动静态 Adam 时钟候选，也不增加模型层、类别感知或 reweight；
+  若后续确需接替，只考虑由 DetA/AssA/AP 证据支持的单因素、零推理开销调度。
