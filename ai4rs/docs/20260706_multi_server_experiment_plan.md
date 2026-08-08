@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 14:04 CST.
+Last updated: 2026-08-08 14:25 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -44,6 +44,18 @@ decoder/head parameter-group LR `1.333333e-4`. Current loss/gradient pairs are
 `11.8907/33.7476`, `11.1644/33.9302`, `11.4395/34.4983`, and
 `11.3209/29.4490` respectively, with fatal scans empty. No epoch checkpoint is
 expected before the configured epoch-4 interval. Continue all four unchanged.
+
+At 14:25 CST, dynamic-99/197/178 have entered epoch 4 at iterations
+150/500/500, while fixed-252 is at epoch 3 iteration 1000. All formal logs
+remain finite and fatal-free. A no-GPU successor, `0808_05`, now completes the
+optimizer-clock hypothesis by setting Adam betas to
+`(0.9^(4/3), 0.999^(4/3))` in addition to the coherent LR/warmup/EMA/Liquid
+compression. This makes each 72-epoch exponential-memory decay exactly equal
+to the parent 96-epoch decay. Clean isolated commit `30cbc71` passed both
+config deep copies, remote launcher syntax, and complete parent/target builds
+at 22,771,111 parameters and 711 states. It remains
+`STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU` and must not preempt the active
+99 run or be reported as running.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det

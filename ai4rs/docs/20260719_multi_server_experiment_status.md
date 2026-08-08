@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 14:04 CST。
+更新时间：2026-08-08 14:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E2I1000/TO_E72；warmup 完成，screen/main `2578722/2578723` | e4/e8 仅诊断；完整保留至 e72 同点检测与 TrackEval | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E3I100/TO_E72；warmup 完成，screen/main `2811863/2811864` | 单因素 96→72 优化器时钟压缩；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E2I900/TO_E72；压缩 warmup 完成，screen/main `1579744/1579745` | 仅固定 GPU0/1；252 最慢，承担完整训练时钟压缩复验 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E3I150/TO_E72；warmup 完成，screen/main `1346508/1346509` | 单卡、只加速 decoder/head 优化；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E4I150/TO_E72；screen/main `2578722/2578723` | `0808_05` 完整 Adam 时钟压缩仅静态就绪、不占 GPU；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E4I500/TO_E72；screen/main `2811863/2811864` | 单因素 96→72 优化器时钟压缩；等待 e4 全量闭环 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E3I1000/TO_E72；screen/main `1579744/1579745` | 仅固定 GPU0/1；252 最慢，承担完整训练时钟压缩复验 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E4I500/TO_E72；screen/main `1346508/1346509` | 单卡、只加速 decoder/head 优化；等待 e4 全量闭环 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
@@ -35,6 +35,21 @@
 - 四条 screen、进程、GPU 与正式日志一致，fatal 扫描均为 0，尚无 scheduled epoch
   checkpoint（interval=4），符合预期。e4 将保存 checkpoint 并触发 5416/50 检测与异步
   TrackEval；`bff42cb` 的严格验收器已以相同 SHA-256 放置在各机 `/tmp`，未热更新存活仓库。
+
+## 2026-08-08 14:25 CST：前三线进入 e4；完整 Adam 时钟候选静态闭环
+
+- 99/197/178 已分别进入 e4 iter150/500/500，252 到 e3 iter1000；四条正式日志持续
+  更新且 fatal 扫描为 0。197/178 的 e4 checkpoint 将最先产生，之后按 checkpoint
+  有限性、iterative-cls/DN 语义、5416/50 检测、28/108 TrackEval 顺序闭环；e4 仅诊断。
+- `0808_05 complete Adam clock compression` 在 `0808_04` 的 LR、warmup、EMA、Liquid
+  `96→72` 压缩上，新增且仅新增 Adam 指数记忆时钟压缩：`beta' = beta^(96/72)`，即
+  `beta1=0.8689404461`、`beta2=0.9986668889`。由此 `beta'^72 = beta^96`，同时提高 LR
+  已自然匹配 AdamW 的积分 weight decay；推理模型、数据、loss 和全局 batch 均不变。
+- 本地提交 `30cbc71` 已在 99 新隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_0808_05_adamclock_99/ai4rs/ai4rs` 完成两配置 deepcopy、
+  两 launcher 远端 `bash -n`、父/子完整构建和 state-shape 比对；均为 22,771,111 参数、
+  711 states、增量 0。当前严格登记 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`；不热更新
+  `0808_01`，也不在任一运行资源上抢占 smoke。
 
 ## 2026-08-08 13:33 CST：开启 decoder e96→e72 收敛压缩主目标
 

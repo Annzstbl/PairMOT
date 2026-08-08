@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 14:04 CST
+更新时间：2026-08-08 14:25 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E2I1000/TO_E72` | warmup 已完整达到 `1.25e-4` 且数值稳定；e4/e8 仅诊断。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E3I100/TO_E72` | warmup 已完整达到 `1.333e-4` 且数值稳定；e4/e8 仅诊断。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E3I150/TO_E72` | 全局 `1e-4`、decoder/head `1.333e-4` 参数组均已进入平台且稳定。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E2I900/TO_E72` | 1500-iter 压缩 warmup 已达到 `1.333e-4` 且稳定；GPU2/3 未使用。 |
+| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E4I150/TO_E72` | 数值稳定；e4/e8 仅诊断。后备 `0808_05` 仅静态就绪、不占 GPU。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E4I500/TO_E72` | 数值稳定；等待 e4 checkpoint、检测与 TrackEval。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E4I500/TO_E72` | 数值稳定；等待 e4 checkpoint、检测与 TrackEval。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E3I1000/TO_E72` | 数值稳定；严格只用 GPU0/1，GPU2/3 未使用。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -66,6 +66,16 @@
 - 当前尚无 checkpoint 是 interval=4 的预期行为，不构成缺失。e4 后只做完整
   checkpoint/检测/TrackEval 诊断并继续训练，不以早期 HOTA 直接否决；最终验收仍固定为
   同一 e72 checkpoint 的 cls、det、和三门槛。
+
+## 2026-08-08 14:25 CST：完整 Adam 优化器时钟压缩候选静态就绪
+
+- `0808_05` 保持最终 product-tangent 推理模型不变，在 `0808_04` 的 LR、warmup、EMA、
+  Liquid 时钟压缩之外，将 Adam 默认 `beta=(0.9,0.999)` 变换为
+  `(0.9^(4/3),0.999^(4/3))=(0.8689404461,0.9986668889)`；72 次 epoch 级遗忘与父线 96 次
+  完全等价。该变换 class-agnostic、无 reweight、零推理参数和计算增量。
+- clean isolated `30cbc71` 已通过配置 deepcopy、launcher 语法及父/子完整构建；参数/state
+  均为 `22,771,111/711`。尚未使用 GPU、未做真实 smoke、未建 formal 工作目录，因此只记
+  `STATIC_VALIDATED/NO_GPU`，不登记 RUNNING；启动取决于现有四线后续成熟证据与资源释放。
 
 ## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
 
