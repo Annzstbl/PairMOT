@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 17:55 CST
+更新时间：2026-08-08 18:15 CST
 
 ## 当前研究原则
 
@@ -18,11 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | e1 iter50 五门槛通过；前 12 epoch 保持父线 LR，随后升至 `1.4e-4`。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E16I150/TO_E72` | e12 完整 `47.147/54.337`，det 缺口较 e8 明显收窄；继续 e16+。 |
-| 197 不占 GPU | `0808_07 ... staged delayed LR clock ... fresh` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | e12/e24 两次温和升速，e72 名义 LR 积分严格等于父线 e96；等待成熟资源决策。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E14I600/TO_E72` | e12 完整 `47.998/55.163`，四线最强成熟点；继续 e16+。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E13I150/TO_E72` | e12 完整 `47.539/54.477`，成熟四线第二；严格只用 GPU0/1，继续 e16+。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E2I750/TO_E72` | e1 iter50 五门槛通过；前 12 epoch 保持父线 LR，随后升至 `1.4e-4`。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | 双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；e12/e24 两次温和升速。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E16I550/TO_E72` | e12 完整 `47.998/55.163`，当前最强成熟点；保留到 e16 完整评测及后续成熟节点。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E14I750/TO_E72` | e12 完整 `47.539/54.477`，成熟路线第二；严格只用 GPU0/1，继续 e16+。 |
+| 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
@@ -31,6 +31,35 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-08 18:15 CST：197 e16 成熟换线并启动分阶段延迟 LR
+
+- `0808_02` e16 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `47.432/38.067/61.774`，det 为 `57.103/49.726/67.955`，绝对和
+  `104.535`。pair mAP/AP50 为 `0.247341/0.430837`，both-independent 为
+  `0.287731/0.477695`；386,531,943-byte `epoch_16.pth` 的 SHA-256 为
+  `04cf9522c15ad3a9646077b7aca4192237c8274e4b2ee61d14bda2f71c8312e7`。
+  5416 条检测、50 序列、28 CSV、108 个非空 TrackEval 文件和异步完成日志全部闭环；
+  严格验收器按预期返回 2。
+- 该点相对 e12 为 `+0.285/+2.766`，但相对直接 product-tangent 父线 e16
+  `51.220/57.370` 仍为 `-3.788/-0.267`；其 cls 差距较 e12 继续扩大，联合差距仅从
+  `-4.543` 收窄到 `-4.055`。因此在 e4/e8/e12/e16 四个完整节点后精确 TERM
+  PGID `2811864`（成员 `23→0`），不是 e4/e8 早停；GPU0/1 连续两次为
+  `1 MiB/0%`。
+- 单因素后继 `0808_07` 保持最终 product-tangent 模型、参数/state、loss、数据和推理计算
+  完全不变：e0–11 使用父线 `1e-4`，e12–23 使用
+  `1.2037682266e-4`，e24–71 使用 `1.4490579434e-4`，使 72 epoch 的名义 LR
+  积分严格等于父线 96 epoch，同时避免一次性 40% 跳变。它仍为 class-agnostic、无
+  reweight、无新层/attention/loss。
+- clean detached `adca76a` 的真实双卡 smoke 产生 loss
+  `12.9372/19.4996/19.6153/21.2276`、grad
+  `102.8418/91.7395/85.7160/93.2128`；364,513,383-byte `iter_4.pth`
+  SHA-256 为 `941d0447924eed1ad544b3499523e52425297ced40b95add9d6caefb9b43ec3d`，
+  iterative-cls/DN 已训练且 642 个浮点张量全有限。fresh formal screen/main
+  `3583196/3583197` 已在动态 GPU0/1 达到 e1 iter50：LR/loss/grad 为
+  `2.5488e-6/21.4029/112.8655`，total、DN、encoder proposal 均有限，GPU 各约
+  19.2 GiB 且满载，无 traceback/OOM/NaN/NCCL/unused-parameter fatal，故正式登记
+  `RUNNING/TO_E72`。
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 

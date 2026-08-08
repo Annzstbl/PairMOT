@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 16:21 CST.
+Last updated: 2026-08-08 18:15 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -20,22 +20,45 @@ their absolute sum `>117.830` (gain sum `>1.0` over Encoder). The stretch gate
 is sum `>=118.355`, matching the current epoch-96 `55.739/62.616` point.
 Epoch 4/8 remain diagnostics and cannot directly reject a decoder.
 
-Four inference-identical training strategies are active from clean detached
-commit `81aaf00`. Dynamic-99 GPU0/1 runs `0808_01` with only global LR
-`1.25e-4`; dynamic-197 GPU0/1 runs `0808_02` with only global LR
-`1.333333e-4`; dynamic-178 GPU0 runs `0808_03` with only decoder and bbox-head
-LR multipliers `4/3`; fixed-252 GPU0/1 runs `0808_04` with coherent `96→72`
-clock compression (LR `4/3`, warmup `1500`, EMA momentum/gamma
-`1.333333e-4/1500`, Liquid anneal/hard start epoch 27). All retain 72 epochs,
-the same global batch, data, losses, 22,771,111 parameters and 711 model states;
-they are class-agnostic, use no reweighting, and add no inference compute.
+Four inference-identical training strategies currently occupy the legal lanes.
+Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
+epoch 12. Dynamic-197 GPU0/1 runs `0808_07`, which keeps the parent LR through
+epoch 11 and stages two smaller increases at epochs 12 and 24. Dynamic-178 GPU0
+runs `0808_03` with only decoder and bbox-head LR multipliers `4/3`; fixed-252
+GPU0/1 runs `0808_04` with coherent `96→72` clock compression. All retain 72
+epochs, the same global batch, data, losses, 22,771,111 parameters and 711 model
+states; they are class-agnostic, use no reweighting, and add no inference compute.
 
 All four passed config deepcopy, remote Bash syntax, complete target/parent
 model builds with identical state shapes, real four-iteration smoke,
 `iter_4.pth` finite-tensor and iterative-cls/DN checks, and the formal iter50
 five gates. They are therefore `RUNNING/TO_E72`, not merely prepared. The next
 decision points are complete e4/e8 diagnostics followed by mature checkpoints;
-the final decision is reserved for full epoch-72 detection plus TrackEval.
+the final decision is reserved for full epoch-72 detection plus TrackEval. The
+original global-LR lines `0808_01` and `0808_02` were stopped only after complete
+e12 and e16 mature windows respectively, not at e4/e8.
+
+At 18:15 CST, dynamic-197 `0808_02` closed epoch 16 at cls/det HOTA
+`47.432/57.103`, with DetA/AssA `38.067/61.774` and `49.726/67.955`.
+Relative to the aligned direct product-tangent parent `51.220/57.370`, the
+deficits are `3.788/0.267`; the joint deficit remains `4.055`, while the cls
+gap widened from epoch 12. Its checkpoint, 5416/50 detections, 28 CSVs, 108
+nonempty evaluation files, 50 predictions, AP diagnostics and async completion
+log are complete. PGID `2811864` was therefore exactly terminated after four
+complete checkpoints, reducing members `23→0`; GPU0/1 were idle in two
+consecutive checks.
+
+The replacement `0808_07` uses parent LR `1e-4` for epochs 0–11, multiplier
+`1.2037682266` for epochs 12–23, and multiplier `1.4490579434` for epochs
+24–71. Its 72-epoch nominal LR integral is exactly the parent 96-epoch
+integral, but the smaller staged jumps are intended to preserve association.
+Clean detached `adca76a` passed deepcopy, complete construction and exact
+parameter/state checks. A real two-GPU smoke produced four finite steps and a
+364,513,383-byte checkpoint with trained iterative-cls/DN heads and 642 finite
+floating tensors. Fresh formal screen/main `3583196/3583197` reached epoch 1
+iteration 50 at LR/loss/grad `2.5488e-6/21.4029/112.8655`; process, GPU,
+formal-log, finite-loss and fatal-signature gates all pass. Register it
+`RUNNING/TO_E72` and collect e4/e8 diagnostically before mature checkpoints.
 
 At 14:04 CST all four runs have crossed their real warmup boundaries without
 numerical failure. Dynamic-99 reached LR `1.25e-4`; dynamic-197 and fixed-252

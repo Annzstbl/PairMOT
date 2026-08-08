@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 17:55 CST。
+更新时间：2026-08-08 18:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,34 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2606264/2606266` | `0808_01` e12 成熟停止后接替；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E16I1000/TO_E72；main `2811864` | e16 checkpoint 即将产生；`0808_07` 静态后备不占 GPU | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E13I150/TO_E72；main `1579745` | e12 完整 `47.539/54.477`，成熟四线第二；继续 e16+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E14I600/TO_E72；main `1346509` | e12 完整 `47.998/55.163`，当前最强成熟点；继续 e16+ | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E2I750/TO_E72；screen/main `2606264/2606266` | `0808_01` e12 成熟停止后接替；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `3583196/3583197` | `0808_02` e16 成熟停止后接替；双卡 smoke/checkpoint/formal 五门槛全通过 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E14I750/TO_E72；main `1579745` | e12 完整 `47.539/54.477`，成熟路线第二；继续 e16+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E16I550/TO_E72；main `1346509` | e12 完整 `47.998/55.163`，当前最强成熟点；等待 e16 完整闭环 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-08 18:15 CST：197 e16 完整审计、成熟停止与 `0808_07` 交接
+
+- `0808_02` e16 cls HOTA/DetA/AssA `47.432/38.067/61.774`，det
+  `57.103/49.726/67.955`，sum `104.535`；pair mAP/AP50
+  `0.247341/0.430837`，both-independent `0.287731/0.477695`。同一
+  386,531,943-byte checkpoint、5416/50 检测、28 CSV、108 个非空评测文件、50 个非空
+  prediction 和异步完成日志闭环，严格验收器 rc=2。
+- 相对直接 product-tangent 父线 e16 `51.220/57.370`，该全局高 LR 线仍低
+  `3.788/0.267`，联合低 `4.055`；e12→e16 主要仅 det 回升，cls 父线差距反而扩大。
+  在 e4/e8/e12/e16 四节点成熟证据后，PGID `2811864` 精确 TERM，成员 `23→0`，
+  GPU0/1 连续两次为 `1 MiB/0%`；这是成熟换线，不是 e4/e8 否决。
+- 后继 `0808_07` 的 clean detached HEAD 为 `adca76a`。真实 GPU0/1 DDP smoke 四步
+  loss `12.9372/19.4996/19.6153/21.2276`、grad
+  `102.8418/91.7395/85.7160/93.2128`；364,513,383-byte checkpoint 的
+  iterative-cls/DN 与 642 个浮点张量检查通过。fresh formal screen/main
+  `3583196/3583197` 达到 e1 iter50，LR/loss/grad
+  `2.5488e-6/21.4029/112.8655`，双卡约 19.2 GiB 且满载，正式日志更新、全部损失有限、
+  fatal=0，故登记 `RUNNING/TO_E72`。
+- `0808_07` 只改变训练 LR 时序：e0–11 为 `1e-4`，e12–23 为
+  `1.2037682266e-4`，e24–71 为 `1.4490579434e-4`；名义 LR 积分严格等于父线 e96。
+  最终 product-tangent 推理结构、参数/state、数据、loss 均不变，class-agnostic、无
+  reweight、无推理计算增量。
 
 ## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
 
