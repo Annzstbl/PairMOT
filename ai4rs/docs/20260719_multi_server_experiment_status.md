@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 00:40 CST。
+更新时间：2026-08-09 01:07 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E21I300/E20_COMPLETE/TO_E72；screen/main `2606264/2606266` | e20 `50.048/57.885`，总和领先 197 同点 `0.839`；继续 e24+ | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E21I350+/E20_COMPLETE/TO_E72；screen/main `3583196/3583197` | e20 `50.650/56.444`；继续 e24/e28 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I600/TO_E72；screen/main `1642666/1642667` | formal 健康；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E35/E32_COMPLETE/TO_E72；main `1346509` | `0809_01` 局部延迟 LR 已静态验证但不占卡；先闭环 e36 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E1I50/TO_E72；screen/main `1605754/1605756` | `0808_03` e36 成熟停线后正式接替；GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4373,3 +4373,16 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 状态严格为 `STATIC_VALIDATED/NO_GPU`：smoke/formal workdir 均未创建，GPU 未占用；当前
   `0808_03` 继续独占动态 GPU0 到 e36，GPU1 空闲。只有成熟证据支持精确交接后，才依次执行
   真实 smoke、checkpoint 有限性和 formal iter50 五门槛。
+## 2026-08-09 01:07 CST：178 e36 成熟交接与 `0809_01` formal 五门槛
+
+- `0808_03` e36 cls/det 为 `51.825/59.674`，DetA/AssA 为
+  `42.637/65.375` 与 `51.565/71.437`；连续 e32/e36 未恢复 e28，四项 AP 也全部低 e28。
+  相对父线 e36 虽 det 高 `0.381`、det AssA 高 `2.731`，但 cls 低 `1.501`、双 DetA 低
+  `2.209/1.397` 且 AP 全低，成熟归因为局部 LR 从 e1 启动造成定位/分类过冲。
+- e36 checkpoint 414,252,532 bytes、SHA-256 `42b38e2c...3390406`，642 浮点张量有限、
+  iterative-cls/DN 已训练，5416/50、28/108/50 与 `async_done=1` 完整。原线于 e37i400
+  精确停止 PGID `1346509`，成员 `9→0`；两卡连续空闲后才做接替 smoke。
+- `0809_01` 四步真实单卡 smoke loss/grad 全有限；364,520,628-byte checkpoint SHA-256
+  `7930cf68...01e6`，有限性与 iterative-cls/DN 检查通过。fresh formal session/main
+  `1605754/1605756` 到 e1 iter50：LR/loss/grad `2.5488e-6/21.0057/111.0022`，进程、
+  GPU0、正式日志、有限 total/DN/Encoder 与 fatal=0 五门槛齐全，故登记 RUNNING；GPU1 未用。

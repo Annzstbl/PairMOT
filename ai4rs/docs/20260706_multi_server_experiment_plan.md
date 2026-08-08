@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 00:40 CST.
+Last updated: 2026-08-09 01:07 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4135,3 +4135,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   结果后决定是否执行动态五项门槛。
 - 现有四条 formal 保持原资源边界继续；`0809_01` 只作为合法交接候选，不因准备完成而抢占
   仍有信息价值的成熟轨迹，也不得在真实 smoke、有限 checkpoint 与 formal iter50 前登记 RUNNING。
+## 2026-08-09 01:07 CST：成熟过冲证据触发 178 局部延迟 LR 交接
+
+- `0808_03` e36 `51.825/59.674` 连续第二个成熟节点未恢复 e28；cls DetA/AssA、det DetA
+  和四项 AP 均低 e28。相对父线仍有 det AssA 优势，但双 DetA、cls 与 AP 明显不足，证实应
+  保留局部关联加速、延后其起点，而不是继续从 e1 高 LR 或改为全局加速。
+- e36 checkpoint、有限性、5416/50、28/108/50 与 TrackEval 完整后，旧 PGID `1346509`
+  在 e37i400 精确停止、成员 `9→0`。`0809_01` 随后按顺序通过真实 GPU0 smoke、有限
+  checkpoint 和 formal iter50 五项门槛；screen/main `1605754/1605756`，GPU1 未用。
+- 新线继续 e4/e8 诊断，并重点比较 e12 父线等价点与 e16 首四轮局部 `1.4×` 响应；不得因
+  早期节点否决。99/197/252 保持各自合法资源继续，不因 178 换线中断其成熟证据收集。
