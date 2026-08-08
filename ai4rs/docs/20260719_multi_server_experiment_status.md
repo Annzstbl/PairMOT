@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 23:45 CST。
+更新时间：2026-08-08 23:56 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E19I650/E16_COMPLETE/TO_E72；screen/main `2606264/2606266` | e16 `48.335/55.763`；闭环 e20 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E20I850/E16_COMPLETE/TO_E72；screen/main `3583196/3583197` | e16 `48.551/55.024`；闭环 e20/e24 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `1642666/1642667` | formal 五门槛通过；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E33I350/E32_COMPLETE/TO_E72；main `1346509` | e32 `51.872/59.521`，单点同步回撤；继续 e36 验证恢复 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E20I150/E16_COMPLETE/TO_E72；screen/main `2606264/2606266` | 正在闭环 e20 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E21I350/E20_COMPLETE/TO_E72；screen/main `3583196/3583197` | e20 `50.650/56.444`；继续 e24/e28 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I600/TO_E72；screen/main `1642666/1642667` | formal 健康；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E33I700/E32_COMPLETE/TO_E72；main `1346509` | e32 `51.872/59.521`，单点同步回撤；继续 e36 验证恢复 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4332,3 +4332,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `32/33216`；model/EMA 711/712 keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
   5416/50、28 CSV、108 非空文件、50 predictions 闭环，TrackEval 268.7 秒。main
   `1346509` 已恢复 e33 iter350，只用 GPU0。
+
+## 2026-08-08 23:56 CST：197 `0808_07` e20 全量闭环
+
+- e20 cls HOTA/DetA/AssA `50.650/42.356/62.730`，det
+  `56.444/50.569/65.114`，sum `107.094`；相对 e16 双升 `2.099/1.420`，四个 DetA/AssA
+  分量全部提升。相对直接父线 e20 仍低 `1.548/1.688`，相对 178 同点 cls 高 `0.137`、det
+  低 `1.487`，当前不是主候选。
+- pair mAP/AP50 `0.2692/0.4706`、both-independent `0.3142/0.5221`，均较 e16 提升。
+  checkpoint 392,028,519 bytes，SHA-256
+  `bd3397e5e0b4f4ca1d9edbc6e6a3ad6d9efd7188e92b075aa690e161a7c2f1e2`，meta
+  `20/20760`；model/EMA 711/712 keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
+- 5416/50、28 CSV、108 非空文件、50 predictions 完整；TrackEval 330.0 秒自然结束。
+  main 已恢复 e21 iter350、动态 GPU0/1、fatal=0。由于第二阶段 LR 在 e24 后才生效，继续
+  e24 基准及 e28 响应，不在 e20 提前否决完整策略。

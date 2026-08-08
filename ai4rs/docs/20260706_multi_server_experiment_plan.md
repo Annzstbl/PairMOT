@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 23:45 CST.
+Last updated: 2026-08-08 23:56 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4103,3 +4103,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   时钟 `0808_08` 的 e12/e16 响应作为主替代判据，而不是立即增加模型复杂度。
 - 下一顺序调整为 99/197 e20 → 178 e36 → 252 `0808_08` e4/e8（仅诊断）及 e12/e16。
   所有结论继续以同 checkpoint 的检测、TrackEval 和有限性闭环为准。
+
+## 2026-08-08 23:56 CST：197 e20 第一阶段恢复成立，完整分阶段策略继续
+
+- `0808_07` e20 `50.650/56.444`，较 e16 双升 `2.099/1.420`，DetA、AssA、pair/both AP
+  也全部上升；第一阶段温和 LR 提升确有恢复作用。它仍低直接父线 `1.548/1.688`，也比 178
+  同点总和低 `1.350`，所以不替代 decoder/head-only 主线。
+- 第二次 LR 提升在 e24 checkpoint 后开始，e20 尚未消费完整调度。继续 e24 作为第二阶段前
+  基准，并至少保留到 e28 评价切换响应；这与“不用早期或未触发策略的节点否决 decoder”一致。
+- 当前近期顺序为：收 99 e20，与 197 e20 比较一次/分阶段跳变；随后闭环 178 e36 和 252
+  `0808_08` e4/e8。除非成熟节点给出全指标支配关系，否则不抢占仍在执行其核心干预的路线。
