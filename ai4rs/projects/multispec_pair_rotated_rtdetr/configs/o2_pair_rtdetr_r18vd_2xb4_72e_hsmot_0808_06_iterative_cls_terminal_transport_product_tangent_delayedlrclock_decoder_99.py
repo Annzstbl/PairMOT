@@ -10,6 +10,7 @@ This is class agnostic, uses no reweighting, and adds no model parameter,
 state, loss, hook, or inference operation.
 """
 from mmengine.config import read_base
+from mmengine.optim.scheduler.lr_scheduler import MultiStepLR
 
 with read_base():
     from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0803_26_iterative_cls_terminal_transport_product_tangent_decoder_99 import *  # noqa: F401,F403
@@ -17,7 +18,7 @@ with read_base():
 
 param_scheduler.append(
     dict(
-        type='MultiStepLR',
+        type=MultiStepLR,
         begin=0,
         end=72,
         by_epoch=True,
