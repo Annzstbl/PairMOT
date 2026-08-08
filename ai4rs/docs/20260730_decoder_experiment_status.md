@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 21:11 CST
+更新时间：2026-08-08 22:03 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E11I950/E8_COMPLETE/TO_E72` | e8 完整 `42.129/46.937`，早期 AP 与 HOTA 均弱于父线；首次升 LR 在 e12，优先闭环 e12/e16，不以 e8 否决。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E11I850/E8_COMPLETE/TO_E72` | e8 完整 `40.206/46.565`，e4 的小优势未延续；e12/e24 分阶段升 LR，优先闭环 e12/e16。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E25I250/E24_COMPLETE/TO_E72` | e24 `51.215/58.367`，较 e20 双升且相对父线差距收窄至 `1.263/0.404`；当前最强，继续 e28+。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E23I100/E20_COMPLETE/TO_E72` | e20 `49.772/57.365`，较 e16 双升但仍低父线 `2.426/0.767`；继续闭环 e24+。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E14I500/E12_COMPLETE/TO_E72` | e12 `45.402/51.604`；e13 起 LR 已切到 `1.4e-4`，继续 e16 判断切换响应，不以早期节点否决。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E14I800/E12_COMPLETE/TO_E72` | e12 `47.190/53.110`，同点领先 99；e13 起 LR 为 `1.2038e-4`，继续 e16/e24。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E28I450/E24_COMPLETE/TO_E72` | e24 `51.215/58.367`，相对父线差距 `1.263/0.404`；当前最强，优先闭环 e28+。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E25I350/E24_COMPLETE/TO_E72` | e24 `49.951/58.453`，det 恢复但 cls 近平台，低 178 同点总和 `1.178`；保留为成熟对照到 e28+。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
@@ -5875,3 +5875,34 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 正式训练已恢复到 e25 iter500，动态只使用 GPU0；GPU1 的外部占用在现场审计间有波动，
   但从未被本目标使用。本目标没有越界扩卡。同期 99/197 进入 e12、252 到 e23，下一批优先闭环 99/197 e12 与
   首次 LR 切换后的 e16，以及 252 e24。
+
+## 2026-08-08 22:03 CST：延迟调度 e12 与整体时钟 e24 完整闭环
+
+- 197 `0808_07` e12 cls HOTA/DetA/AssA 为 `47.190/38.691/59.991`，det 为
+  `53.110/47.655/61.287`，绝对和 `100.300`；pair mAP/AP50
+  `0.2433/0.4239`，both-independent `0.2885/0.4807`。99 `0808_06` e12 为 cls
+  `45.402/37.226/58.322`、det `51.604/46.850/58.907`，绝对和 `97.006`；pair
+  `0.2314/0.4109`、both-independent `0.2738/0.4660`。197 同点 HOTA 领先
+  `1.788/1.506`，DetA、AssA 与 AP 也一致领先，支持温和分阶段调度优于一次 `1.4×` 跳变。
+- 两条 e12 相对直接 product-tangent 父线 `49.784/56.243` 仍分别低
+  `2.594/3.133` 与 `4.382/4.639`；相对 178 decoder/head-only e12
+  `47.998/55.163`，197 低 `0.808/2.053`。但 e12 是 LR 切换前 checkpoint，不作成熟否决。
+  正式日志确认 99 e13 已切到 `1.4e-4`、197 e13 切到 `1.2038e-4`，两线继续 e16 检验
+  加速后的恢复斜率。
+- 99/197 checkpoint 分别为 381,051,446/381,036,583 bytes，SHA-256 分别为
+  `ce1fea065968be18e0f4c743e424a12e4cb0a8ee33f24b18c2d9846e4c15548c` 与
+  `f7b6251075201140fc6cddf1c85486cbbbc70c52c28084cae2383b93703c6304`；meta 均为
+  `12/12456`，model/EMA 分别 711/712 keys、各 642 个浮点张量全有限，iterative-cls/DN
+  已训练。两边均有 5416/50、28 CSV、108 非空文件、50 predictions；TrackEval 分别耗时
+  286.2/341.4 秒自然结束。
+- 252 `0808_04` e24 为 cls `49.951/42.031/61.401`、det
+  `58.453/51.154/69.169`，绝对和 `108.404`；pair `0.2771/0.4761`、both-independent
+  `0.3207/0.5251`。相对 e20 为 `+0.179/+1.088`，但相对父线 e24 仍低
+  `2.527/0.318`，联合差距仅从 e20 的 `3.193` 收窄到 `2.845`。它比 178 e24 det 高
+  `0.086`，却因 cls AssA 低 `3.192` 而 cls 低 `1.264`、总和低 `1.178`，说明全局时钟压缩
+  更伤类别关联；保留为成熟对照到 e28+，不升级为主候选。
+- 252 e24 checkpoint 为 397,531,510 bytes，SHA-256
+  `92b69f5ea0ff702378804d4b007877aadbd9bd0cbed6a98e2f0e254f0935abbf`，meta
+  `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
+  28 CSV、108 非空文件、50 predictions 完整，TrackEval 378.4 秒自然结束。训练恢复 e25，
+  固定只使用 GPU0/1，GPU2/3 未使用。

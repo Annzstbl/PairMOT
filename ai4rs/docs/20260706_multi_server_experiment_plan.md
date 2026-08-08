@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 21:11 CST.
+Last updated: 2026-08-08 22:03 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4032,3 +4032,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 接下来按信息价值排序：先收 99/197 e12，继续到首次 LR 调整后的 e16 观察响应；同时收
   252 e24，并延续 178 e28+。在四条合法资源均健康运行时不启动静态 Adam 候选，也不抢占
   外部 GPU；只有成熟轨迹明确失效并释放资源后，才验证下一单因素策略的五项动态门槛。
+
+## 2026-08-08 22:03 CST：分阶段 LR 获得同族优势，整体时钟仍弱于局部加速
+
+- 197 分阶段延迟 LR 的 e12 为 `47.190/53.110`，99 单次延迟 LR 为
+  `45.402/51.604`；197 的 DetA、AssA、pair/both AP 也全部更高。由于两者此时尚未消费
+  切换后的 LR，e12 仅建立起跑基准；99 已以 `1.4e-4`、197 已以 `1.2038e-4` 进入 e13，
+  必须继续到 e16 比较恢复斜率。若 99 的大跳变伤害 AssA 而 197 保持增长，优先保留 197。
+- 252 整体时钟 e24 `49.951/58.453`，相对父线 e24 联合差距 `2.845`，仅比 e20 收窄
+  `0.348`。它比 178 同点 det 高 `0.086`，但 cls 低 `1.264`；进一步分解显示 det DetA
+  高 `0.215`，cls AssA 却低 `3.192`。因此不能用更高的检测量掩盖类别关联损失，252 继续
+  到 e28 只作为成熟对照，178 decoder/head-only 仍是第一候选。
+- 当前信息优先级为：178 e28 > 99/197 e16 > 252 e28。四条线全部健康且占满合法资源，
+  不启动静态 Adam 候选、不热更新仓库；若成熟结果释放资源，再按五项门槛验证新的单因素、
+  零推理开销策略。

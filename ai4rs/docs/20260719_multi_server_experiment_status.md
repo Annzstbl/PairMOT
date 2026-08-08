@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 21:11 CST。
+更新时间：2026-08-08 22:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E11I950/E8_COMPLETE/TO_E72；screen/main `2606264/2606266` | e8 `42.129/46.937`；优先闭环 e12/e16，不以 e8 否决 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E11I850/E8_COMPLETE/TO_E72；screen/main `3583196/3583197` | e8 `40.206/46.565`；优先闭环 e12/e16，不以 e8 否决 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E23I100/E20_COMPLETE/TO_E72；main `1579745` | e20 `49.772/57.365`，继续闭环 e24+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E25I250/E24_COMPLETE/TO_E72；main `1346509` | e24 `51.215/58.367`，当前最强；继续 e28+ | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E14I500/E12_COMPLETE/TO_E72；screen/main `2606264/2606266` | e12 `45.402/51.604`；LR 已切 `1.4e-4`，继续 e16 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E14I800/E12_COMPLETE/TO_E72；screen/main `3583196/3583197` | e12 `47.190/53.110`；LR 已切 `1.2038e-4`，继续 e16/e24 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E25I350/E24_COMPLETE/TO_E72；main `1579745` | e24 `49.951/58.453`，保留成熟对照到 e28+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E28I450/E24_COMPLETE/TO_E72；main `1346509` | e24 `51.215/58.367`，当前最强；优先闭环 e28+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4240,3 +4240,26 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
 - 5416/50 检测、28 CSV、108 非空 TrackEval 文件、50 非空 predictions 完整；TrackEval
   255.9 秒自然结束。main `1346509` 已恢复到 e25 iter500，只使用动态 GPU0；GPU1 有外部
   占用且从未被本目标使用。99/197 分别进入 e12 iter100/50，252 到 e23 iter300；全部资源边界合规。
+
+## 2026-08-08 22:03 CST：99/197 e12 与 252 e24 全量闭环
+
+- 197 `0808_07` e12 cls HOTA/DetA/AssA `47.190/38.691/59.991`，det
+  `53.110/47.655/61.287`；pair mAP/AP50 `0.2433/0.4239`，both-independent
+  `0.2885/0.4807`。99 `0808_06` e12 为 cls `45.402/37.226/58.322`、det
+  `51.604/46.850/58.907`；pair `0.2314/0.4109`、both-independent
+  `0.2738/0.4660`。197 同点全指标领先，但两条线的 LR 改变都发生在 e12 之后，因此继续
+  e16，不以切换前 checkpoint 否决。
+- 99/197 checkpoint 大小为 381,051,446/381,036,583 bytes，SHA-256 为
+  `ce1fea065968be18e0f4c743e424a12e4cb0a8ee33f24b18c2d9846e4c15548c` /
+  `f7b6251075201140fc6cddf1c85486cbbbc70c52c28084cae2383b93703c6304`；meta 均
+  `12/12456`，model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。两边均完成
+  5416/50、28 CSV、108 非空文件与 50 predictions；TrackEval 286.2/341.4 秒自然结束。
+  当前 99 e14 iter500、197 e14 iter800，LR 分别为 `1.4e-4/1.2038e-4`。
+- 252 `0808_04` e24 cls `49.951/42.031/61.401`，det
+  `58.453/51.154/69.169`，sum `108.404`；pair `0.2771/0.4761`、both-independent
+  `0.3207/0.5251`。相对父线 e24 低 `2.527/0.318`，相对 178 同点 det 高 `0.086`，但
+  cls 低 `1.264`、总和低 `1.178`；主要差异是 cls AssA 低 `3.192`，故只保留成熟对照。
+- 252 e24 checkpoint 397,531,510 bytes，SHA-256
+  `92b69f5ea0ff702378804d4b007877aadbd9bd0cbed6a98e2f0e254f0935abbf`，meta
+  `24/24912`；model/EMA 全有限并完成 5416/50、28/108/50 闭环，TrackEval 378.4 秒。
+  main 恢复 e25 iter350，固定 GPU0/1；GPU2/3 未使用。178 到 e28 iter450，只用 GPU0。
