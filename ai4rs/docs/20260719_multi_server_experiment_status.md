@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 00:17 CST。
+更新时间：2026-08-09 00:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E21I300/E20_COMPLETE/TO_E72；screen/main `2606264/2606266` | e20 `50.048/57.885`，总和领先 197 同点 `0.839`；继续 e24+ | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E21I350+/E20_COMPLETE/TO_E72；screen/main `3583196/3583197` | e20 `50.650/56.444`；继续 e24/e28 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I600/TO_E72；screen/main `1642666/1642667` | formal 健康；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E33I700/E32_COMPLETE/TO_E72；main `1346509` | e32 `51.872/59.521`，单点同步回撤；继续 e36 验证恢复 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E35/E32_COMPLETE/TO_E72；main `1346509` | `0809_01` 局部延迟 LR 已静态验证但不占卡；先闭环 e36 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4361,3 +4361,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `20/20760`；model/EMA 711/712 keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
   5416/50、28 CSV、108 非空文件、50 predictions 完整，TrackEval 288.4 秒。main 已恢复
   e21 iter300，动态 GPU0/1、fatal=0。
+## 2026-08-09 00:40 CST：178 下一局部延迟 LR 候选静态就绪
+
+- `0809_01` 在 e1–e12 保持最终 product-tangent 父线优化轨迹，e12 后只把 decoder/head
+  参数组 LR 提升为 `1.4×`；这使局部名义 LR 积分在 e72 等于父线 e96，同时不改变模型、
+  state、loss、数据或推理开销。策略为 class-agnostic、无 reweight。
+- isolated checkout 固定 clean detached `eb2c70a`。tagged scheduler 单测 `2/2 OK`，两配置
+  deepcopy、两 launcher `bash -n`、父/候选完整构建通过；二者均为 22,771,111 参数、711
+  states。实际 498 个 optimizer groups 中只有 178 个 decoder/head 组在模拟 e12 后由
+  `1e-4` 变为 `1.4e-4`，其余组保持各自原 LR。
+- 状态严格为 `STATIC_VALIDATED/NO_GPU`：smoke/formal workdir 均未创建，GPU 未占用；当前
+  `0808_03` 继续独占动态 GPU0 到 e36，GPU1 空闲。只有成熟证据支持精确交接后，才依次执行
+  真实 smoke、checkpoint 有限性和 formal iter50 五门槛。

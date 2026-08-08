@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 00:17 CST
+更新时间：2026-08-09 00:40 CST
 
 ## 当前研究原则
 
@@ -22,6 +22,7 @@
 | 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E21I350+/E20_COMPLETE/TO_E72` | e20 `50.650/56.444`，cls 高 99、det 低 `1.441`；继续 e24，并保留到第二阶段切换响应。 |
 | 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E33I700/E32_COMPLETE/TO_E72` | e32 `51.872/59.521`，较 e28 同步回撤但 det AssA 仍高父线 `2.011`；继续 e36 验证恢复，不以单点停线。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E1I600/TO_E72` | 只给 decoder/head 压缩 Adam 记忆时钟；formal 健康，继续 e4/e8 诊断及成熟节点。 |
+| 178 待交接 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `STATIC_VALIDATED/NO_GPU` | e1–e12 完全保留父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；隔离构建和实际参数组调度通过，严格等待成熟交接后再做真实 smoke。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
@@ -6036,3 +6037,18 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `20/20760`，model/EMA `711/712` keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
   5416/50、28 CSV、108 非空文件、50 predictions 完整，TrackEval 288.4 秒自然结束。
   formal 已恢复 e21 iter300、动态 GPU0/1、fatal=0，GPU2 外部状态未触碰。
+## 2026-08-09 00:40 CST：局部延迟 LR 候选完成隔离静态闭环
+
+- 下一单因素 `0809_01` 将“保留早期关联形成”和“仅加速 decoder/head”合并为正交训练策略：
+  e1–e12 所有参数严格使用父线 LR，e12 边界后只给 decoder/head 组乘 `1.4`。局部组到 e72
+  的名义 LR 积分为 `12×1+60×1.4=96` 个父线 epoch，backbone/encoder 继续原 72-epoch
+  轨迹；最终模型、参数、state、loss 与推理计算均不变，且非 class-aware、无 reweight。
+- 新的 tagged scheduler 只读取优化器参数组元数据。真实 AdamW 两组单测证明 milestone 后
+  tagged LR 为 `1e-4→1.4e-4`、untagged 保持 `1e-4`；两项单元测试通过。隔离 178 checkout
+  `/data1/users/litianhao01/PairMOT_0809_01_decoderhead_delayedlr_178/ai4rs` 为 clean detached
+  `eb2c70a`，两 launcher `bash -n`、formal/smoke config deepcopy 均通过。
+- 父/候选完整构建均为 `22,771,111` 参数、711 个 state tensor且 state shape 完全一致。
+  实际优化器 498 组中 178 组、5,355,864 个 decoder/head 参数带标签；模拟 e12 milestone
+  后仅这些组变为 `1.4e-4`，其余组逐一保持原 LR。当前仍为 `STATIC_VALIDATED/NO_GPU`：
+  未创建 smoke/formal workdir、未占用 GPU，也未热更新 178 存活训练仓库；是否动态验证由
+  `0808_03` e36 的完整 HOTA/DetA/AssA/AP 成熟证据决定。

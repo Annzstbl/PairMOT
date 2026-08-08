@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 00:17 CST.
+Last updated: 2026-08-09 00:40 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4124,3 +4124,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   基准及 e28 响应。当前没有合法依据释放任一双卡线。
 - 近期顺序改为：252 `0808_08` e4（仅诊断）→ 178 e36 → 99/197 e24；各线仍由同 checkpoint
   的 HOTA/DetA/AssA/AP、checkpoint 有限性和完整 TrackEval 决定，不因单一 HOTA 或早期节点换线。
+## 2026-08-09 00:40 CST：准备局部延迟 LR 的正交交接候选
+
+- 成熟证据已经把问题分解为：全局时钟压缩损伤 cls/DetA，而 decoder/head-only LR 在 e28
+  提供 AssA 收益但从 e1 开始加速存在阶段波动。`0809_01` 因此先沿用父线 12 epoch，再只把
+  decoder/head LR 提至 `1.4×`；局部 e72 LR 积分等于父线 e96，encoder/backbone 不加速。
+- isolated 178 checkout `eb2c70a` 已通过 scheduler 单测、配置 deepcopy、完整父/候选构建、
+  launcher 语法和实际 498 组优化器审计；模型参数/state严格不变，只有 178 个已标记局部组在
+  e12 milestone 改 LR。当前不占 GPU、不建 smoke/formal 目录，仍需等待 `0808_03` e36 成熟
+  结果后决定是否执行动态五项门槛。
+- 现有四条 formal 保持原资源边界继续；`0809_01` 只作为合法交接候选，不因准备完成而抢占
+  仍有信息价值的成熟轨迹，也不得在真实 smoke、有限 checkpoint 与 formal iter50 前登记 RUNNING。
