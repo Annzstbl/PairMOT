@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 22:59 CST.
+Last updated: 2026-08-08 23:41 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -25,9 +25,10 @@ Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
 epoch 12. Dynamic-197 GPU0/1 runs `0808_07`, which keeps the parent LR through
 epoch 11 and stages two smaller increases at epochs 12 and 24. Dynamic-178 GPU0
 runs `0808_03` with only decoder and bbox-head LR multipliers `4/3`; fixed-252
-GPU0/1 runs `0808_04` with coherent `96→72` clock compression. All retain 72
-epochs, the same global batch, data, losses, 22,771,111 parameters and 711 model
-states; they are class-agnostic, use no reweighting, and add no inference compute.
+GPU0/1 now runs `0808_08`, which retains that successful local LR and compresses
+Adam memory only for decoder/head parameter groups. All retain 72 epochs, the
+same global batch, data, losses, 22,771,111 parameters and 711 model states;
+they are class-agnostic, use no reweighting, and add no inference compute.
 
 All four passed config deepcopy, remote Bash syntax, complete target/parent
 model builds with identical state shapes, real four-iteration smoke,
@@ -4071,3 +4072,22 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 下一顺序为 252 e28、178 e32、99/197 e20。若后续需要释放一条双卡资源，优先比较
   e20 的 HOTA/DetA/AssA/AP 恢复斜率后精确停止较弱者，再考虑静态 Adam 或新的训练单因素；
   不依据 e16 单点抢占仍在恢复的路线。
+
+## 2026-08-08 23:41 CST：全局时钟证伪后转向局部优化器记忆压缩
+
+- 252 `0808_04` e28 为 `50.677/59.213`，相对 178 decoder/head-only 同点低
+  `2.173/0.489`；cls/det DetA、AssA 与 pair/both AP 也全部更低。它从 e4 到 e28 已有七个
+  checkpoint 完整闭环，因此在 e29 iter550 精确停止并释放固定 GPU0/1；这是成熟路线换线，
+  不是以 e4/e8 否决 decoder。
+- 证据说明全局同步加速会伤害 encoder/backbone 形成的关联，而 178 的局部 LR 已在 e28 双超
+  父线。因此 `0808_08` 以 178 策略为基底，只给 decoder/bbox-head 参数组增加
+  `beta' = beta^(96/72)`，其余参数组仍用父线 LR 与 Adam 记忆；相对强线是单因素，模型、
+  参数、state、loss、推理 FLOPs、warmup、EMA 与 Liquid 时钟均不变。
+- isolated HEAD `b41a936` 已完成配置 deepcopy、完整构建、实际 optimizer-group 审计、远端
+  `bash -n`、固定 GPU0/1 四步 DDP smoke、checkpoint 有限性与 iterative-cls/DN 检查。
+  formal screen/main `1642666/1642667` 的 e1 iter50 loss/grad 为 `21.4287/120.2927`，DN 与
+  encoder proposal 有限、fatal=0、双卡满载、GPU2/3 空闲，五项门槛通过后登记
+  `RUNNING/TO_E72`。
+- 当前收集顺序为：178 e32 全量检测/TrackEval，99/197 e20，同步保留 252 `0808_08` 到
+  e4/e8 诊断和 e12/e16+ 成熟响应。e4/e8 不作直接否决；新结构只在成熟节点证明当前局部
+  optimizer clock 失效后再设计，避免继续扩展无证据的全局调度。

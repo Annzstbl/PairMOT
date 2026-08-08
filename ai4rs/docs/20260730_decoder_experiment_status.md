@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 22:59 CST
+更新时间：2026-08-08 23:41 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E17I300/E16_COMPLETE/TO_E72` | e16 `48.335/55.763`，较 e12 快速恢复且总和领先 197 同点 `0.523`；继续 e20，不以首次切换响应否决。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E18I50/E16_COMPLETE/TO_E72` | e16 `48.551/55.024`，cls 略高于 99、det 低 `0.739`；继续 e20/e24 观察第二阶段前趋势。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E31I200/E28_COMPLETE/TO_E72` | e28 `52.850/59.702`，同点双超父线 `0.209/0.716`、总和领先 `0.925`；当前最强，继续 e32+。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E28I250/E24_COMPLETE/TO_E72` | e24 `49.951/58.453`，det 恢复但 cls 近平台，低 178 同点总和 `1.178`；继续闭环 e28。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E19I650/E16_COMPLETE/TO_E72` | e16 `48.335/55.763`，较 e12 快速恢复且总和领先 197 同点 `0.523`；继续闭环 e20。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E20I850/E16_COMPLETE/TO_E72` | e16 `48.551/55.024`，cls 略高于 99、det 低 `0.739`；继续闭环 e20/e24。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E33I100/E28_COMPLETE/TO_E72` | e28 `52.850/59.702`，同点双超父线 `0.209/0.716`、总和领先 `0.925`；当前最强，等待 e32 全量评估。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E1I50/TO_E72` | 只给 decoder/head 压缩 Adam 记忆时钟；formal iter50 五门槛通过，继续 e4/e8 诊断及成熟节点。 |
+| 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
@@ -5948,3 +5949,33 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `8e54260575338aef8108e1a17ad6739cd8f44d88c6a5a3c26bbf8d89c001423e`；meta 均
   `16/16608`，model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。两边均完成
   5416/50、28 CSV、108 非空文件、50 predictions；TrackEval 分别耗时 281.5/337.3 秒。
+
+## 2026-08-08 23:41 CST：252 全局时钟成熟停线，局部 Adam 时钟正式接替
+
+- 252 `0808_04` e28 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `50.677/42.170/62.973`，det 为 `59.213/51.537/70.457`，绝对和 `109.890`。相对自身
+  e24 双升 `0.726/0.760`，但相对 178 decoder/head-only 同点低 `2.173/0.489`，总和低
+  `2.662`；cls/det 的 DetA 分别低 `1.766/0.253`，AssA 低 `2.460/0.709`，已是全面而非
+  单指标落后。pair mAP/AP50 `0.2821/0.4844`、both-independent `0.3242/0.5298`，也全部
+  低于 178 同点的 `0.2992/0.5105` 与 `0.3406/0.5543`。
+- e28 checkpoint 为 403,030,198 bytes，SHA-256
+  `f07ef31c7e1541df223933bbe7697d46ff20868db80ceb9e7f947cb292dcbd52`；meta
+  `28/29064`，model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练；5416/50、
+  28 CSV、108 非空文件、50 predictions 完整，TrackEval 389.8 秒自然结束。在 e4--e28
+  七个完整节点后，PGID `1579745` 于 e29 iter550 精确 TERM，成员 `7→0`；GPU0/1 连续
+  两次回到 `1 MiB/0%`，GPU2/3 始终未使用。该停止不是 e4/e8 否决。
+- 后继 `0808_08` 以当前最强的 decoder/head LR×4/3 为基底，只对 decoder/head 参数组增加
+  Adam 记忆时钟压缩：`beta' = beta^(96/72)`，即
+  `(0.8689404461, 0.9986668889)`；backbone/encoder 保持父线 `1e-4` 与默认 Adam betas，
+  warmup、EMA、Liquid 时钟、模型、loss 和数据均不变。它 class-agnostic、无 reweight、无
+  新参数/state/推理计算，是相对 178 强线的单训练因素。
+- clean detached checkout HEAD `b41a936`；两配置 deepcopy、两 launcher `bash -n`、父/子
+  完整构建和实际优化器参数组审计通过：均为 22,771,111 参数、711 states、增量 0；178 个
+  decoder/head 参数组使用局部 betas，其余 319 组保持默认。固定 GPU0/1 的四步 DDP smoke
+  loss `12.9389/19.4649/19.5867/21.1698`、grad 全有限；364,506,742-byte checkpoint
+  SHA-256 `9acaf973dc0e7fcc8c4724c2a8a1fbd82a1e7a02455d9afa77a085a6061b1ede`，642 个
+  浮点张量全有限且 iterative-cls/DN 已训练。
+- fresh formal screen/main `1642666/1642667` 已到 e1 iter50：LR/loss/grad
+  `2.5488e-6/21.4287/120.2927`，DN、encoder proposal 与总损失全有限，fatal=0；双卡各约
+  19.2 GiB 且满载，正式日志持续更新，故五项门槛齐全后严格登记 `RUNNING/TO_E72`。GPU2/3
+  仍为 `1 MiB/0%`。同期 99 e19i650、197 e20i850、178 e33i100，资源边界全部合规。
