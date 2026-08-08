@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO=${PAIRMOT_REPO:-/data/users/wangying01/lth/PairMOT_0808_05_adamclock_99/ai4rs}
+REPO=${PAIRMOT_REPO:-/data/users/wangying01/lth/PairMOT_0808_05_adamclock_99/ai4rs/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/smoke/o2_pair_rtdetr_r18vd_0808_05_product_tangent_adamclockcompressed_decoder_4iter_smoke_99.py
 WORK_DIR=/data4/litianhao/PairMmot/workdir_99/smoke_0808_05_product_tangent_adamclockcompressed_4iter
 
