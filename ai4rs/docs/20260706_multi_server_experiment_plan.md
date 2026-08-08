@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 23:56 CST.
+Last updated: 2026-08-09 00:17 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4113,3 +4113,14 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   基准，并至少保留到 e28 评价切换响应；这与“不用早期或未触发策略的节点否决 decoder”一致。
 - 当前近期顺序为：收 99 e20，与 197 e20 比较一次/分阶段跳变；随后闭环 178 e36 和 252
   `0808_08` e4/e8。除非成熟节点给出全指标支配关系，否则不抢占仍在执行其核心干预的路线。
+
+## 2026-08-09 00:17 CST：一次延迟跳变在 e20 的检测关联恢复更快
+
+- 99 e20 `50.048/57.885`，较 e16 双升 `1.713/2.122`；与 197 e20 相比 cls 低
+  `0.602`、det 高 `1.441`、总和高 `0.839`。两线 AP 基本同档，而 99 det AssA 高
+  `2.776`，说明一次 `1.4×` 跳变目前更快恢复检测轨迹关联。
+- 99 e20 与 178 同点只差 `0.465/0.046`，已接近局部 LR 主线；但 cls 仍低直接父线
+  `2.150`，不能在中期误报加速成功。99 继续 e24+；197 因第二阶段 LR 尚未生效，继续 e24
+  基准及 e28 响应。当前没有合法依据释放任一双卡线。
+- 近期顺序改为：252 `0808_08` e4（仅诊断）→ 178 e36 → 99/197 e24；各线仍由同 checkpoint
+  的 HOTA/DetA/AssA/AP、checkpoint 有限性和完整 TrackEval 决定，不因单一 HOTA 或早期节点换线。

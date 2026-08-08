@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 23:56 CST
+更新时间：2026-08-09 00:17 CST
 
 ## 当前研究原则
 
@@ -18,8 +18,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E20I150/E16_COMPLETE/TO_E72` | e16 `48.335/55.763`；正在闭环 e20，等待与 197 同点比较。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E21I350/E20_COMPLETE/TO_E72` | e20 `50.650/56.444`，较 e16 双升但仍低父线；继续 e24，并保留到第二阶段切换响应。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E21I300/E20_COMPLETE/TO_E72` | e20 `50.048/57.885`，总和高 197 同点 `0.839` 且近 178 同点；继续 e24+。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E21I350+/E20_COMPLETE/TO_E72` | e20 `50.650/56.444`，cls 高 99、det 低 `1.441`；继续 e24，并保留到第二阶段切换响应。 |
 | 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E33I700/E32_COMPLETE/TO_E72` | e32 `51.872/59.521`，较 e28 同步回撤但 det AssA 仍高父线 `2.011`；继续 e36 验证恢复，不以单点停线。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E1I600/TO_E72` | 只给 decoder/head 压缩 Adam 记忆时钟；formal 健康，继续 e4/e8 诊断及成熟节点。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
@@ -6015,3 +6015,24 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - 正式训练已恢复 e21 iter350，动态 GPU0/1、fatal=0。第二阶段 LR 提升发生在 e24 边界后，
   因此 e20 不能验证完整策略；继续到 e24 建立切换前基准，并至少保留到 e28 检验第二阶段响应，
   不以当前低父线提前否决。
+
+## 2026-08-09 00:17 CST：99 一次延迟 LR e20 闭环并领先分阶段同点
+
+- `0808_06` e20 cls HOTA/DetA/AssA 为 `50.048/41.914/62.323`，det 为
+  `57.885/51.156/67.890`，绝对和 `107.933`。相对 e16 双升 `1.713/2.122`；cls
+  DetA/AssA 分别升 `1.365/2.135`，det 分别升 `1.299/3.326`，第一阶段八轮 `1.4×` LR
+  继续形成检测与关联的共同恢复。
+- 相对 197 分阶段线 e20 `50.650/56.444`，99 cls 低 `0.602`、det 高 `1.441`、总和高
+  `0.839`。分量上 99 cls DetA/AssA 低 `0.442/0.407`，det DetA/AssA 高
+  `0.587/2.776`，优势主要来自检测轨迹关联。pair mAP/AP50 `0.2677/0.4738`、
+  both-independent `0.3112/0.5241`；相对 197 是 mAP 低 `0.0015/0.0030`、AP50 高
+  `0.0032/0.0020`，两者检测质量基本同档，HOTA 差异不是大幅 AP 偏置。
+- 相对直接父线 e20 `52.198/58.132`，99 仍低 `2.150/0.247`；相对 178
+  decoder/head-only 同点 `50.513/57.931` 仅低 `0.465/0.046`，总和低 `0.511`。因此它
+  尚未成为主线但信息价值明确，继续 e24+；197 的第二阶段尚未触发，也不能因同点总和较低而
+  停止，后续比较 e24 基准及 e28 响应。
+- 392,071,606-byte checkpoint SHA-256
+  `8bdc0a5b92bd5695be3c18c9ea8d60a47db75690418b70bf6b482f54df3d8103`；meta
+  `20/20760`，model/EMA `711/712` keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
+  5416/50、28 CSV、108 非空文件、50 predictions 完整，TrackEval 288.4 秒自然结束。
+  formal 已恢复 e21 iter300、动态 GPU0/1、fatal=0，GPU2 外部状态未触碰。
