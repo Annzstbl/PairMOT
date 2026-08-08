@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 22:03 CST
+更新时间：2026-08-08 22:29 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E14I500/E12_COMPLETE/TO_E72` | e12 `45.402/51.604`；e13 起 LR 已切到 `1.4e-4`，继续 e16 判断切换响应，不以早期节点否决。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E14I800/E12_COMPLETE/TO_E72` | e12 `47.190/53.110`，同点领先 99；e13 起 LR 为 `1.2038e-4`，继续 e16/e24。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E28I450/E24_COMPLETE/TO_E72` | e24 `51.215/58.367`，相对父线差距 `1.263/0.404`；当前最强，优先闭环 e28+。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E25I350/E24_COMPLETE/TO_E72` | e24 `49.951/58.453`，det 恢复但 cls 近平台，低 178 同点总和 `1.178`；保留为成熟对照到 e28+。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E15I950/E12_COMPLETE/TO_E72` | e12 `45.402/51.604`；e13 起 LR 已切到 `1.4e-4`，继续闭环 e16，不以早期节点否决。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E16I500/E12_COMPLETE/TO_E72` | e12 `47.190/53.110`，同点领先 99；e13 起 LR 为 `1.2038e-4`，优先闭环 e16。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E29I350/E28_COMPLETE/TO_E72` | e28 `52.850/59.702`，同点双超父线 `0.209/0.716`、总和领先 `0.925`；当前最强，继续 e32+。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E26I750/E24_COMPLETE/TO_E72` | e24 `49.951/58.453`，det 恢复但 cls 近平台，低 178 同点总和 `1.178`；保留为成熟对照到 e28+。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
@@ -5906,3 +5906,24 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
   28 CSV、108 非空文件、50 predictions 完整，TrackEval 378.4 秒自然结束。训练恢复 e25，
   固定只使用 GPU0/1，GPU2/3 未使用。
+
+## 2026-08-08 22:29 CST：decoder/head-only e28 首次同点双超直接父线
+
+- 178 `0808_03` e28 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `52.850/43.936/65.433`，det 为 `59.702/51.790/71.166`，绝对和 `112.552`。相对自身
+  e24 双升 `1.635/1.335`；cls DetA/AssA 分别升 `1.758/0.840`，det 分别升
+  `0.851/1.964`，说明检测与关联共同增长，而不是单侧交换。
+- 相对直接 product-tangent 父线 e28 `52.641/58.986`，首次实现同点双超
+  `0.209/0.716`，绝对和领先 `0.925`。分量上候选 cls/det DetA 低父线
+  `0.532/0.723`，但 AssA 高 `1.286/2.560`，证明 decoder/head-only 学习率加速的收益主要
+  来自更快形成稳定轨迹关联。其 e28 总和也仅低父线 e32 `112.629` 的 `0.077`，已近似压缩
+  4 个父线 epoch。
+- pair mAP/AP50 `0.2992/0.5105`、both-independent `0.3406/0.5543`，均较自身 e24
+  明显提升；虽然仍略低父线 e28 的 `0.3001/0.5156` 与 `0.3442/0.5622`，HOTA 已由 AssA
+  反超，且没有 AP 退化趋势。距 e72 保底门槛仍差 cls `1.587`、det `2.691`、绝对和
+  `5.278`，因此必须继续 e32/e36+，不能登记达标。
+- 403,198,580-byte `epoch_28.pth` SHA-256 为
+  `614243d4a87efc01983fc7dcf9e22742f081aa451cff095ec4ad94a60d04447c`；meta
+  `28/29064`，model/EMA 分别 711/712 keys、各 642 个浮点张量全有限，iterative-cls/DN
+  已训练。5416/50、28 CSV、108 非空文件、50 predictions 完整，TrackEval 252.9 秒自然
+  结束。训练已恢复 e29 iter350，只用动态 GPU0；GPU1 未用。

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 22:03 CST.
+Last updated: 2026-08-08 22:29 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4046,3 +4046,16 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 当前信息优先级为：178 e28 > 99/197 e16 > 252 e28。四条线全部健康且占满合法资源，
   不启动静态 Adam 候选、不热更新仓库；若成熟结果释放资源，再按五项门槛验证新的单因素、
   零推理开销策略。
+
+## 2026-08-08 22:29 CST：局部 LR 加速在 e28 首次验证成熟压缩
+
+- 178 decoder/head-only LR×4/3 的 e28 达到 `52.850/59.702`，较自身 e24 双升
+  `1.635/1.335`，并相对直接 product-tangent 父线 e28 双超 `0.209/0.716`、总和领先
+  `0.925`。其总和 `112.552` 与父线 e32 的 `112.629` 只差 `0.077`，首次给出约 4 epoch
+  成熟压缩的同协议证据。
+- 分解显示候选相对父线 e28 的 cls/det DetA 低 `0.532/0.723`，AssA 却高
+  `1.286/2.560`；因此下一步应保留局部加速，避免把全局 LR 继续抬高而破坏分类关联。
+  e32/e36 将检验关联优势能否维持，同时观察 AP 是否追平父线。
+- 优先级调整为：先闭环 197/99 e16 的 LR 切换响应，同时持续 178 e32+；252 保留到 e28
+  作为全局时钟对照。当前不启动新模型或静态 Adam 候选，因为四条合法资源仍被有效成熟
+  轨迹占满，且 178 主线没有平台迹象。
