@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-06 10:15 CST.
+Last updated: 2026-08-08 13:33 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,30 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 13:33 CST on 2026-08-08, the active objective is to compress the final
+decoder's epoch-96 maturity into epoch 72. The strict fallback gate uses one
+epoch-72 checkpoint and requires cls HOTA `>54.437`, det HOTA `>62.393`, and
+their absolute sum `>117.830` (gain sum `>1.0` over Encoder). The stretch gate
+is sum `>=118.355`, matching the current epoch-96 `55.739/62.616` point.
+Epoch 4/8 remain diagnostics and cannot directly reject a decoder.
+
+Four inference-identical training strategies are active from clean detached
+commit `81aaf00`. Dynamic-99 GPU0/1 runs `0808_01` with only global LR
+`1.25e-4`; dynamic-197 GPU0/1 runs `0808_02` with only global LR
+`1.333333e-4`; dynamic-178 GPU0 runs `0808_03` with only decoder and bbox-head
+LR multipliers `4/3`; fixed-252 GPU0/1 runs `0808_04` with coherent `96→72`
+clock compression (LR `4/3`, warmup `1500`, EMA momentum/gamma
+`1.333333e-4/1500`, Liquid anneal/hard start epoch 27). All retain 72 epochs,
+the same global batch, data, losses, 22,771,111 parameters and 711 model states;
+they are class-agnostic, use no reweighting, and add no inference compute.
+
+All four passed config deepcopy, remote Bash syntax, complete target/parent
+model builds with identical state shapes, real four-iteration smoke,
+`iter_4.pth` finite-tensor and iterative-cls/DN checks, and the formal iter50
+five gates. They are therefore `RUNNING/TO_E72`, not merely prepared. The next
+decision points are complete e4/e8 diagnostics followed by mature checkpoints;
+the final decision is reserved for full epoch-72 detection plus TrackEval.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det

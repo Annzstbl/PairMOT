@@ -1,13 +1,15 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-06 10:15 CST
+更新时间：2026-08-08 13:33 CST
 
 ## 当前研究原则
 
 - 论文主线保持为：`0719_05 Base 52.417/61.265` → `0723_01 Base+Liquid 53.955/62.032` → `0727_01 +Encoder 54.437/62.393`。
 - decoder 目标是同时超过 `0727_01` 的 cls HOTA 54.437 和 det HOTA 62.393。
-- 该严格目标已由 `0806_06` 的 epoch-96 同一 checkpoint 达成：`55.739/62.616`，
-  绝对和 `118.355`，相对 Encoder 的两项增量和为 `1.525`。
+- 原严格目标已由 `0806_06` 的 epoch-96 同一 checkpoint 达成：`55.739/62.616`，
+  绝对和 `118.355`，相对 Encoder 的两项增量和为 `1.525`。当前新目标是在 epoch 72
+  达到相近成熟度；保底要求同点 cls/det 分别严格超过 `54.437/62.393` 且绝对和
+  `>117.830`（增量和 `>1.0`），冲刺目标为绝对和 `>=118.355`。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
 - 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡但不固定序号。每台机器同一时间至多使用该总卡数。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
@@ -16,6 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E1I200/TO_E72` | 最终模型不变，仅全局 LR `1e-4→1.25e-4`；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E1I50/TO_E72` | 最终模型不变，仅全局 LR 乘 `96/72=4/3`；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E1I200/TO_E72` | 全局 LR 不变，只加速 decoder 与 bbox head；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E1I250/TO_E72` | LR×4/3，warmup/EMA/Liquid 时钟×3/4；仅训练策略变化，四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -34,6 +40,22 @@
 `0804_14 hemisphere-boundary center + log-shape consensus` 已在 e4/e8/e12 完整窗口后成熟停止；
 接替者 `0804_16 quotient-anisotropy shape consensus` 已完成 e4/e8/e12 成熟窗口；e12 全量
 结果相对强父线仍双降，完整产物闭环后精确停止并释放 GPU0，始终未触碰 GPU1 外部任务。
+
+## 2026-08-08 13:33 CST：最终 decoder 的 epoch-72 收敛压缩实验启动
+
+- 已知最终 decoder 轨迹为 e72 `55.170/62.165`、e80 `55.446/62.342`、e84
+  `55.474/62.422`、e88 `55.397/62.403`、e92 `55.534/62.430`、e96
+  `55.739/62.616`。晚期收益同时来自 cls 与 det，因此第一阶段优先测试优化时钟压缩，
+  不改变已验证的 terminal-only product-tangent 推理结构。
+- `0808_01/02/03/04` 分别隔离全局 LR `1.25×`、全局 LR `4/3×`、仅 decoder/head
+  LR `4/3×`、以及 LR+warmup+EMA+Liquid 的一致 `96→72` 时钟压缩。它们均为单因素或
+  可解释的同一时钟复合策略，参数/state 仍为 `22,771,111/711`，class-agnostic、无
+  reweight、无新增 loss/layer/attention，也无明显推理计算增长。
+- 提交 `81aaf00` 已在四台独立 clean checkout 中通过配置 deepcopy、完整构建、父子 state
+  等同性、远端语法、真实训练 smoke、有限 checkpoint 与 iterative-cls/DN 语义检查。
+  当前 99/197/178/252 分别使用动态 0,1、动态 0,1、动态 0、固定 0,1，formal iter50
+  五门槛全部通过并继续到 e72。e4/e8 只用于诊断收敛速度，不直接否决；最终只接受同一
+  e72 checkpoint 的完整检测、TrackEval 与三条严格阈值证据。
 
 ## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
 

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-06 10:15 CST。
+更新时间：2026-08-08 13:33 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,39 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0806_07 stratified product-tangent`（动态 GPU0/1） | STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED；PGID `2037143` 成员 `7→0` | 252 e96 严格达标后释放资源；不构成 e4 否决，全部产物保留，GPU2 外部作业未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0804_09 norm-preserving Householder product-tangent` | STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178；e8 完整 `42.596/47.448` | e8 已交由 178 `0806_03` 以同模型、同全局 batch 续到 e12；原 GPU 已释放 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0806_06 factorized product-tangent e88→e96`（固定 GPU0/1） | COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED；`55.739/62.616`、总和 `118.355` | 三项严格门槛全部通过；checkpoint/检测/TrackEval 完整，GPU0/1/2/3 已释放 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0806_02 log-SPD product-tangent`（动态 GPU0） | STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED；PGID `274434` 成员 `9→0` | 252 e96 严格达标后释放资源；不构成早期否决，全部产物保留 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E1I200/TO_E72；screen/main `2578722/2578723`，iter50 五门槛通过 | e4/e8 仅诊断；完整保留至 e72 同点检测与 TrackEval | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2811863/2811864`，iter50 五门槛通过 | 单因素 96→72 优化器时钟压缩；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E1I250/TO_E72；screen/main `1579744/1579745`，iter50 五门槛通过 | 仅固定 GPU0/1；252 最慢，承担完整训练时钟压缩复验 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E1I200/TO_E72；screen/main `1346508/1346509`，iter50 五门槛通过 | 单卡、只加速 decoder/head 优化；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-08 13:33 CST：开启 decoder e96→e72 收敛压缩主目标
+
+- 新严格保底线要求同一个 epoch-72 checkpoint 的 cls/det HOTA 分别严格超过 Encoder
+  `54.437/62.393`，且绝对和严格超过 `117.830`（相对 Encoder 增量和 `>1.0`）；冲刺线为
+  达到或超过当前 decoder e96 的 `55.739/62.616`、绝对和 `118.355`。当前父线 e72
+  `55.170/62.165`、和 `117.335`，说明主要缺口是 det `0.228` 与总和 `0.495`，不能以
+  e4/e8 直接否决 decoder。
+- 首批四条均保持最终 terminal-only product-tangent 推理模型、数据、loss、全局 batch 与
+  e72 终点不变，参数/state 均为 `22,771,111/711`：99 `0808_01` 仅把全局 LR 从
+  `1e-4` 提到 `1.25e-4`；197 `0808_02` 仅提到 `1.333333e-4`；178 `0808_03` 保持
+  全局 LR，只令 decoder 与 bbox head 的 LR multiplier 为 `4/3`；252 `0808_04` 将全局
+  LR 提到 `4/3`，并按 `72/96` 同步把 warmup `2000→1500` iter、EMA
+  momentum `1e-4→1.333333e-4`/gamma `2000→1500`、Liquid anneal/hard-start
+  `36→27` epoch。所有路线 class-agnostic、无 reweight、无新增推理参数或明显计算量。
+- 隔离提交为 `81aaf00`；四台均从 SHA-256
+  `c8ce37b65df32575435941bcf0537f6a4c29cb55bddadb8934c8826ecff44721` 的完整 bundle
+  建立 clean detached checkout。99 首次克隆因无关 Git LFS 大文件 smudge EOF 保留为
+  `_clone_failed_lfs` 审计目录；其后以跳过无关 LFS 资产的全新 clean clone 完成，不覆盖旧目录。
+- 四台均通过远端 launcher `bash -n`、配置 deepcopy、父子完整模型构建与逐键 state-shape
+  比对；目标与父线均为 `22,771,111` 参数、711 states。真实 smoke 各完成 4 iter，
+  `iter_4.pth` 存在，iterative-cls residual/DN absolute 头已训练，642 个浮点 checkpoint
+  张量全部有限，total/DN/Encoder proposal/grad 全有限。
+- 动态复核后分配 99 GPU0/1、197 GPU0/1、178 GPU0；252 严格固定 GPU0/1，GPU2/3
+  未使用。四条 formal 均已达到真实 iter50：99 loss/grad `21.3299/106.8418`，197
+  `21.3255/107.4264`，178 iter50 已通过且当前 iter200 为 `19.3843/70.2974`，252
+  iter100 `20.1859/112.8898`；screen/进程、GPU 驻留、正式日志更新、iter50 与有限值/fatal
+  扫描五门槛一致，故严格登记 `RUNNING/TO_E72`。
 
 ## 2026-08-06 10:15 CST：252 e96 通过全部严格门槛，释放并行候选
 
