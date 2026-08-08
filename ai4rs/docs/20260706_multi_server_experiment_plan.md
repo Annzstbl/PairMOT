@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 14:25 CST.
+Last updated: 2026-08-08 14:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -56,6 +56,20 @@ config deep copies, remote launcher syntax, and complete parent/target builds
 at 22,771,111 parameters and 711 states. It remains
 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU` and must not preempt the active
 99 run or be reported as running.
+
+At 14:57 CST, all four epoch-4 checkpoints and their complete detection plus
+TrackEval artifacts are closed. The cls/det HOTA pairs for `0808_01/02/03/04`
+are `31.249/38.298`, `33.362/40.192`, `34.176/38.801`, and
+`34.359/41.302`. Every point has 5416 records, 50 sequences, 28 CSVs, 108
+nonempty evaluation files, 50 prediction files, and `async_done=1`; all four
+checkpoints pass the 642-floating-tensor and iterative-cls/DN checks. Coherent
+clock compression is the strongest early strategy. Relative to the direct
+product-tangent epoch-4 parent `35.274/43.849`, its detection DetA improves by
+`1.327` while AssA falls by `8.716`, so the remaining early deficit is
+association stability rather than localization. This is diagnostic only: all
+four formal jobs continue unchanged to epoch 8 and beyond. `0808_05` remains
+the first no-GPU successor and is not promoted to RUNNING without real smoke,
+checkpoint checks, and formal iteration-50 evidence on a released lane.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det

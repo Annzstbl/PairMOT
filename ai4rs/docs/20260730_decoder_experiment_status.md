@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 14:25 CST
+更新时间：2026-08-08 14:59 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E4I150/TO_E72` | 数值稳定；e4/e8 仅诊断。后备 `0808_05` 仅静态就绪、不占 GPU。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E4I500/TO_E72` | 数值稳定；等待 e4 checkpoint、检测与 TrackEval。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E4I500/TO_E72` | 数值稳定；等待 e4 checkpoint、检测与 TrackEval。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E3I1000/TO_E72` | 数值稳定；严格只用 GPU0/1，GPU2/3 未使用。 |
+| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E5I750/TO_E72` | e4 完整 `31.249/38.298`；继续 e8+，不早停。后备 `0808_05` 仅静态就绪。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E6I300/TO_E72` | e4 完整 `33.362/40.192`；继续 e8+，不早停。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E5I800/TO_E72` | e4 完整 `34.176/38.801`；继续 e8+，不早停。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E5I350/TO_E72` | e4 完整 `34.359/41.302`，四线最佳；严格只用 GPU0/1，GPU2/3 未使用。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -76,6 +76,27 @@
 - clean isolated `30cbc71` 已通过配置 deepcopy、launcher 语法及父/子完整构建；参数/state
   均为 `22,771,111/711`。尚未使用 GPU、未做真实 smoke、未建 formal 工作目录，因此只记
   `STATIC_VALIDATED/NO_GPU`，不登记 RUNNING；启动取决于现有四线后续成熟证据与资源释放。
+
+## 2026-08-08 14:57 CST：首批四线 e4 全量闭环
+
+- `0808_01/02/03` 的 e4 cls/det HOTA 分别为 `31.249/38.298`、`33.362/40.192`、
+  `34.176/38.801`；对应 DetA/AssA 为 cls `25.744/40.540`、`27.235/44.499`、
+  `28.092/44.525`，det `32.864/45.670`、`35.690/46.596`、`35.123/44.211`。
+- 三线 pair mAP/AP50 分别为 `0.136265/0.263169`、`0.149637/0.283232`、
+  `0.151597/0.280968`；both-independent 为 `0.178522/0.330828`、
+  `0.192098/0.351060`、`0.199536/0.353928`。每线均有 epoch-4 checkpoint、5416/50
+  检测、28 CSV、108 个非空文件和 `async_done=1`，严格验收器闭环但因早期阈值预期返回 2。
+- 相对直接 product-tangent e4 `35.274/43.849`，三条新线尚无早期 HOTA 优势；但全局
+  `4/3×` 与 decoder/head `4/3×` 的 det DetA 分别高父线 `1.357/0.790`，而 det AssA
+  分别低 `11.504/13.889`。因此当前诊断是更快更新先改善定位、暂时破坏关联稳定；必须看
+  e8/e12 是否回补，不能在 e4 否决 decoder 或学习率策略。
+- 四个 e4 checkpoint 均通过 642 个浮点张量全有限与 iterative-cls/DN 已训练检查；99/197/
+  178/252 的 SHA-256 依次为 `621b7d48…e42ea7`、`c661e739…dc1a70`、
+  `ad6a531a…0e453`、`6cbb726f…cf940`。252 e4 cls/det 为 `34.359/41.302`，DetA/AssA
+  `28.251/43.986` 与 `35.660/49.384`，pair `0.150897/0.278264`，both-independent
+  `0.195096/0.349369`；5416/50、28/108、50 predictions 与 `async_done=1` 全闭环，当前四线
+  最佳。相对父线 det DetA 高 `1.327`、AssA 低 `8.716`，支持完整时钟压缩能够部分保住关联。
+  四线均已进入 e5，252 仍严格固定 GPU0/1，其他资源未超过卡数边界。
 
 ## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
 
