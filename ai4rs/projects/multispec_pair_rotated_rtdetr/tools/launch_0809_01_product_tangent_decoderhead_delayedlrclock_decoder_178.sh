@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO=${PAIRMOT_REPO:-/data1/users/litianhao01/PairMOT_0809_01_decoderhead_delayedlr_178/ai4rs}
+REPO=${PAIRMOT_REPO:-/data1/users/litianhao01/PairMOT_0809_01_decoderhead_delayedlr_178/ai4rs/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_1xb8_72e_hsmot_0809_01_iterative_cls_terminal_transport_product_tangent_decoderhead_delayedlrclock_decoder_178.py
 WORK_DIR=/data4/litianhao/PairMmot/workdir_178/0809_01_final_product_tangent_decoderhead_delayedlrclock_72e_1xb8_fresh
 
