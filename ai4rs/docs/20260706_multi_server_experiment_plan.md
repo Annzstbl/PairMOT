@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 01:37 CST.
+Last updated: 2026-08-09 01:49 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4165,3 +4165,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 当前排序因此保持 197 为全局调度主线，等待其 e28 第二阶段响应；99 继续 e28+ 取得第二个
   切换后成熟点，不因单个 e24 立即停止。252 继续固定 GPU0/1 到 e8/e12+，178 新局部延迟
   LR 继续 e4/e8 诊断及 e12/e16 核心窗口，均不得用早期点否决。
+
+## 2026-08-09 01:49 CST：准备局部延迟 LR + EMA 时钟后备
+
+- `0809_02` 相对 `0809_01` 只有一个新增因素：EMA momentum/gamma 按 96→72 从
+  `1e-4/2000` 改为 `1.333333e-4/1500`，把后期 EMA 记忆长度从约 9.6 epoch 压至
+  7.2 epoch。它保留 e12 后仅 decoder/head `1.4×` 的优化轨迹，模型与推理完全相同。
+- 99 隔离 checkout 已完成 deepcopy、launcher 语法、父/候选完整构建与实际优化器 tag 审计；
+  22,771,111 参数、711 states 不变。首次 LFS 失败副本已安全清理并以 skip-smudge 重建。
+  当前无 smoke/formal 目录且不占 GPU；只有当 99/197 e28 成熟证据支持释放一条双卡资源时，
+  才依次执行真实 DDP smoke、checkpoint 审计和 formal iter50 五门槛。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 01:37 CST。
+更新时间：2026-08-09 01:49 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E25I400/E24_COMPLETE/TO_E72；screen/main `2606264/2606266` | e24 `50.048/58.669`；cls 停滞、低 197 同点总和 `1.599`，继续成熟观察 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E25I400/E24_COMPLETE/TO_E72；screen/main `2606264/2606266` | e24 `50.048/58.669`；cls 停滞、低 197 同点总和 `1.599`；`0809_02` EMA-clock 后备静态就绪但不占卡 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E27I500/E24_COMPLETE/TO_E72；screen/main `3583196/3583197` | e24 `52.091/58.225`；第二阶段已生效，继续 e28 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E4_COMPLETE/TO_E72；screen/main `1642666/1642667` | e4 `31.106/37.307` 仅作诊断，继续 e8/e12+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E2I1000/TO_E72；screen/main `1605754/1605756` | `0808_03` e36 成熟停线后正式接替；GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -4411,3 +4411,14 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
   28 CSV、108 非空文件、50 predictions 与异步完成证据齐全，TrackEval 274.6 秒自然结束。
   main 恢复 e25i400，GPU0/1 合规，GPU2 空闲，fatal=0。
+
+## 2026-08-09 01:49 CST：99 `0809_02` EMA-clock 后备静态就绪
+
+- 新后备在 `0809_01` 局部延迟 LR 上只把 ExpMomentumEMA 的 momentum/gamma 从
+  `1e-4/2000` 压缩为 `1.333333e-4/1500`，不改模型、loss、数据或推理计算，非
+  class-aware、无 reweight。提交 `adf8308` 位于新隔离 clean detached checkout；首次 LFS
+  checkout 失败目录已核准并删除，再以 skip-smudge 重建，存活训练仓库未更新。
+- formal/smoke deepcopy 与 launcher 语法通过；父/候选均为 22,771,111 参数、711 states，
+  state shapes 相同。497 optimizer groups 中 178 组、5,355,864 参数带局部 tag；EMA 配置值
+  审计正确。两个目标 workdir 均不存在，尚无 smoke、checkpoint 或 formal iter50，故状态只为
+  `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，不登记 RUNNING。

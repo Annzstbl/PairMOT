@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 01:37 CST
+更新时间：2026-08-09 01:49 CST
 
 ## 当前研究原则
 
@@ -19,6 +19,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E25I400/E24_COMPLETE/TO_E72` | e24 `50.048/58.669`；det 继续增益但 cls 停滞，低 197 同点总和 `1.599`，保留到更成熟节点。 |
+| 99 后备、不占 GPU | `0809_02 ... decoder/head delayed LR + EMA clock ...` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在 `0809_01` 上压缩 EMA 时钟；隔离 checkout、deepcopy、构建与优化器审计通过，待成熟证据释放资源。 |
 | 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E27I500/E24_COMPLETE/TO_E72` | e24 `52.091/58.225`，距父线仅 `0.387/0.546`；第二阶段已生效，继续 e28。 |
 | 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E2I1000/TO_E72` | e1–e12 保持父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；真实 smoke 与 formal 五门槛通过。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E4_COMPLETE/TO_E72` | e4 `31.106/37.307` 为负的早期诊断；不以 e4 否决，继续 e8/e12+。 |
@@ -6112,3 +6113,20 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
   28 CSV、108 个非空评估文件、50 predictions 与 `async_done=1` 完整；TrackEval 自然耗时
   274.6 秒。正式训练已恢复到 e25 iter400，动态 GPU0/1，GPU2 空闲，fatal=0。
+
+## 2026-08-09 01:49 CST：EMA 时钟单因素后备静态就绪
+
+- `0809_02` 保持 `0809_01` 的模型与 LR 轨迹：e1–e12 全参数父线 LR，之后只给
+  decoder/head `1.4×`。唯一新增因素是把 ExpMomentumEMA 的渐近 momentum 从 `1e-4`
+  调为 `1.333333e-4`、gamma 从 `2000` 调为 `1500`，按 `96/72` 压缩 EMA 样本时钟；
+  其渐近记忆长度约由 9.6 epoch 缩为 7.2 epoch。它不改变模型、loss、数据或推理计算，
+  class-agnostic、无 reweight。
+- 本地提交 `adf8308` 已部署到 99 新隔离 clean detached checkout
+  `/data/users/wangying01/lth/PairMOT_0809_02_decoderhead_delayedlr_emaclock_99/ai4rs`。
+  首次 clone 因仓库缺失 LFS 演示大文件而 checkout 失败；失败目录经绝对路径核准后完整删除，
+  随后用 `GIT_LFS_SKIP_SMUDGE=1` 重建成功，未修改存活 `0808_06` 仓库。
+- formal/smoke config deepcopy、两 launcher `bash -n`、父/候选完整构建通过；两者均为
+  22,771,111 参数、711 state tensors 且 state shapes 完全相同。实际优化器 497 groups 中
+  178 个组、5,355,864 参数带局部 LR tag；EMA 值为 `1.333333e-4/1500`。smoke/formal
+  workdir 均不存在且未占 GPU，严格状态仅 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；是否启动
+  由 99/197 e28 成熟证据决定。
