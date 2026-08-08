@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 20:36 CST
+更新时间：2026-08-08 21:11 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E9I1000/E8_COMPLETE/TO_E72` | e8 完整 `42.129/46.937`，早期 AP 与 HOTA 均弱于父线；首次升 LR 仍在 e12，继续 e12/e16，不以 e8 否决。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E9I600/E8_COMPLETE/TO_E72` | e8 完整 `40.206/46.565`，e4 的小优势未延续；e12/e24 才分阶段升 LR，继续成熟观察。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E23I1000/E20_COMPLETE/TO_E72` | e20 `50.513/57.931`，较 e16 双升且只低父线 `1.685/0.201`；当前最强，优先闭环 e24。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E21I350/E20_COMPLETE/TO_E72` | e20 `49.772/57.365`，较 e16 双升但仍低父线 `2.426/0.767`；继续 e24+。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E11I950/E8_COMPLETE/TO_E72` | e8 完整 `42.129/46.937`，早期 AP 与 HOTA 均弱于父线；首次升 LR 在 e12，优先闭环 e12/e16，不以 e8 否决。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E11I850/E8_COMPLETE/TO_E72` | e8 完整 `40.206/46.565`，e4 的小优势未延续；e12/e24 分阶段升 LR，优先闭环 e12/e16。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E25I250/E24_COMPLETE/TO_E72` | e24 `51.215/58.367`，较 e20 双升且相对父线差距收窄至 `1.263/0.404`；当前最强，继续 e28+。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E23I100/E20_COMPLETE/TO_E72` | e20 `49.772/57.365`，较 e16 双升但仍低父线 `2.426/0.767`；继续闭环 e24+。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
@@ -5856,3 +5856,22 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   workdir 均不存在，无进程或 GPU 使用，故严格只登记 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`。
   等 197 `0808_02` e16 同 checkpoint 完整评测后，再决定是否释放资源执行真实 smoke；不得
   用静态构建替代五项动态门槛。
+
+## 2026-08-08 21:11 CST：178 decoder/head-only e24 继续收窄父线差距
+
+- `0808_03` e24 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `51.215/42.178/64.593`，det 为 `58.367/50.939/69.202`，绝对和 `109.582`。相对自身
+  e20 双升 `0.702/0.436`；相对直接 product-tangent 父线 e24 `52.478/58.771` 只低
+  `1.263/0.404`，联合差距由 e20 的 `1.886` 继续收窄到 `1.667`。这是当前最强成熟策略，
+  保留到 e28+，不能在仍持续恢复时释放。
+- pair mAP/AP50 为 `0.279480/0.475666`，both-independent 为
+  `0.320369/0.520240`，四项均高于自身 e20 的 `0.276800/0.471258` 与
+  `0.318240/0.516288`；DetA、AssA 与 AP 同向改善，未见用关联换检测或反向退化。
+- 397,671,732-byte `epoch_24.pth` 的 SHA-256 为
+  `525b3dd347dfc7da31e7175c76ed86d93069d9bfa16f0702c8fbf5f3b04f8725`；meta
+  `24/24912`，model/EMA 分别 711/712 keys、各 642 个浮点张量全有限，iterative-cls 与
+  DN 状态已训练。检测为 5416 records/50 sequences；TrackEval 产生 28 CSV、108 个非空
+  文件和 50 个非空 predictions，耗时 255.9 秒自然结束，统一验收器按未达 e72 的预期返回 2。
+- 正式训练已恢复到 e25 iter500，动态只使用 GPU0；GPU1 的外部占用在现场审计间有波动，
+  但从未被本目标使用。本目标没有越界扩卡。同期 99/197 进入 e12、252 到 e23，下一批优先闭环 99/197 e12 与
+  首次 LR 切换后的 e16，以及 252 e24。

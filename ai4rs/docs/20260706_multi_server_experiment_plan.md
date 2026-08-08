@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 20:36 CST.
+Last updated: 2026-08-08 21:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4018,3 +4018,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 下一决策优先级固定为：先闭环 178 e24，随后收集 99/197 e12 及其首次 LR 切换后的 e16，
   再比较 252 e24。当前不启动静态 Adam 时钟候选，也不增加模型层、类别感知或 reweight；
   若后续确需接替，只考虑由 DetA/AssA/AP 证据支持的单因素、零推理开销调度。
+
+## 2026-08-08 21:11 CST：decoder/head-only e24 仍是主候选
+
+- 178 `0808_03` e24 cls/det HOTA 为 `51.215/58.367`，DetA/AssA 为
+  `42.178/64.593` 与 `50.939/69.202`。相对自身 e20 双升 `0.702/0.436`，相对直接
+  product-tangent 父线 e24 `52.478/58.771` 的联合差距从 `1.886` 继续收窄到
+  `1.667`；pair 与 both-independent AP 四项也全部提升。因此它继续占用 178 GPU0 到
+  e28+，不因尚未到目标成熟度而换线。
+- checkpoint 有限性、iterative-cls/DN、5416/50 检测、28/108 TrackEval 与 50 predictions
+  已完整闭环；训练恢复到 e25。该候选只改变 decoder/bbox-head 的训练 LR multiplier，最终
+  推理模型、参数量与计算量不变，符合非 class-aware、无 reweight 的限制。
+- 接下来按信息价值排序：先收 99/197 e12，继续到首次 LR 调整后的 e16 观察响应；同时收
+  252 e24，并延续 178 e28+。在四条合法资源均健康运行时不启动静态 Adam 候选，也不抢占
+  外部 GPU；只有成熟轨迹明确失效并释放资源后，才验证下一单因素策略的五项动态门槛。
