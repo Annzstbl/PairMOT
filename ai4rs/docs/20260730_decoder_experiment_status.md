@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 16:21 CST
+更新时间：2026-08-08 17:46 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E10I100/TO_E72` | e8 完整 `43.047/50.080`；`0808_06` 为第一静态后备。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E11I250/TO_E72` | e8 完整 `44.177/50.218`，当前四线最佳和；继续 e12+。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E10I200/TO_E72` | e8 完整 `44.233/49.984`；继续 e12+。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E9I350/TO_E72` | e8 完整 `42.943/49.685`；严格只用 GPU0/1，GPU2/3 未使用。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | e1 iter50 五门槛通过；前 12 epoch 保持父线 LR，随后升至 `1.4e-4`。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E16I150/TO_E72` | e12 完整 `47.147/54.337`，det 缺口较 e8 明显收窄；继续 e16+。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E14I600/TO_E72` | e12 完整 `47.998/55.163`，四线最强成熟点；继续 e16+。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E13I150/TO_E72` | e12 完整 `47.539/54.477`，成熟四线第二；严格只用 GPU0/1，继续 e16+。 |
+| 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -5652,3 +5653,44 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
 - pair mAP/AP50 `0.1898/0.3386`、both-independent `0.2370/0.4073`，375,532,775-byte
   checkpoint、5416/50、28 CSV、108 文件与异步完成证据齐全。e8 只登记中期负信号；动态
   GPU2/3、PGID `1016336` 已进入 e9，继续 e12 后再作成熟判定，GPU0/1 外部任务不动。
+
+## 2026-08-08 17:25 CST：三条快资源 e12 成熟分流
+
+- 197 `0808_02` e12 cls HOTA/DetA/AssA 为 `47.147/37.813/62.011`，det 为
+  `54.337/48.809/62.587`；pair mAP/AP50 `0.241215/0.428460`，both-independent
+  `0.282467/0.478276`。相对直接 product-tangent 父线 e12 `49.784/56.243` 仍低
+  `2.637/1.906`，但 det 缺口已由 e8 的 `3.704` 收窄，且 cls AssA 高父线 `0.496`；
+  因此保留动态 GPU0/1 到 e16/e72，不按 e12 单点停止。
+- 178 `0808_03` e12 为 cls `47.998/40.190/59.892`、det `55.163/49.761/63.220`；
+  pair `0.264565/0.457265`，both-independent `0.308771/0.508690`。相对父线 HOTA 只低
+  `1.786/1.080`，det DetA 仅低 `0.260`，pair mAP 反高 `0.003`，是当前最强成熟候选；
+  动态 GPU0 继续 e16/e72。
+- 99 `0808_01` e12 为 cls `45.078/37.002/57.264`、det `53.335/47.145/62.637`；
+  pair `0.231580/0.408462`，both-independent `0.273380/0.462161`，相对父线 HOTA 低
+  `4.706/2.908`。e4/e8/e12 三个完整 checkpoint、检测与 TrackEval 节点均弱于 197/178，
+  故精确 TERM PGID `2578723`，成员 `23→0`，screen 消失且 GPU0/1 回到 10 MiB；这是
+  成熟三节点停止，不是以 e4/e8 直接否决。三个 e12 checkpoint 均通过有限性与
+  iterative-cls/DN 语义审计，197/178/99 SHA-256 分别为
+  `2c72058e…e925`、`af544b33…e6bc`、`e1c07ff6…9ed`。
+- 252 `0808_04` e12 为 cls `47.539/40.233/58.344`、det `54.477/49.370/62.125`，
+  同点和 `102.016`，成熟四线仅次于 178；pair `0.255269/0.445445`、both-independent
+  `0.301642/0.501309`。相对父线 HOTA 低 `2.245/1.766`，但 e8→e12 总和恢复 `9.388`，
+  为四线最大。381,031,798-byte checkpoint SHA-256 `5b9f67a6…e4a0`，642 个浮点 tensor
+  全有限且 iterative-cls/DN 已训练；5416/50、28 CSV、108 非空文件、50 predictions 与
+  `async_done=1` 完整，统一验收器按预期返回 2。固定 GPU0/1 继续 e16/e72，GPU2/3 未用。
+
+## 2026-08-08 17:43 CST：延迟升 LR 候选通过正式五门槛
+
+- 99 释放后，`0808_06` 在动态 GPU0/1 完成真实四步 DDP smoke：loss
+  `12.9372/19.4567/19.5708/21.1591`、grad
+  `102.8954/87.2210/79.9080/80.0173`，DN 与 Encoder proposal 全有限。364,512,886-byte
+  checkpoint SHA-256 `8ed6ff4f…6eaa`，642 个浮点 tensor 全有限，iterative-cls/DN 已训练。
+- 三次 formal 尝试都在模型训练前退出，仅留下 144-byte `launch.log`，无 checkpoint、无 GPU
+  占用。复核确认根因是 test GMC 路径把 Linux 大小写敏感的 `PairMOT` 误写为 `PairMmot`，
+  不是训练不稳定或共享盘随机故障。失败目录全部保留；提交 `169f5f2` 增加最多 30 秒的共享
+  目录可见性重试，`f701e73` 修正路径，均通过本地/远端 `bash -n`，推理和训练配置未改变。
+- clean detached `f701e73` 在 fresh formal 目录启动；screen/main
+  `2606264/2606266`，GPU0/1 各约 19.2 GiB。e1 iter50 的 LR/loss/grad 为
+  `2.5488e-6/21.4017/134.7102`，total、DN、Encoder proposal 全有限，traceback/OOM/NaN/
+  NCCL/DDP fatal=0；会话/双 rank、目标 GPU、正式目录/日志、iter50 与有限值五门槛齐全，
+  严格登记 `RUNNING/TO_E72`。它前 12 epoch 完全保留父线关联形成时钟，e4/e8 仍只作诊断。

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 16:21 CST。
+更新时间：2026-08-08 17:46 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E10I100/TO_E72；screen/main `2578722/2578723` | e8 完整 `43.047/50.080`；`0808_06` 为第一静态后备、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E11I250/TO_E72；screen/main `2811863/2811864` | e8 完整 `44.177/50.218`，四线最佳总和；继续 e12+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E9I350/TO_E72；screen/main `1579744/1579745` | e8 完整 `42.943/49.685`；严格仅 GPU0/1，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E10I200/TO_E72；screen/main `1346508/1346509` | e8 完整 `44.233/49.984`；继续 e12+，不早停 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2606264/2606266` | `0808_01` e12 成熟停止后接替；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E16I150/TO_E72；main `2811864` | e12 完整 `47.147/54.337`，继续 e16+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E13I150/TO_E72；main `1579745` | e12 完整 `47.539/54.477`，成熟四线第二；继续 e16+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E14I600/TO_E72；main `1346509` | e12 完整 `47.998/55.163`，当前最强成熟点；继续 e16+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
@@ -4063,3 +4063,40 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `32.595/48.019` 与 `41.869/48.825`；相对原 decoder e8 `-3.571/-3.658`，相对 position/product
   e8 `-3.488/-3.645`。pair mAP/AP50 `0.1898/0.3386`、both-independent `0.2370/0.4073`，
   checkpoint、5416/50/28/108 和异步完成证据完整；PGID `1016336` 继续 e12，不以 e8 早停。
+
+## 2026-08-08 17:25 CST：e12 成熟审计与 99 资源交接
+
+- 197 `0808_02` e12 完整 `47.147/54.337`，DetA/AssA 为 cls
+  `37.813/62.011`、det `48.809/62.587`；pair `0.241215/0.428460`、both-independent
+  `0.282467/0.478276`。det 对父线缺口较 e8 收窄，main PGID `2811864` 继续动态 GPU0/1，
+  当前 e16 iter150，formal 数值有限、fatal=0。
+- 178 `0808_03` e12 完整 `47.998/55.163`，DetA/AssA 为 cls
+  `40.190/59.892`、det `49.761/63.220`；pair `0.264565/0.457265`、both-independent
+  `0.308771/0.508690`，为当前最强成熟点。main PGID `1346509` 继续动态 GPU0，当前
+  e14 iter600；GPU1 未使用。
+- 99 `0808_01` e12 完整 `45.078/53.335`，DetA/AssA 为 cls
+  `37.002/57.264`、det `47.145/62.637`；pair `0.231580/0.408462`、both-independent
+  `0.273380/0.462161`。e4/e8/e12 三节点均明显弱于 197/178 后精确 TERM PGID
+  `2578723`，成员 `23→0`、screen 消失、GPU0/1 归零；产物保留，状态
+  `STOPPED/E12/MATURE_STRICT_FAIL`，不是 e4/e8 早停。
+- 252 `0808_04` e12 完整 `47.539/54.477`，DetA/AssA 为 cls
+  `40.233/58.344`、det `49.370/62.125`；pair `0.255269/0.445445`、both-independent
+  `0.301642/0.501309`。381,031,798-byte checkpoint SHA-256 `5b9f67a6…e4a0`，642 个
+  浮点 tensor 全有限且 iterative-cls/DN 已训练；5416/50、28 CSV、108 非空文件、50
+  predictions 与 `async_done=1` 完整。e8→e12 总和恢复 `9.388` 为四线最大，main
+  `1579745` 继续固定 GPU0/1 到 e16/e72，GPU2/3 为 1 MiB。
+
+## 2026-08-08 17:43 CST：99 启动 0808_06 delayed LR clock
+
+- 释放后的动态 GPU0/1 完成 `0808_06` 四步真实 DDP smoke，四个 loss/grad、DN、Encoder
+  proposal 全有限；364,512,886-byte checkpoint 的 642 个浮点张量、iterative-cls/DN
+  语义与错误扫描通过，GPU 随后归零。
+- 三次 formal 启动在训练前失败，均只有 144-byte `launch.log`、无 checkpoint 或 GPU 占用；
+  根因最终定位为 test GMC 路径大小写错误 `PairMmot`，正确目录为 `PairMOT` 且含 5416 文件。
+  三个失败目录均保留归档。`169f5f2` 增加 30 次共享目录重试，`f701e73` 修正路径；远端隔离
+  checkout clean、launcher 语法与两个 GMC 缓存重新通过，未热更新任何存活训练仓库。
+- fresh workdir
+  `/data4/litianhao/PairMmot/workdir_99/0808_06_final_product_tangent_delayedlrclock_72e_2xb4_fresh`
+  的 screen/main 为 `2606264/2606266`；e1 iter50 LR/loss/grad
+  `2.5488e-6/21.4017/134.7102`，双 rank、GPU0/1 各约 19.2 GiB、正式日志与有限
+  total/DN/Encoder、fatal=0 五门槛通过。登记 `RUNNING/TO_E72`；GPU2 保持 10 MiB。

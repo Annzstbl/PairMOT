@@ -3922,3 +3922,20 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   “e16 后持续下行”的单点外推，因此保留 178 当前动态 GPU0 到 e24，不提前切 product-tangent。
 - e24 若继续缩小对 Encoder/原 decoder 的双侧差距，则延长强线；若恢复停滞，再结合 center/shape
   的 e8/e12 选择 product-tangent 接替，仍不做 scale、reweight、class-aware 或计算堆叠。
+
+## 2026-08-08 17:43 CST：e72 收敛压缩进入成熟分流
+
+- 197 全局 LR `4/3×` 与 178 decoder/head LR `4/3×` 的 e12 分别为
+  `47.147/54.337`、`47.998/55.163`；两者相对 e8 均恢复，178 的 det DetA 已接近父线，
+  因此保留到 e16/e72。99 全局 LR `1.25×` e12 `45.078/53.335` 在完整 e4/e8/e12
+  窗口后仍显著较弱，已成熟停止并释放双卡；不是以 e4/e8 直接否决。
+- 释放资源优先给延迟升 LR 的 `0808_06`：前 12 epoch 保持父线 `1e-4`，随后升至
+  `1.4e-4`，不改变最终 product-tangent 推理模型、参数、loss、EMA、Liquid 或数据。
+  真实 DDP smoke/checkpoint 通过后，formal 启动暴露 test GMC 路径大小写错误；失败目录保留，
+  仅修正物理路径并增加有界可见性重试，未改变科学配置。
+- clean `f701e73` fresh formal 已在 99 动态 GPU0/1 达到 e1 iter50，loss/grad
+  `21.4017/134.7102`，DN/Encoder 与进程、GPU、正式日志、fatal=0 五门槛齐全。继续收集
+  e4/e8/e12 诊断与 e16+ 成熟轨迹，最终只用同一 e72 checkpoint 的 cls、det 和总和验收。
+- 252 的完整时钟压缩线 e12 已完整闭环为 `47.539/54.477`，总和 `102.016`；e8→e12
+  恢复 `9.388` 为四线最大，且成熟和仅次于 178。固定 GPU0/1 因此继续 e16/e72；GPU2/3
+  继续不用于本目标，不因资源较慢提前截断仍在恢复的候选。
