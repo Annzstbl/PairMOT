@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 02:59 CST.
+Last updated: 2026-08-09 03:25 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4206,3 +4206,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 保持 178 的不压缩 EMA 与 99 的压缩 EMA 两条正交局部延迟轨迹同时前进；只有成熟节点在
   HOTA/DetA/AssA/AP 上形成支配，才释放其中较弱资源。197/252 也分别等 e32/e12+，避免用
   未完成核心干预的节点过早换线。
+
+## 2026-08-09 03:25 CST：197 e32 后继续 e36
+
+- 197 e32 相对直接父线同点 cls `-0.237`、det `+0.362`、sum `+0.125`，已不再是成熟全组
+  支配关系；其 det AssA 有真实增益但 cls AssA、DetA 与 AP 仍低。继续到 e36 检验是否转为
+  双侧成熟收益，不释放双卡，也不把小幅总和领先误报为 e72 达标。
+- 近期顺序调整为：178 e8 完整检测/TrackEval → 252 e12 → 197 e36；99/178 两条 EMA
+  正交线按 e4/e8 诊断、e12 边界和 e16 首个干预窗口推进。若 197 e36 重新被父线和局部延迟线
+  在 HOTA/DetA/AssA/AP 成熟支配，再精确释放 197 给下一单因素候选。

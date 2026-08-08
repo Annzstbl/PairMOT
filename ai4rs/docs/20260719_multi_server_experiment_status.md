@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 02:59 CST。
+更新时间：2026-08-09 03:25 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0809_02 decoder/head delayed LR + EMA clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2652052/2652054` | `0808_06` e28 成熟停线后接替；真实 smoke/checkpoint/formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E32I350/E28_COMPLETE/TO_E72；screen/main `3583196/3583197` | e28 `52.580/58.980`，几乎复现父线但无提前量，闭环 e32 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E10I650/E8_COMPLETE/TO_E72；screen/main `1642666/1642667` | e8 `40.166/47.240` 为负诊断但快速恢复；继续 e12+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E7I400/E4_COMPLETE/TO_E72；screen/main `1605754/1605756` | e4 `32.955/41.857` 仅作诊断；继续 e8/e12/e16，GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0809_02 decoder/head delayed LR + EMA clock`（动态 GPU0/1） | RUNNING/E2I550/TO_E72；screen/main `2652052/2652054` | `0808_06` e28 成熟停线后接替；真实 smoke/checkpoint/formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E33I700/E32_COMPLETE/TO_E72；screen/main `3583196/3583197` | e32 `53.072/59.682`，总和高父线同点 `0.125`，继续 e36 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E12I50/E8_COMPLETE/TO_E72；screen/main `1642666/1642667` | e8 `40.166/47.240` 为负诊断但快速恢复；继续 e12+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E8_VAL/E4_COMPLETE/TO_E72；screen/main `1605754/1605756` | e8 checkpoint 已生成并在完整检测；仍只作 LR 切换前诊断，GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4458,3 +4458,15 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   张量与 iterative-cls/DN 审计通过。fresh formal screen/main `2652052/2652054` 到 e1i50，
   loss/grad `21.4247/94.6118`，双 rank、GPU0/1、正式日志、total/DN/Encoder 与 fatal=0
   五门槛齐全，正式登记 RUNNING；GPU2 保持空闲。
+
+## 2026-08-09 03:25 CST：197 e32 由复现父线转为小幅总和领先
+
+- 197 e32 cls/det `53.072/59.682`、sum `112.754`，较 e28 双升 `0.492/0.702`；相对
+  直接父线同点为 `-0.237/+0.362`，总和高 `0.125`。det AssA 高父线 `1.359`，但 cls AssA、
+  双 DetA 和四项 AP 仍低；因此保留到 e36 检验收益能否从 det 关联扩展到 cls/AP。
+- checkpoint 408,504,743 bytes、SHA-256
+  `67c4abde9c1d8a04374df24d5ef0dcbe73b7eb6e9c1c5cb6b7177b28d1da937f`；642 浮点
+  张量有限、iterative-cls/DN 已训练，5416/50、28/108/50 完整，TrackEval 340.2 秒。
+  训练恢复 e33i700，动态 GPU0/1、fatal=0。
+- 178 e8 checkpoint 已生成并在单卡完整检测；其干预尚未在 e12 触发，继续只作诊断。
+  252 已进入 e12，99 EMA 候选到 e2；四台机器均保持授权卡数。
