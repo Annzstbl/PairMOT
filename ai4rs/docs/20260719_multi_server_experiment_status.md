@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 01:12 CST。
+更新时间：2026-08-09 01:37 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E24/E20_COMPLETE/TO_E72；screen/main `2606264/2606266` | 正在完成 e24，随后同点比较 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E25I850/E24_COMPLETE/TO_E72；screen/main `3583196/3583197` | e24 `52.091/58.225`；第二阶段已生效，继续 e28 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E25I400/E24_COMPLETE/TO_E72；screen/main `2606264/2606266` | e24 `50.048/58.669`；cls 停滞、低 197 同点总和 `1.599`，继续成熟观察 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E27I500/E24_COMPLETE/TO_E72；screen/main `3583196/3583197` | e24 `52.091/58.225`；第二阶段已生效，继续 e28 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E4_COMPLETE/TO_E72；screen/main `1642666/1642667` | e4 `31.106/37.307` 仅作诊断，继续 e8/e12+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E1I50/TO_E72；screen/main `1605754/1605756` | `0808_03` e36 成熟停线后正式接替；GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E2I1000/TO_E72；screen/main `1605754/1605756` | `0808_03` e36 成熟停线后正式接替；GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4397,3 +4397,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   `43.546/64.231` 与 `51.554/68.041`；较 e20 双升 `1.441/1.781`，距父线 e24 仅
   `0.387/0.546`。checkpoint 397,524,007 bytes、SHA-256 `2b76c0d2...73213a9`，有限性与
   评估产物完整；e25 已使用第二阶段 `1.4491e-4`，继续到 e28。
+
+## 2026-08-09 01:37 CST：99 e24 全量闭环与同点判定
+
+- `0808_06` e24 cls HOTA/DetA/AssA `50.048/41.868/61.903`，det
+  `58.669/51.219/69.684`，sum `108.717`；较 e20 为 `+0.000/+0.784`。pair mAP/AP50
+  `0.272209/0.474497`，both-independent `0.314667/0.523701`。
+- 相对 197 分阶段 LR e24，99 cls 低 `2.043`、det 高 `0.444`、sum 低 `1.599`；相对直接父线
+  e24 `52.478/58.771` 低 `2.430/0.102`。一次性全局跳变的 det AssA 收益没有带动 cls，
+  因而当前优先级低于 197，但仍保留到 e28+ 形成第二个切换后成熟点。
+- `epoch_24.pth` 为 397,581,174 bytes，SHA-256
+  `0596a12c145c668438ba9597af77d011c6cf2370421bba44041d5d19da36795b`，meta
+  `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
+  28 CSV、108 非空文件、50 predictions 与异步完成证据齐全，TrackEval 274.6 秒自然结束。
+  main 恢复 e25i400，GPU0/1 合规，GPU2 空闲，fatal=0。

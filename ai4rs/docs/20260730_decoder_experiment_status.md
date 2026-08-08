@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 01:12 CST
+更新时间：2026-08-09 01:37 CST
 
 ## 当前研究原则
 
@@ -18,9 +18,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E24/E20_COMPLETE/TO_E72` | e20 `50.048/57.885`；正在完成 e24，同点后与 197 比较。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E25I850/E24_COMPLETE/TO_E72` | e24 `52.091/58.225`，距父线仅 `0.387/0.546`；第二阶段已生效，继续 e28。 |
-| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | e1–e12 保持父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；真实 smoke 与 formal 五门槛通过。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E25I400/E24_COMPLETE/TO_E72` | e24 `50.048/58.669`；det 继续增益但 cls 停滞，低 197 同点总和 `1.599`，保留到更成熟节点。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E27I500/E24_COMPLETE/TO_E72` | e24 `52.091/58.225`，距父线仅 `0.387/0.546`；第二阶段已生效，继续 e28。 |
+| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E2I1000/TO_E72` | e1–e12 保持父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；真实 smoke 与 formal 五门槛通过。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E4_COMPLETE/TO_E72` | e4 `31.106/37.307` 为负的早期诊断；不以 e4 否决，继续 e8/e12+。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
@@ -6095,3 +6095,20 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `2b76c0d2c26a079d43f5df3622f43ef79c0fa65fc8f9bde32ee73f19773213a9`；642 浮点张量
   全有限、iterative-cls/DN 已训练，5416/50、28/108/50 完整。formal 已恢复 e25 iter850、
   动态 GPU0/1，fatal=0；其他四卡空闲。
+
+## 2026-08-09 01:37 CST：99 一次性延迟 LR e24 全量闭环
+
+- 99 `0808_06` e24 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `50.048/41.868/61.903`，det 为 `58.669/51.219/69.684`，绝对和 `108.717`。相对 e20
+  cls 为 `+0.000`、det 为 `+0.784`；det AssA 继续增加，但 cls HOTA 完全停滞，说明 e12
+  一次性全局 `1.4×` 跳变更偏向 det 关联，尚未恢复 cls/定位。
+- 同点比较中，它低 197 分阶段 LR e24 `2.043/-0.444`，总和低 `1.599`；相对直接
+  product-tangent 父线 e24 `52.478/58.771` 为 `-2.430/-0.102`、总和低 `2.532`。pair
+  mAP/AP50 为 `0.272209/0.474497`，both-independent 为 `0.314667/0.523701`；检测 AP
+  较 e20 上升，但未转化为 cls HOTA。该线不作为当前主候选，不过仅一个切换后成熟点不足以
+  精确停线，继续收集 e28+，不涉及 e4/e8 早停。
+- 397,581,174-byte `epoch_24.pth` 的 SHA-256 为
+  `0596a12c145c668438ba9597af77d011c6cf2370421bba44041d5d19da36795b`，meta 为
+  `24/24912`；model/EMA 各 642 个浮点张量全有限，iterative-cls/DN 已训练。5416/50、
+  28 CSV、108 个非空评估文件、50 predictions 与 `async_done=1` 完整；TrackEval 自然耗时
+  274.6 秒。正式训练已恢复到 e25 iter400，动态 GPU0/1，GPU2 空闲，fatal=0。

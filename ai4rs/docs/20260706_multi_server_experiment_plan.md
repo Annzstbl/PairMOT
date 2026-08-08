@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 01:12 CST.
+Last updated: 2026-08-09 01:37 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -24,7 +24,8 @@ Four inference-identical training strategies currently occupy the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
 epoch 12. Dynamic-197 GPU0/1 runs `0808_07`, which keeps the parent LR through
 epoch 11 and stages two smaller increases at epochs 12 and 24. Dynamic-178 GPU0
-runs `0808_03` with only decoder and bbox-head LR multipliers `4/3`; fixed-252
+now runs `0809_01`, which keeps the parent trajectory through epoch 12 and then
+raises only decoder/head LR to `1.4x`; fixed-252
 GPU0/1 now runs `0808_08`, which retains that successful local LR and compresses
 Adam memory only for decoder/head parameter groups. All retain 72 epochs, the
 same global batch, data, losses, 22,771,111 parameters and 711 model states;
@@ -4154,3 +4155,13 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 近期顺序为：99 e24 同点闭环 → 252 e8 → 197 e28 → 178 `0809_01` e4/e8 诊断和 e12
   边界。四路都继续以同 checkpoint 的 HOTA/DetA/AssA/AP、有限 checkpoint 和完整 TrackEval
   决策，任何 e4/e8 结果都不直接否决 decoder。
+
+## 2026-08-09 01:37 CST：一次性全局延迟 LR e24 判定
+
+- 99 `0808_06` e24 为 `50.048/58.669`，较 e20 `+0.000/+0.784`；cls 停滞而 det AssA
+  继续上升。相对 197 分阶段 LR 同点 cls 低 `2.043`、det 高 `0.444`、sum 低 `1.599`，
+  相对直接父线 sum 低 `2.532`。checkpoint、有限性、5416/50、28/108/50 和异步 TrackEval
+  均已闭环。
+- 当前排序因此保持 197 为全局调度主线，等待其 e28 第二阶段响应；99 继续 e28+ 取得第二个
+  切换后成熟点，不因单个 e24 立即停止。252 继续固定 GPU0/1 到 e8/e12+，178 新局部延迟
+  LR 继续 e4/e8 诊断及 e12/e16 核心窗口，均不得用早期点否决。
