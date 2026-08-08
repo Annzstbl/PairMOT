@@ -33,7 +33,7 @@ mkdir -p "${WORK_DIR}"
 cd "${REPO}"
 test -f /data4/litianhao/PairMmot/pretrained_weights/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/pair_coco_adapted_pretrain.pth
 require_dir_with_retry /data/users/wangying01/lth/PairMOT/workdir/aux/gmc_cache/hsmot_train_gap1
-require_dir_with_retry /data/users/wangying01/lth/PairMmot/workdir/aux/gmc_cache/hsmot_test_gap1
+require_dir_with_retry /data/users/wangying01/lth/PairMOT/workdir/aux/gmc_cache/hsmot_test_gap1
 : "${PAIRMOT_CUDA_VISIBLE_DEVICES:?set two currently free 99 GPU indices}"
 export CUDA_VISIBLE_DEVICES=${PAIRMOT_CUDA_VISIBLE_DEVICES}
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
