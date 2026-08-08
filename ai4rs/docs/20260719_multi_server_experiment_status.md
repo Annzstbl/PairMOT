@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 19:11 CST。
+更新时间：2026-08-08 19:24 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E5I650/E4_COMPLETE/TO_E72；screen/main `2606264/2606266` | e4 `31.479/38.507` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E4I850/TO_E72；screen/main `3583196/3583197` | `0808_02` e16 成熟停止后接替；五门槛通过 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E17I300/E16_COMPLETE/TO_E72；main `1579745` | e16 `48.631/56.237`，继续 e20/e24+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E19I400/TO_E72；main `1346509` | e16 完整 `49.515/56.831`，保持双升并继续 e20/e24+ | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E6I350/E4_COMPLETE/TO_E72；screen/main `2606264/2606266` | e4 `31.479/38.507` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E5I350/E4_COMPLETE/TO_E72；screen/main `3583196/3583197` | e4 `31.568/40.475` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E18I50/E16_COMPLETE/TO_E72；main `1579745` | e16 `48.631/56.237`，继续 e20/e24+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E20I250/TO_E72；main `1346509` | e16 完整 `49.515/56.831`，保持双升并继续 e20/e24+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -42,6 +42,18 @@
   `ec2df1f9a36ab1fa7028e5d03be65b6375c2753ed3b4c83a2731d1c080367786`；5416/50、
   28 CSV、108 文件、50 predictions 闭合，TrackEval 耗时 251.2 秒。正式线已到 e5 iter650，
   动态 GPU0/1 运行，GPU2 未触碰。
+
+## 2026-08-08 19:24 CST：197 分阶段延迟-LR e4 闭环
+
+- 197 `0808_07` e4 cls HOTA/DetA/AssA `31.568/25.863/41.490`，det
+  `40.475/33.355/50.267`，sum `72.043`；pair mAP/AP50
+  `0.136393/0.257404`，both-independent `0.177854/0.325145`。相对父线 e4 仍低
+  `3.706/3.374`，但比 99 `0808_06` 同点高 `0.089/1.968`。仅作早期稳定性诊断，
+  不能在 e4 否决，继续 e8/e12 与 e12 后的首次 LR 提升。
+- 197 e4 checkpoint 为 369,976,295 bytes，SHA-256
+  `72ed271d3467a66c5a0e93b1890b0b488df798c0cd9ca3bd06234cd5851a1b30`；5416/50、
+  28 CSV、108 个非空文件、50 predictions 完整，TrackEval 283.5 秒自然结束。正式线已恢复
+  e5 iter350，动态 GPU0/1 运行，GPU2–5 空闲。
 
 ## 2026-08-08 18:39 CST：178 `0808_03` e16 全量闭环并继续
 
