@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 23:41 CST。
+更新时间：2026-08-08 23:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E19I650/E16_COMPLETE/TO_E72；screen/main `2606264/2606266` | e16 `48.335/55.763`；闭环 e20 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E20I850/E16_COMPLETE/TO_E72；screen/main `3583196/3583197` | e16 `48.551/55.024`；闭环 e20/e24 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `1642666/1642667` | formal 五门槛通过；e4/e8 仅诊断，继续成熟节点；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E33I100/E28_COMPLETE/TO_E72；main `1346509` | e28 `52.850/59.702`，双超父线且总和领先 `0.925`；等待 e32 评估 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E33I350/E32_COMPLETE/TO_E72；main `1346509` | e32 `51.872/59.521`，单点同步回撤；继续 e36 验证恢复 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -4317,3 +4317,18 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   iter50，LR/loss/grad `2.5488e-6/21.4287/120.2927`，双卡约 19.2 GiB 满载、正式日志更新、
   fatal=0，五项门槛通过后登记 `RUNNING/TO_E72`。现场 99 e19i650、197 e20i850、178
   e33i100，全部在合法卡数内。
+
+## 2026-08-08 23:45 CST：178 `0808_03` e32 完整闭环
+
+- e32 cls HOTA/DetA/AssA `51.872/43.247/64.217`，det
+  `59.521/51.622/70.992`，sum `111.393`；相对自身 e28 为 `-0.978/-0.181`，四个
+  DetA/AssA 分量及 pair/both AP 均回撤。pair mAP/AP50 `0.2943/0.4987`，
+  both-independent `0.3343/0.5405`。
+- 相对直接父线 e32 `53.309/59.320`，cls 低 `1.437`、det 高 `0.201`；det AssA 高
+  `2.011`、DetA 低 `1.200`，局部加速仍保留关联优势但定位/AP 未同步。单个 e32 回撤不覆盖
+  e28 的同点双超成熟证据，故继续 e36，而不是以一节点停止。
+- checkpoint 408,728,116 bytes，SHA-256
+  `38aaa4f56fce98a9300c6c8926d6c7983ce1495274b92be671ae8e3db84fdd3f`，meta
+  `32/33216`；model/EMA 711/712 keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
+  5416/50、28 CSV、108 非空文件、50 predictions 闭环，TrackEval 268.7 秒。main
+  `1346509` 已恢复 e33 iter350，只用 GPU0。

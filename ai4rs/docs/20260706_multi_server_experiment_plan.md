@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 23:41 CST.
+Last updated: 2026-08-08 23:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4091,3 +4091,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 当前收集顺序为：178 e32 全量检测/TrackEval，99/197 e20，同步保留 252 `0808_08` 到
   e4/e8 诊断和 e12/e16+ 成熟响应。e4/e8 不作直接否决；新结构只在成熟节点证明当前局部
   optimizer clock 失效后再设计，避免继续扩展无证据的全局调度。
+
+## 2026-08-08 23:45 CST：178 e32 回撤但关联机制未消失
+
+- decoder/head-only e32 为 `51.872/59.521`，较 e28 同步低 `0.978/0.181`，pair 与
+  both-independent AP 也回撤；当前不能延续“稳定提前 4 epoch”的强结论。相对直接父线 e32，
+  det 仍高 `0.201` 且 det AssA 高 `2.011`，但 cls 低 `1.437`、det DetA 低 `1.200`，说明
+  局部高 LR 的核心关联收益仍在，定位/分类成熟度出现阶段性波动。
+- e28 已有完整同点双超，decoder 长轨迹历史也有中间节点回撤后恢复；因此继续 178 到 e36，
+  不以 e32 单点停线。若 e36 仍在 HOTA、DetA、AssA、AP 四组证据上低于 e28，再把局部 Adam
+  时钟 `0808_08` 的 e12/e16 响应作为主替代判据，而不是立即增加模型复杂度。
+- 下一顺序调整为 99/197 e20 → 178 e36 → 252 `0808_08` e4/e8（仅诊断）及 e12/e16。
+  所有结论继续以同 checkpoint 的检测、TrackEval 和有限性闭环为准。

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 23:41 CST
+更新时间：2026-08-08 23:45 CST
 
 ## 当前研究原则
 
@@ -20,7 +20,7 @@
 | --- | --- | --- | --- |
 | 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E19I650/E16_COMPLETE/TO_E72` | e16 `48.335/55.763`，较 e12 快速恢复且总和领先 197 同点 `0.523`；继续闭环 e20。 |
 | 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E20I850/E16_COMPLETE/TO_E72` | e16 `48.551/55.024`，cls 略高于 99、det 低 `0.739`；继续闭环 e20/e24。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E33I100/E28_COMPLETE/TO_E72` | e28 `52.850/59.702`，同点双超父线 `0.209/0.716`、总和领先 `0.925`；当前最强，等待 e32 全量评估。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E33I350/E32_COMPLETE/TO_E72` | e32 `51.872/59.521`，较 e28 同步回撤但 det AssA 仍高父线 `2.011`；继续 e36 验证恢复，不以单点停线。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E1I50/TO_E72` | 只给 decoder/head 压缩 Adam 记忆时钟；formal iter50 五门槛通过，继续 e4/e8 诊断及成熟节点。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
@@ -5979,3 +5979,21 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `2.5488e-6/21.4287/120.2927`，DN、encoder proposal 与总损失全有限，fatal=0；双卡各约
   19.2 GiB 且满载，正式日志持续更新，故五项门槛齐全后严格登记 `RUNNING/TO_E72`。GPU2/3
   仍为 `1 MiB/0%`。同期 99 e19i650、197 e20i850、178 e33i100，资源边界全部合规。
+
+## 2026-08-08 23:45 CST：decoder/head-only e32 单点回撤，继续 e36
+
+- 178 `0808_03` e32 cls HOTA/DetA/AssA 为 `51.872/43.247/64.217`，det 为
+  `59.521/51.622/70.992`，绝对和 `111.393`。相对自身 e28 同步回撤
+  `0.978/0.181`；cls DetA/AssA 分别低 `0.689/1.216`，det 分别低 `0.168/0.174`，不是
+  HOTA 内部交换。pair mAP/AP50 `0.2943/0.4987`、both-independent
+  `0.3343/0.5405`，也较 e28 的 `0.2992/0.5105`、`0.3406/0.5543` 回落。
+- 相对直接 product-tangent 父线 e32 `53.309/44.791/65.462`、det
+  `59.320/52.822/68.981`，候选 cls 低 `1.437`、det 高 `0.201`；det AssA 仍高
+  `2.011`，但 det DetA 低 `1.200`，说明局部加速的关联优势仍在，当前瓶颈转为定位/AP 与
+  分类轨迹共同回撤。e28 曾完整双超父线且 decoder 历史存在非单调成熟，因此 e32 单点不构成
+  成熟停线；继续 e36 判断是否恢复，不能误报达标。
+- 408,728,116-byte checkpoint SHA-256
+  `38aaa4f56fce98a9300c6c8926d6c7983ce1495274b92be671ae8e3db84fdd3f`；meta
+  `32/33216`，model/EMA `711/712` keys、642 个浮点张量全有限，iterative-cls/DN 已训练。
+  5416/50、28 CSV、108 非空文件、50 predictions 完整，TrackEval 268.7 秒自然结束。
+  main `1346509` 已恢复 e33 iter350，只用动态 GPU0，fatal=0。
