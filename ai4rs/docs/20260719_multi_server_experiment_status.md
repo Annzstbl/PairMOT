@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 14:59 CST。
+更新时间：2026-08-08 15:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E5I750/TO_E72；screen/main `2578722/2578723` | e4 完整 `31.249/38.298`；继续 e8+，不早停。`0808_05` 仅静态就绪 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E6I300/TO_E72；screen/main `2811863/2811864` | e4 完整 `33.362/40.192`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E5I350/TO_E72；screen/main `1579744/1579745` | e4 完整 `34.359/41.302`，四线最佳；严格仅 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E5I800/TO_E72；screen/main `1346508/1346509` | e4 完整 `34.176/38.801`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E6I400/TO_E72；screen/main `2578722/2578723` | e4 完整 `31.249/38.298`；`0808_05/06` 仅静态就绪、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E7I50/TO_E72；screen/main `2811863/2811864` | e4 完整 `33.362/40.192`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E5I1000/TO_E72；screen/main `1579744/1579745` | e4 完整 `34.359/41.302`，四线最佳；严格仅 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E6I550/TO_E72；screen/main `1346508/1346509` | e4 完整 `34.176/38.801`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
@@ -75,6 +75,26 @@
   HOTA 低 `0.915/2.547`，但 det DetA 高 `1.327`、AssA 低 `8.716`，一致时钟压缩明显缓解了
   单纯加 LR 的早期关联损伤。训练已进入 e5，固定 GPU0/1，GPU2/3 仍为 1 MiB；四条均继续
   e8/e12，不提前释放或替换。
+
+## 2026-08-08 15:11 CST：关联保真的延迟 LR 时钟候选静态闭环
+
+- e4 显示立即提高 LR 的路线先改善 det DetA、同时损伤 det AssA；因此新增第二后备
+  `0808_06 delayed LR clock`。它前 12 epoch 完全保持父线 `1e-4`，从 e12 边界起仅把 LR
+  乘 `1.4`，满足 `12×1 + 60×1.4 = 96`，使 e72 的名义 LR 积分等于父线 e96，同时保留
+  早期关联形成阶段。推理模型、参数/state、数据、loss、EMA 与 Liquid 均不变，class-agnostic、
+  无 reweight、无新增推理计算。
+- 本地提交 `f13a48c` 的初版在远端构建时发现当前 MMEngine 不注册字符串形式
+  `MultiStepLR`；任何训练或 workdir 创建前即失败。`8cddf56` 改为显式调度器类后，配置
+  deepcopy、两 launcher `bash -n`、72-epoch LR 序列均通过：e0--e11 为 `1e-4`，e12--e72
+  为 `1.4e-4`。父/子完整构建均为 22,771,111 参数、711 states、差异 0。
+- 首次隔离 clone 因无关 LFS 演示 GIF 缺失对象失败，保留在
+  `/data/users/wangying01/lth/PairMOT_0808_06_delayedlr_99_clone_failed_lfs_20260808_1507`；随后全程
+  `GIT_LFS_SKIP_SMUDGE=1` 的新隔离 checkout
+  `/data/users/wangying01/lth/PairMOT_0808_06_delayedlr_99/ai4rs` 为 clean detached
+  `8cddf56`。smoke/formal 目录均不存在、无进程、未使用 GPU，严格状态为
+  `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`，不得登记 RUNNING。
+- 15:11 四条正式线主进程、目标 GPU、正式日志均存活且 fatal=0；99/197/178/252 分别到
+  e6 iter400、e7 iter50、e6 iter550、e5 iter1000。继续优先收集 e8，不因 e4 释放资源。
 
 ## 2026-08-08 13:33 CST：开启 decoder e96→e72 收敛压缩主目标
 

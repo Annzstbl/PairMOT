@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 14:59 CST.
+Last updated: 2026-08-08 15:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -70,6 +70,22 @@ association stability rather than localization. This is diagnostic only: all
 four formal jobs continue unchanged to epoch 8 and beyond. `0808_05` remains
 the first no-GPU successor and is not promoted to RUNNING without real smoke,
 checkpoint checks, and formal iteration-50 evidence on a released lane.
+
+At 15:11 CST, a second no-GPU fallback `0808_06` is statically validated from
+the epoch-4 mechanism evidence. It preserves the parent's `1e-4` LR for the
+first 12 epochs, then applies a single 1.4 multiplier: `12*1 + 60*1.4 = 96`,
+so epoch 72 has the same nominal LR integral as the parent epoch 96 without
+disturbing the early association-formation phase. It changes training schedule
+only and adds no inference parameter or compute, class awareness, reweighting,
+loss, EMA, or Liquid change. Clean detached `8cddf56` passes formal/smoke config
+deepcopy, both remote Bash syntax checks, exact 72-epoch LR sequence, and
+complete parent/target builds at 22,771,111 parameters and 711 states.
+The first isolated clone failed before any build because an unrelated LFS demo
+GIF object was unavailable; that directory is archived and a fresh
+`GIT_LFS_SKIP_SMUDGE=1` checkout is clean. No 0808_06 workdir, process, smoke,
+formal run, or GPU use exists, so it remains
+`STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`. The four active jobs continue
+unchanged toward epoch 8 and may not be displaced by this static candidate.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det

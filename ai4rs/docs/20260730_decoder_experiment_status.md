@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 14:59 CST
+更新时间：2026-08-08 15:11 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E5I750/TO_E72` | e4 完整 `31.249/38.298`；继续 e8+，不早停。后备 `0808_05` 仅静态就绪。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E6I300/TO_E72` | e4 完整 `33.362/40.192`；继续 e8+，不早停。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E5I800/TO_E72` | e4 完整 `34.176/38.801`；继续 e8+，不早停。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E5I350/TO_E72` | e4 完整 `34.359/41.302`，四线最佳；严格只用 GPU0/1，GPU2/3 未使用。 |
+| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E6I400/TO_E72` | e4 完整 `31.249/38.298`；后备 `0808_05/06` 仅静态就绪。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E7I50/TO_E72` | e4 完整 `33.362/40.192`；继续 e8+，不早停。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E6I550/TO_E72` | e4 完整 `34.176/38.801`；继续 e8+，不早停。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E5I1000/TO_E72` | e4 完整 `34.359/41.302`，四线最佳；严格只用 GPU0/1，GPU2/3 未使用。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -97,6 +97,19 @@
   `0.195096/0.349369`；5416/50、28/108、50 predictions 与 `async_done=1` 全闭环，当前四线
   最佳。相对父线 det DetA 高 `1.327`、AssA 低 `8.716`，支持完整时钟压缩能够部分保住关联。
   四线均已进入 e5，252 仍严格固定 GPU0/1，其他资源未超过卡数边界。
+
+## 2026-08-08 15:11 CST：延迟 LR 积分压缩候选静态就绪
+
+- `0808_06` 根据 e4 的“DetA 上升、AssA 下降”证据，把父线 `1e-4` 完整保留到 e12，再一次
+  升为 `1.4e-4`；`12×1 + 60×1.4 = 96`，因此到 e72 的名义 LR 积分等于父线 e96。
+  这是单一训练调度变化；最终 product-tangent 推理模型、EMA、Liquid、参数/state、loss、
+  数据均不变，class-agnostic、无 reweight、零推理增量。
+- 初版字符串调度器在静态构建中被 MMEngine 注册表拒绝，未运行训练；提交 `8cddf56` 显式
+  使用调度器类后，formal/smoke deepcopy、两 launcher 语法、完整 72-epoch LR 序列与父子
+  完整构建均通过，模型为 22,771,111 参数、711 states、差异 0。
+- LFS 演示 GIF 导致的首次 clone 失败目录已保留审计；新隔离 checkout clean detached
+  `8cddf56`。当前没有 smoke/formal workdir、没有进程或 GPU 使用，只能登记
+  `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`。四条正式线均健康继续 e8+。
 
 ## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
 
