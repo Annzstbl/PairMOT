@@ -16,6 +16,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('work_dir', type=Path)
     parser.add_argument('--epoch', type=int, default=72)
+    parser.add_argument(
+        '--payload-step', type=int,
+        help=('Expected TrackEval payload step. By default this is epoch-1; '
+              'set it explicitly for an evaluation-only Runner whose '
+              'MessageHub starts from a validation index.'))
     parser.add_argument('--cls-threshold', type=float, default=54.437)
     parser.add_argument('--det-threshold', type=float, default=62.393)
     parser.add_argument('--sum-threshold', type=float, default=117.830)
@@ -41,17 +46,21 @@ def finite_float(mapping: dict[str, Any], key: str) -> float:
     return value
 
 
-def find_epoch_eval(work_dir: Path, epoch: int) -> tuple[Path, dict[str, Any]]:
+def find_epoch_eval(
+        work_dir: Path, epoch: int,
+        payload_step: int | None = None) -> tuple[Path, dict[str, Any]]:
+    expected_step = epoch - 1 if payload_step is None else payload_step
     matches = []
     for payload_path in sorted(
             (work_dir / 'val_track_eval').glob(
                 'val_track_*/async_track_eval_payload.json')):
         payload = load_json(payload_path)
-        if int(payload['step']) + 1 == epoch:
+        if int(payload['step']) == expected_step:
             matches.append((payload_path.parent, payload))
     if len(matches) != 1:
         raise RuntimeError(
-            f'expected exactly one TrackEval for epoch {epoch}, got '
+            f'expected exactly one TrackEval for epoch {epoch} '
+            f'(payload step {expected_step}), got '
             f'{len(matches)}')
     return matches[0]
 
@@ -78,7 +87,8 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     if not checkpoint.is_file() or checkpoint.stat().st_size <= 0:
         raise FileNotFoundError(f'missing nonempty checkpoint: {checkpoint}')
 
-    eval_dir, payload = find_epoch_eval(work_dir, args.epoch)
+    eval_dir, payload = find_epoch_eval(
+        work_dir, args.epoch, args.payload_step)
     track = load_json(eval_dir / 'metrics.json')
     if finite_float(track, 'track/async_done') != 1.0:
         raise RuntimeError('TrackEval has not completed successfully')
@@ -146,6 +156,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     result = {
         'work_dir': str(work_dir),
         'epoch': args.epoch,
+        'payload_step': int(payload['step']),
         'checkpoint': str(checkpoint),
         'checkpoint_bytes': checkpoint.stat().st_size,
         'eval_dir': str(eval_dir),
