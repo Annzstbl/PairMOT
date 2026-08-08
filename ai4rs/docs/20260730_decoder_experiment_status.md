@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 18:15 CST
+更新时间：2026-08-08 18:39 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E2I750/TO_E72` | e1 iter50 五门槛通过；前 12 epoch 保持父线 LR，随后升至 `1.4e-4`。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | 双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；e12/e24 两次温和升速。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E16I550/TO_E72` | e12 完整 `47.998/55.163`，当前最强成熟点；保留到 e16 完整评测及后续成熟节点。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E14I750/TO_E72` | e12 完整 `47.539/54.477`，成熟路线第二；严格只用 GPU0/1，继续 e16+。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E4I100/TO_E72` | 前 12 epoch 保持父线 LR，formal 健康；e4 只作诊断。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E2I750/TO_E72` | 双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；e12/e24 两次温和升速。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E17I350/TO_E72` | e16 完整 `49.515/56.831`，较 e12 双升且只低父线 `1.705/0.539`；继续 e20/e24+。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E15I1000/TO_E72` | e12 完整 `47.539/54.477`，严格只用 GPU0/1；即将进入 e16。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
@@ -60,6 +60,25 @@
   `2.5488e-6/21.4029/112.8655`，total、DN、encoder proposal 均有限，GPU 各约
   19.2 GiB 且满载，无 traceback/OOM/NaN/NCCL/unused-parameter fatal，故正式登记
   `RUNNING/TO_E72`。
+
+## 2026-08-08 18:39 CST：178 decoder/head-only 加速 e16 保持恢复趋势
+
+- `0808_03` e16 同一 checkpoint 的 cls HOTA/DetA/AssA 为
+  `49.515/41.094/62.034`，det 为 `56.831/50.640/65.907`，绝对和
+  `106.346`。相对自身 e12 双 HOTA 为 `+1.517/+1.668`；相对直接 product-tangent
+  父线 e16 `51.220/57.370` 只低 `1.705/0.539`，联合差距 `2.244`，明显优于
+  `0808_02` e16 的联合差距 `4.055`。该点仍未达到 e72 目标，验收器按预期返回 2，
+  但成熟趋势支持继续 e20/e24+，不停止。
+- pair mAP/AP50 为 `0.273383/0.468078`，both-independent 为
+  `0.315196/0.515004`；四项均较自身 e12 上升，但相对父线 e16
+  `0.2914/0.5039` 与 `0.3379/0.5551` 仍有差距。5416 条检测、50 序列、28 CSV、
+  108 个非空 TrackEval 文件和 50 个非空 prediction 全部闭环；异步 TrackEval 于
+  18:37:05 自然结束，耗时 253.7 秒。
+- 386,621,172-byte `epoch_16.pth` SHA-256 为
+  `ea0200ff9d5557d11e93bba39e458ae7c985865c300302a8a86daa29a6b8d31d`；
+  iterative classification residual 与 DN absolute heads 已训练，642 个浮点 checkpoint
+  张量全有限。正式训练已恢复到 e17 iter350，只使用动态 GPU0；GPU1 保持空闲，符合单卡
+  资源上限。
 
 `0803_14 terminal log-area` 在 252 的 PGID `77558` 已停止且正式目录尚无 epoch checkpoint；smoke、正式 iter50 证据和隔离提交保留。资源序号澄清后改迁 99 的空闲 GPU1/2，重新执行 smoke 后 fresh 启动。252 不再使用 GPU2/3。
 

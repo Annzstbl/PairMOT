@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 18:15 CST。
+更新时间：2026-08-08 18:39 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E2I750/TO_E72；screen/main `2606264/2606266` | `0808_01` e12 成熟停止后接替；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `3583196/3583197` | `0808_02` e16 成熟停止后接替；双卡 smoke/checkpoint/formal 五门槛全通过 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E14I750/TO_E72；main `1579745` | e12 完整 `47.539/54.477`，成熟路线第二；继续 e16+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E16I550/TO_E72；main `1346509` | e12 完整 `47.998/55.163`，当前最强成熟点；等待 e16 完整闭环 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E4I100/TO_E72；screen/main `2606264/2606266` | 前 12 epoch 保持父线 LR；e4 只作诊断 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E2I750/TO_E72；screen/main `3583196/3583197` | `0808_02` e16 成熟停止后接替；五门槛通过 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E15I1000/TO_E72；main `1579745` | e12 完整 `47.539/54.477`；即将进入 e16，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E17I350/TO_E72；main `1346509` | e16 完整 `49.515/56.831`，保持双升并继续 e20/e24+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-08 18:39 CST：178 `0808_03` e16 全量闭环并继续
+
+- e16 cls HOTA/DetA/AssA `49.515/41.094/62.034`，det
+  `56.831/50.640/65.907`，sum `106.346`。相对 e12 双升
+  `1.517/1.668`；相对直接父线 e16 `51.220/57.370` 只低 `1.705/0.539`，联合低
+  `2.244`。严格 e72 验收器 rc=2 是预期行为；该成熟点仍在恢复，不作停止判断。
+- pair mAP/AP50 `0.273383/0.468078`、both-independent
+  `0.315196/0.515004`，均较 e12 提高。386,621,172-byte checkpoint 的 SHA-256 为
+  `ea0200ff9d5557d11e93bba39e458ae7c985865c300302a8a86daa29a6b8d31d`；
+  iterative-cls/DN 已训练，642 个浮点张量全有限。
+- 5416/50 检测、28 CSV、108 个非空评测文件、50 个非空 prediction 全部闭环；异步
+  TrackEval 在 253.7 秒后自然结束。main `1346509` 已恢复 e17 iter350，GPU0 约
+  21.7 GiB，GPU1 为空，严格遵守 178 单卡上限。继续收集 e20/e24+。
 
 ## 2026-08-08 18:15 CST：197 e16 完整审计、成熟停止与 `0808_07` 交接
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 18:15 CST.
+Last updated: 2026-08-08 18:39 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -59,6 +59,18 @@ floating tensors. Fresh formal screen/main `3583196/3583197` reached epoch 1
 iteration 50 at LR/loss/grad `2.5488e-6/21.4029/112.8655`; process, GPU,
 formal-log, finite-loss and fatal-signature gates all pass. Register it
 `RUNNING/TO_E72` and collect e4/e8 diagnostically before mature checkpoints.
+
+At 18:39 CST, dynamic-178 `0808_03` closed epoch 16 at cls/det HOTA
+`49.515/56.831`, with DetA/AssA `41.094/62.034` and `50.640/65.907`.
+It improves `1.517/1.668` over its own epoch 12 and trails the aligned direct
+product-tangent parent by only `1.705/0.539`, reducing its joint gap to
+`2.244`. Pair mAP/AP50 `0.273383/0.468078` and both-independent
+`0.315196/0.515004` also improve over epoch 12. The 386,621,172-byte
+checkpoint, trained iterative-cls/DN heads, 642 finite tensors, 5416/50
+detections, 28 CSVs, 108 nonempty files, 50 predictions and 253.7-second async
+TrackEval all close. Keep dynamic GPU0 through epoch 20/24 and later mature
+nodes; do not stop a jointly improving trajectory merely because epoch 16 is
+below the final epoch-72 thresholds.
 
 At 14:04 CST all four runs have crossed their real warmup boundaries without
 numerical failure. Dynamic-99 reached LR `1.25e-4`; dynamic-197 and fixed-252
