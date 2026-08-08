@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 17:46 CST
+更新时间：2026-08-08 17:55 CST
 
 ## 当前研究原则
 
@@ -20,6 +20,7 @@
 | --- | --- | --- | --- |
 | 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E1I50/TO_E72` | e1 iter50 五门槛通过；前 12 epoch 保持父线 LR，随后升至 `1.4e-4`。 |
 | 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E16I150/TO_E72` | e12 完整 `47.147/54.337`，det 缺口较 e8 明显收窄；继续 e16+。 |
+| 197 不占 GPU | `0808_07 ... staged delayed LR clock ... fresh` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | e12/e24 两次温和升速，e72 名义 LR 积分严格等于父线 e96；等待成熟资源决策。 |
 | 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E14I600/TO_E72` | e12 完整 `47.998/55.163`，四线最强成熟点；继续 e16+。 |
 | 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E13I150/TO_E72` | e12 完整 `47.539/54.477`，成熟四线第二；严格只用 GPU0/1，继续 e16+。 |
 | 99 已释放 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `STOPPED/E12/MATURE_STRICT_FAIL` | e12 完整 `45.078/53.335`；e4/e8/e12 三节点均弱于 197/178 后精确停止，非 e4/e8 否决。 |
@@ -5694,3 +5695,20 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `2.5488e-6/21.4017/134.7102`，total、DN、Encoder proposal 全有限，traceback/OOM/NaN/
   NCCL/DDP fatal=0；会话/双 rank、目标 GPU、正式目录/日志、iter50 与有限值五门槛齐全，
   严格登记 `RUNNING/TO_E72`。它前 12 epoch 完全保留父线关联形成时钟，e4/e8 仍只作诊断。
+
+## 2026-08-08 17:55 CST：分段延迟 LR 后备完成静态闭环
+
+- `0808_07` 保持最终 product-tangent 推理模型与完整训练协议不变，只把 `0808_06` 在 e12
+  的单次 `1.4×` LR 跳变改为 e12/e24 两次相同温和倍率。解析倍率为
+  `g=(sqrt(113)-1)/8=1.2037682266`，因此实际训练使用 e0--e11 `1.0×`、e12--e23
+  `g×`、e24--e71 `g²=1.4490579434×`，且 `12+12g+48g²=96`。这使 e72 名义 LR
+  积分严格等于父线 e96，同时把首次突变从 `40%` 降到 `20.38%`。
+- 该候选是单一训练调度变更，class-agnostic、无 reweight、零参数/state/loss/hook/推理
+  增量。formal/smoke 配置均通过 `copy.deepcopy`，两 launcher 通过本地与远端 `bash -n`；
+  与 197 当前 product-tangent 父配置完整构建均为 `22,771,111` 参数、711 states，差异 0。
+  独立调度器实测确认训练前 LR 序列和72轮积分为 `96.00000000000011`。
+- clean detached checkout
+  `/data/users/litianhao/PairMOT_0808_07_stagedlr_197/ai4rs` 为提交 `adca76a`；目标 smoke/formal
+  workdir 均不存在，无进程或 GPU 使用，故严格只登记 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`。
+  等 197 `0808_02` e16 同 checkpoint 完整评测后，再决定是否释放资源执行真实 smoke；不得
+  用静态构建替代五项动态门槛。

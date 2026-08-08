@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 17:46 CST。
+更新时间：2026-08-08 17:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -18,7 +18,7 @@
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2606264/2606266` | `0808_01` e12 成熟停止后接替；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E16I150/TO_E72；main `2811864` | e12 完整 `47.147/54.337`，继续 e16+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E16I1000/TO_E72；main `2811864` | e16 checkpoint 即将产生；`0808_07` 静态后备不占 GPU | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E13I150/TO_E72；main `1579745` | e12 完整 `47.539/54.477`，成熟四线第二；继续 e16+，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E14I600/TO_E72；main `1346509` | e12 完整 `47.998/55.163`，当前最强成熟点；继续 e16+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
@@ -4100,3 +4100,17 @@ cls/det HOTA `54.437/62.393`，才进入论文性能递进主线。
   的 screen/main 为 `2606264/2606266`；e1 iter50 LR/loss/grad
   `2.5488e-6/21.4017/134.7102`，双 rank、GPU0/1 各约 19.2 GiB、正式日志与有限
   total/DN/Encoder、fatal=0 五门槛通过。登记 `RUNNING/TO_E72`；GPU2 保持 10 MiB。
+
+## 2026-08-08 17:55 CST：0808_07 staged delayed LR 静态就绪
+
+- 新后备只把 e12 的 `1.4×` 单次跳变分解为 e12/e24 两次
+  `g=1.2037682266×`；实际训练 LR 区间为 12 轮 `1.0×`、12 轮 `g×`、48 轮
+  `g²=1.4490579434×`，解析与实测积分均为 96 个父线 epoch。最终模型、参数、数据、loss、
+  EMA、Liquid 与推理计算均不变，非 class-aware、无 reweight。
+- 提交 `adca76a` 已部署到 197 新隔离 clean checkout。formal/smoke config deepcopy、两个
+  launcher 语法、72轮 LR 序列、父/候选完整构建通过：均为 `22,771,111` 参数、711 states。
+  两个目标 workdir 不存在、无 `0808_07` 训练进程、未占 GPU，状态仅
+  `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`。
+- 当前 `0808_02` main `2811864` 仍独占动态 GPU0/1，17:55 到 e16 iter1000，total、DN、
+  Encoder proposal 与 grad 全有限。必须先完成 e16 checkpoint/检测/TrackEval，再据成熟轨迹
+  决定保留原线或释放双卡给 `0808_07` 的真实 smoke；不热更新存活仓库。
