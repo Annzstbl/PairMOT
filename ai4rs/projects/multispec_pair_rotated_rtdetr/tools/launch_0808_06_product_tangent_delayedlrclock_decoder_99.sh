@@ -14,12 +14,26 @@ test "${CONDA_PREFIX}" = /data/users/wangying01/anaconda3/envs/py310
 PYTHON_ROOT=${CONDA_PREFIX}/bin
 trap 'status=$?; echo "[$(date "+%F %T")] formal 0808_06 failed: status=${status} command=${BASH_COMMAND}" >> "${WORK_DIR}/launch.log"; exit "${status}"' ERR
 
+require_dir_with_retry() {
+    local path=$1
+    local attempt
+    for attempt in $(seq 1 30); do
+        if [[ -d "${path}" ]]; then
+            return 0
+        fi
+        ls -ld "$(dirname "${path}")" >/dev/null 2>&1 || true
+        sleep 1
+    done
+    echo "[$(date '+%F %T')] required directory remained unavailable after 30 attempts: ${path}" >> "${WORK_DIR}/launch.log"
+    return 1
+}
+
 test ! -e "${WORK_DIR}"
 mkdir -p "${WORK_DIR}"
 cd "${REPO}"
 test -f /data4/litianhao/PairMmot/pretrained_weights/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/pair_coco_adapted_pretrain.pth
-test -d /data/users/wangying01/lth/PairMOT/workdir/aux/gmc_cache/hsmot_train_gap1
-test -d /data/users/wangying01/lth/PairMmot/workdir/aux/gmc_cache/hsmot_test_gap1
+require_dir_with_retry /data/users/wangying01/lth/PairMOT/workdir/aux/gmc_cache/hsmot_train_gap1
+require_dir_with_retry /data/users/wangying01/lth/PairMmot/workdir/aux/gmc_cache/hsmot_test_gap1
 : "${PAIRMOT_CUDA_VISIBLE_DEVICES:?set two currently free 99 GPU indices}"
 export CUDA_VISIBLE_DEVICES=${PAIRMOT_CUDA_VISIBLE_DEVICES}
 export PYTHONPATH="${REPO}:${PYTHONPATH:-}"
