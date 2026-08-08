@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 01:49 CST
+更新时间：2026-08-09 02:34 CST
 
 ## 当前研究原则
 
@@ -18,11 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E25I400/E24_COMPLETE/TO_E72` | e24 `50.048/58.669`；det 继续增益但 cls 停滞，低 197 同点总和 `1.599`，保留到更成熟节点。 |
+| 99 动态 GPU 0,1 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `RUNNING/E28I150/E24_COMPLETE/TO_E72` | e24 `50.048/58.669`；det 继续增益但 cls 停滞，保留到 e28 完整成熟节点后再决定交接。 |
 | 99 后备、不占 GPU | `0809_02 ... decoder/head delayed LR + EMA clock ...` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 只在 `0809_01` 上压缩 EMA 时钟；隔离 checkout、deepcopy、构建与优化器审计通过，待成熟证据释放资源。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E27I500/E24_COMPLETE/TO_E72` | e24 `52.091/58.225`，距父线仅 `0.387/0.546`；第二阶段已生效，继续 e28。 |
-| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E2I1000/TO_E72` | e1–e12 保持父线 LR，e12 后只把 decoder/head LR 提至 `1.4×`；真实 smoke 与 formal 五门槛通过。 |
-| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E4_COMPLETE/TO_E72` | e4 `31.106/37.307` 为负的早期诊断；不以 e4 否决，继续 e8/e12+。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E30I200/E28_COMPLETE/TO_E72` | e28 `52.580/58.980`，已几乎复现父线同点但无成熟提前量；继续 e32 检验第二阶段完整窗口。 |
+| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E5I350/E4_COMPLETE/TO_E72` | e4 `32.955/41.857` 仅作 LR 切换前诊断；继续 e8/e12 边界与 e16 首个局部加速窗口。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E9I350/E8_COMPLETE/TO_E72` | e8 `40.166/47.240` 为负诊断但较 e4 强恢复；不以 e8 否决，继续 e12+。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
 | 197 已释放 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `STOPPED/E16/MATURE_STRICT_FAIL` | e16 完整 `47.432/57.103`；相对直接父线 e16 为 `-3.788/-0.267`，四节点成熟证据后精确停止 PGID `2811864`，成员 `23→0`。 |
@@ -6130,3 +6130,44 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   178 个组、5,355,864 参数带局部 LR tag；EMA 值为 `1.333333e-4/1500`。smoke/formal
   workdir 均不存在且未占 GPU，严格状态仅 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；是否启动
   由 99/197 e28 成熟证据决定。
+
+## 2026-08-09 02:30 CST：197 e28 与 178 局部延迟线 e4 全量闭环
+
+- 197 `0808_07` e28 cls HOTA/DetA/AssA 为 `52.580/44.265/64.141`，det 为
+  `58.980/52.026/69.173`，总和 `111.560`。相对自身 e24 双升 `0.489/0.755`；相对直接
+  product-tangent 父线 e28 仅低 `0.061/0.006`，但尚未形成把成熟度提前到 e72 所需的正增益。
+  相对旧 decoder/head-only 局部高 LR e28 `52.850/59.702` 仍低 `0.270/0.722`，差异来自
+  AssA 低 `1.292/1.993`，尽管 DetA 高 `0.329/0.236`。pair mAP/AP50
+  `0.285742/0.495156`、both-independent `0.330566/0.545248`，也均低父线和旧局部线。
+- 403,016,103-byte e28 checkpoint SHA-256 为
+  `aac5233a6d1496003daec669d2e91c0372a802d08c971a868d0c063eeb3ada3e`；meta
+  `28/29064`，model/EMA `711/712` keys、各 642 个浮点张量全有限，iterative-cls/DN 已训练。
+  5416/50、28 CSV、108 非空文件、50 predictions 与 `async_done=1` 完整；TrackEval 338.5 秒
+  自然结束。训练已恢复到 e30 iter200、动态 GPU0/1、fatal=0。第二阶段仅消费四轮，因此继续
+  e32 作为最低完整成熟窗口，不在 e28 单点释放 197。
+- 178 `0809_01` e4 cls HOTA/DetA/AssA 为 `32.955/25.403/44.408`，det 为
+  `41.857/31.323/57.964`，总和 `74.812`；pair mAP/AP50 `0.143762/0.268205`、
+  both-independent `0.184286/0.331246`。该点位于 e12 局部 LR 切换之前，只用于建立单卡物理
+  轨迹的早期基准，不能据此否决 decoder；继续 e8、e12 及切换后的 e16。
+- 369,986,740-byte e4 checkpoint SHA-256 为
+  `4a2e195c8de24a9943c1d14f6a1c5e651952856ce09ac6e0f6bf004980684ef5`；meta
+  `4/4152`，model/EMA `711/712` keys、各 642 个浮点张量全有限，iterative-cls/DN probe
+  为已训练非零状态。5416/50、28/108/50 完整，TrackEval 211.1 秒自然结束；训练已恢复 e5
+  iter350，只用 GPU0，GPU1 空闲、fatal=0。
+
+## 2026-08-09 02:34 CST：252 局部 Adam 时钟 e8 完整闭环
+
+- `0808_08` e8 cls HOTA/DetA/AssA 为 `40.166/33.358/50.568`，det 为
+  `47.240/42.304/54.498`，总和 `87.406`；较自身 e4 双升 `9.060/9.933`，说明早期扰动后
+  仍在快速恢复。相对直接 product-tangent 父线 e8 `46.673/53.922` 低 `6.507/6.682`，
+  相对旧 decoder/head-only LR e8 `41.972/48.178` 低 `1.806/0.938`。pair mAP/AP50
+  `0.197302/0.346075`、both-independent `0.240257/0.404885`，也低父线
+  `0.252434/0.444294` 与 `0.303859/0.513938`，因此记为一致的负早期诊断，但不在 e8 否决。
+- 375,537,462-byte checkpoint SHA-256 为
+  `2c9d29b07be111012bc3648e9708cdb7308a70818fe2d3aeb73978be403e54ed`；meta
+  `8/8304`，model/EMA `711/712` keys、各 642 个浮点张量全有限，17 个 iterative-cls/DN
+  probe 均为已训练非零状态。5416/50、28 CSV、108 非空文件、50 predictions 与
+  `async_done=1` 完整；TrackEval 361.0 秒自然结束。
+- 正式训练已恢复到 e9 iter350，loss、DN、Encoder proposal 与 grad 全有限；固定 GPU0/1
+  约 21.4 GiB，GPU2/3 仍为 `1 MiB/0%`。日志中的 `NCCL` 三处仅为 PyTorch 构建/配置文本，
+  没有 runtime fatal。继续 e12/e16 观察本候选真正的成熟响应，严格不以 e4/e8 停线。

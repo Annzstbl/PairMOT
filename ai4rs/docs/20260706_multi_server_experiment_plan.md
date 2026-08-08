@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 01:49 CST.
+Last updated: 2026-08-09 02:34 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4175,3 +4175,22 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   22,771,111 参数、711 states 不变。首次 LFS 失败副本已安全清理并以 skip-smudge 重建。
   当前无 smoke/formal 目录且不占 GPU；只有当 99/197 e28 成熟证据支持释放一条双卡资源时，
   才依次执行真实 DDP smoke、checkpoint 审计和 formal iter50 五门槛。
+
+## 2026-08-09 02:30 CST：e28 成熟证据后的调度顺序
+
+- 197 分阶段 LR e28 已几乎复现直接父线，但尚无提前成熟的正增益；继续到 e32，避免只用
+  第二阶段四轮响应做停线判断。178 局部延迟 LR e4 完整但仍在 e12 切换前，继续 e8/e12/e16。
+- 99 一次性延迟 LR 等待 e28 完整 HOTA/DetA/AssA/AP；若仍在 cls、DetA 和 AP 上被 197 或
+  父线成熟支配，则完整审计后精确释放双卡，按既定顺序给 `0809_02` 做真实 DDP smoke、有限
+  checkpoint 与 formal iter50 五门槛。不得因静态就绪提前登记 RUNNING。
+- 252 固定 GPU0/1 已完成 e8 checkpoint/检测，等待异步 TrackEval 后继续 e12+；e8 仍只作
+  诊断。近期顺序为：252 e8 闭环 → 99 e28 → 197 e32 → 178 e8/e12，并始终保留至少一条
+  最有希望的局部优化轨迹向 e72 推进。
+
+## 2026-08-09 02:34 CST：252 e8 后的执行约束
+
+- 252 e8 `40.166/47.240` 虽较 e4 快速恢复，但 HOTA、DetA/AssA 与 AP 均弱于父线；按既定
+  约束继续 e12/e16，不把 e8 当成否决证据，也不在最慢资源上新增并行路线。
+- 下一资源决策仍由 99 e28 和 197 e32 的成熟闭环触发：优先精确释放被成熟证据支配的双卡线，
+  再让 `0809_02` 依次通过真实双卡 smoke、有限 checkpoint 和 formal iter50 五项门槛。
+  178 保持局部延迟 LR 到 e12/e16，避免所有候选同时只验证全局时钟。
