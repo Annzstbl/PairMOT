@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 15:11 CST。
+更新时间：2026-08-08 16:21 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E6I400/TO_E72；screen/main `2578722/2578723` | e4 完整 `31.249/38.298`；`0808_05/06` 仅静态就绪、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E7I50/TO_E72；screen/main `2811863/2811864` | e4 完整 `33.362/40.192`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E5I1000/TO_E72；screen/main `1579744/1579745` | e4 完整 `34.359/41.302`，四线最佳；严格仅 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E6I550/TO_E72；screen/main `1346508/1346509` | e4 完整 `34.176/38.801`；继续 e8+，不早停 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E10I100/TO_E72；screen/main `2578722/2578723` | e8 完整 `43.047/50.080`；`0808_06` 为第一静态后备、不占 GPU | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E11I250/TO_E72；screen/main `2811863/2811864` | e8 完整 `44.177/50.218`，四线最佳总和；继续 e12+，不早停 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E9I350/TO_E72；screen/main `1579744/1579745` | e8 完整 `42.943/49.685`；严格仅 GPU0/1，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E10I200/TO_E72；screen/main `1346508/1346509` | e8 完整 `44.233/49.984`；继续 e12+，不早停 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
@@ -95,6 +95,29 @@
   `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`，不得登记 RUNNING。
 - 15:11 四条正式线主进程、目标 GPU、正式日志均存活且 fatal=0；99/197/178/252 分别到
   e6 iter400、e7 iter50、e6 iter550、e5 iter1000。继续优先收集 e8，不因 e4 释放资源。
+
+## 2026-08-08 16:21 CST：四线 epoch-8 全量闭环并继续 e12
+
+- 99/197/178/252 的 e8 cls/det HOTA 分别为 `43.047/50.080`、`44.177/50.218`、
+  `44.233/49.984`、`42.943/49.685`，绝对和依次为 `93.127/94.395/94.217/92.628`。
+  相对直接 product-tangent 父线 e8 `46.673/53.922`，四线均未形成中期加速优势；197 为
+  当前四线最佳总和，但只比 178 高 `0.178`。
+- 四线 cls DetA/AssA 依次为 `35.180/55.317`、`37.007/54.797`、
+  `37.236/54.933`、`36.233/53.447`；det 为 `44.431/58.864`、`45.748/57.122`、
+  `45.638/56.774`、`45.089/56.616`。父线为 cls `39.891/56.595`、det
+  `47.262/64.136`，主要共同缺口仍是 det AssA，同时伴随 DetA 损失。
+- pair mAP/AP50 依次为 `0.212543/0.384172`、`0.222107/0.405285`、
+  `0.227299/0.402691`、`0.222818/0.389035`；both-independent 为
+  `0.253997/0.440963`、`0.267313/0.464481`、`0.276508/0.466215`、
+  `0.265917/0.445627`，均低父线 `0.252434/0.444294` 与 `0.303859/0.513938`。
+- 四个 checkpoint 字节数为 `375547254/375536359/375572596/375535222`，SHA-256
+  依次为 `6a92311b…2f5da`、`72680692…25af8e`、`bd00c286…75fc5`、
+  `d949fca2…d69a80`；`last_checkpoint`、iterative-cls/DN、5416/50、28 CSV、108 非空
+  文件与 50 predictions 全部闭环，统一验收器因早期绝对阈值按预期返回 2。四条 formal
+  已自然恢复并到 e10i100/e11i250/e10i200/e9i350，fatal=0；252 仍固定 GPU0/1。
+- e8 只证明“从 epoch 1 立即压缩时钟”暂时破坏关联/AP，不构成 decoder 否决。四线继续到
+  e12 成熟窗口；若成熟证据释放资源，`0808_06`（e12 后再升 LR）优先于继承立即压缩假设的
+  `0808_05`。两者仍无 smoke/formal/GPU，不能登记 RUNNING。
 
 ## 2026-08-08 13:33 CST：开启 decoder e96→e72 收敛压缩主目标
 

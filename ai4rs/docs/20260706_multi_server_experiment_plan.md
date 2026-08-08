@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 15:11 CST.
+Last updated: 2026-08-08 16:21 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -86,6 +86,30 @@ GIF object was unavailable; that directory is archived and a fresh
 formal run, or GPU use exists, so it remains
 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL/NO_GPU`. The four active jobs continue
 unchanged toward epoch 8 and may not be displaced by this static candidate.
+
+At 16:21 CST, all four epoch-8 checkpoints, 5416-record/50-sequence detection
+exports, and 28-CSV/108-nonempty-file TrackEval runs are complete. The cls/det
+HOTA pairs for `0808_01/02/03/04` are `43.047/50.080`, `44.177/50.218`,
+`44.233/49.984`, and `42.943/49.685`; their sums are `93.127`, `94.395`,
+`94.217`, and `92.628`. The direct product-tangent parent is
+`46.673/53.922` at epoch 8, so none of the immediate clock-compression variants
+has recovered the parent's mid-early trajectory. The corresponding pair
+mAP/AP50 values are `0.212543/0.384172`, `0.222107/0.405285`,
+`0.227299/0.402691`, and `0.222818/0.389035`; all remain below the parent
+`0.252434/0.444294`. Each checkpoint has a stable SHA-256, a correct
+`last_checkpoint`, and trained finite iterative-cls/DN heads. Every formal job
+has naturally resumed beyond epoch 8; current 99/197/178/252 progress is
+e10i100/e11i250/e10i200/e9i350 with fatal scans empty.
+
+This epoch-8 evidence does not reject or stop any decoder. It shows that
+raising LR from the start trades association and AP for faster updates: the
+best current sum is global `4/3` LR on 197, while coherent clock compression
+fell from the best epoch-4 point to the weakest epoch-8 sum. Continue all four
+through the complete epoch-12 mature window. If a lane is released on mature
+e4/e8/e12 evidence, promote `0808_06` (parent LR through epoch 12, then 1.4x)
+ahead of `0808_05`; the latter inherits the currently disfavored immediate
+coherent-clock premise. Neither fallback is RUNNING before real smoke,
+checkpoint, and formal-iter50 gates pass.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det
