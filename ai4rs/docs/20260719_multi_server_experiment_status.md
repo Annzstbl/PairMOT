@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 13:33 CST。
+更新时间：2026-08-08 14:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,24 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E1I200/TO_E72；screen/main `2578722/2578723`，iter50 五门槛通过 | e4/e8 仅诊断；完整保留至 e72 同点检测与 TrackEval | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E1I50/TO_E72；screen/main `2811863/2811864`，iter50 五门槛通过 | 单因素 96→72 优化器时钟压缩；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E1I250/TO_E72；screen/main `1579744/1579745`，iter50 五门槛通过 | 仅固定 GPU0/1；252 最慢，承担完整训练时钟压缩复验 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E1I200/TO_E72；screen/main `1346508/1346509`，iter50 五门槛通过 | 单卡、只加速 decoder/head 优化；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_01 product-tangent LR=1.25e-4`（动态 GPU0/1） | RUNNING/E2I1000/TO_E72；warmup 完成，screen/main `2578722/2578723` | e4/e8 仅诊断；完整保留至 e72 同点检测与 TrackEval | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_02 product-tangent LR=1.333e-4`（动态 GPU0/1） | RUNNING/E3I100/TO_E72；warmup 完成，screen/main `2811863/2811864` | 单因素 96→72 优化器时钟压缩；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E2I900/TO_E72；压缩 warmup 完成，screen/main `1579744/1579745` | 仅固定 GPU0/1；252 最慢，承担完整训练时钟压缩复验 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E3I150/TO_E72；warmup 完成，screen/main `1346508/1346509` | 单卡、只加速 decoder/head 优化；e4/e8 不否决 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-08 14:04 CST：四条收敛压缩线完成 warmup 完整性审计
+
+- 99 在 e2 iter1000 达到目标全局 LR `1.25e-4`，loss/grad
+  `11.8907/33.7476`；197 在 e2 iter1000 达到 `1.3333e-4`，随后自然进入 e3 iter100，
+  当前 loss/grad `11.1644/33.9302`。两台均只使用动态 GPU0/1，额外 GPU 未触碰。
+- 178 在 e2 iter1000 达到全局 `1e-4`，配置日志已证明 decoder/bbox-head 参数组实际为
+  `1.3333e-4`；当前 e3 iter150 loss/grad `11.4395/34.4983`，只使用 GPU0。
+- 252 的压缩 warmup 在总 iter1500 后达到 `1.3333e-4`，跨平台后继续到 e2 iter900，
+  loss/grad `11.3209/29.4490`；严格只用固定 GPU0/1，GPU2/3 保持 1 MiB。
+- 四条 screen、进程、GPU 与正式日志一致，fatal 扫描均为 0，尚无 scheduled epoch
+  checkpoint（interval=4），符合预期。e4 将保存 checkpoint 并触发 5416/50 检测与异步
+  TrackEval；`bff42cb` 的严格验收器已以相同 SHA-256 放置在各机 `/tmp`，未热更新存活仓库。
 
 ## 2026-08-08 13:33 CST：开启 decoder e96→e72 收敛压缩主目标
 

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-08 13:33 CST
+更新时间：2026-08-08 14:04 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E1I200/TO_E72` | 最终模型不变，仅全局 LR `1e-4→1.25e-4`；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
-| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E1I50/TO_E72` | 最终模型不变，仅全局 LR 乘 `96/72=4/3`；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
-| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E1I200/TO_E72` | 全局 LR 不变，只加速 decoder 与 bbox head；四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
-| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E1I250/TO_E72` | LR×4/3，warmup/EMA/Liquid 时钟×3/4；仅训练策略变化，四步 smoke、checkpoint 审计与 formal iter50 五门槛通过。 |
+| 99 动态 GPU 0,1 | `0808_01 ... product-tangent LR=1.25e-4 ... fresh` | `RUNNING/E2I1000/TO_E72` | warmup 已完整达到 `1.25e-4` 且数值稳定；e4/e8 仅诊断。 |
+| 197 动态 GPU 0,1 | `0808_02 ... product-tangent LR=1.333e-4 ... fresh` | `RUNNING/E3I100/TO_E72` | warmup 已完整达到 `1.333e-4` 且数值稳定；e4/e8 仅诊断。 |
+| 178 动态 GPU 0 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `RUNNING/E3I150/TO_E72` | 全局 `1e-4`、decoder/head `1.333e-4` 参数组均已进入平台且稳定。 |
+| 252 固定 GPU 0,1 | `0808_04 ... coherent clock compression ... fresh` | `RUNNING/E2I900/TO_E72` | 1500-iter 压缩 warmup 已达到 `1.333e-4` 且稳定；GPU2/3 未使用。 |
 | 252 已释放 | `0806_06 ... factorized product-tangent ... e88→e96` | `COMPLETED/E96/STRICT_PASS/GOAL_ACHIEVED` | e96 同一 checkpoint cls/det `55.739/62.616`，分别过线 `1.302/0.223`，绝对和 `118.355`、增量和 `1.525`，严格总和过线 `0.025`；checkpoint、检测与 TrackEval 全量闭环后自然结束，四卡均归零。 |
 | 252 固定 GPU 0,1 | `0806_04 ... factorized product-tangent ... e80→e88` | `COMPLETED/E88/STRICT_FAIL` | e84 为该段最佳 `55.474/62.422`、总和 `117.896`；e88 为 `55.397/62.403`、总和 `117.800`。两点均未通过严格总和 `>118.330`，完整审计后自然结束并交接给 `0806_06`。 |
 | 178 已释放 | `0806_02 ... log-SPD product-tangent ... fresh` | `STOPPED/E3I600/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e3 iter600；因 252 e96 已严格达标而精确停止 PGID `274434`，成员 `9→0`，不是依据 e4/e8 或未成熟指标否决；全部 smoke/formal 产物保留。 |
@@ -56,6 +56,16 @@
   当前 99/197/178/252 分别使用动态 0,1、动态 0,1、动态 0、固定 0,1，formal iter50
   五门槛全部通过并继续到 e72。e4/e8 只用于诊断收敛速度，不直接否决；最终只接受同一
   e72 checkpoint 的完整检测、TrackEval 与三条严格阈值证据。
+
+## 2026-08-08 14:04 CST：四线 warmup 全部稳定闭环
+
+- 四条路线均跨过各自真实 warmup 边界并达到配置目标 LR，total、DN、Encoder proposal
+  和 grad 全有限，fatal=0；99/197/178/252 当前分别为 e2 iter1000、e3 iter100、e3
+  iter150、e2 iter900。252 的联合时钟压缩没有在较短 warmup 或更快 EMA/Liquid 时钟下
+  暴露数值不稳定。
+- 当前尚无 checkpoint 是 interval=4 的预期行为，不构成缺失。e4 后只做完整
+  checkpoint/检测/TrackEval 诊断并继续训练，不以早期 HOTA 直接否决；最终验收仍固定为
+  同一 e72 checkpoint 的 cls、det、和三门槛。
 
 ## 2026-08-06 10:15 CST：252 e96 严格达标，decoder 主目标完成
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 13:33 CST.
+Last updated: 2026-08-08 14:04 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -36,6 +36,14 @@ model builds with identical state shapes, real four-iteration smoke,
 five gates. They are therefore `RUNNING/TO_E72`, not merely prepared. The next
 decision points are complete e4/e8 diagnostics followed by mature checkpoints;
 the final decision is reserved for full epoch-72 detection plus TrackEval.
+
+At 14:04 CST all four runs have crossed their real warmup boundaries without
+numerical failure. Dynamic-99 reached LR `1.25e-4`; dynamic-197 and fixed-252
+reached `1.333333e-4`; dynamic-178 reached global LR `1e-4` with verified
+decoder/head parameter-group LR `1.333333e-4`. Current loss/gradient pairs are
+`11.8907/33.7476`, `11.1644/33.9302`, `11.4395/34.4983`, and
+`11.3209/29.4490` respectively, with fatal scans empty. No epoch checkpoint is
+expected before the configured epoch-4 interval. Continue all four unchanged.
 
 At 10:15 CST, the decoder objective is achieved by fixed-252 `0806_06
 factorized product-tangent` at epoch 96. The same checkpoint gives cls/det
