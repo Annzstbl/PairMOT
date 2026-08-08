@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 03:42 CST.
+Last updated: 2026-08-09 03:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4223,3 +4223,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 178 的核心干预要到 e12 后才触发，故 e12 只作为同源边界，e16 才是首个局部 LR 响应点。
   99 的 EMA 压缩不改 Adam 时钟，保持与 178 正交；两者至少都走过 e16，再用 DetA/AssA/AP
   判断 EMA 记忆压缩是否真的把成熟度前移。
+
+## 2026-08-09 03:59 CST：局部 Adam 时钟只保留到 e16 复核
+
+- 252 e12 的 HOTA、DetA/AssA 与 AP 均被直接父线和旧局部 LR 成熟支配，说明压缩 Adam
+  一阶/二阶记忆没有带来预期的早熟。由于 e8→e12 仍双升，按 decoder 慢收敛约束继续到 e16，
+  但将其状态降为 `TO_E16_REVIEW`，不再默认占用到 e72。
+- 若 e16 仍在全组指标上被 178 局部延迟 LR 或直接父线支配，则完整审计后精确释放 252；
+  252 是最慢资源，释放后只用于成熟路线复验，不用于无证据的新结构搜索。近期优先顺序仍为
+  197 e36 → 178 e12/e16 → 99 EMA e4/e8/e12，所有 e4/e8 只作诊断。

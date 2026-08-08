@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 03:42 CST
+更新时间：2026-08-09 03:59 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0809_02 ... decoder/head delayed LR + EMA clock ... fresh` | `RUNNING/E3I450/TO_E72` | 只在 `0809_01` 上压缩 EMA 时钟；真实双卡 smoke、checkpoint 与 formal 五门槛已通过。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E34I750/E32_COMPLETE/TO_E72` | e32 `53.072/59.682`，总和略超父线同点 `0.125`；保留到 e36 检验 cls/AP 能否追平。 |
-| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E9I350/E8_COMPLETE/TO_E72` | e8 `42.853/49.918` 较 e4 强恢复且优于局部 Adam 同点；继续 e12/e16，不能以 e8 否决。 |
-| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E12I900/E8_COMPLETE/TO_E72` | e8 `40.166/47.240` 为负诊断但较 e4 强恢复；即将闭环 e12。 |
+| 99 动态 GPU 0,1 | `0809_02 ... decoder/head delayed LR + EMA clock ... fresh` | `RUNNING/E4I450/TO_E72` | 只在 `0809_01` 上压缩 EMA 时钟；真实双卡 smoke、checkpoint 与 formal 五门槛已通过。 |
+| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E35I900/E32_COMPLETE/TO_E72` | e32 `53.072/59.682`，总和略超父线同点 `0.125`；即将进入 e36 检验 cls/AP。 |
+| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E10I450/E8_COMPLETE/TO_E72` | e8 `42.853/49.918` 较 e4 强恢复且优于局部 Adam 同点；继续 e12/e16。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E13I450/E12_COMPLETE/TO_E16_REVIEW` | e12 `45.569/52.337` 仍被父线/旧局部 LR 支配；保留到 e16 成熟复核，不在 e12 单点停线。 |
 | 99 已释放 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `STOPPED/E29I350/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.334/59.149`，第二个切换后成熟点仍低 197/父线的 cls、DetA 与 AP；完整审计后 PGID `2606266` 成员归零。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
@@ -6230,3 +6230,22 @@ GPU2/3 双卡 formal；`0803_09 log-size tangent + periodic-angle` 已在 `0803_
   `8/8304`，642 个浮点张量全有限且 iterative-cls/DN 已训练。5416/50、28 CSV、108 非空
   文件、50 predictions 与 `async_done=1` 完整；TrackEval 240.5 秒自然结束。formal 已恢复
   e9 iter350，只用 GPU0，GPU1 空闲、fatal=0。
+
+## 2026-08-09 03:59 CST：252 局部 Adam 时钟 e12 成熟负证据
+
+- `0808_08` e12 cls HOTA/DetA/AssA 为 `45.569/37.291/57.726`，det 为
+  `52.337/46.717/60.617`，总和 `97.906`；较自身 e8 双升 `5.403/5.097`，尚未平台。
+  但相对直接 product-tangent 父线 e12 `49.784/56.243` 低 `4.215/3.906`，相对旧
+  decoder/head-only 局部 LR e12 `47.998/55.163` 也低 `2.429/2.826`；双 DetA、双 AssA
+  均未形成补偿，说明局部 Adam 记忆压缩目前延缓而非加速成熟。
+- pair mAP/AP50 `0.231117/0.401379`、both-independent `0.272619/0.453119`；相对直接
+  父线约 `0.2758/0.4786` 与 `0.3214/0.5310` 全低，也低旧局部 LR e12
+  `0.264565/0.457265` 与 `0.308771/0.508690`。该结论不是跟踪阈值或 HOTA 内部交换。
+- 381,036,022-byte checkpoint SHA-256 为
+  `ec1bb0a7b5b35e14f62de6c4e8978a29fd561e4aa6c99578f5c32ba4035a2e2d`；meta
+  `12/12456`，642 个浮点张量全有限且 iterative-cls/DN 已训练。5416/50、28 CSV、
+  108 非空文件、50 predictions 与 `async_done=1` 完整；TrackEval 在最慢 252 上耗时
+  453.1 秒自然结束。
+- e4/e8/e12 三点均为负，但 e8→e12 仍双升且 decoder 允许慢收敛；按预先约定保留固定
+  GPU0/1 到 e16 作最后成熟复核，而不是在单个 e12 停线。formal 已恢复 e13 iter450，
+  GPU2/3 仍空闲、fatal=0；该候选优先级降至四线最低，不再在 252 上新增并行路线。
