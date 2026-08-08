@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 22:29 CST.
+Last updated: 2026-08-08 22:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -4059,3 +4059,15 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 优先级调整为：先闭环 197/99 e16 的 LR 切换响应，同时持续 178 e32+；252 保留到 e28
   作为全局时钟对照。当前不启动新模型或静态 Adam 候选，因为四条合法资源仍被有效成熟
   轨迹占满，且 178 主线没有平台迹象。
+
+## 2026-08-08 22:59 CST：e16 显示单次延迟跳变恢复更快，但局部 LR 仍领先
+
+- 99 单次延迟 `1.4×` LR 的 e16 为 `48.335/55.763`，197 分阶段 `1.2038×` 为
+  `48.551/55.024`。99 总和高 `0.523`，差异主要来自 det AssA 高 `1.854`；两边 AP
+  基本相同，说明更快的关联恢复不是检测阈值假象。
+- 两条相对 e12 都双升，但仍低 178 decoder/head-only e16：99 联合低 `2.248`，197 低
+  `2.771`。因此主线继续保持 178；99/197 都保留到 e20，因为它们只消费四轮切换后 LR，
+  且 197 的第二阶段切换要到 e24 才发生。
+- 下一顺序为 252 e28、178 e32、99/197 e20。若后续需要释放一条双卡资源，优先比较
+  e20 的 HOTA/DetA/AssA/AP 恢复斜率后精确停止较弱者，再考虑静态 Adam 或新的训练单因素；
+  不依据 e16 单点抢占仍在恢复的路线。
