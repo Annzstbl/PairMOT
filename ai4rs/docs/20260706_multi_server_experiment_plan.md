@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-08 18:39 CST.
+Last updated: 2026-08-08 19:54 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -3987,3 +3987,17 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 先闭环 197 `0808_02` e16。若 HOTA/DetA/AssA/AP 显示立即全局 `4/3×` 仍明显低于强父线且
   恢复不足，则成熟停止后用释放双卡执行 `0808_07` smoke/正式五门槛；若 e16 继续强收窄，
   则保留原线而不为运行新候选牺牲更有价值的成熟轨迹。
+
+## 2026-08-08 19:54 CST：decoder/head-only e20 保持最强成熟恢复趋势
+
+- 178 `0808_03` e20 cls/det HOTA 为 `50.513/57.931`，DetA/AssA 为
+  `41.739/63.720` 与 `50.697/68.493`。相对 e16 双升 `0.998/1.100`；相对直接
+  product-tangent 父线 e20 `52.198/58.132` 只低 `1.685/0.201`，联合差距从 e16 的
+  `2.244` 收窄到 `1.886`，因此继续 e24+ 而不释放 178。
+- 检测 AP 同步从 e16 的 pair `0.273383/0.468078`、both-independent
+  `0.315196/0.515004` 升至 `0.276800/0.471258` 与 `0.318240/0.516288`，未见平台或
+  反转。checkpoint、5416/50 检测、28/108 TrackEval、50 predictions、有限性和
+  iterative-cls/DN 审计均闭环；训练已恢复 e21。
+- 99/197 的延迟与分阶段延迟 LR 继续到 e8/e12，252 固定 GPU0/1 继续 e20/e24。
+  178 GPU1 当前有外部任务，本目标只使用 GPU0；任何后续接替仍须等待当前成熟证据或合法资源
+  释放，并完成 deepcopy、完整构建、真实 smoke、checkpoint 和 formal iter50 五门槛。

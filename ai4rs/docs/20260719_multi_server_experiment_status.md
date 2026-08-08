@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-08 19:24 CST。
+更新时间：2026-08-08 19:54 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E6I350/E4_COMPLETE/TO_E72；screen/main `2606264/2606266` | e4 `31.479/38.507` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E5I350/E4_COMPLETE/TO_E72；screen/main `3583196/3583197` | e4 `31.568/40.475` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E18I50/E16_COMPLETE/TO_E72；main `1579745` | e16 `48.631/56.237`，继续 e20/e24+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E20I250/TO_E72；main `1346509` | e16 完整 `49.515/56.831`，保持双升并继续 e20/e24+ | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0808_06 product-tangent delayed LR clock`（动态 GPU0/1） | RUNNING/E7I950/E4_COMPLETE/TO_E72；screen/main `2606264/2606266` | e4 `31.479/38.507` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E7I200/E4_COMPLETE/TO_E72；screen/main `3583196/3583197` | e4 `31.568/40.475` 仅作诊断；继续 e8/e12+ | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_04 product-tangent coherent clock compression`（固定 GPU0/1） | RUNNING/E19I550/E16_COMPLETE/TO_E72；main `1579745` | e16 `48.631/56.237`，继续 e20/e24+；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0808_03 product-tangent decoder/head LR×4/3`（动态 GPU0） | RUNNING/E21I300/E20_COMPLETE/TO_E72；main `1346509` | e20 `50.513/57.931`，父线联合差距缩至 `1.886`；继续 e24+ | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
@@ -54,6 +54,20 @@
   `72ed271d3467a66c5a0e93b1890b0b488df798c0cd9ca3bd06234cd5851a1b30`；5416/50、
   28 CSV、108 个非空文件、50 predictions 完整，TrackEval 283.5 秒自然结束。正式线已恢复
   e5 iter350，动态 GPU0/1 运行，GPU2–5 空闲。
+
+## 2026-08-08 19:54 CST：178 `0808_03` e20 全量闭环并继续
+
+- e20 cls HOTA/DetA/AssA `50.513/41.739/63.720`，det
+  `57.931/50.697/68.493`，sum `108.444`；相对 e16 双升 `0.998/1.100`，相对直接
+  product-tangent 父线 e20 `52.198/58.132` 只低 `1.685/0.201`，联合差距由 e16 的
+  `2.244` 收窄到 `1.886`。因此保留到 e24+，不作成熟停线。
+- pair mAP/AP50 `0.276800/0.471258`、both-independent
+  `0.318240/0.516288`，均较 e16 上升。392,144,884-byte checkpoint SHA-256 为
+  `a49d946cfa5e042c590c9ed6d2fd76d9f77cb6ffe11245df3baedf52b1bacbae`；meta
+  `20/20760`，642 个浮点张量、iterative-cls 与 DN 状态审计通过。
+- 5416/50、28 CSV、108 个非空文件、50 predictions 完整，TrackEval 250.2 秒自然结束；
+  main 已恢复 e21 iter300，只使用 GPU0。GPU1 的约 10.3 GiB 外部任务未触碰，仍严格遵守
+  178 单卡上限。
 
 ## 2026-08-08 18:39 CST：178 `0808_03` e16 全量闭环并继续
 
