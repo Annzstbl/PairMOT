@@ -33,7 +33,11 @@ check_gpu_idle
 test -d "${REPO}/../.git"
 test -f "${REPO}/${CONFIG}"
 test -f "${VERIFY}"
-test ! -e "${ROOT}"
+if [[ "${PAIRMOT_RESUME_EVAL:-0}" == 1 ]]; then
+    test -d "${ROOT}"
+else
+    test ! -e "${ROOT}"
+fi
 test -s "${SOURCE_ROOT}/checkpoints/online_fraction_025.pth"
 test -s "${SOURCE_ROOT}/checkpoints/online_fraction_050.pth"
 mkdir -p "${ROOT}"
@@ -66,18 +70,27 @@ run_one() {
         sleep 15
     done
     test -s "${metrics}"
-    set +e
-    "${PYTHON_ROOT}/python" "${VERIFY}" "${output}" --epoch 72 \
-        --payload-step 1 --json-out "${output}/strict_verification.json" \
-        >> "${ROOT}/runner.log" 2>&1
-    local verify_status=$?
-    set -e
+    local verify_status
+    if "${PYTHON_ROOT}/python" "${VERIFY}" "${output}" --epoch 72 \
+            --payload-step 1 \
+            --json-out "${output}/strict_verification.json" \
+            >> "${ROOT}/runner.log" 2>&1; then
+        verify_status=0
+    else
+        verify_status=$?
+    fi
     if (( verify_status != 0 && verify_status != 2 )); then
         return "${verify_status}"
     fi
     echo "[$(date '+%F %T')] fraction=${fraction} verifier=${verify_status}" >> "${ROOT}/runner.log"
 }
 
-run_one 025
-run_one 050
+fractions=${PAIRMOT_EVAL_FRACTIONS:-'025 050'}
+for fraction in ${fractions}; do
+    case "${fraction}" in
+        025|050) ;;
+        *) echo "unsupported EMA-lag fraction: ${fraction}" >&2; exit 5 ;;
+    esac
+    run_one "${fraction}"
+done
 echo "[$(date '+%F %T')] 0810_02 complete" >> "${ROOT}/runner.log"
