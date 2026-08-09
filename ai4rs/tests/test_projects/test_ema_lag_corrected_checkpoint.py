@@ -33,6 +33,35 @@ class TestEmaLagCorrectedCheckpoint(unittest.TestCase):
         self.assertTrue(torch.equal(output['weight'], self.online['module.weight']))
         self.assertEqual(output['counter'].item(), 5)
 
+    def test_excluded_prefix_stays_at_ema(self):
+        averaged = OrderedDict([
+            ('decoder.weight', torch.tensor([0.0, 2.0])),
+            ('bbox_head.weight', torch.tensor([1.0, 3.0])),
+        ])
+        online = OrderedDict([
+            ('steps', torch.tensor(8)),
+            ('module.decoder.weight', torch.tensor([2.0, 4.0])),
+            ('module.bbox_head.weight', torch.tensor([3.0, 5.0])),
+        ])
+        output, stats = interpolate_state_dict(
+            averaged, online, 0.25, ('decoder.', ))
+        self.assertTrue(torch.equal(
+            output['decoder.weight'], averaged['decoder.weight']))
+        self.assertTrue(torch.equal(
+            output['bbox_head.weight'], torch.tensor([1.5, 3.5])))
+        self.assertEqual(stats['interpolated_floating_tensors'], 1)
+        self.assertEqual(stats['excluded_floating_tensors'], 1)
+
+    def test_excluded_nonfloating_stays_at_ema_at_online_endpoint(self):
+        output, _ = interpolate_state_dict(
+            self.averaged, self.online, 1.0, ('counter', ))
+        self.assertEqual(output['counter'].item(), 3)
+
+    def test_rejects_empty_exclude_prefix(self):
+        with self.assertRaises(ValueError):
+            interpolate_state_dict(
+                self.averaged, self.online, 0.25, ('', ))
+
     def test_input_is_not_mutated(self):
         before_averaged = self.averaged['weight'].clone()
         before_online = self.online['module.weight'].clone()

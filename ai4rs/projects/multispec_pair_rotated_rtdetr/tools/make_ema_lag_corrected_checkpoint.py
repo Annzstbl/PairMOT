@@ -29,20 +29,32 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         '--online-fraction', type=float, required=True,
         help='0 keeps the saved EMA weights; 1 uses the online weights.')
+    parser.add_argument(
+        '--exclude-prefix', action='append', default=[],
+        help=(
+            'State-dict prefix to keep at the saved EMA value. May be '
+            'repeated; useful for a single blockwise lag-correction '
+            'ablation.'))
     return parser.parse_args()
 
 
 def interpolate_state_dict(
         averaged_state: Mapping[str, Tensor],
         ema_state: Mapping[str, Tensor],
-        online_fraction: float) -> tuple[OrderedDict[str, Tensor], dict]:
+        online_fraction: float,
+        exclude_prefixes: tuple[str, ...] = ()) \
+        -> tuple[OrderedDict[str, Tensor], dict]:
     """Return EMA-to-online interpolation with strict key/finite checks."""
     if not math.isfinite(online_fraction) or not 0 <= online_fraction <= 1:
         raise ValueError('online_fraction must be finite and in [0, 1]')
+    if any(not prefix for prefix in exclude_prefixes):
+        raise ValueError('exclude prefixes must be non-empty')
 
     output: OrderedDict[str, Tensor] = OrderedDict()
     floating = 0
     nonfloating = 0
+    interpolated_floating = 0
+    excluded_floating = 0
     squared_delta = 0.0
     squared_ema = 0.0
     expected_online_keys = set()
@@ -63,6 +75,7 @@ def interpolate_state_dict(
                 f'{averaged.shape}/{averaged.dtype} versus '
                 f'{online.shape}/{online.dtype}')
 
+        excluded = key.startswith(exclude_prefixes)
         if torch.is_floating_point(averaged):
             if not torch.isfinite(averaged).all():
                 raise ValueError(f'non-finite averaged state {key!r}')
@@ -71,17 +84,23 @@ def interpolate_state_dict(
             averaged_float = averaged.detach().float()
             online_float = online.detach().float()
             delta = online_float - averaged_float
-            mixed = averaged_float + online_fraction * delta
+            if excluded:
+                mixed = averaged_float
+                excluded_floating += 1
+            else:
+                mixed = averaged_float + online_fraction * delta
+                interpolated_floating += 1
+                squared_delta += float(torch.sum(delta * delta))
+                squared_ema += float(torch.sum(averaged_float * averaged_float))
             if not torch.isfinite(mixed).all():
                 raise ValueError(f'non-finite interpolated state {key!r}')
             output[key] = mixed.to(dtype=averaged.dtype)
             floating += 1
-            squared_delta += float(torch.sum(delta * delta))
-            squared_ema += float(torch.sum(averaged_float * averaged_float))
         else:
             # Integer counters are not meaningfully interpolated.  Keep the
             # deployed EMA value except at the exact-online endpoint.
-            source = online if online_fraction == 1 else averaged
+            source = (
+                online if online_fraction == 1 and not excluded else averaged)
             output[key] = source.detach().clone()
             nonfloating += 1
 
@@ -96,6 +115,8 @@ def interpolate_state_dict(
     stats = {
         'floating_tensors': floating,
         'nonfloating_tensors': nonfloating,
+        'interpolated_floating_tensors': interpolated_floating,
+        'excluded_floating_tensors': excluded_floating,
         'relative_online_to_ema_l2': relative_delta,
     }
     return output, stats
@@ -116,11 +137,12 @@ def main() -> None:
 
     state_dict, stats = interpolate_state_dict(
         checkpoint['state_dict'], checkpoint['ema_state_dict'],
-        args.online_fraction)
+        args.online_fraction, tuple(args.exclude_prefix))
     meta = copy.deepcopy(checkpoint.get('meta', {}))
     meta['ema_lag_correction'] = {
         'source_checkpoint': str(input_path),
         'online_fraction': args.online_fraction,
+        'excluded_prefixes': list(args.exclude_prefix),
         **stats,
     }
 
