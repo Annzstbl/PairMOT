@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 03:12 CST
+更新时间：2026-08-10 03:44 CST
 
 ## 当前研究原则
 
@@ -10,15 +10,18 @@
   绝对和 `118.355`，相对 Encoder 的两项增量和为 `1.525`。当前新目标是在 epoch 72
   达到相近成熟度；保底要求同点 cls/det 分别严格超过 `54.437/62.393` 且绝对和
   `>117.830`（增量和 `>1.0`），冲刺目标为绝对和 `>=118.355`。
+- e72 保底目标已由 `0810_01` staged delayed LR clock 同一 checkpoint 达成：
+  `55.263/62.599`、绝对和 `117.862`，相对 Encoder 增量和 `1.032`；冲刺线未达，
+  但三项严格 margin `+0.826/+0.206/+0.032` 全部为正。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
 - 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡但不固定序号。每台机器同一时间至多使用该总卡数。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
 
-## 运行中
+## 当前实验状态
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E71I750/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
+| 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
 | 178 已释放 | `0810_03 ... decoder-frozen EMA-lag correction eval` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.810/62.340`、sum `117.150`；完整检测、TrackEval 与 checkpoint 闭环，det 低线 `0.053`、sum 低线 `0.680`，screen 自然退出。 |
 | 178 已释放 | `0810_02 ... full-model epoch72 EMA-lag correction eval` | `COMPLETED/STRICT_FAIL` | fraction 0.25 为 `55.223/62.371`、sum `117.594`；0.50 为 `55.171/62.225`、sum `117.396`。三点包络无过线空间。 |
 | 197 主机不可达 | `0808_07 ... staged delayed LR clock ... fresh` | `STOPPED/HOST_UNREACHABLE/E70I950/E68_STRICT_PASS` | e68 `55.646/62.509`、sum `118.155`，严格通过保底线；仅因主机卡死/SSH 不可达而未生成 e72，已迁移到 99。 |
@@ -119,6 +122,25 @@
   cls/det AssA 也下降 `0.991/0.397`；它没有形成预期的“保 AssA、提 DetA”解耦，因此停止
   该块级 fraction 分支，不做无依据扫描。99 `0810_01` 已到 e71 iter750，双卡健康，继续
   生成并完整评测目标 e72 checkpoint。
+
+## 2026-08-10 03:44 CST：staged delayed LR 在 e72 严格达成保底目标
+
+- 99 `0810_01` 同一 e72 checkpoint 的 cls HOTA/DetA/AssA 为
+  `55.263/45.767/68.558`，det 为 `62.599/54.619/74.088`，绝对和 `117.862`。
+  相对 Encoder `54.437/62.393` 的增量为 `0.826/0.206`、增量和 `1.032`；严格
+  cls/det/sum margin 为 `+0.826/+0.206/+0.032`，保底三门槛全部通过。相对可选冲刺
+  `118.355` 仍低 `0.493`，不将其误报为冲刺达成。
+- pair mAP/AP50 为 `0.320203/0.534775`，both-independent 为
+  `0.359593/0.571307`；5416 条检测、50 序列、28 CSV、108 个非空 TrackEval 文件、
+  50 predictions 与 `async_done=1` 全量闭环，严格 verifier rc=0。
+- `epoch_72.pth` 为 463,321,014 bytes，SHA-256
+  `4c104018004f3a3808f2c108637957bd60caee10188a16670ca8621c94bc9bcf`，meta
+  `72/74736`；optimizer、scheduler、message hub、EMA 均在，state/EMA 各 642 个浮点
+  张量全有限，iterative-cls/DN 已训练。配置 deepcopy、22,771,111 参数/711 states
+  完整构建与 strict load 全部通过。
+- 该策略仅改变训练 LR 时钟，最终 terminal-only product-tangent decoder、模型参数/state、
+  loss 与推理计算不变；未新增 class-aware decoder 操作或 reweight。99 screen、正式进程和
+  GPU0/1 均自然归零，e72 保底目标完成。
 
 ## 2026-08-08 18:15 CST：197 e16 成熟换线并启动分阶段延迟 LR
 

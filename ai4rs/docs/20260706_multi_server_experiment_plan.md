@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-09 03:59 CST.
+Last updated: 2026-08-10 03:44 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -20,7 +20,28 @@ their absolute sum `>117.830` (gain sum `>1.0` over Encoder). The stretch gate
 is sum `>=118.355`, matching the current epoch-96 `55.739/62.616` point.
 Epoch 4/8 remain diagnostics and cannot directly reject a decoder.
 
-Four inference-identical training strategies currently occupy the legal lanes.
+At 03:42 CST on 2026-08-10, this epoch-72 fallback objective is achieved by
+`0810_01 staged delayed LR clock`. The same epoch-72 checkpoint gives cls/det
+HOTA `55.263/62.599`, DetA/AssA `45.767/68.558` and `54.619/74.088`, and an
+absolute sum of `117.862`. Relative to Encoder, the gains are `0.826/0.206`
+and the gain sum is `1.032`; the strict cls/det/sum margins are therefore
+`+0.826/+0.206/+0.032`. It does not reach the optional stretch sum `118.355`
+(`-0.493`), but it satisfies every required fallback gate at epoch 72.
+
+The 463,321,014-byte checkpoint has SHA-256
+`4c104018004f3a3808f2c108637957bd60caee10188a16670ca8621c94bc9bcf`,
+meta `72/74736`, optimizer/scheduler/message-hub/EMA state, 711 model states
+and 712 EMA states. Both mappings contain 642 finite floating tensors; the
+full 22,771,111-parameter/711-state model deep-copies, builds and strict-loads
+with every key matched. Detection and TrackEval close at 5416 records/50
+sequences, 28 CSVs, 108 nonempty files, 50 predictions and `async_done=1`.
+Pair mAP/AP50 is `0.320203/0.534775`; both-independent is
+`0.359593/0.571307`. The schedule changes training only: the final
+terminal-only product-tangent decoder, parameter/state count, losses and
+inference compute remain unchanged, with no added class-aware decoder logic
+or reweighting. The 99 screen and all assigned GPUs released naturally.
+
+The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
 epoch 12. Dynamic-197 GPU0/1 runs `0808_07`, which keeps the parent LR through
 epoch 11 and stages two smaller increases at epochs 12 and 24. Dynamic-178 GPU0

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 03:12 CST。
+更新时间：2026-08-10 03:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,7 +17,7 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E71I750/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | 完整 checkpoint、检测和 TrackEval 闭环；screen 与 GPU0/1 已释放 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0810_03 decoder-frozen EMA-lag correction eval`（动态 GPU0） | COMPLETED/E72/STRICT_FAIL | `54.810/62.340`、sum `117.150`；完整闭环后 screen 自然退出，GPU 已释放 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -86,6 +86,19 @@
   均回落，否定了冻结整个 decoder 的解耦假设；screen `2136747` 自然退出，动态 GPU0 已释放。
 - 99 `0810_01` 已到 e71 iter750，LR `1.4491e-4`，总损失、DN、encoder proposal 与梯度
   均有限，双 GPU0/1 满载，继续生成并闭环 e72。
+
+## 2026-08-10 03:44 CST：99 `0810_01` e72 严格达标并释放资源
+
+- 同一 e72 checkpoint 的 cls HOTA/DetA/AssA 为 `55.263/45.767/68.558`，det 为
+  `62.599/54.619/74.088`，sum `117.862`；相对保底三门槛 margin
+  `+0.826/+0.206/+0.032`，严格 verifier rc=0。可选冲刺 sum `118.355` 未达，差 `0.493`。
+- pair mAP/AP50 `0.320203/0.534775`、both-independent `0.359593/0.571307`；
+  5416/50、28 CSV、108 个非空文件、50 predictions 和异步完成标志全部闭合。
+- 463,321,014-byte checkpoint SHA-256 为
+  `4c104018004f3a3808f2c108637957bd60caee10188a16670ca8621c94bc9bcf`，meta
+  `72/74736`；optimizer/scheduler/message hub/EMA 完整，state/EMA 各 642 个浮点张量
+  全有限，22,771,111 参数/711 states 模型 strict load 全匹配。screen 自然退出，99
+  GPU0/1 均为 10 MiB/0%，当前 PairMOT 资源已释放。
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
 
