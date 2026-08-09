@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 02:43 CST。
+更新时间：2026-08-10 03:01 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E70I250/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E71I250/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_02 epoch72 EMA-lag correction eval`（动态 GPU0） | RUNNING/EVAL/FRACTION_050；recovery screen `2128739` | 0.25 完整 `55.223/62.371`、sum `117.594`，未过 det/sum；0.50 已无损续跑，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0810_03 decoder-frozen EMA-lag correction eval`（动态 GPU0） | RUNNING/EVAL/BATCH100；screen `2136747` | 0810_02 两点严格失败后保留 decoder EMA、只校正其余 state；GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-10 02:23 CST：四线 e72 审计与 197→99 无损续训
@@ -63,6 +63,19 @@
   原进程和 GPU 均归零后，recovery screen `2128739` 已真实启动 fraction 0.50。没有覆盖或
   重算 0.25，178 仍只占动态 GPU0。
 - 99 `0810_01` 已到 e70 iter250，正式数值有限、双 GPU0/1 正常，继续目标 e72。
+
+## 2026-08-10 03:01 CST：178 `0810_02` 完成并启动 `0810_03`
+
+- `0810_02` fraction 0.50 为 cls `55.171/45.664/68.807`、det
+  `62.225/54.607/73.386`，sum `117.396`；pair `0.316672/0.533237`、
+  both-independent `0.355568/0.570005`，5416/50、28/108/50 完整，严格 rc=2。
+  与原点、0.25 联合拟合的 det/sum 上界约 `62.372/117.613`，所以停止全模型 fraction 扫描。
+- `0810_03` 针对 0.25 的 DetA 双升、det AssA 回落证据，只把 `decoder.*` 的 105 个浮点
+  state 固定在 EMA，其余 537 个仍按 0.25 校正；无结构、参数或推理开销变化。工具 8 项单测、
+  checkpoint finite、完整模型 strict load 均通过；payload 91,468,881 bytes、SHA-256
+  `f2c35e57d08f4e813754d35a05024a8776c29ff7215647e867a755abe8bc0de4`。screen
+  `2136747` 已在动态 GPU0 到 batch100，GPU1 空闲。
+- 99 `0810_01` 已到 e71 iter250，双卡与正式数值健康，继续 e72。
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
 
