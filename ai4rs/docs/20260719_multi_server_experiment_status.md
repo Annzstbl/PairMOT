@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 02:23 CST。
+更新时间：2026-08-10 02:31 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@
 | 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E69I50/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0809_01 product-tangent decoder/head delayed LR clock` | COMPLETED/E72/STRICT_FAIL `54.745/61.733`，sum `116.478` | checkpoint、检测与 TrackEval 全量闭环，GPU 已释放 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0810_02 epoch72 EMA-lag correction eval`（动态 GPU0） | RUNNING/EVAL/FRACTION_025；screen `2122996` | 对 252 e72 的 0.25/0.50 同步权重插值串行评测；GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-10 02:23 CST：四线 e72 审计与 197→99 无损续训
@@ -41,6 +41,16 @@
   4-iter smoke、364,513,078-byte finite checkpoint 与正式 e69 iter50 五门槛全部通过；
   iter50 LR/loss/grad 为 `1.4491e-4/9.0782/48.6024`，screen `3028786`、动态 GPU0/1
   各约 19.4 GiB，状态正式登记为 `RUNNING/TO_E72`。
+
+## 2026-08-10 02:31 CST：178 `0810_02` EMA-lag 评测启动
+
+- 252 `0808_08` e72 原点距 det/保底 sum 分别只差 `0.121/0.764`。`0810_02` 不重训，
+  仅将同一 checkpoint 的 EMA 权重向同一步 online 权重插值 `0.25/0.50`，无参数量、模型图、
+  class-aware、reweight 或推理 FLOPs 变化。
+- 178 隔离 checkout `5e007da` 已验证来源/评测 model dict 相等；两个 711-state payload
+  对 22,771,111 参数模型 strict load 且全有限。动态 GPU0 两次空闲后，screen `2122996`
+  已真实进入 fraction 0.25 test batch `100/1354`，约占 10 GiB；GPU1 保持空闲，随后串行
+  fraction 0.50，并分别等待完整检测、TrackEval 和严格验收。
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
 
