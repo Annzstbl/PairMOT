@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 02:31 CST。
+更新时间：2026-08-10 02:43 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,10 +17,10 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E69I50/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E70I250/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_02 epoch72 EMA-lag correction eval`（动态 GPU0） | RUNNING/EVAL/FRACTION_025；screen `2122996` | 对 252 e72 的 0.25/0.50 同步权重插值串行评测；GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0810_02 epoch72 EMA-lag correction eval`（动态 GPU0） | RUNNING/EVAL/FRACTION_050；recovery screen `2128739` | 0.25 完整 `55.223/62.371`、sum `117.594`，未过 det/sum；0.50 已无损续跑，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
 ## 2026-08-10 02:23 CST：四线 e72 审计与 197→99 无损续训
@@ -51,6 +51,18 @@
   对 22,771,111 参数模型 strict load 且全有限。动态 GPU0 两次空闲后，screen `2122996`
   已真实进入 fraction 0.25 test batch `100/1354`，约占 10 GiB；GPU1 保持空闲，随后串行
   fraction 0.50，并分别等待完整检测、TrackEval 和严格验收。
+
+## 2026-08-10 02:43 CST：178 fraction 0.25 闭环、runner 修复并续跑 0.50
+
+- 0.25 的 cls HOTA/DetA/AssA 为 `55.223/46.011/68.318`，det 为
+  `62.371/54.782/73.505`，sum `117.594`；pair `0.318450/0.534314`、
+  both-independent `0.357215/0.570580`，5416/50、28/108/50 全量闭环。margin
+  `+0.786/-0.022/-0.236`，严格 verifier rc=2，故不是达标结果。
+- 首版 runner 的 ERR trap 错把预期 rc=2 当作运行错误，在 0.25 闭环后退出。修复
+  `17fd626` 以条件分支接收 rc 0/2，并支持在保留既有 workdir 的条件下只续跑缺失 fraction；
+  原进程和 GPU 均归零后，recovery screen `2128739` 已真实启动 fraction 0.50。没有覆盖或
+  重算 0.25，178 仍只占动态 GPU0。
+- 99 `0810_01` 已到 e70 iter250，正式数值有限、双 GPU0/1 正常，继续目标 e72。
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
 

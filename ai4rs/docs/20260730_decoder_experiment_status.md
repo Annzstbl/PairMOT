@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 02:31 CST
+更新时间：2026-08-10 02:43 CST
 
 ## 当前研究原则
 
@@ -18,8 +18,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E69I50/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
-| 178 动态 GPU 0 | `0810_02 ... epoch72 EMA-lag correction eval` | `RUNNING/EVAL/FRACTION_025` | 对 252 `0808_08` e72 的同一步 EMA→online 权重做 0.25/0.50 串行评测；不改模型图、参数或推理计算，GPU1 未使用。 |
+| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E70I250/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
+| 178 动态 GPU 0 | `0810_02 ... epoch72 EMA-lag correction eval` | `RUNNING/EVAL/FRACTION_050` | fraction 0.25 完整 `55.223/62.371`、sum `117.594`，det/sum 仅差 `0.022/0.236`；已无损恢复并串行评测 0.50，GPU1 未使用。 |
 | 197 主机不可达 | `0808_07 ... staged delayed LR clock ... fresh` | `STOPPED/HOST_UNREACHABLE/E70I950/E68_STRICT_PASS` | e68 `55.646/62.509`、sum `118.155`，严格通过保底线；仅因主机卡死/SSH 不可达而未生成 e72，已迁移到 99。 |
 | 178 已释放 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.745/61.733`、sum `116.478`；完整检测、TrackEval 与 checkpoint 闭环。 |
 | 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.794/62.272`、sum `117.066`；完整闭环但 det 低线 `0.121`、sum 低保底 `0.764`。PairMOT 已结束；当前 GPU0 外部负载未触碰。 |
@@ -74,6 +74,21 @@
   均对 22,771,111 参数、711 states 的完整模型 strict load 成功且全部有限。GPU0 连续两次空闲
   后启动 screen `2122996`；fraction 0.25 已到 test batch `100/1354`，GPU0 约 10 GiB，GPU1
   保持空闲。两个候选串行运行并各自等待完整检测、TrackEval 与严格三门槛验收。
+
+## 2026-08-10 02:43 CST：EMA fraction 0.25 完整失败与 0.50 无损恢复
+
+- fraction 0.25 完整结果为 cls HOTA/DetA/AssA `55.223/46.011/68.318`、det
+  `62.371/54.782/73.505`，sum `117.594`；pair mAP/AP50
+  `0.318450/0.534314`、both-independent `0.357215/0.570580`。5416/50、28 CSV、
+  108 个非空 TrackEval 文件和 50 predictions 全部闭环。相对保底线 margin 为
+  `+0.786/-0.022/-0.236`，因此严格未通过，但证明小幅 online 校正显著提高 cls 且 det
+  缺口仅剩 `0.022`。
+- 验收器返回码 2 本应表示正常的严格未达标，却被首版 runner 的 ERR trap 误判成运行失败，
+  使 0.50 未自动启动。0.25 产物没有损坏或重算；修复提交 `17fd626` 改为在条件语句中捕获
+  0/2，并增加只续跑缺失 fraction 的安全恢复入口。原 screen 自然退出、GPU0 归零后，
+  recovery screen `2128739` 只启动 fraction 0.50；正式 test 进程存活，GPU1 仍未使用。
+- 99 `0810_01` 同时已进入 e70 iter250，LR `1.4491e-4`、loss `8.9333`、grad
+  `53.9742`，total/DN/encoder proposal 全有限，双卡各约 19.4 GiB，fatal=0。
 
 ## 2026-08-08 18:15 CST：197 e16 成熟换线并启动分阶段延迟 LR
 
