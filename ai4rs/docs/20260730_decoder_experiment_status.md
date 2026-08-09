@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 03:01 CST
+更新时间：2026-08-10 03:12 CST
 
 ## 当前研究原则
 
@@ -18,8 +18,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E71I250/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
-| 178 动态 GPU 0 | `0810_03 ... decoder-frozen EMA-lag correction eval` | `RUNNING/EVAL/BATCH100` | 保留 105 个 decoder 浮点 state 的 EMA，仅对其余 537 个 state 做 0.25 同步校正，以保住 AssA 并争取 DetA；GPU1 未使用。 |
+| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E71I750/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
+| 178 已释放 | `0810_03 ... decoder-frozen EMA-lag correction eval` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.810/62.340`、sum `117.150`；完整检测、TrackEval 与 checkpoint 闭环，det 低线 `0.053`、sum 低线 `0.680`，screen 自然退出。 |
 | 178 已释放 | `0810_02 ... full-model epoch72 EMA-lag correction eval` | `COMPLETED/STRICT_FAIL` | fraction 0.25 为 `55.223/62.371`、sum `117.594`；0.50 为 `55.171/62.225`、sum `117.396`。三点包络无过线空间。 |
 | 197 主机不可达 | `0808_07 ... staged delayed LR clock ... fresh` | `STOPPED/HOST_UNREACHABLE/E70I950/E68_STRICT_PASS` | e68 `55.646/62.509`、sum `118.155`，严格通过保底线；仅因主机卡死/SSH 不可达而未生成 e72，已迁移到 99。 |
 | 178 已释放 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.745/61.733`、sum `116.478`；完整检测、TrackEval 与 checkpoint 闭环。 |
@@ -107,6 +107,18 @@
   `f2c35e57d08f4e813754d35a05024a8776c29ff7215647e867a755abe8bc0de4`，642 个浮点张量
   全有限，并对 22,771,111 参数/711 states 模型 strict load。178 GPU0 两次空闲后，screen
   `2136747` 已真实到 batch100、约 10 GiB，GPU1 空闲。99 同时到 e71 iter250，继续 e72。
+
+## 2026-08-10 03:12 CST：decoder-frozen EMA-lag 完整失败
+
+- `0810_03` 同一 e72 payload 的 cls HOTA/DetA/AssA 为 `54.810/45.577/67.327`，det 为
+  `62.340/54.317/73.902`，sum `117.150`；pair mAP/AP50
+  `0.319153/0.540030`、both-independent `0.359617/0.577048`。5416/50、28 CSV、
+  108 个非空 TrackEval 文件和 50 predictions 全量闭环；严格 margin
+  `+0.373/-0.053/-0.680`，verifier rc=2，screen 自然退出并释放 GPU0。
+- 相比全模型 0.25 校正，冻结全部 decoder 令 cls/det DetA 分别下降 `0.434/0.465`，
+  cls/det AssA 也下降 `0.991/0.397`；它没有形成预期的“保 AssA、提 DetA”解耦，因此停止
+  该块级 fraction 分支，不做无依据扫描。99 `0810_01` 已到 e71 iter750，双卡健康，继续
+  生成并完整评测目标 e72 checkpoint。
 
 ## 2026-08-08 18:15 CST：197 e16 成熟换线并启动分阶段延迟 LR
 
