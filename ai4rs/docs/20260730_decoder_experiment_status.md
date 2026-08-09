@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-09 03:59 CST
+更新时间：2026-08-10 02:23 CST
 
 ## 当前研究原则
 
@@ -18,10 +18,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 动态 GPU 0,1 | `0809_02 ... decoder/head delayed LR + EMA clock ... fresh` | `RUNNING/E4I450/TO_E72` | 只在 `0809_01` 上压缩 EMA 时钟；真实双卡 smoke、checkpoint 与 formal 五门槛已通过。 |
-| 197 动态 GPU 0,1 | `0808_07 ... staged delayed LR clock ... fresh` | `RUNNING/E35I900/E32_COMPLETE/TO_E72` | e32 `53.072/59.682`，总和略超父线同点 `0.125`；即将进入 e36 检验 cls/AP。 |
-| 178 动态 GPU 0 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `RUNNING/E10I450/E8_COMPLETE/TO_E72` | e8 `42.853/49.918` 较 e4 强恢复且优于局部 Adam 同点；继续 e12/e16。 |
-| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `RUNNING/E13I450/E12_COMPLETE/TO_E16_REVIEW` | e12 `45.569/52.337` 仍被父线/旧局部 LR 支配；保留到 e16 成熟复核，不在 e12 单点停线。 |
+| 99 动态 GPU 0,1 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `RUNNING/E69I50/TO_E72` | 197 原线 e68 已严格通过保底三门槛但主机在 e72 前失联；以同一完整 checkpoint、同一 2×4 协议迁移。真实双卡 smoke 与 resume formal 五门槛已通过。 |
+| 197 主机不可达 | `0808_07 ... staged delayed LR clock ... fresh` | `STOPPED/HOST_UNREACHABLE/E70I950/E68_STRICT_PASS` | e68 `55.646/62.509`、sum `118.155`，严格通过保底线；仅因主机卡死/SSH 不可达而未生成 e72，已迁移到 99。 |
+| 178 已释放 | `0809_01 ... product-tangent decoder/head delayed LR clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.745/61.733`、sum `116.478`；完整检测、TrackEval 与 checkpoint 闭环。 |
+| 252 固定 GPU 0,1 | `0808_08 ... decoder/head LR×4/3 + local Adam clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.794/62.272`、sum `117.066`；完整闭环但 det 低线 `0.121`、sum 低保底 `0.764`。PairMOT 已结束；当前 GPU0 外部负载未触碰。 |
+| 99 已释放 | `0809_02 ... decoder/head delayed LR + EMA clock ... fresh` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.452/62.161`、sum `116.613`；完整检测、TrackEval 与 checkpoint 闭环。 |
 | 99 已释放 | `0808_06 ... product-tangent delayed LR clock ... fresh` | `STOPPED/E29I350/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.334/59.149`，第二个切换后成熟点仍低 197/父线的 cls、DetA 与 AP；完整审计后 PGID `2606266` 成员归零。 |
 | 178 已释放 | `0808_03 ... decoder/head LR×4/3 ... fresh` | `STOPPED/E37I400/E36_COMPLETE/MATURE_OVERSHOOT` | e36 `51.825/59.674`，连续 e32/e36 未恢复 e28，定位、cls 与 AP 成熟回撤；完整审计后 PGID `1346509` 成员 `9→0`。 |
 | 252 已释放 | `0808_04 ... coherent clock compression ... fresh` | `STOPPED/E29I550/E28_COMPLETE/MATURE_DOMINATED` | e28 `50.677/59.213`，低 178 同点 `2.173/0.489`，DetA、AssA 与 AP 全部被压制；七个成熟节点后精确停止 PGID `1579745`，成员 `7→0`。 |
@@ -34,6 +35,33 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 02:23 CST：e72 全线审计与 197 e68 达标状态迁移
+
+- 99 `0809_02` e72 为 cls `54.452/45.008/67.976`、det
+  `62.161/54.148/73.772`，sum `116.613`；178 `0809_01` e72 为 cls
+  `54.745/44.985/68.807`、det `61.733/54.126/72.886`，sum `116.478`；252
+  `0808_08` e72 为 cls `54.794/45.494/67.505`、det `62.272/54.192/73.968`，
+  sum `117.066`。三点均具备 5416 条检测、50 序列、28 CSV、108 个非空 TrackEval
+  文件和 50 predictions，但均未同时通过 cls `>54.437`、det `>62.393`、sum
+  `>117.830`，故不登记达标。
+- 197 `0808_07` 的 e68 已完整闭环：cls `55.646/46.167/68.836`、det
+  `62.509/54.486/74.139`，sum `118.155`；pair mAP/AP50
+  `0.321370/0.539301`、both-independent `0.361550/0.577505`。相对保底三门槛的
+  margin 为 `+1.209/+0.116/+0.325`。457,866,023-byte checkpoint SHA-256
+  `9488476dcabd43f4e13de5a35140831a342ca8c58dce845cefc7684d6356f511`，meta
+  `68/70584`，优化器、scheduler、message hub、EMA、iterative-cls/DN 均完整，642 个
+  浮点张量全有限。正式日志最后到 e70 iter950 后主机显著降速并失联，不能用 e68 代替目标要求的
+  e72，因此只将其登记为路线通过、目标待同点复核。
+- `0810_01` 在 99 的隔离 clean detached `2da182f` 上只迁移主机本地路径，模型、参数、
+  2×4 batch、优化器、分阶段 LR、EMA、loss 和推理均与 `0808_07` 相同。配置 deepcopy 与
+  完整构建为 22,771,111 参数/711 states。真实双卡 smoke loss
+  `12.9372/19.4054/19.5346/21.1504`、grad
+  `102.9152/93.6501/89.9647/99.0633`；364,513,078-byte `iter_4.pth` SHA-256
+  `855353a4b54832297b1901762a2a68e73929f78f4b0383bbcd6a6b87f61a4847`，DN、encoder、
+  iterative-cls 与 642 个浮点张量均有限。resume screen `3028786` 在动态 GPU0/1 达到
+  e69 iter50，LR/loss/grad 为 `1.4491e-4/9.0782/48.6024`，两 rank 各约 19.4 GiB，
+  formal 五门槛通过，状态 `RUNNING/TO_E72`。
 
 ## 2026-08-08 18:15 CST：197 e16 成熟换线并启动分阶段延迟 LR
 

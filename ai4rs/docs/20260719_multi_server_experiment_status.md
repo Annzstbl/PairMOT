@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-09 03:59 CST。
+更新时间：2026-08-10 02:23 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,30 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0809_02 decoder/head delayed LR + EMA clock`（动态 GPU0/1） | RUNNING/E4I450/TO_E72；screen/main `2652052/2652054` | `0808_06` e28 成熟停线后接替；真实 smoke/checkpoint/formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock`（动态 GPU0/1） | RUNNING/E35I900/E32_COMPLETE/TO_E72；screen/main `3583196/3583197` | e32 `53.072/59.682`，总和高父线同点 `0.125`，即将 e36 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | RUNNING/E13I450/E12_COMPLETE/TO_E16_REVIEW；screen/main `1642666/1642667` | e12 `45.569/52.337` 成熟偏弱，保留至 e16 复核；GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0809_01 product-tangent decoder/head delayed LR clock`（动态 GPU0） | RUNNING/E10I450/E8_COMPLETE/TO_E72；screen/main `1605754/1605756` | e8 `42.853/49.918`，优于局部 Adam 同点；继续 e12/e16，GPU1 空闲 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | RUNNING/E69I50/TO_E72；screen `3028786` | 从 197 的严格保底通过 e68 完整迁移；真实 2-GPU smoke 与 formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0809_01 product-tangent decoder/head delayed LR clock` | COMPLETED/E72/STRICT_FAIL `54.745/61.733`，sum `116.478` | checkpoint、检测与 TrackEval 全量闭环，GPU 已释放 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 02:23 CST：四线 e72 审计与 197→99 无损续训
+
+- 99 `0809_02`、178 `0809_01`、252 `0808_08` 的 e72 分别为
+  `54.452/62.161`（sum `116.613`）、`54.745/61.733`（sum `116.478`）和
+  `54.794/62.272`（sum `117.066`）。三点 checkpoint、5416/50 检测、28 CSV、108
+  非空 TrackEval 文件及 50 predictions 均闭环，但未同时通过 cls `>54.437`、det
+  `>62.393`、sum `>117.830`。
+- 197 `0808_07` e68 为 `55.646/62.509`、sum `118.155`，相对保底线 margin
+  `+1.209/+0.116/+0.325`，且 DetA/AssA 为 cls `46.167/68.836`、det
+  `54.486/74.139`。checkpoint 为 457,866,023 bytes、SHA-256
+  `9488476dcabd43f4e13de5a35140831a342ca8c58dce845cefc7684d6356f511`、meta
+  `68/70584`，resume 所需 optimizer/scheduler/message hub/EMA 全部存在且有限。主机在 e70
+  iter950 后卡死并不可达，故 e68 虽严格通过保底，也不能替代同一 e72 checkpoint 的目标验收。
+- 99 隔离 checkout `2da182f` 的 `0810_01` 仅覆盖主机路径，从上述 e68 同一 checkpoint
+  以相同 2×4 协议续训。配置 deepcopy、22,771,111 参数/711 states 完整构建、真实双卡
+  4-iter smoke、364,513,078-byte finite checkpoint 与正式 e69 iter50 五门槛全部通过；
+  iter50 LR/loss/grad 为 `1.4491e-4/9.0782/48.6024`，screen `3028786`、动态 GPU0/1
+  各约 19.4 GiB，状态正式登记为 `RUNNING/TO_E72`。
 
 ## 2026-08-08 19:11 CST：252 e16 与 99 延迟-LR e4 闭环
 
