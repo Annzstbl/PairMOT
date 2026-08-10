@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 18:39 CST.
+Last updated: 2026-08-10 19:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -126,6 +126,20 @@ remote checkout, deepcopy/build, smoke/formal workdir or GPU allocation
 exists. Its exact state is therefore
 `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`, not remotely validated
 or running.
+
+At 19:10 CST, dynamic-178 `0810_06` closes epoch 8 completely. The same
+375,609,076-byte checkpoint (SHA-256 `2fefd4127eeb83c144c4ba9009341e0141f317693c3db073b3346f17b99bfafb`)
+gives cls HOTA/DetA/AssA `32.494/28.983/39.381` and det
+`37.373/36.934/39.004`; pair mAP/AP50 is `0.156090/0.298093` and
+both-independent is `0.207748/0.380997`. Its 642 floating model tensors are
+finite and iterative-cls/DN heads are trained. Detection and TrackEval close
+at 5416 records/50 sequences, 28 CSVs, 108 nonempty files, 50 predictions and
+`async_done=1`; TrackEval ends naturally in 235.9 seconds. Training resumes at
+epoch 9 iteration 300 on only dynamic GPU0. The standard One-Cycle ascent lasts
+through epoch 21.6, so this delayed e8 point is diagnostic rather than a stop
+gate; collect e12/e16 and later mature nodes. Fixed-252 `0810_07` concurrently
+reaches e8 iteration 700 and dynamic-99 `0810_08` reaches e4 iteration 750,
+both finite with legal GPU mappings and no next checkpoint yet.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until

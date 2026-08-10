@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 18:39 CST。
+更新时间：2026-08-10 19:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,22 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E1I50/TO_E72；formal 五门槛通过 | `0810_09 standard WSD warmup4+stable56+cosine12` 已远端 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；GPU1 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E4I750/TO_E72；fatal=0 | `0810_09 standard WSD warmup4+stable56+cosine12` 已远端 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；GPU1 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 主机适配仅 `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E5I550/E4_COMPLETE/TO_E72；fatal=0 | e4 `14.874/31.414` 完整闭环；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E6I250/E4_COMPLETE/TO_E72；fatal=0 | e4 `0.300/1.493` 完整闭环；单卡 1×8，继续 e8+，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E8I700/E4_COMPLETE/TO_E72；fatal=0 | 接近 e8 checkpoint；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E9I300/E8_COMPLETE/TO_E72；fatal=0 | e8 `32.494/37.373` 完整闭环；单卡 1×8，继续成熟窗口，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 19:10 CST：178 `0810_06` e8 完整闭环
+
+- e8 cls HOTA/DetA/AssA `32.494/28.983/39.381`，det
+  `37.373/36.934/39.004`，sum `69.867`；pair mAP/AP50
+  `0.156090/0.298093`，both-independent `0.207748/0.380997`。
+- 375,609,076-byte checkpoint SHA-256 为 `2fefd412…bfafb`；642 个浮点模型 tensor、
+  iterative-cls/DN 审计通过。5416/50 检测、28 CSV、108 个非空评测文件、50 predictions、
+  `async_done=1` 完整，TrackEval 235.9 秒自然结束。
+- 主训练已恢复 e9 iter300，只占动态 GPU0。该线仍处于标准 One-Cycle 上升段，e8 只作诊断，
+  不直接否决；同期固定 252 到 e8 iter700，动态 99 到 e4 iter750，均 fatal=0。
 
 ## 2026-08-10 18:32 CST：99 `0810_09` WSD 后备静态就绪
 
