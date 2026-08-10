@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 04:14 CST.
+Last updated: 2026-08-11 05:30 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 05:30 CST, dynamic-178 ratio-preserving standard One-Cycle peak x2.5
+closes e40 at `54.002/61.769` (sum `115.771`). Every HOTA, DetA, AssA and AP
+summary rises from e36, and its final cls/det/sum gaps shrink to
+`1.261/0.830/2.091`. Its 419,711,476-byte checkpoint has 2,776 finite floating
+tensors and the full 5,416/50 detection, 28 CSV/108 nonempty/50 prediction and
+async TrackEval closure. It is the strongest mature point but is not yet a
+pass, so it continues to e44/e72.
+
+Dynamic-99 warmup12-cosine closes e36 at `52.908/60.882` (sum `113.790`).
+At matched e36 it leads One-Cycle in cls and sum but trails det; the detailed
+DetA/AssA/AP comparison is mixed, so neither dominates and cosine continues to
+e40/e72. Fixed-252 WSD closes e8 at `43.141/48.555` (sum `91.696`), gaining
+`11.037/8.549` HOTA from e4 with every DetA/AssA/AP summary higher. It leads
+warmup12-cosine by `2.940/1.847` at matched e8, but this remains early formation
+evidence rather than a stopping decision; WSD continues to e12/e72. Both e36
+and e8 checkpoints have 2,776 finite floating tensors and complete detection/
+TrackEval closure. Current progress is 99 e37i300, 178 e41i850 and 252 e10i1000.
 
 At 04:14 CST, dynamic-99 standard warmup12-cosine closes e32 at
 `52.597/60.315` (sum `112.912`) and dynamic-178 ratio-preserving standard
