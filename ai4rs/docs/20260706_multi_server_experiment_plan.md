@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 05:30 CST.
+Last updated: 2026-08-11 06:50 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,33 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 06:50 CST, dynamic-99 warmup12-cosine closes e40 at
+`54.541/61.711` (sum `116.252`) and becomes the strongest mature point. It
+gains `1.633/0.829` HOTA from e36 with all DetA, AssA and AP summaries higher;
+the remaining cls/det/sum gaps are `0.722/0.888/1.610`. Its 419,439,798-byte
+checkpoint SHA-256 is `d417c38041f4bc7d27819f325665366fdab32656b02f2d18180889dcb32e75fe`;
+all 2,776 floating tensors, 5,416/50 detection records/sequences and
+28 CSV/108 nonempty/50 prediction TrackEval closure pass.
+
+Dynamic-178 ratio-preserving One-Cycle closes e44 at `54.296/61.805` (sum
+`116.101`). Relative to e40, DetA rises `0.472/0.372`, AssA rolls back
+`0.136/0.460`, HOTA still rises `0.294/0.036`, and all four AP summaries rise.
+Its final gaps are `0.967/0.794/1.761`; the 425,217,396-byte checkpoint SHA-256
+is `b9e93b4789553ee1c373ac8bfa3a9f3b9d56551a63023ae03b8138df2f8363e8`,
+with the same finite-state and full evaluation closure. At these adjacent
+mature nodes, cosine leads cls and sum while One-Cycle leads det, so both
+continue to e44/e48 and e72.
+
+Fixed-252 WSD closes e12 at `45.839/53.198` (sum `99.037`), gaining
+`2.698/4.643` HOTA from e8 with every DetA, AssA and AP summary higher. Its
+380,977,590-byte checkpoint SHA-256 is
+`be2a1a731c388cacd7e4ba8a64fb5ed9125383c64a1294049174671e6cec7479`;
+all 2,776 floating tensors and full detection/TrackEval gates pass. E12 remains
+an early stable-phase point rather than a rejection gate, so WSD continues to
+e16/e72 on fixed GPU0/1. Live progress is 99 e41i300, 178 e45i950 and 252
+e14i350. The 99 control plane and 197 SSH currently time out, but 99 shared
+logs remain live; 197 owns no PairMOT GPU and no fallback is launched.
 
 At 05:30 CST, dynamic-178 ratio-preserving standard One-Cycle peak x2.5
 closes e40 at `54.002/61.769` (sum `115.771`). Every HOTA, DetA, AssA and AP
