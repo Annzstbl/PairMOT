@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 01:58 CST。
+更新时间：2026-08-11 02:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,25 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E26I400/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.850/58.999` 完整；99 的 `0810_09` WSD 静态后备不占卡，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E27I50/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.850/58.999` 完整；`0810_09` WSD 与 `0811_01` warmup4-cosine 均为静态后备且不占卡，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E1I50/SMOKE_COMPLETE/TO_E72；fatal=0 | commit `34efcf4`；静态构建、497 组倍率、真实双卡 smoke、有限 checkpoint、formal iter50 五门槛通过；旧 `0810_07` 在 e24 成熟支配证据后停止 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E30I1000/E28_COMPLETE/TO_E72；fatal=0 | e28 `51.313/60.243` 完整；HOTA/DetA/AssA 继续升、AP 略回撤，继续 e32/e72，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E1I750/SMOKE_COMPLETE/TO_E72；fatal=0 | commit `34efcf4`；静态构建、497 组倍率、真实双卡 smoke、有限 checkpoint、formal iter50 五门槛通过；旧 `0810_07` 在 e24 成熟支配证据后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E31I750/E28_COMPLETE/TO_E72；fatal=0 | e28 `51.313/60.243` 完整；HOTA/DetA/AssA 继续升、AP 略回撤，继续 e32/e72，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 02:11 CST：99 `0811_01` 标准短 warmup-cosine 静态后备
+
+- `0811_01` 是 `0810_08` 的严格单因素调度后备：相同 `8/3×` 峰值，将 LinearLR
+  warmup 从 12 epoch 缩为 4 epoch，随后采用 68 epoch 标准 CosineAnnealingLR；连续名义
+  LR 积分仍为 96 个父线 epoch。模型、data、loss、EMA、global batch、hooks、参数组与推理
+  图不变，无 class-aware、reweight 或推理开销变化。
+- commit `e47298f` 已同步到 99 独立 clean checkout，存活 `0810_08` 仓库未修改；未创建
+  smoke/formal workdir、未占 GPU。配置 deepcopy、两个 launcher Bash 语法、父/候选完整构建
+  均通过，二者为 22,771,111 参数/711 states。实际 497 optimizer groups 在 72 点 scheduler
+  审计中保持 `[0.1,1,2,20]`，离散 LR 积分 `97.344267`，所有点为正且有限。状态仅登记
+  `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，不能作为运行实验。
+- 同期 99 `0810_08` 到 e27i50、178 `0810_06` 到 e31i750、252 WSD 到 e1i750；三者
+  正式进程和有限数值健康，下一完整 checkpoint 仍为 99 e28、178 e32 与 252 e4。
 
 ## 2026-08-11 01:58 CST：e24/e28 完整闭环与 252 WSD 五门槛启动
 

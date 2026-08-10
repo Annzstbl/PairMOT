@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-11 01:58 CST
+更新时间：2026-08-11 02:11 CST
 
 ## 当前研究原则
 
@@ -24,10 +24,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E30I1000/E28_COMPLETE/TO_E72` | e28 cls/det HOTA `51.313/60.243` 完整闭环；较 e24 双升 `0.233/0.968`，DetA/AssA 全升但 AP 小幅回撤，继续 e32/e72，GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E1I50/SMOKE_COMPLETE/TO_E72` | commit `34efcf4`；deepcopy、完整构建、497 组倍率、真实双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；iter50 LR/loss/grad `1.0e-7/21.5442/108.2206`，固定只用 GPU0/1。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E26I400/E24_COMPLETE/TO_E72` | e24 cls/det HOTA `51.850/58.999` 完整闭环，较 e20 的 HOTA、DetA、AssA 与四项 AP 全升；继续 e28/e72，GPU1 为外部任务且未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E31I750/E28_COMPLETE/TO_E72` | e28 cls/det HOTA `51.313/60.243` 完整闭环；较 e24 双升 `0.233/0.968`，DetA/AssA 全升但 AP 小幅回撤，继续 e32/e72，GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E1I750/SMOKE_COMPLETE/TO_E72` | commit `34efcf4`；deepcopy、完整构建、497 组倍率、真实双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；当前 total/DN/encoder proposal/grad 有限，固定只用 GPU0/1。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E27I50/E24_COMPLETE/TO_E72` | e24 cls/det HOTA `51.850/58.999` 完整闭环，较 e20 的 HOTA、DetA、AssA 与四项 AP 全升；继续 e28/e72，GPU1 为外部任务且未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
+| 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
 | 252 已释放 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `STOPPED/E25I1000/E24_COMPLETE/MATURE_DOMINATED` | e24 `48.913/55.278`、sum `104.191`，HOTA、DetA、AssA 与 AP 均被 178 同点支配；在峰后成熟闭环后精确停止并释放固定 GPU0/1，非 e4/e8 否决。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
@@ -51,6 +52,25 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-11 02:11 CST：`0811_01` 标准短 warmup-cosine 后备静态就绪
+
+- 基于 99 `0810_08` 在 e12 后形成最快、但前 12 epoch 都用于线性爬升的证据，准备严格
+  单因素后备 `0811_01`：峰值仍为父线 `8/3×`，只将标准 LinearLR warmup 从 12 epoch
+  缩到 4 epoch，随后使用 68 epoch 标准 CosineAnnealingLR。连续名义 LR 积分仍为 96 个
+  父线 epoch，因此没有通过扩大总更新预算获得优势；模型、参数、data、loss、EMA、global
+  batch、hooks 和推理图均与 `0810_08` 相同，无 class-aware、reweight 或新增推理计算。
+- commit `e47298f` 已部署至 99 独立 clean checkout，未热更新存活 `0810_08` 仓库，也未创建
+  smoke/formal workdir 或占用 GPU。配置 deepcopy、两个 launcher Bash 语法与完整父/候选构建
+  通过：均为 22,771,111 参数、711 states；真实 497 optimizer groups 全程保持
+  `[0.1,1,2,20]` 倍率。MMEngine 72 点离散 LR 序列全正且有限，积分为
+  `97.344267` 个父线 epoch；关键点 e0/e1/e3/e4/e12/e36/e60/e71 分别为
+  `0.001/0.889556/2.666667/2.666667/2.576639/1.456479/0.199957/0.001689` 倍。
+  当前状态仅为 `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；只有合法双卡释放且现有成熟
+  证据支持交接后，才执行真实 smoke、有限 checkpoint 与 formal iter50 五门槛。
+- 实时主线仍健康：99 `0810_08` e27i50、178 `0810_06` e31i750、252 WSD e1i750；
+  total、DN、encoder proposal 和 grad 均有限、fatal=0，下一闭环点仍为 99 e28、178 e32、
+  252 e4。
 
 ## 2026-08-11 01:58 CST：成熟节点闭环与 252 标准 WSD 正式交接
 

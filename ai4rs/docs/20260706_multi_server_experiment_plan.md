@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 01:58 CST.
+Last updated: 2026-08-11 02:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,22 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 02:11 CST, standard short-warmup cosine fallback `0811_01` is remotely
+static-validated on 99 without touching the live `0810_08` checkout or using
+a GPU. It is a single scheduler factor: retain the same `8/3x` peak and 96
+parent-epoch nominal LR integral, shorten LinearLR warmup from 12 to four
+epochs, and extend standard cosine decay from 60 to 68 epochs. Model, data,
+loss, EMA, global batch, hooks, parameter groups and inference remain equal to
+`0810_08`, with no class-aware logic or reweighting. At clean detached commit
+`e47298f`, both configs deep-copy, both launchers pass Bash syntax, and full
+parent/candidate builds match at 22,771,111 parameters and 711 states. All
+497 actual optimizer groups retain `0.1/1/2/20` ratios throughout the finite
+72-point MMEngine sequence, whose discrete integral is `97.344267` parent
+epochs. It remains `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` until a legal
+two-GPU lane is released and the full dynamic five-gate protocol is justified.
+The active lines remain healthy at 99 e27i50, 178 e31i750 and fixed-252 WSD
+e1i750; the next complete nodes are e28, e32 and e4 respectively.
 
 At 01:58 CST on 2026-08-11, the mature scheduler comparison has handed the
 fixed-252 lane to standard WSD. Dynamic-178 One-Cycle peak x2.5 closes e28 at
