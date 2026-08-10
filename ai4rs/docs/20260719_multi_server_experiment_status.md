@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 23:05 CST。
+更新时间：2026-08-11 00:22 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,28 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E17I300/E16_COMPLETE/TO_E72；fatal=0 | e16 `49.327/56.697` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 为外部任务且未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E21I300/E20_COMPLETE/TO_E72；fatal=0 | e20 `51.228/58.036` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 为外部任务且未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E19I250/E16_COMPLETE/TO_E72；fatal=0 | e16 `45.071/50.068` 完整；双卡 2×4，继续 e20/e24 峰值前后，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E21I300/E20_COMPLETE/TO_E72；fatal=0 | e20 `49.939/57.763` 完整；单卡 1×8，继续峰后 e24，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E21I800/E20_COMPLETE/TO_E72；fatal=0 | e20 `46.929/52.657` 完整；双卡 2×4，继续峰后 e24，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E25I300/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.080/59.275` 完整；单卡 1×8，峰后全指标继续上升，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 00:22 CST：252 e20、178 e24 与 99 e20 完整闭环
+
+- 252 One-Cycle peak×2.0 e20 为 `46.929/52.657`，DetA/AssA
+  `38.174/60.025` 与 `46.889/61.566`，pair `0.242264/0.426941`，both-independent
+  `0.283642/0.478540`；相对 e16 全指标继续改善，但同 e20 被 178 peak×2.5 全面领先，
+  保留至峰后 e24。checkpoint SHA `195d8057…a0bb`，完整闭环，TrackEval 977.9 秒，训练到
+  e21 iter800。
+- 178 One-Cycle peak×2.5 e24 为 `51.080/59.275`，DetA/AssA
+  `42.101/64.283` 与 `51.994/69.864`，pair `0.295309/0.503612`，both-independent
+  `0.336887/0.547816`；相对 e20 的 HOTA、DetA、AssA 与 AP 全升，无峰后过冲。checkpoint
+  SHA `15cef14d…ab04`，完整闭环，训练恢复 e25 iter300。
+- 99 warmup12-cosine e20 为 `51.228/58.036`，DetA/AssA
+  `43.034/62.808` 与 `51.044/68.380`，pair `0.288417/0.500151`，both-independent
+  `0.331713/0.549963`；同 e20 HOTA 高 178 `1.289/0.273`，但 mAP 略低；相对 178 e24
+  cls `+0.148`、det `-1.239`，支持真实前移但未达到四 epoch 全量等价，继续 e24。checkpoint
+  SHA `0e31ae5f…f4d0`，完整闭环，训练恢复 e21 iter300。
 
 ## 2026-08-10 23:05 CST：178 e20 与 99 e16 完整闭环
 
