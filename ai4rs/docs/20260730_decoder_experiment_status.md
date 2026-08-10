@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 19:38 CST
+更新时间：2026-08-10 21:06 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E10I1000/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `32.494/37.373` 完整闭环；继续 e12/e16 与成熟窗口，不以 e8 否决，GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E9I900/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `31.712/37.834`，完整 checkpoint/检测/TrackEval/有限性闭环；固定只用 GPU0/1，GPU2/3 未使用。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E6I200/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `27.170/36.995` 完整闭环，较 252 同点形成更快；继续 e8/e12，GPU1 为外部任务且未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E15I750/E12_COMPLETE/TO_E72` | e12 cls/det HOTA `44.024/49.377` 完整闭环；e8→e12 双升 `11.530/12.004`，继续 e16 与峰后窗口，GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E13I800/E12_COMPLETE/TO_E72` | e12 cls/det HOTA `39.046/43.968` 完整闭环；固定只用 GPU0/1，TrackEval 经共享存储 RPC 延迟后自然完成。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E10I1000/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `40.201/46.708` 完整闭环，形成速度领先两条 One-Cycle；继续 e12，GPU1 为外部任务且未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
@@ -50,6 +50,35 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 21:06 CST：三条成熟 scheduler 首轮可比节点完整闭环
+
+- 178 `0810_06` One-Cycle peak×2.5 e12 同一 checkpoint 的 cls
+  HOTA/DetA/AssA 为 `44.024/37.766/54.705`，det 为
+  `49.377/46.686/53.771`，sum `93.401`；pair mAP/AP50
+  `0.242287/0.418168`，both-independent `0.290527/0.480515`。相对 e8，cls/det
+  HOTA 上升 `11.530/12.004`，DetA 上升 `8.783/9.752`，AssA 上升
+  `15.324/14.767`，显示仍在快速形成而非停滞。381,129,460-byte checkpoint SHA-256
+  为 `3b6dc39ab11428bca3ba8716d96131c0ea110f1e55f2a19ee4455e3c2bde0fd1`；642 个
+  浮点 tensor、iterative-cls/DN、5416/50、28 CSV、108 非空文件、50 predictions 与
+  `async_done=1` 全部通过。主训练已到 e15 iter750。
+- 99 `0810_08` 标准 12e warmup + cosine e8 cls HOTA/DetA/AssA 为
+  `40.201/33.203/51.170`，det 为 `46.708/41.073/55.034`，sum `86.909`；pair
+  `0.196932/0.351540`，both-independent `0.239690/0.412321`。它比 178 同 e8 HOTA
+  高 `7.707/9.335`，且在 e8 已比 252 e12 高 `1.155/2.740`，是当前形成最快路线。
+  375,537,142-byte checkpoint SHA-256 为
+  `3534d07fb7eb86012cece4d4991a89fae0b6e3080ba322f39ad06fdd7125d04b`；有限性、
+  iterative-cls/DN、5416/50、28/108/50 与 `async_done=1` 闭环，主训练到 e10 iter1000。
+- 252 `0810_07` One-Cycle peak×2.0 e12 cls HOTA/DetA/AssA 为
+  `39.046/32.850/48.962`，det 为 `43.968/40.484/48.999`，sum `83.014`；pair
+  `0.187661/0.341973`，both-independent `0.237962/0.419204`。同点被 178 peak×2.5
+  全面领先 HOTA `4.978/5.409`，DetA、AssA 与 AP 也均更低；但两条 One-Cycle 的峰值均在
+  epoch 21.6，故 e12 仍不是停线点。381,086,774-byte checkpoint SHA-256 为
+  `e65260a3890375b1f847ff4a03a466d609e21c34b139d0900b642306c1e3877d`，其余完整性门槛
+  均通过。TrackEval 曾因 `rpc_wait_bit_killable` 共享存储等待延长至 916.5 秒，进程自行恢复
+  并自然完成；主训练未受影响，已到 e13 iter800。
+- 三节点 verifier 均为 `fallback_pass=false`，不能证明最终 e72 失败。后续顺序为 178/252
+  e16 与 peak 后 e24、99 e12 及后续 cosine 成熟点；197 仍 SSH 超时，WSD 不越过动态门槛。
 
 ## 2026-08-10 19:38 CST：197 短暂恢复后再次失联，WSD 未越过动态门槛
 

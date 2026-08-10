@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 19:38 CST.
+Last updated: 2026-08-10 21:06 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,17 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 21:06 CST, the first comparable scheduler nodes are complete. Dynamic-178
+One-Cycle peak x2.5 reaches e12 `44.024/49.377`; fixed-252 peak x2.0 reaches
+e12 `39.046/43.968`; dynamic-99 standard warmup-cosine reaches e8
+`40.201/46.708`. Every checkpoint, finite-state, iterative-cls/DN, 5,416/50
+detection, 28 CSV/108 non-empty/50 prediction and async TrackEval gate is
+closed. 99 forms fastest and 178 dominates 252 at matched e12, but One-Cycle
+still rises to epoch 21.6, so both continue to e16 and post-peak e24 while 99
+continues to e12. The 252 e12 TrackEval recovered naturally from an NFS RPC
+wait and finished in 916.5 seconds; training was unaffected. Server 197 still
+times out and WSD remains unlaunched.
 
 At 19:38 CST, server 197 answered one read-only audit at 19:32 and reported
 all six GPUs at 1 MiB/0%, but the next two SSH audits timed out, including the
