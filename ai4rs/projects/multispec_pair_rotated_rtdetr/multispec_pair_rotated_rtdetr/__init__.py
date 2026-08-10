@@ -23,6 +23,7 @@ from .pair_track_early_stopping_hook import PairTrackEarlyStoppingHook
 from .single_val_visualization_hook import HSMOTSingleValVisualizationHook
 from .timed_rotated_rtdetr import TimedRotatedRTDETR
 from .tagged_lr_scheduler import TaggedMultiStepLR
+from .ratio_preserving_onecycle_lr import RatioPreservingOneCycleLR
 
 __all__ = [
     'HSMOTPairOverfitMetric',
@@ -47,4 +48,5 @@ __all__ = [
     'PairTrackEarlyStoppingHook',
     'TimedRotatedRTDETR',
     'TaggedMultiStepLR',
+    'RatioPreservingOneCycleLR',
 ]
