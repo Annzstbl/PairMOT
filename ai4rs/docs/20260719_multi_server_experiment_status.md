@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 00:22 CST。
+更新时间：2026-08-11 00:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,19 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E21I300/E20_COMPLETE/TO_E72；fatal=0 | e20 `51.228/58.036` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 为外部任务且未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E21I650/E20_COMPLETE/TO_E72；fatal=0 | e20 `51.228/58.036` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E21I800/E20_COMPLETE/TO_E72；fatal=0 | e20 `46.929/52.657` 完整；双卡 2×4，继续峰后 e24，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E25I300/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.080/59.275` 完整；单卡 1×8，峰后全指标继续上升，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E22I850/E20_COMPLETE/TO_E72；fatal=0 | e20 `46.929/52.657` 完整；双卡 2×4，继续峰后 e24，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E26I50/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.080/59.275` 完整；单卡 1×8，继续 e28/e72，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 00:27 CST：正式进程、GPU 与下一节点审计
+
+- 178 `0810_06` 到 e26i50，仅动态 GPU0；99 `0810_08` 到 e21i650，动态 GPU0/2；252
+  `0810_07` 到 e22i850，严格固定 GPU0/1。三条正式进程、worker、日志均持续更新，loss/grad
+  与 DN/Encoder proposal 有限，fatal=0；未授权 GPU 均未触碰。
+- 178 e28、99/252 e24 尚未生成 checkpoint/检测目录，继续自然训练。197 只读 SSH 再次超时，
+  `0810_09` WSD 仍未部署、不占卡；当前三台可达主机均已占满各自授权卡数，因此没有越界新增任务。
 
 ## 2026-08-11 00:22 CST：252 e20、178 e24 与 99 e20 完整闭环
 

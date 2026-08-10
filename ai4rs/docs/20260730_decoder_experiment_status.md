@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-11 00:22 CST
+更新时间：2026-08-11 00:27 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E25I300/E24_COMPLETE/TO_E72` | e24 cls/det HOTA `51.080/59.275` 完整闭环；峰后 HOTA、DetA、AssA 与 AP 全升，无过冲，继续 e72，GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E21I800/E20_COMPLETE/TO_E72` | e20 cls/det HOTA `46.929/52.657` 完整闭环；同点仍被 178 peak×2.5 全指标领先，继续峰后 e24，固定只用 GPU0/1。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E21I300/E20_COMPLETE/TO_E72` | e20 cls/det HOTA `51.228/58.036` 完整闭环，同点领先 178 HOTA `1.289/0.273`，但未全指标支配；继续 e24，GPU1 为外部任务且未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E26I50/E24_COMPLETE/TO_E72` | e24 cls/det HOTA `51.080/59.275` 完整闭环；峰后 HOTA、DetA、AssA 与 AP 全升，无过冲，继续 e28/e72，GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E22I850/E20_COMPLETE/TO_E72` | e20 cls/det HOTA `46.929/52.657` 完整闭环；同点仍被 178 peak×2.5 全指标领先，继续峰后 e24，固定只用 GPU0/1。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E21I650/E20_COMPLETE/TO_E72` | e20 cls/det HOTA `51.228/58.036` 完整闭环，同点领先 178 HOTA `1.289/0.273`，但未全指标支配；继续 e24，GPU1 为外部任务且未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
@@ -50,6 +50,20 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-11 00:27 CST：三条成熟 scheduler 实时审计与资源约束
+
+- 178 `0810_06` 正式训练主进程/worker 存活，最新正式日志到 e26 iter50，LR
+  `2.4712e-4`，loss/grad `9.2596/49.2430`，total、DN、Encoder proposal 全有限；仅动态
+  GPU0 约 31.5 GiB，GPU1 为 `1 MiB/0%`。e28 目录尚未生成，继续自然训练而不抢占单卡配额。
+- 99 `0810_08` 正式 torchrun/双 rank 存活，最新日志到 e21 iter650，LR
+  `2.5514e-4`，loss/grad `9.9856/58.0264`，fatal=0；动态 GPU0/2 各约 21.4 GiB，GPU1
+  仅 10 MiB 且未触碰。e24 checkpoint/检测尚未生成，继续收集下一正式节点。
+- 252 `0810_07` 正式 torchrun/双 rank 存活，最新日志到 e22 iter850，LR
+  `1.9999e-4`，loss/grad `10.3284/47.7482`，fatal=0；严格只使用 GPU0/1，各约
+  21.4 GiB，GPU2/3 为 `1 MiB/0%`。e24 产物尚未生成，保留至共同峰后窗口。
+- 197 只读 SSH 再次超时；未同步、未创建远端 workdir、未占用 GPU。当前 99/252/178 已分别
+  占满授权 2/2/1 卡，故 WSD `0810_09` 继续保持静态后备，不越界启动、不热更新存活仓库。
 
 ## 2026-08-11 00:22 CST：252 e20、178 e24 与 99 e20 完整闭环
 
