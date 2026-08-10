@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 03:37 CST.
+Last updated: 2026-08-11 04:14 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 04:14 CST, dynamic-99 standard warmup12-cosine closes e32 at
+`52.597/60.315` (sum `112.912`) and dynamic-178 ratio-preserving standard
+One-Cycle peak x2.5 closes e36 at `52.358/61.237` (sum `113.595`). Relative
+to their previous nodes, 99 gains `0.623/0.597` HOTA and 178 gains
+`0.919/0.387`; all DetA/AssA and all four AP summaries rise on each line.
+Both 408,479,606-byte and 414,205,108-byte checkpoints have 2,776 finite
+floating tensors, and each 5,416/50 detection, 28 CSV/108 nonempty/50
+prediction and async TrackEval closure passes.
+
+At matched e32, cosine leads cls HOTA, sum and four AP summaries while
+One-Cycle leads det HOTA and both cls/det AssA, so neither dominates. The best
+current mature point is One-Cycle e36 sum `113.595`, still short of the final
+cls/det/sum gates by `2.905/1.362/4.267`; both lines therefore continue rather
+than being stopped. Current progress is 99 e33i350, 178 e37i850 and fixed-252
+WSD e7i550, with next complete nodes e36/e40/e8. Server 197 again times out on
+a short read-only probe, so no new GPU lane is authorized and `0811_01`
+remains a static fallback.
 
 At 03:37 CST, dynamic-99 standard warmup12-cosine closes e28 at
 `51.974/59.718` (sum `111.692`) and dynamic-178 ratio-preserving standard
