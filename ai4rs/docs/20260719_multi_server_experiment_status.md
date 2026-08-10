@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 17:27 CST。
+更新时间：2026-08-10 18:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,30 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | `0810_08` queue screen `3349124` 等待任意两张动态空闲卡；QUEUED/NO_SMOKE/NO_FORMAL | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E3I450/TO_E72；fatal=0 | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E4I100/TO_E72；fatal=0 | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E5I300/E4_COMPLETE/TO_E72；fatal=0 | e4 `14.874/31.414` 完整闭环；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E5I1000/E4_COMPLETE/TO_E72；fatal=0 | e4 `0.300/1.493` 完整闭环；单卡 1×8，继续 e8+，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 18:05 CST：178/252 One-Cycle epoch-4 完整闭环
+
+- 178 `0810_06` e4 cls HOTA/DetA/AssA 为 `0.300/0.044/2.047`，det 为
+  `1.493/0.136/16.372`；pair mAP/AP50 `0.0000/0.0001`，both-independent
+  `0.0003/0.0012`。370,013,620-byte checkpoint SHA-256 为
+  `db7e75069999737a71a2e7756e6d7a1de9cbe640a6205f03d43c1914b9dd8f45`，meta
+  `4/4152`；model/EMA 各 642 个浮点 tensor 全有限，iterative-cls/DN、optimizer、
+  scheduler 和 message hub 完整。5416/50、28 CSV、108 文件、50 predictions、
+  `async_done=1` 齐全，TrackEval 140.4 秒；只用动态 GPU0，已恢复 e5 iter1000。
+- 252 `0810_07` e4 cls HOTA/DetA/AssA 为 `14.874/10.404/28.113`，det 为
+  `31.414/21.281/46.741`；pair `0.0450/0.0950`，both-independent
+  `0.0666/0.1376`。370,015,350-byte checkpoint SHA-256 为
+  `fcb5daec928123079a5579280e6670677f25778df29fc6611a03e57cb41ffb1f`，meta
+  `4/4152`；497 optimizer groups、model/EMA 有限性与 iterative-cls/DN 均通过。
+  5416/50、28/108/50 与 `async_done=1` 完整，TrackEval 288.0 秒；固定 GPU0/1，已恢复
+  e5 iter300，GPU2/3 未使用。
+- 252 的较温和候选在 e4 明显更稳，但 178/252 还存在 1×8/2×4 物理批拓扑差异，不能把
+  全部差异归因于 peak factor。两线均处于 One-Cycle 升温段，继续 e8 与成熟节点，未以 e4
+  停线。99 `0810_08` queue screen `3349124` 仍存活；仅 GPU0 空闲，smoke/formal 目录均
+  不存在，状态保持 `QUEUED/NO_SMOKE/NO_FORMAL`。
 
 ## 2026-08-10 17:27 CST：99 `0810_08` 安全队列真实存活
 
