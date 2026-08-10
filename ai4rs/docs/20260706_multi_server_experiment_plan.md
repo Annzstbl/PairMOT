@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 19:10 CST.
+Last updated: 2026-08-10 19:28 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -140,6 +140,25 @@ through epoch 21.6, so this delayed e8 point is diagnostic rather than a stop
 gate; collect e12/e16 and later mature nodes. Fixed-252 `0810_07` concurrently
 reaches e8 iteration 700 and dynamic-99 `0810_08` reaches e4 iteration 750,
 both finite with legal GPU mappings and no next checkpoint yet.
+
+At 19:28 CST, dynamic-99 `0810_08` closes epoch 4 and fixed-252 `0810_07`
+closes epoch 8. The 99 point gives cls HOTA/DetA/AssA
+`27.170/20.136/39.522` and det `36.995/28.502/48.859`; pair mAP/AP50 is
+`0.090551/0.186640` and both-independent is `0.126042/0.249651`. Its
+369,988,342-byte checkpoint has SHA-256
+`815f8d84d727a43b1a5e8f0cc0657fb90ab77055ff8c5b645042b9a5712e5115`.
+The 252 point gives cls `31.712/24.229/44.724` and det
+`37.834/31.449/46.794`; pair is `0.115459/0.222711` and both-independent is
+`0.157338/0.294269`. Its 375,593,718-byte checkpoint has SHA-256
+`9e82d591dca3722d8adb860899f0db7cd54ac6390364d86393ffa7f08f4e420d`.
+Both checkpoints pass floating-tensor and iterative-cls/DN audits; each closes
+5416/50 detection, 28 CSVs, 108 nonempty files, 50 predictions and
+`async_done=1`. TrackEval takes 223.2 seconds on 99 and 331.2 seconds on the
+slowest 252. Training resumes at 99 e5i550 and 252 e9i300; 178 is e10i500.
+The warmup-cosine e4 point is `+12.296/+5.581` HOTA over the same-2x4 252 e4
+point, while 252 e8 has higher AssA but lower DetA/AP than 178 e8. These are
+formation diagnostics, not e4/e8 stop gates; continue 99 to e8/e12 and both
+One-Cycle lines through e12/e16 and post-peak mature nodes.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
