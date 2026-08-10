@@ -6,7 +6,7 @@ model and all optimizer paramwise LR ratios and only changes the scheduler.
 from mmengine.config import read_base
 
 with read_base():
-    from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0804_01_iterative_cls_terminal_transport_product_tangent_decoder_252 import *  # noqa: F401,F403
+    from .o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0804_01_iterative_cls_terminal_transport_product_tangent_decoder_resume252 import *  # noqa: F401,F403
 
 
 param_scheduler = [
