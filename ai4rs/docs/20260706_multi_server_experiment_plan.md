@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 18:32 CST.
+Last updated: 2026-08-10 18:39 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -117,6 +117,15 @@ remote Bash syntax. Because live `0810_08` owns dynamic GPU0/2 and GPU1 is an
 external job, `0810_09` remains `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`: it may
 only advance after two legal GPUs are free and the real smoke, finite
 checkpoint and formal-iter50 gates pass.
+
+At 18:39 CST, commit `a914606` adds a host-only 197 adaptation of the same
+`0810_09` WSD candidate. It changes only 197 data, GMC, TrackEval, Conda,
+workdir and dynamic-two-GPU launcher paths; both configs compile and both
+launchers pass local Bash syntax. The host still times out over SSH, so no
+remote checkout, deepcopy/build, smoke/formal workdir or GPU allocation
+exists. Its exact state is therefore
+`LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`, not remotely validated
+or running.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until

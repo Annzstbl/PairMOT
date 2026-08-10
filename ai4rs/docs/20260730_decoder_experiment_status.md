@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 18:32 CST
+更新时间：2026-08-10 18:39 CST
 
 ## 当前研究原则
 
@@ -28,6 +28,7 @@
 | 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E5I550/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `14.874/31.414`，早期明显稳于 peak×2.5 候选；完整闭环后继续 e8+，GPU2/3 未使用。 |
 | 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E1I50/TO_E72` | queue 已完成连续空闲、真实 DDP smoke、有限 checkpoint 和 formal iter50 五门槛；标准 LinearLR+CosineAnnealingLR，GPU1 外部任务未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
+| 197 后备（主机不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 仅完成 197 数据/GMC/TrackEval/Conda 路径适配及本地语法；尚未部署或远端构建，不占 GPU。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
@@ -72,6 +73,10 @@
   `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，未创建任何 smoke/formal workdir、未占 GPU。
   只有合法两卡释放后完成真实 DDP smoke、有限 checkpoint 与 formal iter50 五门槛，才可
   升级状态。
+- commit `a914606` 同时补齐 197 的同科学候选主机适配：只覆盖该机 data、GMC、TrackEval、
+  Conda、workdir 与动态双卡 launcher 路径；两 launcher 本地 `bash -n`、两配置语法通过。
+  197 仍 SSH 超时，因此没有远端 checkout、deepcopy/构建、smoke/formal workdir 或 GPU
+  占用，严格状态仅为 `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`。
 
 ## 2026-08-10 18:10 CST：99 标准 warmup-cosine 通过真实五门槛
 
