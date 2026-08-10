@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 16:37 CST
+更新时间：2026-08-10 17:19 CST
 
 ## 当前研究原则
 
@@ -24,8 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E1I150/TO_E72` | 标准 two-phase cosine One-Cycle，逐参数组展开 `eta_max` 并保留原 497 组 LR 倍率；commit `552668d`，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E1I100/TO_E72` | 与 `0810_06` 只差预声明 peak factor；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 外部任务未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E3I800/TO_E72` | 标准 two-phase cosine One-Cycle，逐参数组展开 `eta_max` 并保留原 497 组 LR 倍率；commit `552668d`，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E3I200/TO_E72` | 与 `0810_06` 只差预声明 peak factor；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 外部任务未触碰。 |
+| 99 等待两张空闲卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `STATIC_VALIDATED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL` | commit `a78b239`；标准 LinearLR + CosineAnnealingLR，名义 LR 积分对齐父线 e96；deepcopy、完整构建、497 组倍率和远端 launcher 语法通过。GPU1/2 外部任务占用，未越权启动。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
@@ -47,6 +48,30 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 17:19 CST：标准 warmup-cosine 后备完成静态闭环
+
+- `0810_08` 只替换 LR 曲线：12 epoch 标准线性 warmup 从父线相同的 `1e-7`
+  安全起点升至 base-group `2.6666667e-4`，随后 60 epoch 使用 MMEngine
+  `CosineAnnealingLR(T_max=60, eta_min_ratio=1e-4)`。连续近似的名义积分为
+  `0.5×12×(8/3) + 0.5×60×(8/3) = 96` 个父线 epoch；它比当前 One-Cycle 的
+  21.6-epoch 上升段更早进入有效 LR 区间，但不使用人工倍率跳变。
+- 隔离 commit `a78b239` 已部署到 99 的 clean detached checkout。首次普通 clone 被无关
+  历史 LFS 动图 smudge 中断；精确核验并只清理新建失败副本后，以 skip-smudge 无损重建。
+  本地/远端 launcher `bash -n`、配置 deepcopy、父子 model/train data/train cfg/hooks
+  等同性均通过；optimizer 除 peak LR 这一曲线参数外完全相同。
+- 完整模型构建仍为 22,771,111 参数/711 states。实际 optimizer 为 497 组，peak 四档
+  `[2.6667e-5,2.6667e-4,5.3333e-4,5.3333e-3]`，初始化四档
+  `[1e-8,1e-7,2e-7,2e-6]`，所有组共同缩放 `0.000375`，原 `0.1/1/2/20`
+  倍率逐项保持。
+- 99 在 17:04 的 GPU0 空闲，但 GPU1/2 各有约 20.3/23.4 GiB 外部任务，197 仍 SSH
+  超时；因此不满足真实双卡 smoke 条件。`0810_08` 只登记
+  `STATIC_VALIDATED/WAITING_2_FREE_GPUS`，完成真实 DDP smoke、有限 checkpoint 和
+  formal iter50 五门槛前不得登记 RUNNING。
+- 同时审计主线：178 `0810_06` 到 e3i800，LR/loss `1.9607e-5/16.1195`；252
+  `0810_07` 到 e3i200，LR/loss `1.2837e-5/12.5755`。两线 screen/训练进程/GPU 映射
+  合法、fatal=0，尚未生成 e4 checkpoint；继续等待完整诊断节点，不以早期 loss 或
+  裁剪前 grad norm 停线。
 
 ## 2026-08-10 16:37 CST：修复标量 eta_max 协议并启动倍率保持 One-Cycle
 

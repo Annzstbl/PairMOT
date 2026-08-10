@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 16:37 CST.
+Last updated: 2026-08-10 17:19 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -64,6 +64,20 @@ Real-data smoke checkpoints are finite and formal iter50 LR/loss/grad is
 GPU, workdir and log mappings match the legal resource assignments. Both jobs
 therefore run to the mature evaluation window; epoch 4/8 remain diagnostics
 rather than rejection gates.
+
+At 17:19 CST, a standard warmup-cosine fallback `0810_08` is statically ready
+on a clean detached 99 checkout at commit `a78b239`. It uses a 12-epoch linear
+warmup from the parent's `1e-7` safety LR to base-group `2.6666667e-4`, followed
+by 60 epochs of `CosineAnnealingLR`; the nominal continuous LR integral equals
+96 parent epochs. Model, data, losses, EMA, hooks, global batch and inference
+are unchanged. Config deepcopy, remote launcher syntax, a complete
+22,771,111-parameter/711-state build and all 497 optimizer-group ratio checks
+pass. It remains `STATIC_VALIDATED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL`:
+99 currently has only GPU0 free while GPU1/2 run external jobs, and 197 remains
+unreachable. It must still pass real two-GPU smoke, finite checkpoint and the
+five formal iter50 gates before it can be called running. Concurrently,
+`0810_06/0810_07` are healthy at e3i800/e3i200 with fatal scans empty and no e4
+checkpoint yet.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until

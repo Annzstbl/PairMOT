@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 16:37 CST。
+更新时间：2026-08-10 17:19 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,26 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | 完整 checkpoint、检测和 TrackEval 闭环；screen 与 GPU0/1 已释放 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | `0810_08` 标准 warmup-cosine 已静态验证，等待两张空闲卡；当前 GPU1/2 为外部任务，NO_SMOKE/NO_FORMAL | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E1I100/TO_E72；formal iter50 `lr/loss/grad=8.0023e-6/20.6372/94.4325` | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E1I150/TO_E72；formal iter50 `lr/loss/grad=1.0003e-5/20.0431/82.6103` | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E3I200/TO_E72；`lr/loss=1.2837e-5/12.5755` | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E3I800/TO_E72；`lr/loss=1.9607e-5/16.1195` | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 17:19 CST：warmup-cosine 后备静态就绪，主线进入 epoch 3
+
+- `0810_08` 使用标准 12-epoch `LinearLR` warmup 和 60-epoch
+  `CosineAnnealingLR`，peak factor 为 `8/3`，名义 LR 积分对齐父线 e96。它保持最终
+  model、data、loss、EMA、全局 batch、hooks 和推理不变，commit 为 `a78b239`。
+- 99 clean detached checkout 已通过远端 launcher 语法、配置 deepcopy、完整
+  22,771,111 参数/711 states 构建及实际 497 optimizer-group 审计；四档 peak/initial LR
+  为 `[2.6667e-5,2.6667e-4,5.3333e-4,5.3333e-3]` 和
+  `[1e-8,1e-7,2e-7,2e-6]`，所有倍率保持。首次 clone 的无关 LFS smudge 失败已通过
+  精确清理新建副本和 skip-smudge 重建恢复。
+- 99 只有 GPU0 空闲，GPU1/2 为外部任务；197 仍不可达。因此 `0810_08` 仅为
+  `STATIC_VALIDATED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL`，没有越权占卡或伪报 RUNNING。
+- 178 `0810_06` 到 e3i800，252 `0810_07` 到 e3i200；两线进程、授权 GPU、正式日志和
+  fatal 扫描正常，尚无 e4 checkpoint，继续等待完整检测/TrackEval 诊断。
 
 ## 2026-08-10 16:37 CST：倍率保持 One-Cycle 双线通过正式五门槛
 
