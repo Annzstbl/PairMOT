@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-11 02:11 CST
+更新时间：2026-08-11 03:37 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E31I750/E28_COMPLETE/TO_E72` | e28 cls/det HOTA `51.313/60.243` 完整闭环；较 e24 双升 `0.233/0.968`，DetA/AssA 全升但 AP 小幅回撤，继续 e32/e72，GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E1I750/SMOKE_COMPLETE/TO_E72` | commit `34efcf4`；deepcopy、完整构建、497 组倍率、真实双卡 smoke、有限 checkpoint 与 formal iter50 五门槛均通过；当前 total/DN/encoder proposal/grad 有限，固定只用 GPU0/1。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E27I50/E24_COMPLETE/TO_E72` | e24 cls/det HOTA `51.850/58.999` 完整闭环，较 e20 的 HOTA、DetA、AssA 与四项 AP 全升；继续 e28/e72，GPU1 为外部任务且未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E36I50/E32_COMPLETE/TO_E72` | e32 cls/det HOTA `51.439/60.850`、sum `112.289` 完整闭环；较 e28 双升 `0.126/0.607`，det DetA/AssA 继续升，checkpoint 全有限，继续 e36/e72，GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E5I750/E4_COMPLETE/TO_E72` | e4 `32.104/40.006`、sum `72.110` 完整闭环；checkpoint 的 2,776 个浮点 tensor 全有限，5416/50 与 28/108/50 评测门槛通过。该点仅为 warmup 诊断，继续 e8/e72，固定只用 GPU0/1。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E31I350/E28_COMPLETE/TO_E72` | e28 cls/det HOTA `51.974/59.718`、sum `111.692` 完整闭环；较 e24 双升 `0.124/0.719`，四项 AP 全升，checkpoint 全有限；继续 e32/e72，GPU1 未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
@@ -52,6 +52,34 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-11 03:37 CST：99 e28、178 e32 与 252 e4 完整闭环
+
+- 99 `0810_08` warmup12-cosine e28 同一 checkpoint 为 cls HOTA/DetA/AssA
+  `51.974/43.872/63.535`、det `59.718/52.118/70.892`，sum `111.692`；pair
+  mAP/AP50 `0.296164/0.517461`，both-independent `0.338926/0.563368`。相对 e24，
+  cls HOTA/DetA/AssA 为 `+0.124/-0.048/+0.669`，det 为 `+0.719/+0.376/+1.264`，
+  四项 AP 全升。402,992,438-byte checkpoint SHA-256
+  `7bfe550ba525419b779b67f6a50c7abb7f21ad38902649583218cae2890a7841`，浮点
+  tensor 全有限；5416/50、28 CSV/108 非空文件/50 predictions、`async_done=1` 全闭环。
+- 178 `0810_06` ratio-preserving One-Cycle peak×2.5 e32 为 cls
+  `51.439/42.464/64.809`、det `60.850/52.938/72.392`，sum `112.289`；pair
+  `0.295390/0.500819`，both-independent `0.336153/0.542595`。相对 e28，cls
+  HOTA/DetA/AssA 为 `+0.126/+0.259/-0.117`，det 为 `+0.607/+0.362/+0.983`；
+  pair 两项与 both-independent mAP 回升，仅 both-independent AP50 `-0.000166`。
+  408,691,956-byte checkpoint SHA-256
+  `d296519e67e3ec2a6aa513b960bad9274815d98deb125429f401f04517792a3e`，浮点
+  tensor 全有限；检测和 TrackEval 的 5416/50、28/108/50 与 async 门槛全闭环。
+- 同 e28 比较，99 的 cls HOTA、sum 分别高 `0.661/0.136`，且四项 AP 更高；178 的
+  det HOTA 高 `0.525`，cls/det AssA 更强。两者没有全面支配，且 178 e28→e32 仍双升，
+  因此均继续至下一成熟节点和 e72，不作早停；当前 99 e31i350、178 e36i50，fatal=0。
+- 252 WSD e4 最终为 cls `32.104/24.149/46.108`、det
+  `40.006/31.048/52.422`，sum `72.110`；pair `0.125499/0.234166`、
+  both-independent `0.167094/0.302948`。369,969,206-byte checkpoint SHA-256
+  `bb7633caaaf4d752cc301de923932c4a7263dc8184e26d46acd152ca846e556c`，遍历
+  checkpoint 的 2,776 个浮点 tensor 全有限；5416/50、28 CSV/108 非空文件/50 predictions
+  和 `async_done=1` 全闭环。训练独立推进到 e5i750。e4 只是四轮标准 warmup 的诊断点，
+  不能据此否决 WSD，继续 e8/e72。197 只读 SSH 再次超时，未改变其代码、workdir 或 GPU 状态。
 
 ## 2026-08-11 02:11 CST：`0811_01` 标准短 warmup-cosine 后备静态就绪
 

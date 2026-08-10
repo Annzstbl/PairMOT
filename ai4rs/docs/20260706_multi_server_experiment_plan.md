@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 02:11 CST.
+Last updated: 2026-08-11 03:37 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 03:37 CST, dynamic-99 standard warmup12-cosine closes e28 at
+`51.974/59.718` (sum `111.692`) and dynamic-178 ratio-preserving standard
+One-Cycle peak x2.5 closes e32 at `51.439/60.850` (sum `112.289`). Both
+checkpoints are finite and their 5,416/50 detection, 28 CSV/108 nonempty/50
+prediction and async TrackEval gates close. Relative to their prior nodes,
+99 gains `0.124/0.719` HOTA with all four AP summaries higher, while 178 gains
+`0.126/0.607` and keeps raising det DetA/AssA. At matched e28, 99 leads cls,
+sum and AP while 178 leads det and AssA, so neither dominates and both remain
+live to e72. Current formal progress is 99 e31i350 and 178 e36i50.
+
+Fixed-252 WSD also closes e4 at cls/det HOTA `32.104/40.006` (sum `72.110`),
+with DetA/AssA `24.149/46.108` and `31.048/52.422`. Its 369,969,206-byte
+checkpoint SHA-256 is `bb7633caaaf4d752cc301de923932c4a7263dc8184e26d46acd152ca846e556c`;
+all 2,776 floating checkpoint tensors are finite, and 5,416/50 detection,
+28 CSV/108 nonempty/50 prediction and async TrackEval gates close. Training
+continues at e5i750 on fixed GPU0/1. E4 is only a four-epoch standard-warmup
+diagnostic and cannot reject WSD; it continues to e8/e72. Server 197 again
+times out on a read-only SSH probe, with no deployment or GPU change.
 
 At 02:11 CST, standard short-warmup cosine fallback `0811_01` is remotely
 static-validated on 99 without touching the live `0810_08` checkout or using
