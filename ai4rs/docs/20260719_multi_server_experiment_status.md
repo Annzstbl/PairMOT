@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 00:27 CST。
+更新时间：2026-08-11 01:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,41 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E21I650/E20_COMPLETE/TO_E72；fatal=0 | e20 `51.228/58.036` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E26I400/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.850/58.999` 完整；99 的 `0810_09` WSD 静态后备不占卡，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E22I850/E20_COMPLETE/TO_E72；fatal=0 | e20 `46.929/52.657` 完整；双卡 2×4，继续峰后 e24，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E26I50/E24_COMPLETE/TO_E72；fatal=0 | e24 `51.080/59.275` 完整；单卡 1×8，继续 e28/e72，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E1I50/SMOKE_COMPLETE/TO_E72；fatal=0 | commit `34efcf4`；静态构建、497 组倍率、真实双卡 smoke、有限 checkpoint、formal iter50 五门槛通过；旧 `0810_07` 在 e24 成熟支配证据后停止 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E30I1000/E28_COMPLETE/TO_E72；fatal=0 | e28 `51.313/60.243` 完整；HOTA/DetA/AssA 继续升、AP 略回撤，继续 e32/e72，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 01:58 CST：e24/e28 完整闭环与 252 WSD 五门槛启动
+
+- 178 `0810_06` e28 完整结果为 cls HOTA/DetA/AssA `51.313/42.205/64.926`、det
+  `60.243/52.576/71.409`，sum `111.556`；pair mAP/AP50 `0.292999/0.500325`，
+  both-independent `0.333631/0.542761`。403,176,116-byte checkpoint SHA-256
+  `fe99173216c65067912d3979fe8a426ad014944c9bbe8b39f8d86d05f4de0806`，642 tensor、
+  iterative-cls/DN、5416/50、28 CSV/108 非空文件/50 predictions 完整；训练到 e30i1000，
+  单卡 GPU0、fatal=0，继续 e32/e72。
+- 99 `0810_08` e24 为 cls `51.850/43.920/62.866`、det `58.999/51.742/69.628`，
+  sum `110.849`；pair `0.293353/0.508800`，both-independent `0.337096/0.558036`。
+  397,499,574-byte checkpoint SHA-256
+  `c887c28c0c8609cc3e324465a1df498de37f9f65a9dd453c55e95d05f9e9c1ee`，完整闭环；
+  相对 e20 的 HOTA、DetA、AssA 与四项 AP 全升。训练到 e26i400，动态 GPU0/2、fatal=0。
+- 252 `0810_07` e24 为 cls `48.913/40.141/61.988`、det `55.278/49.174/64.653`，
+  sum `104.191`；pair `0.259727/0.455464`，both-independent `0.301252/0.505747`。
+  397,539,638-byte checkpoint SHA-256
+  `cb74956db753eeb3047eca9adf0d35bea2933847fc8a0c854b36a39cd4972d4b` 且 5416/50、
+  28/108/50 全闭环。该峰后成熟点被 178 同 e24 的 HOTA、DetA、AssA、AP 全面支配，故在
+  e25i1000 精确停止并释放固定 GPU0/1；不是依据 e4/e8 停线。
+- 随后在 252 独立 clean checkout 部署标准 WSD `0810_09`（commit `34efcf4`）：4 epoch
+  线性 warmup 到 `1.5×`、56 stable、12 cosine。配置 deepcopy、两个 launcher Bash 语法、
+  父/候选完整构建均通过，均为 22,771,111 参数/711 states；实际 497 optimizer groups 保持
+  `[0.1,1,2,20]` 倍率。模型、数据语义、loss、EMA、global batch 和推理图未变。
+- 固定 GPU0/1 的真实 4-iter DDP smoke 四个 loss/grad 全有限；364,512,758-byte checkpoint
+  SHA-256 `e38b5e39287711d4e4ae9db27427596e21f2fde8a253016a6485e6922569b897`，
+  iterative-cls/DN 已训练、642 浮点 tensor 全有限、fatal=0。fresh formal 的 screen/torchrun、
+  双 rank、GPU0/1、工作目录均一致，e1 iter50 LR/loss/grad
+  `1.0e-7/21.5442/108.2206`，total、DN、encoder proposal 全有限且 fatal=0；五项门槛后登记
+  `RUNNING/TO_E72`。
 
 ## 2026-08-11 00:27 CST：正式进程、GPU 与下一节点审计
 

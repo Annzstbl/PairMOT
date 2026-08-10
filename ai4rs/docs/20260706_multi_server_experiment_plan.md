@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 21:51 CST.
+Last updated: 2026-08-11 01:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,37 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 01:58 CST on 2026-08-11, the mature scheduler comparison has handed the
+fixed-252 lane to standard WSD. Dynamic-178 One-Cycle peak x2.5 closes e28 at
+`51.313/60.243` (sum `111.556`) and is healthy at e30i1000; dynamic-99
+warmup12-cosine closes e24 at `51.850/58.999` (sum `110.849`) and is healthy
+at e26i400. Their checkpoint, finite-state, iterative-cls/DN, 5,416/50
+detection and 28 CSV/108 nonempty/50 prediction TrackEval gates all close.
+Both continue to e32/e72 and e28/e72 respectively: 178 still improves HOTA,
+DetA and AssA despite a small AP rollback, while 99 improves every audited
+metric over its own e20.
+
+Fixed-252 One-Cycle peak x2.0 closes e24 at `48.913/55.278` (sum `104.191`),
+with HOTA, DetA, AssA and AP all dominated by 178 at the same mature node. It
+was therefore stopped precisely at e25i1000 and released GPU0/1; this is a
+post-peak mature decision, not an epoch-4/8 rejection. Standard WSD `0810_09`
+was then deployed in an isolated clean checkout at commit `34efcf4`. The only
+scientific change is the conventional 4-epoch linear warmup to `1.5x`, 56
+stable epochs and 12-epoch cosine decay. Candidate/parent deepcopy and full
+builds match at 22,771,111 parameters/711 states, and all 497 real optimizer
+groups retain `0.1/1/2/20` ratios. Model, data semantics, loss, EMA, global
+batch and inference are unchanged.
+
+The fixed-GPU0/1 four-iteration DDP smoke produced four finite loss/grad
+records and a 364,512,758-byte checkpoint with SHA-256
+`e38b5e39287711d4e4ae9db27427596e21f2fde8a253016a6485e6922569b897`;
+iterative-cls/DN is trained and all 642 floating tensors are finite. Fresh
+formal screen, torchrun, two ranks, GPU0/1 and workdir agree, and e1i50 reports
+LR/loss/grad `1.0e-7/21.5442/108.2206` with finite total, DN and encoder
+proposal terms and fatal=0. It has passed all five dynamic gates and is now
+`RUNNING/TO_E72`. Server 197 remains only a prepared intermittent-host
+fallback and owns no PairMOT GPU.
 
 At 21:51 CST, dynamic-178 One-Cycle peak x2.5 closes e16 at
 `49.006/55.002`, and dynamic-99 standard warmup-cosine closes e12 at
