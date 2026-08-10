@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 18:10 CST
+更新时间：2026-08-10 18:32 CST
 
 ## 当前研究原则
 
@@ -27,6 +27,7 @@
 | 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E6I250/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `0.300/1.493`，处于 One-Cycle 升温低成熟区；checkpoint、检测与 TrackEval 完整，继续 e8+，不以 e4 否决；GPU1 未使用。 |
 | 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E5I550/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `14.874/31.414`，早期明显稳于 peak×2.5 候选；完整闭环后继续 e8+，GPU2/3 未使用。 |
 | 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E1I50/TO_E72` | queue 已完成连续空闲、真实 DDP smoke、有限 checkpoint 和 formal iter50 五门槛；标准 LinearLR+CosineAnnealingLR，GPU1 外部任务未触碰。 |
+| 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
@@ -48,6 +49,29 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 18:32 CST：标准 WSD 后备完成远端静态闭环
+
+- 三条运行线都采用长升温，其中 One-Cycle e4 已显示明显形成延迟；这仍不是 e4 否决依据，
+  但需要一个成熟且不依赖人工倍率跳变的正交后备。`0810_09` 因此采用标准
+  warmup-stable-decay：4 epoch 线性升至父线 `1.5×`，56 epoch 保持，再用 12 epoch
+  `CosineAnnealingLR` 平滑下降。连续名义积分为
+  `0.5×4×1.5 + 56×1.5 + 0.5×12×1.5 = 96` 个父线 epoch。
+- 唯一科学变化是 LR 时间曲线；最终 terminal-only product-tangent model、data、loss、EMA、
+  global batch、hooks 和推理图不变，无 class-aware、reweight 或推理计算增量。commit
+  `18f7465` 已部署到 99 独立 clean detached checkout
+  `/data/users/wangying01/lth/PairMOT_0810_09_wsd4_56_cos12_99/ai4rs`，没有热更新
+  `0810_08` 存活仓库。
+- 两 launcher 远端 `bash -n`、配置 `copy.deepcopy`、父/候选完整构建及训练数据/循环/hooks
+  等同性均通过；两模型均为 `22,771,111` 参数、711 states。实际优化器 497 组四档 LR 为
+  `[1.5e-5,1.5e-4,3e-4,3e-3]`，继承的 `0.1/1/2/20` 倍率逐项保持。MMEngine
+  scheduler 实际构建后的 e1/e2/e3/e4/e60/e68/e72 base-group 相对父线倍率为
+  `0.001/0.500667/1.000333/1.5/1.5/0.555980/0.025703`，72 epoch 离散积分为
+  `96.752825`。
+- 当前 99 动态 GPU0/2 正运行 `0810_08`，GPU1 为外部任务；故 `0810_09` 严格只登记
+  `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，未创建任何 smoke/formal workdir、未占 GPU。
+  只有合法两卡释放后完成真实 DDP smoke、有限 checkpoint 与 formal iter50 五门槛，才可
+  升级状态。
 
 ## 2026-08-10 18:10 CST：99 标准 warmup-cosine 通过真实五门槛
 

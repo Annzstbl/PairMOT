@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 18:10 CST。
+更新时间：2026-08-10 18:32 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,23 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E1I50/TO_E72；formal 五门槛通过 | smoke/checkpoint 完整，queue 已自然退出；GPU1 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E1I50/TO_E72；formal 五门槛通过 | `0810_09 standard WSD warmup4+stable56+cosine12` 已远端 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`；GPU1 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E5I550/E4_COMPLETE/TO_E72；fatal=0 | e4 `14.874/31.414` 完整闭环；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E6I250/E4_COMPLETE/TO_E72；fatal=0 | e4 `0.300/1.493` 完整闭环；单卡 1×8，继续 e8+，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 18:32 CST：99 `0810_09` WSD 后备静态就绪
+
+- commit `18f7465` 在全新隔离 checkout 中实现标准 warmup-stable-decay：4 epoch 线性
+  warmup 至 `1.5×` 父线 LR，56 epoch stable，最后 12 epoch cosine decay；连续名义 LR
+  积分为 96 个父线 epoch，真实 MMEngine 离散序列积分为 `96.752825`。
+- 候选与父线的 model、data、loss、EMA、global batch、hooks 和推理图相同。远端配置
+  deepcopy、launcher 语法、父/候选完整构建均通过，均为 `22,771,111` 参数/711 states；
+  实际 497 optimizer groups 保持 `[0.1,1,2,20]` 倍率。
+- 当前 GPU0/2 属于存活 `0810_08`，GPU1 为外部任务，因此没有创建 smoke/formal workdir，
+  没有占用 GPU，状态仅为 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`。后续必须重新动态选取两张
+  空闲卡并通过 smoke、checkpoint 和 formal iter50 五门槛。
 
 ## 2026-08-10 18:10 CST：99 `0810_08` 从安全队列转入正式运行
 

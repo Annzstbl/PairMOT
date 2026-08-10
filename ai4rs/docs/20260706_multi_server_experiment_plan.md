@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 18:10 CST.
+Last updated: 2026-08-10 18:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -104,6 +104,19 @@ GPU0/2, workdir, log and finite-loss/fatal checks all pass. Register it
 has exited normally after observing the formal interval. Concurrently, 178
 `0810_06` is at e6i250 and fixed-252 `0810_07` is at e5i550, both finite and
 continuing toward e8 diagnostics.
+
+At 18:32 CST, standard WSD fallback `0810_09` is remotely static-validated in
+an isolated 99 checkout at commit `18f7465`. It uses four epochs of linear
+warmup to `1.5x` parent LR, 56 stable epochs, and 12 epochs of cosine decay.
+The continuous update budget is exactly 96 parent epochs; the actual 72-point
+MMEngine sequence integrates to `96.752825`. Candidate and parent configs
+deep-copy and fully build to the same 22,771,111 parameters and 711 states;
+model, data, loss, EMA, global batch, hooks and inference are equal, while all
+497 optimizer groups retain their `0.1/1/2/20` LR ratios. Both launchers pass
+remote Bash syntax. Because live `0810_08` owns dynamic GPU0/2 and GPU1 is an
+external job, `0810_09` remains `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`: it may
+only advance after two legal GPUs are free and the real smoke, finite
+checkpoint and formal-iter50 gates pass.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
