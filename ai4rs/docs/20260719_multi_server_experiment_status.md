@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 16:09 CST。
+更新时间：2026-08-10 16:37 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,11 +19,32 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | 完整 checkpoint、检测和 TrackEval 闭环；screen 与 GPU0/1 已释放 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_05 product-tangent standard One-Cycle maxLR=2.0e-4`（固定 GPU0/1） | RUNNING/E1I100/TO_E72；formal iter50 `lr/loss/grad=8.0023e-6/20.6151/119.2760` | 双卡 2×4，严格复验较保守峰值；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_04 product-tangent standard One-Cycle maxLR=2.5e-4`（动态 GPU0） | RUNNING/E1I150/TO_E72；formal iter50 `lr/loss/grad=1.0003e-5/20.0036/110.8778` | 单卡 1×8，高峰值主候选；GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E1I100/TO_E72；formal iter50 `lr/loss/grad=8.0023e-6/20.6372/94.4325` | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E1I150/TO_E72；formal iter50 `lr/loss/grad=1.0003e-5/20.0431/82.6103` | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
 
-## 2026-08-10 16:09 CST：标准 One-Cycle 双线通过正式五门槛
+## 2026-08-10 16:37 CST：倍率保持 One-Cycle 双线通过正式五门槛
+
+- 强制 optimizer-group 审计确认旧 `0810_04/0810_05` 的标量 `eta_max` 会把 497 个参数组
+  原有 `[1e-5,1e-4,2e-4,2e-3]` 四档 LR 压为单档，破坏 backbone、encoder adapter 与
+  gamma 等既有 `lr_mult`。旧线在 e1 iter150/100 精确停止，状态为
+  `STOPPED/INVALID_SCALAR_ETA_MAX`；PGID `2396834/2520675` 成员归零，全部产物保留但
+  不参与成熟 scheduler 的有效比较。
+- 新号 `0810_06/0810_07` 使用 commit `552668d`。新增适配器只把 peak factor `2.5/2.0`
+  按 scheduler 构建前每组 LR 展开为标准 OneCycleLR 的 list-valued `eta_max`，标准
+  two-phase/cosine/`pct_start=0.3`/`div_factor=25`/`final_div_factor=1e4` 不变。
+  两端 497 组逐项断言保持倍率；model、optim wrapper、EMA/hooks、数据和 train cfg 与父线全等，
+  完整构建均为 22,771,111 参数/711 states。
+- 178/252 新隔离 fresh smoke checkpoint 分别为 364,536,948 bytes、SHA-256
+  `1fe7f7077803483769769d1836b38dc9c6697b141e1e4f90b9c716ebe4f4f4ca` 和
+  364,533,174 bytes、`08bf29e39d3c679e1d99cd4c19aa79d99c9046caadb8f86aaed9a3dde95de93c`；
+  iterative-cls/DN 已训练，642 个浮点 tensor 全有限。
+- 178 screen/PGID `2410546/2410549` 只占动态 GPU0，formal iter50
+  `1.0003e-5/20.0431/82.6103`；252 screen/PGID `2536495/2536498` 只占固定 GPU0/1，
+  iter50 `8.0023e-6/20.6372/94.4325`。正式 fatal 扫描为空、screen/worker/GPU 对齐，
+  因此登记 `RUNNING/TO_E72`；e4/e8 仍仅作诊断。
+
+## 2026-08-10 16:09 CST：标量 One-Cycle 双线初始启动（后续协议审计判无效）
 
 - 新目标要求保持最终 terminal-only product-tangent decoder、参数、数据、loss、EMA、全局
   batch 与推理完全不变，只用成熟可复现的 LR scheduler，在同一 e72 checkpoint 同时达到

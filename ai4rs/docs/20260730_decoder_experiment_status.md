@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 16:09 CST
+更新时间：2026-08-10 16:37 CST
 
 ## 当前研究原则
 
@@ -24,8 +24,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_04 final product-tangent standard One-Cycle maxLR=2.5e-4 fresh` | `RUNNING/E1I150/TO_E72` | 标准 two-phase cosine One-Cycle；22,771,111 参数/711 states 与父线相等，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_05 final product-tangent standard One-Cycle maxLR=2.0e-4 fresh` | `RUNNING/E1I100/TO_E72` | 与 `0810_04` 只差预声明 peak LR；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 未使用。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E1I150/TO_E72` | 标准 two-phase cosine One-Cycle，逐参数组展开 `eta_max` 并保留原 497 组 LR 倍率；commit `552668d`，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E1I100/TO_E72` | 与 `0810_06` 只差预声明 peak factor；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 外部任务未触碰。 |
+| 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
+| 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
 | 178 已释放 | `0810_03 ... decoder-frozen EMA-lag correction eval` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.810/62.340`、sum `117.150`；完整检测、TrackEval 与 checkpoint 闭环，det 低线 `0.053`、sum 低线 `0.680`，screen 自然退出。 |
 | 178 已释放 | `0810_02 ... full-model epoch72 EMA-lag correction eval` | `COMPLETED/STRICT_FAIL` | fraction 0.25 为 `55.223/62.371`、sum `117.594`；0.50 为 `55.171/62.225`、sum `117.396`。三点包络无过线空间。 |
@@ -46,7 +48,33 @@
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
 
-## 2026-08-10 16:09 CST：成熟 One-Cycle 双候选正式启动
+## 2026-08-10 16:37 CST：修复标量 eta_max 协议并启动倍率保持 One-Cycle
+
+- 对 `0810_04/0810_05` 的实际优化器做逐组审计后发现：父线 497 个参数组原始 LR 有
+  `[1e-5,1e-4,2e-4,2e-3]` 四档，但 MMEngine 标量 `eta_max` 会给所有组写入同一
+  `max_lr`，初始化后也只剩一档 LR。因此两条旧线虽已通过基本 smoke/iter50，却不满足
+  “仅改变 scheduler 时间曲线”的严格单因素条件，已在 e1 精确停止并永久标为
+  `INVALID_SCALAR_ETA_MAX`，不使用其后续指标。
+- 新提交 `552668d` 增加轻量适配器 `RatioPreservingOneCycleLR`：仅读取 scheduler 构建前
+  每个参数组的 LR，把一个预声明 peak factor 展开为 OneCycleLR 原生支持的 list-valued
+  `eta_max`；阶段边界、cosine 退火、状态恢复均仍由标准 MMEngine `OneCycleLR` 实现。
+  178 的 peak factor 为 `2.5`，构造后初始四档为
+  `[1e-6,1e-5,2e-5,2e-4]`、峰值四档为 `[2.5e-5,2.5e-4,5e-4,5e-3]`；
+  252 的 factor 为 `2.0`，对应初始 `[8e-7,8e-6,1.6e-5,1.6e-4]`、峰值
+  `[2e-5,2e-4,4e-4,4e-3]`。497 组逐项倍率断言全部通过。
+- `0810_06/0810_07` 使用全新隔离 checkout 和全新 workdir fresh 启动。两端候选与父线的
+  model、optim wrapper、EMA/custom hooks、train data/train cfg 全等，完整构建均为
+  22,771,111 参数/711 states。真实 smoke checkpoint 分别为 364,536,948 bytes、
+  SHA-256 `1fe7f7077803483769769d1836b38dc9c6697b141e1e4f90b9c716ebe4f4f4ca`
+  和 364,533,174 bytes、`08bf29e39d3c679e1d99cd4c19aa79d99c9046caadb8f86aaed9a3dde95de93c`；
+  642 个浮点 tensor 全有限，iterative-cls/DN 已训练。
+- 178 formal screen/PGID `2410546/2410549` 仅占动态 GPU0，iter50
+  LR/loss/grad 为 `1.0003e-5/20.0431/82.6103`；252 screen/PGID
+  `2536495/2536498` 仅占固定 GPU0/1，iter50 为
+  `8.0023e-6/20.6372/94.4325`。两端正式 fatal 扫描为空、worker/GPU/日志对齐，五门槛
+  通过后登记 `RUNNING/TO_E72`。e4/e8 继续只作诊断，不能直接否决 decoder。
+
+## 2026-08-10 16:09 CST：标量 One-Cycle 初始启动（后续审计判定协议无效）
 
 - `0810_04/0810_05` 完全替换旧 `LinearLR + 人工升 LR MultiStep`，采用 MMEngine 标准
   two-phase `OneCycleLR`，共有 `total_steps=74736`、`pct_start=0.3`、cosine、
