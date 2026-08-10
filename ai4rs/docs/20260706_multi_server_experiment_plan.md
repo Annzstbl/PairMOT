@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 19:28 CST.
+Last updated: 2026-08-10 19:38 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,14 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 19:38 CST, server 197 answered one read-only audit at 19:32 and reported
+all six GPUs at 1 MiB/0%, but the next two SSH audits timed out, including the
+19:37 retry. No code, workdir, or GPU state was changed. Its `0810_09` WSD
+adaptation remains `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`;
+it may only launch after stable reachability and the full dynamic five-gate
+protocol. Concurrently, 178 `0810_06` is healthy at e10 iter1000 and continues
+toward e12/e16 and post-peak evidence.
 
 At 13:33 CST on 2026-08-08, the active objective is to compress the final
 decoder's epoch-96 maturity into epoch 72. The strict fallback gate uses one

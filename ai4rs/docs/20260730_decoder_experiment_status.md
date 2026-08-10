@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 19:28 CST
+更新时间：2026-08-10 19:38 CST
 
 ## 当前研究原则
 
@@ -24,11 +24,11 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E10I500/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `32.494/37.373` 完整闭环；继续 e12/e16 与成熟窗口，不以 e8 否决，GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E9I300/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `31.712/37.834`，完整 checkpoint/检测/TrackEval/有限性闭环；固定只用 GPU0/1，GPU2/3 未使用。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E5I550/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `27.170/36.995` 完整闭环，较 252 同点形成更快；继续 e8/e12，GPU1 当前空闲但未额外占用。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E10I1000/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `32.494/37.373` 完整闭环；继续 e12/e16 与成熟窗口，不以 e8 否决，GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E9I900/E8_COMPLETE/TO_E72` | e8 cls/det HOTA `31.712/37.834`，完整 checkpoint/检测/TrackEval/有限性闭环；固定只用 GPU0/1，GPU2/3 未使用。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E6I200/E4_COMPLETE/TO_E72` | e4 cls/det HOTA `27.170/36.995` 完整闭环，较 252 同点形成更快；继续 e8/e12，GPU1 为外部任务且未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
-| 197 后备（主机不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 仅完成 197 数据/GMC/TrackEval/Conda 路径适配及本地语法；尚未部署或远端构建，不占 GPU。 |
+| 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
@@ -50,6 +50,20 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 19:38 CST：197 短暂恢复后再次失联，WSD 未越过动态门槛
+
+- 19:32 CST 对 197 的一次只读审计成功：主机返回 `ubuntu`，GPU0--5 均为
+  `1 MiB/0%`，表面上具备动态双卡空间；但紧接着的资产、进程与仓库复核连续两次在
+  `ConnectTimeout=8` 下超时，19:37 再测仍无响应。该主机尚不具备安全部署条件。
+- 因连接不稳定，没有同步 commit `a914606`，没有创建 smoke/formal workdir，也没有占用
+  197 GPU；`0810_09` 仍严格保持
+  `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`。只有主机稳定可达、
+  动态双卡连续空闲，并完成 deepcopy、完整构建、真实双卡 smoke、有限 checkpoint 与
+  formal iter50 五项门槛后才可登记 `RUNNING`。
+- 同期 178 `0810_06` 已到 e10 iter1000，LR `1.1543e-4`、loss `10.8216`、
+  grad `43.3195`，正式训练数值有限且 fatal=0；继续等待 e12 完整评测，不以 e8 或训练中
+  指标否决标准 One-Cycle。
 
 ## 2026-08-10 19:28 CST：99 warmup-cosine e4 与 252 One-Cycle e8 完整闭环
 

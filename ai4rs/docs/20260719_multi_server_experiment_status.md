@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 19:28 CST。
+更新时间：2026-08-10 19:38 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,20 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E5I550/E4_COMPLETE/TO_E72；fatal=0 | e4 `27.170/36.995` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 当前空闲但未占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 主机适配仅 `LOCAL_PREPARED/HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E9I300/E8_COMPLETE/TO_E72；fatal=0 | e8 `31.712/37.834` 完整；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E10I500/E8_COMPLETE/TO_E72；fatal=0 | e8 `32.494/37.373` 完整；单卡 1×8，继续成熟窗口，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E6I200/E4_COMPLETE/TO_E72；fatal=0 | e4 `27.170/36.995` 完整；`0810_09` WSD 仍 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL`，GPU1 为外部任务且未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E9I900/E8_COMPLETE/TO_E72；fatal=0 | e8 `31.712/37.834` 完整；双卡 2×4，GPU2/3 未使用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E10I1000/E8_COMPLETE/TO_E72；fatal=0 | e8 `32.494/37.373` 完整；单卡 1×8，继续成熟窗口，GPU1 未使用 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 19:38 CST：197 间歇可达审计
+
+- 19:32 CST 一次只读连接成功，197 的 GPU0--5 均显示 `1 MiB/0%`；随后资产/进程复核与
+  19:37 重试连续超时，说明主机只是短暂恢复，尚不能安全部署或启动训练。
+- 未同步代码、未创建 workdir、未占用 GPU。`0810_09` 的 197 适配仍为
+  `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；必须稳定可达并通过
+  deepcopy、完整构建、真实双卡 smoke、有限 checkpoint、formal iter50 后才能登记运行。
+- 178 `0810_06` 同期健康推进到 e10 iter1000，fatal=0，继续收集 e12/e16 和成熟节点。
 
 ## 2026-08-10 19:28 CST：99 e4 与 252 e8 完整闭环
 
