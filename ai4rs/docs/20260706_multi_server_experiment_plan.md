@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 03:44 CST.
+Last updated: 2026-08-10 16:09 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -40,6 +40,25 @@ Pair mAP/AP50 is `0.320203/0.534775`; both-independent is
 terminal-only product-tangent decoder, parameter/state count, losses and
 inference compute remain unchanged, with no added class-aware decoder logic
 or reweighting. The 99 screen and all assigned GPUs released naturally.
+
+At 16:09 CST on 2026-08-10, the active objective advances from that fallback
+to a paper-ready scheduler replacement: keep the final product-tangent model,
+optimizer, EMA, data, loss, global batch and inference graph unchanged, but use
+an established scheduler and require the same epoch-72 checkpoint to reach
+cls HOTA `>=55.263`, det HOTA `>=62.599`, and sum `>=117.862`. Experiments
+`0810_04` (dynamic 178 GPU0, 1x8, peak `2.5e-4`) and `0810_05` (fixed 252
+GPU0/1, 2x4, peak `2.0e-4`) use standard two-phase cosine OneCycleLR with
+`total_steps=74736`, `pct_start=0.3`, `div_factor=25`, and
+`final_div_factor=1e4`. They differ only in the predeclared peak LR.
+
+Both isolated checkouts at commit `a978bdd` passed config deepcopy, Bash
+syntax, parent/candidate equality, complete 22,771,111-parameter/711-state
+Runner construction, real-data smoke, finite checkpoint and formal iter50.
+The 178 formal iter50 LR/loss/grad is `1.0003e-5/20.0036/110.8778`; the 252
+point is `8.0023e-6/20.6151/119.2760`. Total, DN and encoder-proposal losses
+are finite, strict fatal scans are empty, and sessions/workers/GPU mappings
+match the legal resource assignments. They therefore run to the mature
+evaluation window; epoch 4/8 remain diagnostics rather than rejection gates.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until

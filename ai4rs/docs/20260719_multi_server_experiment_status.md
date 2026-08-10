@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 03:44 CST。
+更新时间：2026-08-10 16:09 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,9 +19,32 @@
 | --- | --- | --- | --- | --- |
 | 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | 完整 checkpoint、检测和 TrackEval 闭环；screen 与 GPU0/1 已释放 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0808_08 product-tangent decoder/head local Adam clock`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL `54.794/62.272`，sum `117.066` | PairMOT 已释放；GPU0 当前外部负载未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_03 decoder-frozen EMA-lag correction eval`（动态 GPU0） | COMPLETED/E72/STRICT_FAIL | `54.810/62.340`、sum `117.150`；完整闭环后 screen 自然退出，GPU 已释放 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_05 product-tangent standard One-Cycle maxLR=2.0e-4`（固定 GPU0/1） | RUNNING/E1I100/TO_E72；formal iter50 `lr/loss/grad=8.0023e-6/20.6151/119.2760` | 双卡 2×4，严格复验较保守峰值；formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_04 product-tangent standard One-Cycle maxLR=2.5e-4`（动态 GPU0） | RUNNING/E1I150/TO_E72；formal iter50 `lr/loss/grad=1.0003e-5/20.0036/110.8778` | 单卡 1×8，高峰值主候选；GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 16:09 CST：标准 One-Cycle 双线通过正式五门槛
+
+- 新目标要求保持最终 terminal-only product-tangent decoder、参数、数据、loss、EMA、全局
+  batch 与推理完全不变，只用成熟可复现的 LR scheduler，在同一 e72 checkpoint 同时达到
+  cls `>=55.263`、det `>=62.599`、sum `>=117.862`。下一全局实验号连续使用
+  `0810_04/0810_05`，不复用旧目录。
+- 两线均为 MMEngine 标准 two-phase `OneCycleLR`：`total_steps=72×1038`、
+  `pct_start=0.3`、cosine、`div_factor=25`、`final_div_factor=1e4`。178 主候选 peak
+  `2.5e-4`；最慢 252 只做预先限定的保守 peak `2.0e-4` 复验。两者不是任意 LR 扫描，且
+  模型/optimizer/EMA/hook/data 与各自 product-tangent 父配置严格相等。
+- 隔离提交/checkout 均为 `a978bdd`。两端配置 deepcopy、远端 launcher `bash -n`、父子等同性
+  和完整 Runner 构建通过，均为 22,771,111 参数/711 states。真实 smoke 的有限 checkpoint
+  分别为 364,532,404 bytes、SHA-256 `dd1b78e997303d5d7221f61176d54978f6dac2510fbd8e06ce9850a8e05e4943`
+  与 364,528,566 bytes、`e13408208709f317acb64ce722d47cccc22095f7f43fde93945d8a55c01ac56d`；
+  iterative-cls/DN 已训练、各 642 个浮点 tensor 全有限。
+- 178 screen `2396832` 仅占动态 GPU0，e1 iter50 LR/loss/grad
+  `1.0003e-5/20.0036/110.8778`；252 screen `2520673` 严格只占固定 GPU0/1，e1 iter50
+  `8.0023e-6/20.6151/119.2760`。两线会话/worker、目标 GPU、正式目录/日志、正常 iter50、
+  total/DN/encoder proposal/grad 有限且严格 fatal=0，故登记 `RUNNING/TO_E72`。
+- 252 初次 smoke 已在控制端并发调用中正常完成；随后一次冗余重入被 `test ! -e WORK_DIR`
+  按设计拒绝，只在同一 launch.log 追加失败说明，未改动 checkpoint。正式启动前重新核对了
+  checkpoint SHA-256、空 formal 目录和 GPU0/1 连续空闲，故不影响 smoke 或正式线有效性。
 
 ## 2026-08-10 02:23 CST：四线 e72 审计与 197→99 无损续训
 

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 03:44 CST
+更新时间：2026-08-10 16:09 CST
 
 ## 当前研究原则
 
@@ -13,6 +13,9 @@
 - e72 保底目标已由 `0810_01` staged delayed LR clock 同一 checkpoint 达成：
   `55.263/62.599`、绝对和 `117.862`，相对 Encoder 增量和 `1.032`；冲刺线未达，
   但三项严格 margin `+0.826/+0.206/+0.032` 全部为正。
+- 当前替代目标是不再依赖手工分段倍率，仅用成熟、可复现的标准 LR scheduler，在同一 e72
+  checkpoint 同时达到 cls `>=55.263`、det `>=62.599`、sum `>=117.862`；模型、EMA、
+  loss、数据、全局 batch 和推理保持不变。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - AutoDL 实例均处于关机状态，不纳入当前调度。
 - 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡但不固定序号。每台机器同一时间至多使用该总卡数。252 最慢，只延续成熟路线或复验明确候选；新结构优先在 99、178、197 筛选。
@@ -21,6 +24,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 178 动态 GPU0 | `0810_04 final product-tangent standard One-Cycle maxLR=2.5e-4 fresh` | `RUNNING/E1I150/TO_E72` | 标准 two-phase cosine One-Cycle；22,771,111 参数/711 states 与父线相等，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_05 final product-tangent standard One-Cycle maxLR=2.0e-4 fresh` | `RUNNING/E1I100/TO_E72` | 与 `0810_04` 只差预声明 peak LR；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 未使用。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
 | 178 已释放 | `0810_03 ... decoder-frozen EMA-lag correction eval` | `COMPLETED/E72/STRICT_FAIL` | e72 `54.810/62.340`、sum `117.150`；完整检测、TrackEval 与 checkpoint 闭环，det 低线 `0.053`、sum 低线 `0.680`，screen 自然退出。 |
 | 178 已释放 | `0810_02 ... full-model epoch72 EMA-lag correction eval` | `COMPLETED/STRICT_FAIL` | fraction 0.25 为 `55.223/62.371`、sum `117.594`；0.50 为 `55.171/62.225`、sum `117.396`。三点包络无过线空间。 |
@@ -40,6 +45,22 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 16:09 CST：成熟 One-Cycle 双候选正式启动
+
+- `0810_04/0810_05` 完全替换旧 `LinearLR + 人工升 LR MultiStep`，采用 MMEngine 标准
+  two-phase `OneCycleLR`，共有 `total_steps=74736`、`pct_start=0.3`、cosine、
+  `div_factor=25`、`final_div_factor=1e4`；仅 peak 分别为 `2.5e-4/2.0e-4`。高峰线在
+  e12/e24/e48/e68 的名义 LR 约为 `1.508e-4/2.486e-4/1.157e-4/3.864e-6`，用平滑末端
+  衰减直接处理旧 staged 线 e68→e72 的回撤。
+- 隔离提交 `a978bdd` 的四个配置均通过 syntax/deepcopy，四个 launcher 通过本地/远端
+  `bash -n`。候选与父配置的 model、optim wrapper、EMA/custom hooks、train data 严格相等；
+  完整 Runner 构建为 22,771,111 参数、711 states。
+- 178/252 真实 4-iter smoke 的 loss/grad 全有限，DN、encoder proposal 与 iterative-cls
+  状态正常；finite checkpoint SHA-256 分别为 `dd1b78e9…e4943` 与 `e1340820…c56d`。
+  178 formal iter50 为 LR/loss/grad `1.0003e-5/20.0036/110.8778`，只占 GPU0；252 为
+  `8.0023e-6/20.6151/119.2760`，只占固定 GPU0/1。正式日志 fatal=0、screen/worker/GPU
+  对齐，五项门槛齐全后才登记 RUNNING。e4/e8 仍仅作诊断，不直接否决。
 
 ## 2026-08-10 02:23 CST：e72 全线审计与 197 e68 达标状态迁移
 
