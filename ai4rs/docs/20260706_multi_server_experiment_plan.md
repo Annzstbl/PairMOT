@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 17:27 CST.
+Last updated: 2026-08-10 18:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -89,6 +89,21 @@ GPU0 is currently idle while GPU1/2 remain external high-load jobs, so no smoke
 or formal directory exists and the correct state is
 `QUEUED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL`. The live OneCycle lines are at
 178 e4i100 and 252 e3i450 with fatal scans empty.
+
+At 18:10 CST, `0810_08` has passed the queue handoff and every independent
+formal-start gate. Dynamic GPUs 0/2 passed three consecutive idle checks; the
+exact 2x4 DDP smoke produced four finite iterations and a 364,512,886-byte
+checkpoint with SHA-256
+`e3c0370a1b1e9393556ea9b1e7d558b3025dbb1c0bd015bb30f4255b9735f04a`.
+Its 711/712 model/EMA states, 642 finite floating tensors, trained
+iterative-cls/DN heads, 497 optimizer groups, two scheduler states and message
+hub all close. Fresh formal screen/main `3364119/3364122` reached epoch 1
+iteration 50 at LR/loss/grad `1.0e-7/21.5510/127.1880`; ranks, workers,
+GPU0/2, workdir, log and finite-loss/fatal checks all pass. Register it
+`RUNNING/TO_E72`; GPU1 remains an untouched external job. The queue wrapper
+has exited normally after observing the formal interval. Concurrently, 178
+`0810_06` is at e6i250 and fixed-252 `0810_07` is at e5i550, both finite and
+continuing toward e8 diagnostics.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until
