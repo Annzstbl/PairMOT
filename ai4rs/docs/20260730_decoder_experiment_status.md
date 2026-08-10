@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-10 17:19 CST
+更新时间：2026-08-10 17:27 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E3I800/TO_E72` | 标准 two-phase cosine One-Cycle，逐参数组展开 `eta_max` 并保留原 497 组 LR 倍率；commit `552668d`，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
-| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E3I200/TO_E72` | 与 `0810_06` 只差预声明 peak factor；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 外部任务未触碰。 |
-| 99 等待两张空闲卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `STATIC_VALIDATED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL` | commit `a78b239`；标准 LinearLR + CosineAnnealingLR，名义 LR 积分对齐父线 e96；deepcopy、完整构建、497 组倍率和远端 launcher 语法通过。GPU1/2 外部任务占用，未越权启动。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E4I100/TO_E72` | 标准 two-phase cosine One-Cycle，逐参数组展开 `eta_max` 并保留原 497 组 LR 倍率；commit `552668d`，smoke/checkpoint/formal iter50 五门槛通过；GPU1 未使用。 |
+| 252 固定 GPU0/1 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `RUNNING/E3I450/TO_E72` | 与 `0810_06` 只差预声明 peak factor；2×4 严格复验，smoke/checkpoint/formal iter50 五门槛通过；GPU2/3 外部任务未触碰。 |
+| 99 安全等待队列 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `QUEUED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL` | commit `0adee95`；screen `3349124` 连续检查任意两张动态空闲卡，先真实 DDP smoke/有限 checkpoint，后 formal iter50。当前仅 GPU0 空闲，队列不占 GPU。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
 | 99 已释放 | `0810_01 ... staged delayed LR clock ... resume e68→e72` | `COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED` | e72 同一 checkpoint `55.263/62.599`、sum `117.862`，严格 margin `+0.826/+0.206/+0.032`；checkpoint、检测与 TrackEval 全量闭环，screen 自然退出。 |
@@ -48,6 +48,19 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-10 17:27 CST：99 安全队列开始等待两张动态空闲卡
+
+- commit `0adee95` 新增 `0810_08` 严格队列：任意两张卡必须连续三次满足显存
+  `<1024 MiB` 且利用率 `<10%`，随后才运行目标配置的真实 2×4 DDP smoke；smoke launcher
+  自身必须生成 `iter_4.pth` 并通过 iterative-cls/DN 与全 tensor 有限性检查，队列才会在
+  同一对动态 GPU 上启动 fresh formal，并等待正式日志出现正常 `Epoch(train)` 区间。
+- 99 远端 checkout 已无 LFS 变更、HEAD `0adee95`、clean，queue/两份 launcher 均通过
+  远端 `bash -n`。queue screen `3349124` 在 17:26:25 存活；启动前后 GPU 为
+  `0:12 MiB/0%`、`1:20345 MiB/97%`、`2:约23408 MiB/96–97%`，故只记录等待，未创建
+  smoke/formal workdir，也未占用 GPU。
+- 同期主线 178 已进入 e4i100，252 到 e3i450；两端 screen/训练/GPU 映射和 fatal 扫描
+  正常，尚无 e4 checkpoint。继续等待 178 完成 e4 后的 checkpoint、检测与 TrackEval。
 
 ## 2026-08-10 17:19 CST：标准 warmup-cosine 后备完成静态闭环
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-10 17:19 CST.
+Last updated: 2026-08-10 17:27 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -78,6 +78,17 @@ unreachable. It must still pass real two-GPU smoke, finite checkpoint and the
 five formal iter50 gates before it can be called running. Concurrently,
 `0810_06/0810_07` are healthy at e3i800/e3i200 with fatal scans empty and no e4
 checkpoint yet.
+
+At 17:27 CST, commit `0adee95` adds and deploys a strict 99 queue for
+`0810_08`. Screen `3349124` waits without GPU allocation until any two dynamic
+GPUs pass three consecutive checks below 1024 MiB and 10% utilization. It then
+runs the exact two-rank smoke and requires its finite checkpoint plus
+iterative-cls/DN audits before launching fresh formal training; the queue only
+exits successfully after a normal formal `Epoch(train)` interval appears.
+GPU0 is currently idle while GPU1/2 remain external high-load jobs, so no smoke
+or formal directory exists and the correct state is
+`QUEUED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL`. The live OneCycle lines are at
+178 e4i100 and 252 e3i450 with fatal scans empty.
 
 The initial four inference-identical training strategies occupied the legal lanes.
 Dynamic-99 GPU0/1 runs `0808_06`, which delays its single LR increase until

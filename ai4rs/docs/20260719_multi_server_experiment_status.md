@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-10 17:19 CST。
+更新时间：2026-08-10 17:27 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,22 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | `0810_08` 标准 warmup-cosine 已静态验证，等待两张空闲卡；当前 GPU1/2 为外部任务，NO_SMOKE/NO_FORMAL | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_01 staged delayed LR clock resume e68→e72`（动态 GPU0/1） | COMPLETED/E72/STRICT_PASS/GOAL_ACHIEVED `55.263/62.599`，sum `117.862` | `0810_08` queue screen `3349124` 等待任意两张动态空闲卡；QUEUED/NO_SMOKE/NO_FORMAL | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | SSH 不可达且 e72 未生成；完整 e68 checkpoint 已迁移至 99 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E3I200/TO_E72；`lr/loss=1.2837e-5/12.5755` | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E3I800/TO_E72；`lr/loss=1.9607e-5/16.1195` | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_07 product-tangent ratio-preserving standard One-Cycle peak×2.0`（固定 GPU0/1） | RUNNING/E3I450/TO_E72；fatal=0 | 双卡 2×4；497 组 LR 倍率保持，formal 五门槛通过；GPU2/3 外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E4I100/TO_E72；fatal=0 | 单卡 1×8；497 组 LR 倍率保持，GPU1 未使用，formal 五门槛通过 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-10 17:27 CST：99 `0810_08` 安全队列真实存活
+
+- queue commit `0adee95` 已部署到 clean detached 99 checkout 并通过远端语法；screen
+  `3349124` 于 17:26:25 启动。它要求任意两卡连续三次低于 1024 MiB/10%，先执行真实
+  2×4 smoke、有限 checkpoint 和 iterative-cls/DN 检查，才启动 formal 并等待正常训练区间。
+- 当前 GPU0 为 12 MiB/0%，GPU1/2 为约 20.3/23.4 GiB 且 96–97% 外部负载；队列启动
+  前后没有 GPU 占用变化，smoke/formal 目录均不存在。因此状态严格为
+  `QUEUED/WAITING_2_FREE_GPUS/NO_SMOKE/NO_FORMAL`，不是 RUNNING。
+- 178 `0810_06` 到 e4i100，252 `0810_07` 到 e3i450；两条正式线继续健康且尚无 e4
+  checkpoint。
 
 ## 2026-08-10 17:19 CST：warmup-cosine 后备静态就绪，主线进入 epoch 3
 
