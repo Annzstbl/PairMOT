@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 06:50 CST。
+更新时间：2026-08-11 06:55 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,18 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E41I300/E40_COMPLETE/TO_E72；fatal=0 | e40 `54.541/61.711`、sum `116.252` 完整，当前最强成熟点；距目标 `0.722/0.888/1.610`；静态后备不占卡，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E41I750/E40_COMPLETE/TO_E72；fatal=0 | e40 `54.541/61.711`、sum `116.252` 完整，当前最强成熟点；距目标 `0.722/0.888/1.610`；静态后备不占卡，GPU1 未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E14I350/E12_COMPLETE/TO_E72；fatal=0 | e12 `45.839/53.198`、sum `99.037` 完整；较 e8 HOTA、DetA、AssA、AP 全升，继续 e16/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E45I950/E44_COMPLETE/TO_E72；fatal=0 | e44 `54.296/61.805`、sum `116.101` 完整；定位和 AP 继续改善，距目标 `0.967/0.794/1.761`，继续 e48/e72 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E14I650/E12_COMPLETE/TO_E72；fatal=0 | e12 `45.839/53.198`、sum `99.037` 完整；较 e8 HOTA、DetA、AssA、AP 全升，继续 e16/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E46I200/E44_COMPLETE/TO_E72；fatal=0 | e44 `54.296/61.805`、sum `116.101` 完整；定位和 AP 继续改善，距目标 `0.967/0.794/1.761`，继续 e48/e72 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 06:55 CST：99 控制入口纠正与三线资源复核
+
+- 99 正确 SSH 入口为端口 `2367`；端口 22 超时不代表主机不可达。通过正确入口已直接确认
+  formal screen、torchrun/worker 和动态 GPU0/2 存活，GPU1 仅 10 MiB、未触碰；正式日志
+  到 e41i750 且数值有限。178 到 e46i200、仅 GPU0，252 到 e14i650、仅固定 GPU0/1；
+  三线 fatal=0。197 使用正确身份探测仍超时，故不部署、不占卡。
 
 ## 2026-08-11 06:50 CST：99 e40、178 e44、252 e12 完整闭环
 
@@ -42,7 +49,7 @@
   较 e8 HOTA `+2.698/+4.643`，DetA、AssA 与 AP 全升。380,977,590-byte checkpoint
   SHA-256 `be2a1a73…7479`，2,776 浮点 tensor 全有限，5416/50、28/108/50 与 async
   全闭环；仍属稳定段早期，继续 e16/e72。
-- 当前 99 e41i300、178 e45i950、252 e14i350；99 控制面与 197 SSH 超时，但 99 共享盘
+- 当前 99 e41i300、178 e45i950、252 e14i350；当时 99 端口 22 与 197 SSH 超时，但 99 共享盘
   正式日志持续更新，197 未部署、未占卡。下一节点为 e44/e48/e16。
 
 ## 2026-08-11 05:30 CST：178 e40、99 e36、252 e8 完整闭环

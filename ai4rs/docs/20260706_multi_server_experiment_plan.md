@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 06:50 CST.
+Last updated: 2026-08-11 06:55 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,15 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 06:55 CST, server 99 control is directly reachable through its configured
+SSH port 2367; the earlier port-22 timeout was not evidence of host failure.
+The formal screen, workers and dynamic GPU0/2 allocation are live at e41i750,
+while GPU1 remains idle and untouched. Dynamic-178 is healthy at e46i200 on
+GPU0 only, and fixed-252 is healthy at e14i650 on GPU0/1 only; their logged
+total, DN, encoder losses and gradients are finite. Server 197 still times out
+through its correct identity, so no fallback is deployed there. Continue to
+the next complete e44/e48/e16 nodes without changing any live repository.
 
 At 06:50 CST, dynamic-99 warmup12-cosine closes e40 at
 `54.541/61.711` (sum `116.252`) and becomes the strongest mature point. It
@@ -36,9 +45,9 @@ Fixed-252 WSD closes e12 at `45.839/53.198` (sum `99.037`), gaining
 `be2a1a731c388cacd7e4ba8a64fb5ed9125383c64a1294049174671e6cec7479`;
 all 2,776 floating tensors and full detection/TrackEval gates pass. E12 remains
 an early stable-phase point rather than a rejection gate, so WSD continues to
-e16/e72 on fixed GPU0/1. Live progress is 99 e41i300, 178 e45i950 and 252
-e14i350. The 99 control plane and 197 SSH currently time out, but 99 shared
-logs remain live; 197 owns no PairMOT GPU and no fallback is launched.
+e16/e72 on fixed GPU0/1. Live progress at that audit was 99 e41i300, 178
+e45i950 and 252 e14i350. The 99 port-22 and 197 SSH probes timed out, but 99
+shared logs remained live; 197 owned no PairMOT GPU and no fallback was launched.
 
 At 05:30 CST, dynamic-178 ratio-preserving standard One-Cycle peak x2.5
 closes e40 at `54.002/61.769` (sum `115.771`). Every HOTA, DetA, AssA and AP
