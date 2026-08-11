@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 12:30 CST.
+Last updated: 2026-08-11 13:56 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 13:56 CST, dynamic-99 cosine closes e60 at `54.237/62.306` (sum
+`116.543`), changing `-0.307/+0.068/-0.239` from e56. Classification DetA,
+AssA and all four AP summaries decline, so e52 remains the line and overall
+best at `116.975`. Dynamic-178 One-Cycle closes e64 at `54.411/62.194` (sum
+`116.605`), changing `-0.210/-0.138/-0.348` from e60 with both DetA, both
+AssA and all four AP summaries lower; e60 remains that line's best. Both low-LR
+tails now show regression, but the explicit objective requires an e72 closure,
+so neither formal line is terminated early.
+
+Fixed-252 WSD closes e32 at `52.390/60.263` (sum `112.653`), gaining
+`0.200/0.737/0.937` from e28. Detection DetA/AssA improve `0.345/1.275` and
+all four AP summaries rise to pair `0.291946/0.492856` and both-independent
+`0.335018/0.538283`, validating continued formation in the stable phase.
+The three checkpoints have 711/712 states, 497 optimizer states/groups and
+2,776 finite floating tensors, with complete 5,416/50, 51 detection-file,
+28 CSV/108 nonempty/50 prediction and async=1 closure. SHA prefixes are
+`5181ad55`, `b0c3ce1b` and `2a00dadf` for 99/178/252. Live progress is
+e64i400/e68i550/e33i800 with authorized GPU use and finite logs; next nodes
+are e64/e68/e36. The static warmup4-cosine fallback remains undeployed.
 
 At 12:30 CST, dynamic-178 One-Cycle closes e60 at `54.621/62.332` (sum
 `116.953`), gaining `0.255/-0.086/0.169` from e56 and setting that line's
