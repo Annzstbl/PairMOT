@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 13:56 CST。
+更新时间：2026-08-11 14:21 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,26 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E64I400/E60_COMPLETE/TO_E72；fatal=0 | e60 `54.237/62.306`、sum `116.543` 完整；e52 仍为当前总榜最佳 `116.975`，继续 e64/e72；GPU1 为外部 UNet，PairMOT 仅 GPU0/2 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E65I500/E64_COMPLETE/TO_E72；fatal=0 | e64 `54.354/62.199`、sum `116.553` 完整；e52 仍为当前总榜最佳 `116.975`，继续 e68/e72；GPU1 为外部 UNet，PairMOT 仅 GPU0/2 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E33I800/E32_COMPLETE/TO_E72；fatal=0 | e32 `52.390/60.263`、sum `112.653` 完整；较 e28 双升 `0.200/0.737`，继续 e36/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E68I550/E64_COMPLETE/TO_E72；fatal=0 | e64 `54.411/62.194`、sum `116.605` 完整；较 e60 回撤 `0.210/0.138/0.348`，继续 e68/e72；GPU1 为外部 InternVL，PairMOT 仅 GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E35I50/E32_COMPLETE/TO_E72；fatal=0 | e32 `52.390/60.263`、sum `112.653` 完整且较 e28 双升，继续 e36/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0810_06 product-tangent ratio-preserving standard One-Cycle peak×2.5`（动态 GPU0） | RUNNING/E69I300/E68_COMPLETE/TO_E72；fatal=0 | e68 `54.458/62.218`、sum `116.676` 完整；较 e64 小幅恢复但仍低 e60，继续 e72；GPU1 为外部 InternVL，PairMOT 仅 GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 14:21 CST：99 e64、178 e68 完整闭环
+
+- 99 cosine e64 为 cls HOTA/DetA/AssA `54.354/45.147/67.310`、det
+  `62.199/54.099/73.952`，sum `116.553`；较 e60 `+0.117/-0.107/+0.010`，
+  det AssA 下降且四项 AP 全降，e52 保持总榜最佳。pair `0.310301/0.528114`、
+  both-independent `0.349620/0.565467`。checkpoint SHA `6aebf315…54e6`，meta
+  `64/66432`，2,776 浮点 tensor 全有限，5416/50、51/28/108/50 与 async=1 全闭环。
+- 178 One-Cycle e68 为 cls `54.458/44.857/68.459`、det
+  `62.218/54.543/73.239`，sum `116.676`；较 e64 `+0.047/+0.024/+0.071`，但
+  四项 AP 继续下降且仍低 e60 `0.163/0.114/0.277`。pair `0.311871/0.514154`、
+  both-independent `0.349024/0.547445`。checkpoint SHA `35048e05…807a`，meta
+  `68/70584`，2,776 浮点 tensor 全有限，检测与 TrackEval 全闭环。
+- 两条快线继续到 e72，不用尾段回落提前替代目标判定。实时 99 e65i500、178 e69i300、
+  252 e35i50，fatal=0；下一节点优先为 252 WSD e36。
 
 ## 2026-08-11 13:56 CST：99 e60、178 e64、252 e32 完整闭环
 

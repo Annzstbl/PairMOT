@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 13:56 CST.
+Last updated: 2026-08-11 14:21 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,23 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 14:21 CST, dynamic-99 cosine closes e64 at `54.354/62.199` (sum
+`116.553`), changing `+0.117/-0.107/+0.010` from e60. Classification DetA
+and AssA recover slightly, but detection AssA declines `0.315` and all four AP
+summaries fall; e52 therefore remains the line and overall best. Dynamic-178
+One-Cycle closes e68 at `54.458/62.218` (sum `116.676`), recovering only
+`0.047/0.024/0.071` from e64 and remaining `0.163/0.114/0.277` below its e60
+best while all four AP summaries decline again. Their e72 target gaps are
+`0.909/0.400/1.309` and `0.805/0.381/1.186`; both continue to the required e72
+closure despite the low-LR plateau.
+
+Both new checkpoints have 711/712 states, 497 optimizer states/groups and
+2,776 finite floating tensors, with complete 5,416/50, 51 detection-file,
+28 CSV/108 nonempty/50 prediction and async=1 closure. SHA prefixes are
+`6aebf315` and `35048e05`. Live progress is e65i500/e69i300/e35i50 on
+99/178/252 with authorized GPU use and finite logs. The next node is fixed-252
+WSD e36, followed by the two fast-line e72 closures.
 
 At 13:56 CST, dynamic-99 cosine closes e60 at `54.237/62.306` (sum
 `116.543`), changing `-0.307/+0.068/-0.239` from e56. Classification DetA,
