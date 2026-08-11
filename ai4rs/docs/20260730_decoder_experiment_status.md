@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 03:10 CST
+更新时间：2026-08-12 04:07 CST
 
 ## 当前研究原则
 
@@ -25,7 +25,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E9I200/E8_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e8同点cls/det `44.755/51.724`、sum `96.479`；DetA/AssA、AP、5416/50检测、50/50轨迹、TrackEval、checkpoint SHA与1,284个浮点tensor均闭环。较warmup12同点全面领先，继续成熟节点。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E13I250/E12_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e12同点cls/det `50.576/57.205`、sum `107.781`；完整性全闭环。较warmup12同点双升`3.824/4.000`，较原始父线同点双升`0.792/0.962`，继续e16及成熟节点。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
