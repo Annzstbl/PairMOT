@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 06:55 CST.
+Last updated: 2026-08-11 08:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,25 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 08:05 CST, dynamic-178 One-Cycle closes e48 at `54.413/62.176` (sum
+`116.589`) and becomes the highest-sum mature point. Relative to e44 it gains
+`0.117/0.371` HOTA and both AssA values, while AP rolls back slightly; its
+remaining cls/det/sum gaps are `0.850/0.423/1.273`. Dynamic-99 cosine closes
+e44 at `54.592/61.828` (sum `116.420`), gaining `0.051/0.117` HOTA, both DetA
+and all four AP summaries from e40; gaps are `0.671/0.771/1.442`. Neither
+dominates, so continue them to e52/e48 and e72.
+
+Fixed-252 WSD closes e16 at `48.909/56.825` (sum `105.734`), gaining
+`3.070/3.627` HOTA from e12 with every DetA, AssA and AP summary higher; it
+remains in stable-phase formation and continues to e20/e72 rather than being
+rejected early. All three checkpoints have 711/712 states, 497 optimizer
+groups, 2,776 finite floating tensors and complete 5,416/50 detection plus
+28 CSV/108 nonempty/50 prediction async TrackEval closure. Their SHA-256
+prefixes are `23d80dac`, `6bde0c15` and `872afb3d` for 99/178/252. Live
+progress is e45i350/e49i850/e17i800 within the authorized GPU boundaries.
+Server 197 still times out through the correct identity, so no fallback is
+deployed and no live repository is changed.
 
 At 06:55 CST, server 99 control is directly reachable through its configured
 SSH port 2367; the earlier port-22 timeout was not evidence of host failure.

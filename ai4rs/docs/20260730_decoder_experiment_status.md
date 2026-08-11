@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-11 06:55 CST
+更新时间：2026-08-11 08:05 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E46I200/E44_COMPLETE/TO_E72` | e44 cls/det HOTA `54.296/61.805`、sum `116.101` 完整闭环；定位继续改善、AssA 小幅回撤，四项 AP 全升，距目标 `0.967/0.794/1.761`，继续 e48/e72。 |
-| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E14I650/E12_COMPLETE/TO_E72` | e12 `45.839/53.198`、sum `99.037` 完整闭环；较 e8 双升 `2.698/4.643`，六项 DetA/AssA 与四项 AP 全升。仍属早期稳定段，继续 e16/e72，固定 GPU0/1。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E41I750/E40_COMPLETE/TO_E72` | e40 cls/det HOTA `54.541/61.711`、sum `116.252` 完整闭环，成为当前最强成熟点；较 e36 双升 `1.633/0.829` 且 DetA/AssA/AP 全升，距目标 `0.722/0.888/1.610`；继续 e44/e72，GPU1 未触碰。 |
+| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `RUNNING/E49I850/E48_COMPLETE/TO_E72` | e48 cls/det HOTA `54.413/62.176`、sum `116.589` 完整闭环，当前最高总和；较 e44 双升 `0.117/0.371`，关联增强而 AP 小幅回落，距目标 `0.850/0.423/1.273`，继续 e52/e72。 |
+| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E17I800/E16_COMPLETE/TO_E72` | e16 `48.909/56.825`、sum `105.734` 完整闭环；较 e12 双升 `3.070/3.627`，六项 DetA/AssA 与四项 AP 全升。仍属稳定段形成期，继续 e20/e72，固定 GPU0/1。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E45I350/E44_COMPLETE/TO_E72` | e44 cls/det HOTA `54.592/61.828`、sum `116.420` 完整闭环；较 e40 双升 `0.051/0.117`，DetA/AP 增长而 AssA 微回撤，距目标 `0.671/0.771/1.442`；继续 e48/e72，GPU1 未触碰。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
@@ -52,6 +52,35 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-11 08:05 CST：One-Cycle e48 总和领先，cosine e44 与 WSD e16 完整
+
+- 178 `0810_06` One-Cycle e48 为 cls HOTA/DetA/AssA `54.413/45.115/67.809`、
+  det `62.176/54.585/73.086`，sum `116.589`。相对 e44，HOTA `+0.117/+0.371`，
+  cls/det AssA `+0.501/+0.652`，但四项 AP 小幅回落；pair mAP/AP50
+  `0.313493/0.522858`，both-independent `0.353039/0.560230`。距目标
+  `0.850/0.423/1.273`。430,718,324-byte checkpoint SHA-256
+  `6bde0c1538ef324d75373d7ac1719320943919f00d9454dd65411c669170a131`，meta
+  `48/49824`，711/712 states、497 参数组、1 scheduler、2,776 浮点 tensor 全有限；
+  5416/50、51 检测文件、28 CSV/108 非空/50 predictions、async=1 全闭环。
+- 99 `0810_08` warmup12-cosine e44 为 cls `54.592/45.838/66.764`、det
+  `61.828/53.997/73.297`，sum `116.420`。相对 e40，HOTA `+0.051/+0.117`、
+  DetA `+0.190/+0.197`，AssA `-0.232/-0.031`，四项 AP 继续上升；pair
+  `0.315990/0.544399`，both-independent `0.356856/0.584397`。距目标
+  `0.671/0.771/1.442`。424,915,510-byte checkpoint SHA-256
+  `23d80dacc2c5e71e6015d367389cf7cf761d453af27789fd36009f113cc7ea77`，meta
+  `44/45672`，711/712 states、497 参数组、2 schedulers、2,776 浮点 tensor 全有限；
+  检测和 TrackEval 全量闭环。
+- 252 `0810_09` WSD e16 为 cls `48.909/40.235/61.799`、det
+  `56.825/50.063/66.663`，sum `105.734`。相对 e12，HOTA `+3.070/+3.627`、
+  DetA `+2.491/+2.337`、AssA `+3.766/+5.341` 且四项 AP 全升；pair
+  `0.265075/0.453282`，both-independent `0.307279/0.500349`。386,449,910-byte
+  checkpoint SHA-256 `872afb3dcc4cc87a8d021d76301b6a012f109a49596e29bacd8e0d64f3c1b160`，
+  meta `16/16608`，711/712 states、497 参数组、2 schedulers、2,776 浮点 tensor
+  全有限；评测全闭环。
+- 178 e48 相对 99 e44 的 cls/det/sum 为 `-0.179/+0.348/+0.169`，总和最高但
+  仍不全面支配；两条成熟路线继续。实时为 99 e45i350、178 e49i850、252 e17i800，
+  数值和 GPU 边界正常；197 正确身份仍超时，未部署后备。下一节点 e48/e52/e20。
 
 ## 2026-08-11 06:55 CST：99 正确控制端口恢复，三条正式线持续健康
 
