@@ -4,14 +4,44 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 15:54 CST.
+Last updated: 2026-08-12 00:58 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
 
-Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. By user decision on 2026-08-12, server 197 is excluded from the current objective and must not receive smoke or formal experiments.
+
+At 00:58 CST on August 12, AutoDL instance `c12c46bdd8-77ce297d` is online and
+its SSH endpoint is verified. It has one idle RTX 5090 with 32,607 MiB, 208 CPU
+threads, 754 GiB RAM, image PyTorch 2.8.0+cu128 with CUDA available, and no
+existing compute process. The system, data, and shared disks have approximately
+29 GiB, 15 GiB, and 157 GiB free. The PairMOT checkout, normalized HSMOT
+train/test trees, and GMC working cache exist. At the user's explicit request,
+do not run PairMOT smoke, model construction, real-data loading, or formal
+training; keep this instance `ONLINE/RESOURCE_CHECKED/IDLE/NO_SMOKE/NO_FORMAL`.
+Because only one GPU is present, it cannot execute the original 2x4 protocol
+without a separately approved 1x8-equivalent adaptation.
+
+At 00:50 CST on August 12, a read-only audit through server 197 confirms that
+the shared `/data4` logs for all three active lanes stopped together around
+16:05 CST: dynamic-99 is at e71i150 with last checkpoint e68, fixed-252 is at
+e39i850 with last checkpoint e36, and dynamic-178 is at e2i100 without its
+first periodic checkpoint. A 35-second repeat sample shows identical log sizes
+and final iterations, and exact fatal scans find no Traceback, OOM, or NCCL
+error. Record these lanes as `NO_PROGRESS/CONTROL_UNREACHABLE`, not RUNNING;
+shared logs alone cannot distinguish dead processes from live processes blocked
+outside logging.
+
+Server 197 itself accepts ordinary SSH after a roughly 24-second session-open
+delay and mounts `/data4` successfully from `10.106.15.88:/datav2`. All six
+RTX 3090 GPUs are idle and no prior training process exists, but the py310
+environment does not complete `import torch` within 60 seconds and the dual-GPU
+NCCL diagnostic does not pass. The user explicitly abandons 197 for this
+objective. Diagnostic PGID `3843487` is terminated exactly, its temporary file
+is absent, all six GPUs return to 1 MiB/0%, and no smoke/formal workdir or
+repository mutation is made on 197.
 
 At 15:54 CST, the freed dynamic-178 GPU0 starts `0811_02`, the `1x8`
 global-batch-equivalent form of standard warmup4-cosine68. It changes only the

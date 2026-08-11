@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 15:54 CST。
+更新时间：2026-08-12 00:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -13,15 +13,34 @@
 
 ## 当前资源总览
 
-资源边界为：252 固定 GPU0/1（2 卡、且为最慢资源）；99 总计 2 卡、178 总计 1 卡、197 总计 2 卡，后三者不固定 GPU 序号。每台机器同一时间不超过对应总卡数。
+资源边界为：252 固定 GPU0/1（2 卡、且为最慢资源）；99 总计 2 卡、178 总计 1 卡且不固定 GPU 序号。按用户决定，197 已退出本轮训练资源，不再部署或运行实验。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E70I450/E68_COMPLETE/TO_E72；fatal=0 | e68 `54.387/62.298`、sum `116.685` 完整；e52 仍为当前总榜最佳 `116.975`，继续 e72；GPU1 为外部 UNet，PairMOT 仅 GPU0/2 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E39I250/E36_COMPLETE/TO_E72；fatal=0 | e36 `52.478/60.531`、sum `113.009` 完整且较 e32 双升，继续 e40/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0811_02 product-tangent standard warmup4 + cosine68 peak×8/3`（动态 GPU0，1x8） | RUNNING/E1I250/FORMAL_ITER50_PASS/TO_E72；fatal=0 | 五项门槛全通过；GPU0 约 31.4 GiB，GPU1 外部 InternVL 不动 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+| 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0811_02 product-tangent standard warmup4 + cosine68 peak×8/3`（1x8） | NO_PROGRESS/E2I100/NO_E4/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:43，双采样无增长；无周期checkpoint | `/data4/litianhao/PairMmot/workdir_178` |
+| AutoDL `c12c46bdd8-77ce297d` | 无正式实验 | ONLINE/RESOURCE_CHECKED/IDLE/NO_SMOKE/NO_FORMAL；1×RTX 5090 32GB | 按用户要求不做smoke或formal | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-12 00:58 CST：AutoDL实例在线且基础资源正常
+
+- SSH端点可用且hostname匹配 `c12c46bdd8-77ce297d`。单张RTX 5090为32607 MiB，检查时
+  无计算进程；PyTorch 2.8.0+cu128可识别CUDA和1张GPU。CPU为208线程，内存754 GiB。
+- 系统盘、50G数据盘和200G共享盘分别约有29G、15G、157G可用；代码、HSMOT train/test
+  和GMC工作缓存均存在。用户明确要求不运行PairMOT smoke，因此没有模型、真实数据或训练
+  门槛结论，也没有创建新workdir。实例保持空闲且不能被报告为RUNNING。
+
+## 2026-08-12 00:50 CST：共享日志停写，197按用户决定退出资源
+
+- 经197对共享 `/data4` 两次只读采样，99/252/178分别停在e71i150、e39i850、e2i100，
+  三份正式日志自16:05后无新增且35秒复核大小与末行完全相同；最新周期checkpoint分别为
+  e68、e36、无。精确fatal扫描无Traceback/OOM/NCCL错误，因此状态改为`NO_PROGRESS`，
+  在控制面恢复前不推断进程已退出或仍存活阻塞。
+- 197普通SSH、NFS共享盘、代码和Conda路径均可访问，6张RTX 3090连续空闲；本地`/data`
+  使用99%、剩余约81G。py310的 `import torch` 60秒未完成，双卡诊断未通过。用户决定放弃
+  在197运行实验；测试PGID `3843487` 已精确终止，临时文件不存在，GPU和测试进程归零，
+  未创建任何正式实验目录。
 
 ## 2026-08-11 15:54 CST：178 warmup4-cosine 候选五项门槛通过
 
