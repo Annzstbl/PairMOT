@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 14:21 CST.
+Last updated: 2026-08-11 15:39 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 15:39 CST, dynamic-178 One-Cycle closes its required e72 at
+`54.162/62.280` (sum `116.442`) and strictly fails target gaps
+`1.101/0.319/1.420`. Classification DetA/AssA and all four AP summaries decline
+from e68. Its 463,830,388-byte checkpoint is finite and fully closed under SHA
+prefix `5b499149`; training exits naturally and GPU0 is free while GPU1 remains
+the external InternVL job.
+
+Dynamic-99 cosine closes e68 at `54.387/62.298` (sum `116.685`), recovering
+`0.033/0.099/0.132` from e64 but with all four AP summaries lower; e52 remains
+the overall best. Fixed-252 WSD closes e36 at `52.478/60.531` (sum `113.009`),
+gaining `0.088/0.268/0.356` from e32 with detection DetA/AssA and all four AP
+summaries higher. Both checkpoints have 711/712 states, 497 optimizer
+states/groups and 2,776 finite floating tensors, with complete 5,416/50,
+51 detection-file, 28 CSV/108 nonempty/50 prediction and async=1 closure. SHA
+prefixes are `d55951a2` and `b4a5c835`. Live progress is 99 e69i600 and fixed-252
+e38i500 with finite logs. Adapt the statically validated standard warmup4-cosine
+candidate to 178 `1x8` and require all five dynamic gates before RUNNING.
 
 At 14:21 CST, dynamic-99 cosine closes e64 at `54.354/62.199` (sum
 `116.553`), changing `+0.117/-0.107/+0.010` from e60. Classification DetA
