@@ -7,7 +7,7 @@ set -u
 
 REPO=${PAIRMOT_AUTODL_REPO:-/root/PairMOT_0811_02_autodl/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/autodl_0811_02_product_tangent_warmup4_cosine2667_72e_1xb8.py
-WORK_DIR=/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh
+WORK_DIR=/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2
 PYTHON_BIN=/root/miniconda3/bin/python
 
 trap 'status=$?; echo "[$(date "+%F %T")] formal 0811_02 AutoDL failed: status=${status} command=${BASH_COMMAND}" >> "${WORK_DIR}/launch.log"; exit "${status}"' ERR

@@ -13,11 +13,17 @@ with read_base():
 _hsmot_root = '/root/autodl-tmp/data/hsmot'
 _pretrain_root = '/root/autodl-fs/PairMOT_assets/pretrained_weights'
 _gmc_root = '/root/autodl-tmp/PairMOT_assets/gmc_cache'
+_peak_lr = 8.0e-4 / 3.0
+
+# The source 0811_02 file omitted this assignment despite describing the same
+# peak as 0810_08.  Set it explicitly here so the first warmup LR is 1e-7 and
+# all existing paramwise multipliers remain ratio-preserving.
+optim_wrapper['optimizer']['lr'] = _peak_lr
 
 work_dir = (
     '/root/autodl-tmp/work_dirs/'
     '0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_'
-    'autodl_fresh')
+    'autodl_fresh_v2')
 load_from = (
     f'{_pretrain_root}/rtdetr_r18vd_dec3_6x_coco_from_paddle_pair_adapted/'
     'pair_coco_adapted_pretrain.pth')
