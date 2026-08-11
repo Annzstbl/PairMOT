@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 15:39 CST.
+Last updated: 2026-08-11 15:54 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,20 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 15:54 CST, the freed dynamic-178 GPU0 starts `0811_02`, the `1x8`
+global-batch-equivalent form of standard warmup4-cosine68. It changes only the
+warmup boundary from 12 to 4 epochs while retaining the same 8/3 peak and
+96-parent-epoch nominal LR integral; model, data, loss, EMA, optimizer groups,
+global batch and inference are unchanged. Commit `f78933d` is deployed to a
+new isolated checkout. Config deepcopy, full parent/candidate construction,
+real GPU0 four-iteration smoke, checkpoint update, and formal iter50 all pass.
+Both models have 22,771,111 parameters and 711 states; the smoke checkpoint
+has 711/712 model/EMA states, 497 optimizer states/groups, two schedulers and
+2,776 finite floating tensors. Formal training is healthy beyond e1i250 on
+GPU0 at about 31.4 GiB; GPU1 remains the external InternVL job. Live progress
+is 99 e70i450, fixed-252 e39i250 and 178 e1i250. Next complete nodes are 99
+e72, 252 e40 and 178 e4; early e4/e8 cannot reject the new decoder schedule.
 
 At 15:39 CST, dynamic-178 One-Cycle closes its required e72 at
 `54.162/62.280` (sum `116.442`) and strictly fails target gaps

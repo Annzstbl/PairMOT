@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-11 15:39 CST
+更新时间：2026-08-11 15:54 CST
 
 ## 当前研究原则
 
@@ -24,9 +24,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态 GPU0 | `0810_06 final product-tangent ratio-preserving standard One-Cycle peak×2.5 fresh` | `COMPLETED/E72/STRICT_FAIL/GPU0_FREE` | e72 `54.162/62.280`、sum `116.442` 完整闭环，距目标 `1.101/0.319/1.420`；训练自然退出，GPU0 已释放。GPU1 为外部 InternVL。 |
-| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E38I500/E36_COMPLETE/TO_E72` | e36 `52.478/60.531`、sum `113.009` 完整闭环；较 e32 双升 `0.088/0.268`，det DetA/AssA 与四项 AP 全升，继续 e40/e72，固定 GPU0/1。 |
-| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E69I600/E68_COMPLETE/TO_E72` | e68 `54.387/62.298`、sum `116.685` 完整闭环；较 e64 小升但四项 AP 继续下降，e52 仍为当前总榜最佳 `116.975`；继续 e72。GPU1 为外部 UNet，PairMOT 仅 GPU0/2。 |
+| 178 动态 GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 fresh 1x8` | `RUNNING/E1I250/FORMAL_ITER50_PASS/TO_E72` | 由 One-Cycle e72 严格失败释放的 GPU0 承接；五项动态门槛全通过，模型、全局 batch 与 `0811_01` 一致。GPU1 为外部 InternVL，PairMOT 仅 GPU0。 |
+| 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `RUNNING/E39I250/E36_COMPLETE/TO_E72` | e36 `52.478/60.531`、sum `113.009` 完整闭环；较 e32 双升，继续 e40/e72，固定 GPU0/1。 |
+| 99 动态 GPU0/2 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `RUNNING/E70I450/E68_COMPLETE/TO_E72` | e68 `54.387/62.298`、sum `116.685` 完整闭环；e52 仍为当前总榜最佳 `116.975`，继续 e72。GPU1 为外部 UNet，PairMOT 仅 GPU0/2。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
 | 197 后备（主机间歇不可达） | `0810_09 same WSD host adaptation` | `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL` | 一次只读 GPU 审计后连续超时；尚未部署或远端构建，不占 GPU。 |
@@ -52,6 +52,25 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-11 15:54 CST：178 启动标准 warmup4-cosine 单卡等 batch 候选
+
+- `0811_02` 只把标准 cosine 的 warmup 从 12 epoch 缩短为 4 epoch，随后用 68 epoch
+  `CosineAnnealingLR`；峰值仍为父 LR 的 `8/3`，名义积分仍为 96 个父线 epoch。模型、参数、
+  data、loss、EMA、global batch 8、optimizer 参数组、hooks 与推理图不变，无 class-aware、
+  reweight 或新增推理计算。178 采用 `1x8` 只是资源等价适配，GPU0 单卡运行；GPU1 外部
+  InternVL 不动。
+- commit `f78933d` 通过完整 bundle 部署到全新隔离 checkout
+  `/data1/users/litianhao01/PairMOT_0811_02_warmup4_cosine2667_178/ai4rs`，未热更新历史训练仓库。
+  配置 deepcopy、两个 launcher Bash 语法、父/候选完整构建通过：均为 22,771,111 参数、
+  711 states，model 与 optimizer 配置一致，batch size 8、2 个 scheduler 边界为 0--4/4--72。
+- 真实 GPU0 4-iter smoke 四次 loss/grad 全有限，峰值显存约 21.6 GiB；364,516,340-byte
+  `iter_4.pth` meta `0/4`，model/EMA 711/712、optimizer 497 states/groups、2 scheduler、
+  2,776 浮点 tensor 全有限，迭代分类 residual 与 DN absolute 更新检查通过。
+- fresh formal screen `pm081102formal` 已超过 iter50；iter50 loss `21.2224`、grad norm
+  `108.0192` 均有限，GPU0 约 31.4 GiB，目标进程 9 个且 fatal=0，因此五项门槛全通过并
+  登记 `RUNNING`。实时为 178 e1i250、99 e70i450、252 e39i250；下一优先闭环 99 e72、
+  252 e40 与新线 e4，不能以新线 e4/e8 直接否决。
 
 ## 2026-08-11 15:39 CST：One-Cycle e72 严格失败，cosine e68 小恢复，WSD e36 继续增长
 

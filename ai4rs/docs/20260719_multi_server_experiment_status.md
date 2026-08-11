@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-11 15:39 CST。
+更新时间：2026-08-11 15:54 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -17,11 +17,21 @@
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E69I600/E68_COMPLETE/TO_E72；fatal=0 | e68 `54.387/62.298`、sum `116.685` 完整；e52 仍为当前总榜最佳 `116.975`，继续 e72；GPU1 为外部 UNet，PairMOT 仅 GPU0/2 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 本机 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3`（动态 GPU0/2） | RUNNING/E70I450/E68_COMPLETE/TO_E72；fatal=0 | e68 `54.387/62.298`、sum `116.685` 完整；e52 仍为当前总榜最佳 `116.975`，继续 e72；GPU1 为外部 UNet，PairMOT 仅 GPU0/2 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0808_07 product-tangent staged delayed LR clock` | STOPPED/INTERMITTENT_HOST_UNREACHABLE/E70I950；e68 STRICT_PASS `55.646/62.509`，sum `118.155` | `0810_09` WSD 仅 `LOCAL_PREPARED/INTERMITTENT_HOST_UNREACHABLE/NO_SMOKE/NO_FORMAL`；未部署 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E38I500/E36_COMPLETE/TO_E72；fatal=0 | e36 `52.478/60.531`、sum `113.009` 完整且较 e32 双升，继续 e40/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | 无 PairMOT 训练（GPU0 空闲，GPU1 外部 InternVL） | `0810_06` COMPLETED/E72/STRICT_FAIL；e72 `54.162/62.280`、sum `116.442` | 标准 warmup4-cosine `1x8` 适配与五项门槛待执行 | `/data4/litianhao/PairMmot/workdir_178` |
+| 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | RUNNING/E39I250/E36_COMPLETE/TO_E72；fatal=0 | e36 `52.478/60.531`、sum `113.009` 完整且较 e32 双升，继续 e40/e72，固定 GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0811_02 product-tangent standard warmup4 + cosine68 peak×8/3`（动态 GPU0，1x8） | RUNNING/E1I250/FORMAL_ITER50_PASS/TO_E72；fatal=0 | 五项门槛全通过；GPU0 约 31.4 GiB，GPU1 外部 InternVL 不动 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL | 无训练 | 所有实例关机 | 无 | `/root/autodl-tmp/work_dirs` |
+
+## 2026-08-11 15:54 CST：178 warmup4-cosine 候选五项门槛通过
+
+- `0811_02` 是静态 `0811_01` 的 178 `1x8` 等全局 batch 版本；只把 warmup12 改为
+  warmup4，随后标准 cosine68，峰值与名义 LR 积分不变。模型、EMA、loss、data、optimizer
+  参数组及推理不变，commit `f78933d` 部署于全新隔离 checkout。
+- 配置 deepcopy、完整父/候选构建、真实 GPU0 4-iter smoke、checkpoint 更新及 formal
+  iter50 五项全通过。模型 22,771,111 参数/711 states；smoke checkpoint 为 711/712、
+  497/497、2 scheduler、2,776 浮点 tensor 全有限；formal 已超过 e1i250，fatal=0。
+- 实时 99 e70i450、252 e39i250、178 e1i250；下一节点为 99 e72、252 e40、178 e4。
 
 ## 2026-08-11 15:39 CST：178 e72、99 e68、252 e36 完整闭环
 
