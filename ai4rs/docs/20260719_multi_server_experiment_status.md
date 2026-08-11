@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 02:15 CST。
+更新时间：2026-08-12 03:10 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,23 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E5I350/E4_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e4 `34.903/42.562`、sum `77.465`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；仅作早期诊断 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E9I200/E8_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e8 `44.755/51.724`、sum `96.479`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续成熟节点 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 03:10 CST：AutoDL e8完整闭环，缩短warmup优势保持
+
+- e8同一checkpoint的cls HOTA/DetA/AssA为`44.755/35.387/59.040`，det为
+  `51.724/44.113/63.197`，sum `96.479`；cls/det MOTA分别`34.833/46.495`，
+  IDF1分别`50.385/58.406`。pair mAP/AP50为`0.230501/0.389489`，
+  both-independent为`0.268457/0.435281`。5416条、50序列检测与50/50非空轨迹完整，
+  `track/async_done=1.0`，TrackEval自然耗时158.2秒。
+- `epoch_8.pth`为375,554,740字节，SHA-256
+  `250c3b2471ea5f1a5e54e0b6337b29c93138a31d43e9a57acf4566759db4e649`，meta为
+  `epoch=8/iter=8304`；model/EMA为711/712 states，optimizer为497 states/groups，
+  1,284个浮点model/EMA tensor全部有限。训练自然恢复到e9 iter200，真实运行错误为0。
+- 相对`0810_08`标准warmup12+cosine同点，cls/det HOTA提高`4.554/5.016`，
+  cls DetA/AssA提高`2.184/7.870`，det提高`3.040/8.163`；pair mAP/AP50提高
+  `0.033569/0.037949`，both-independent提高`0.028767/0.022960`。缩短warmup的形成优势
+  从e4保持到e8，但物理1x8与旧2x4存在拓扑差异，且e8仍非成熟否决点，继续e12及后续节点。
 
 ## 2026-08-12 02:15 CST：AutoDL e4首个完整闭环，训练继续至e5
 

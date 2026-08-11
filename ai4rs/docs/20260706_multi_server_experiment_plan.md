@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 02:15 CST.
+Last updated: 2026-08-12 03:10 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -29,6 +29,21 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 03:10 CST, e8 is fully closed. The same checkpoint gives cls
+HOTA/DetA/AssA `44.755/35.387/59.040` and det `51.724/44.113/63.197`,
+with pair mAP/AP50 `0.230501/0.389489` and both-independent
+`0.268457/0.435281`. All 5,416 records, 50 detection files, 50 trajectory
+files, and `track/async_done=1.0` are complete; TrackEval finishes naturally
+in 158.2 seconds. The 375,554,740-byte checkpoint has SHA-256
+`250c3b2471ea5f1a5e54e0b6337b29c93138a31d43e9a57acf4566759db4e649`,
+meta `epoch=8/iter=8304`, 711/712 model/EMA states, 497 optimizer
+states/groups, and no nonfinite value among 1,284 floating model/EMA tensors.
+Against standard warmup12-cosine at e8, cls/det HOTA improve by
+`4.554/5.016`, and all DetA, AssA, and AP comparisons are positive. Training
+resumes to e9 iteration 200. This confirms faster formation but remains an
+early diagnostic with a 1x8 versus 2x4 physical-topology caveat; continue to
+e12 and mature checkpoints rather than rejecting or declaring success.
 
 At 02:15 CST, the first scheduled e4 evaluation is fully closed. The same
 checkpoint gives cls HOTA/DetA/AssA `34.903/26.334/49.005` and det
