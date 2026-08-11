@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 11:00 CST.
+Last updated: 2026-08-11 12:30 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,24 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 12:30 CST, dynamic-178 One-Cycle closes e60 at `54.621/62.332` (sum
+`116.953`), gaining `0.255/-0.086/0.169` from e56 and setting that line's
+best sum. Dynamic-99 cosine closes e56 at `54.544/62.238` (sum `116.782`),
+rolling back `0.265` cls and `0.193` sum from e52; e52 remains the overall
+best at `116.975`, only `0.022` above One-Cycle e60. Their remaining gaps are
+`0.454/0.433/0.887` and `0.642/0.267/0.909`, so neither mature schedule is
+terminated and both continue to e72.
+
+Fixed-252 WSD closes e28 at `52.190/59.526` (sum `111.716`), gaining
+`1.056/0.834` HOTA from e24 with all DetA, AssA and four AP summaries higher.
+It continues to e32/e72 in the standard stable phase. All three checkpoints
+have 711/712 states, 497 optimizer states/groups and 2,776 finite floating
+tensors, with complete 5,416/50, 51 detection-file, 28 CSV/108 nonempty/50
+prediction and async=1 closure. SHA prefixes are `30cd7a6d`, `fea200a4` and
+`5b880aa0` for 99/178/252. Live progress is e59i750/e64i50/e29i950 with
+authorized GPU use and finite logs; next nodes are e60/e64/e32. The static
+warmup4-cosine fallback remains undeployed while no legal lane is free.
 
 At 11:00 CST, dynamic-99 warmup12-cosine closes e52 at `54.809/62.166`
 (sum `116.975`) and remains the highest-sum mature point. Relative to e48 it
