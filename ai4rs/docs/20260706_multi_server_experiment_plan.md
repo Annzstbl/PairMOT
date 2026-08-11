@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 08:05 CST.
+Last updated: 2026-08-11 09:20 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 09:20 CST, dynamic-99 warmup12-cosine closes e48 at `54.816/61.976`
+(sum `116.792`) and becomes the highest-sum mature point. Relative to e44 it
+gains `0.224/0.148` HOTA, driven mainly by cls/det AssA gains of
+`1.079/0.309`; its remaining cls/det/sum gaps are `0.447/0.623/1.070`.
+Dynamic-178 One-Cycle closes e52 at `54.229/62.211` (sum `116.440`), changing
+`-0.184/+0.035/-0.149` from e48 with lower cls and all four AP summaries, so
+e48 remains that line's best point. Keep both mature schedules through e72;
+the single e52 rollback does not justify terminating standard One-Cycle.
+
+Fixed-252 WSD closes e20 at `49.173/57.378` (sum `106.551`), gaining
+`0.264/0.553` HOTA, `1.091/1.316` AssA and all four AP summaries from e16.
+It remains in stable-phase formation and continues to e24/e72. All three new
+checkpoints have 711/712 model/EMA states, 497 optimizer states/groups and
+2,776 finite floating tensors; detection and TrackEval close at 5,416/50,
+51 files, 28 CSV/108 nonempty/50 predictions and async=1. Their SHA-256
+prefixes are `d6458f01`, `f81cba11` and `b4d41f48` for 99/178/252. Live
+progress is e49i500/e53i950/e21i400 within authorized GPU boundaries; 178
+GPU1 is an external InternVL job and PairMOT uses GPU0 only. Next nodes are
+e52/e56/e24. No legal lane is free, so `0811_01` remains static-only.
 
 At 08:05 CST, dynamic-178 One-Cycle closes e48 at `54.413/62.176` (sum
 `116.589`) and becomes the highest-sum mature point. Relative to e44 it gains
