@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 00:58 CST
+更新时间：2026-08-12 01:15 CST
 
 ## 当前研究原则
 
@@ -17,21 +17,21 @@
   checkpoint 同时达到 cls `>=55.263`、det `>=62.599`、sum `>=117.862`；模型、EMA、
   loss、数据、全局 batch 和推理保持不变。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
-- AutoDL 实例 `c12c46bdd8-77ce297d` 已开机并完成只读资源审计：单张 RTX 5090 32GB、
-  PyTorch 2.8.0+cu128 与CUDA可用，当前空闲；按用户要求不做PairMOT smoke或formal，暂不登记为训练线。
-- 资源边界为：252 固定 GPU0/1；99 总计 2 卡、178 总计 1 卡，二者不固定序号。252 最慢，只延续成熟路线或复验明确候选。按用户决定，197 已退出本轮训练资源，不再部署、smoke 或 formal。
+- 本地服务器故障后，当前目标迁移到 AutoDL 实例 `c12c46bdd8-77ce297d` 的单张 RTX 5090；
+  使用物理 `1x8` 保持全局 batch 8，不运行独立训练 smoke，formal 本身承担动态验证。
+- 99/178/252 保留故障前只读状态但不再作为当前计算资源；197 仍按用户决定排除。
 
 ## 当前实验状态
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 178 动态单卡 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 fresh 1x8` | `NO_PROGRESS/E2I100/NO_E4/CONTROL_UNREACHABLE` | `/data4` 正式日志最后为 2026-08-11 16:05:43；00:17--00:18 两次采样大小与末行不变。无法直接确认进程已退出还是阻塞，不再登记 RUNNING。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E1I100/FORMAL_ITER50_PASS/AUTO_FINALIZER_ACTIVE/TO_E72` | 独立 checkout `9bc495c`；首个 v1 正式日志暴露源配置遗漏 peak LR 赋值，e1i100 前停止且不参与比较。v2 显式设置 `8e-4/3`，iter50/100 LR `1e-7`，loss/DN/encoder/grad 全有限，GPU0 约31371 MiB；未运行独立 smoke。 |
+| 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
 | 197 已排除 | `0810_09 same WSD host adaptation` | `EXCLUDED_BY_USER/NO_SMOKE/NO_FORMAL/GPU_FREE` | 2026-08-12 只读审计确认 SSH、`/data4`、代码与Conda路径存在且6卡空闲，但 `import torch` 60秒未完成；测试进程组已精确终止且GPU归零。按用户决定不在197运行实验。 |
-| AutoDL 单卡 | 无正式实验 | `ONLINE/RESOURCE_CHECKED/IDLE/NO_SMOKE/NO_FORMAL` | 实例 `c12c46bdd8-77ce297d`；1×RTX 5090 32607MiB，PyTorch 2.8.0+cu128、CUDA可用，HSMOT与GMC路径存在。仅做基础资源检查，不运行PairMOT smoke。 |
 | 252 已释放 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `STOPPED/E25I1000/E24_COMPLETE/MATURE_DOMINATED` | e24 `48.913/55.278`、sum `104.191`，HOTA、DetA、AssA 与 AP 均被 178 同点支配；在峰后成熟闭环后精确停止并释放固定 GPU0/1，非 e4/e8 否决。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
@@ -54,6 +54,24 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-12 01:15 CST：目标迁移 AutoDL，修正 warmup4-cosine 源配置遗漏后正式运行
+
+- 当前代码通过完整增量 bundle 同步到隔离 checkout `/root/PairMOT_0811_02_autodl`；v2
+  HEAD 为 `9bc495c`，远端工作树干净。HSMOT、R18 COCO-adapted 预训练与真实 GMC
+  8297/5416 文件均复用已有资产，没有重跑初始化或资产生成。
+- 不运行独立训练 smoke。仅做 launcher `bash -n`、配置 deepcopy 和一次 CPU 侧完整模型构建；
+  结果为 22,771,111 参数、711 states、物理 batch 8、72 epochs，模型、loss、EMA、数据与
+  推理协议不变。
+- 第一条 AutoDL v1 formal 在 e1i50 首次记录 `3.75e-8`，由此发现源 `0811_02` 虽声明
+  peak×8/3，却遗漏与 `0810_08` 相同的 `optim_wrapper['optimizer']['lr']=8e-4/3`。
+  自动收尾先停止，随后正式进程精确退出，GPU回到0 MiB；该无效 workdir保留且不参与比较。
+- v2 只补齐上述声明内的 peak LR，并换用 fresh workdir。静态审计确认 peak
+  `2.6666667e-4`、warmup start `1e-7`、LinearLR 0--4 与 CosineAnnealingLR 4--72。
+  formal iter50/100 的 LR 均为 `1e-7`，loss `21.2086/21.2768`、grad
+  `108.0313/92.7441`，DN与encoder proposal项全有限；screen、主进程、GPU、正式日志和
+  fatal门槛全通过，登记 `RUNNING`。自动 finalizer 已绑定 e72、18/18 TrackEval、共享盘
+  归档与自动关机，减少训练完成后的计费空转。
 
 ## 2026-08-12 00:58 CST：AutoDL单卡实例在线，仅完成资源检查
 

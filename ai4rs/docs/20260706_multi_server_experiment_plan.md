@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 00:58 CST.
+Last updated: 2026-08-12 01:15 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,33 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. By user decision on 2026-08-12, server 197 is excluded from the current objective and must not receive smoke or formal experiments.
+
+At 01:15 CST on August 12, local-server failures move the active e72 objective
+to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established
+physical `1x8` global-batch-equivalent protocol. Code is synchronized through
+a verified complete-history bundle into isolated checkout
+`/root/PairMOT_0811_02_autodl`; the corrected v2 commit is `9bc495c`.
+Existing HSMOT, R18 adapted pretrain, and 8,297/5,416 real GMC files are reused,
+so initialization and asset generation are not repeated. No separate training
+or inference smoke is run; launcher syntax, config deepcopy, and one CPU model
+construction are the only prelaunch checks.
+
+The first AutoDL formal attempt exposes a source-config defect at its first
+logged interval: LR is `3.75e-8`, because source `0811_02` describes the
+`8/3` peak but omits the matching optimizer peak assignment used by `0810_08`.
+Stop its finalizer first, then its exact formal screen; both process sets reach
+zero and GPU0 returns to 0 MiB. Preserve that workdir as
+`INVALID_MISSING_PEAK_LR` and do not compare it.
+
+The fresh v2 workdir explicitly sets peak LR to `8e-4/3`; static schedule
+inspection proves a `1e-7` start, LinearLR epochs 0--4, and cosine epochs
+4--72. Formal iter50 and iter100 both log LR `1e-7` with finite total loss,
+DN loss, encoder proposal loss, and gradient norm. GPU0 uses about 31,371 MiB,
+the formal log advances, and no runtime fatal signature is present, so the five
+formal gates pass and the run is `RUNNING/TO_E72`. One finalizer waits for
+epoch 72 and all 18 TrackEval outputs, preserves results to shared FS, and
+shuts the instance down automatically to avoid billed idle time. The stalled
+99/178/252 lanes remain historical read-only state rather than active compute.
 
 At 00:58 CST on August 12, AutoDL instance `c12c46bdd8-77ce297d` is online and
 its SSH endpoint is verified. It has one idle RTX 5090 with 32,607 MiB, 208 CPU

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 00:58 CST。
+更新时间：2026-08-12 01:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -13,15 +13,28 @@
 
 ## 当前资源总览
 
-资源边界为：252 固定 GPU0/1（2 卡、且为最慢资源）；99 总计 2 卡、178 总计 1 卡且不固定 GPU 序号。按用户决定，197 已退出本轮训练资源，不再部署或运行实验。
+本地服务器故障后，当前目标迁移到 AutoDL 单张 RTX 5090 GPU0，以物理 `1x8` 保持全局
+batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资源；197 继续排除。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0811_02 product-tangent standard warmup4 + cosine68 peak×8/3`（1x8） | NO_PROGRESS/E2I100/NO_E4/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:43，双采样无增长；无周期checkpoint | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` | 无正式实验 | ONLINE/RESOURCE_CHECKED/IDLE/NO_SMOKE/NO_FORMAL；1×RTX 5090 32GB | 按用户要求不做smoke或formal | `/root/autodl-tmp/work_dirs` |
+| 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E1I100/FORMAL_ITER50_PASS/AUTO_FINALIZER_ACTIVE/TO_E72 | 无独立smoke；iter50/100 LR正确为`1e-7`且全量训练项有限 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 01:15 CST：AutoDL接管目标并启动修正版正式训练
+
+- 代码以完整可验证 bundle 同步到隔离 checkout，v2 commit `9bc495c`；复用已有 HSMOT、
+  R18预训练和8297/5416份真实GMC，不重跑初始化与资产生成。按付费资源约束，没有运行独立
+  training/inference smoke；只做launcher语法、配置deepcopy与一次CPU模型构建。
+- 初始 v1 formal 的首个日志为 LR `3.75e-8`，证明源 `0811_02` 配置遗漏了声明的
+  peak×8/3赋值。v1在e1i100前停止，GPU与finalizer进程归零，产物保留为
+  `INVALID_MISSING_PEAK_LR`，不参与结果比较。
+- v2 显式设置 peak `8e-4/3`，warmup起点严格为`1e-7`。正式iter50/100的loss、DN、
+  encoder proposal和grad norm均有限，GPU0约31371 MiB，fatal扫描无运行错误，五项门槛
+  通过。唯一 finalizer 已绑定18个评测点、共享盘归档和自动关机。
 
 ## 2026-08-12 00:58 CST：AutoDL实例在线且基础资源正常
 
