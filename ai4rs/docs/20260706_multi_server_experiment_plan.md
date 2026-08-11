@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-11 09:20 CST.
+Last updated: 2026-08-11 11:00 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,26 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99, 178, and 197 have count-only caps of 2, 1, and 2 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time.
+
+At 11:00 CST, dynamic-99 warmup12-cosine closes e52 at `54.809/62.166`
+(sum `116.975`) and remains the highest-sum mature point. Relative to e48 it
+changes `-0.007/+0.190/+0.183`; its cls/det/sum gaps shrink to
+`0.454/0.433/0.887`. Dynamic-178 One-Cycle closes e56 at `54.366/62.418`
+(sum `116.784`), recovering `0.137/0.207/0.344` from e52 and setting that
+line's best sum. Cosine leads cls and sum while One-Cycle leads det, so both
+continue through e60/e56 and e72.
+
+Fixed-252 WSD closes e24 at `51.134/58.692` (sum `109.826`), gaining
+`1.961/1.314` HOTA from e20 with all DetA, AssA and four AP summaries higher;
+it remains in strong stable-phase formation and continues to e28/e72. All
+three checkpoints have 711/712 states, 497 optimizer states/groups and 2,776
+finite floating tensors, with complete 5,416/50, 51 detection-file,
+28 CSV/108 nonempty/50 prediction and async=1 closure. Their SHA prefixes are
+`64ce252a`, `ed2dad52` and `e812198a` for 99/178/252. Live progress is
+e54i850/e59i250/e25i800; 99 GPU1 and 178 GPU1 are external UNet/InternVL jobs,
+while PairMOT remains on authorized GPU0/2 and GPU0. No legal lane is free,
+so the static warmup4-cosine fallback remains undeployed. Next nodes are
+e56/e60/e28.
 
 At 09:20 CST, dynamic-99 warmup12-cosine closes e48 at `54.816/61.976`
 (sum `116.792`) and becomes the highest-sum mature point. Relative to e44 it
