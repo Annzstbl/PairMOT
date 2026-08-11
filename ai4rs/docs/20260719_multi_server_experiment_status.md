@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 01:34 CST。
+更新时间：2026-08-12 02:15 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,23 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E2I550/FORMAL_ITER50_PASS/AUTO_FINALIZER_ACTIVE/TO_E72 | GPU0约31400 MiB；正式日志持续增长，fatal=0；尚未到e4 checkpoint/评测 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E5I350/E4_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e4 `34.903/42.562`、sum `77.465`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；仅作早期诊断 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 02:15 CST：AutoDL e4首个完整闭环，训练继续至e5
+
+- e4同一checkpoint的cls HOTA/DetA/AssA为`34.903/26.334/49.005`，det为
+  `42.562/32.002/58.675`，sum `77.465`；cls/det MOTA分别`26.885/32.904`，
+  IDF1分别`39.528/46.017`。pair mAP/AP50为`0.157039/0.287951`，
+  both-independent为`0.192337/0.340811`。5416条、50序列检测与50/50非空轨迹文件完整，
+  `track/async_done=1.0`，TrackEval自然耗时135秒。
+- `epoch_4.pth`为369,985,140字节，SHA-256
+  `e545879480146a2f94529b1914d8b9bc4919462ff5d9b6cbe7a1f960a5330339`，meta为
+  `epoch=4/iter=4152`；model/EMA为711/712 states，optimizer为497 states/groups，
+  1,284个浮点model/EMA tensor全部有限。
+- 验证汇总中11个不适用于当前匹配统计的诊断字段为`nan`，但AP、HOTA、DetA、AssA、
+  checkpoint tensor和训练loss均有限，且无Traceback/OOM/NCCL/RuntimeError；此前监控命中
+  因此判为假阳性。正式训练已恢复到e5 iter350，GPU0约31.4GB，继续保留到e8和成熟节点，
+  不以e4否决decoder。
 
 ## 2026-08-12 01:34 CST：AutoDL e2持续健康，数据盘清理进入安全待执行状态
 
