@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 01:15 CST。
+更新时间：2026-08-12 01:34 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,16 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E1I100/FORMAL_ITER50_PASS/AUTO_FINALIZER_ACTIVE/TO_E72 | 无独立smoke；iter50/100 LR正确为`1e-7`且全量训练项有限 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E2I550/FORMAL_ITER50_PASS/AUTO_FINALIZER_ACTIVE/TO_E72 | GPU0约31400 MiB；正式日志持续增长，fatal=0；尚未到e4 checkpoint/评测 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 01:34 CST：AutoDL e2持续健康，数据盘清理进入安全待执行状态
+
+- 修正版正式训练推进至 e2 iter550，LR `8.8956e-5`，最近 total loss `12.5055`、grad norm
+  `27.3841`，DN与encoder proposal项均有限；主进程、数据进程、唯一finalizer和GPU0占用正常，
+  精确fatal扫描为0。尚未到e4，因此当前没有周期checkpoint或TrackEval结果。
+- 数据盘50G中剩余约15G；当前配置保留18个周期checkpoint。旧`0727_11`共享归档已验证，
+  可在训练/异步评测全部退出后的安全窗口删除；旧`0728_03`需先把最佳e64、最终e72、
+  报告、配置、日志和TrackEval归档到共享盘并校验。遵循清理保护规则，当前不在存活训练期间删除。
 
 ## 2026-08-12 01:15 CST：AutoDL接管目标并启动修正版正式训练
 

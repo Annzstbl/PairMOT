@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 01:15 CST.
+Last updated: 2026-08-12 01:34 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -29,6 +29,16 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 01:34 CST, the corrected v2 formal run reaches epoch 2 iteration 550. GPU0
+uses about 31,400 MiB, the formal log continues to advance, and the latest
+total loss, DN losses, encoder-proposal losses, and gradient norm are finite;
+the exact fatal scan is zero. It has not yet reached the first epoch-4
+checkpoint or asynchronous evaluation. The 50 GiB data disk retains about
+15 GiB free. Old completed workdirs will not be deleted while this training or
+its evaluators are alive: `0727_11` is already verified on shared storage,
+whereas `0728_03` first needs a minimal verified archive containing its best
+epoch 64 and final epoch 72 products.
 
 The fresh v2 workdir explicitly sets peak LR to `8e-4/3`; static schedule
 inspection proves a `1e-7` start, LinearLR epochs 0--4, and cosine epochs
