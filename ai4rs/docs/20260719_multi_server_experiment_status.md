@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 06:02 CST。
+更新时间：2026-08-12 07:00 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,21 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E21I350/E20_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e20 `51.772/59.525`、sum `111.297`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e24及成熟节点 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E25I450/E24_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e24 `52.115/60.061`、sum `112.176`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e28及成熟节点 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 07:00 CST：AutoDL e24完整闭环，标准短warmup保持联合优势
+
+- e24同一checkpoint的cls HOTA/DetA/AssA为`52.115/43.151/65.666`，det为
+  `60.061/52.801/70.770`，sum `112.176`；pair mAP/AP50为`0.302287/0.506918`，
+  both-independent为`0.342950/0.549071`。5416条、50序列检测与50/50轨迹完整，
+  28个CSV、108个非空评测文件，`track/async_done=1.0`，TrackEval自然耗时169.1秒。
+- 397,515,124-byte checkpoint SHA-256为
+  `e71d3f7b896b4184d1b5201513c499a174ecac1012a04663cdfd9ce01725b2f7`，meta为
+  `epoch=24/iter=24912`；model/EMA为711/712 states，全部2,776个浮点checkpoint
+  tensor有限。
+- 相对warmup12同点，cls/det HOTA提高`0.265/1.062`、联合提高`1.327`；相对原始
+  product-tangent父线为`-0.363/+1.290`，联合仍高`0.927`。训练已进入e25 iter450，
+  数据盘仍余约12 GiB；继续e28和成熟节点，不在e24停线。
 
 ## 2026-08-12 06:02 CST：AutoDL e20完整闭环，标准短warmup保持联合优势
 
