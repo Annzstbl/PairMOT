@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 23:43 CST.
+Last updated: 2026-08-13 00:23 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -71,6 +71,14 @@ an isolated local clone of the existing 252 WSD checkout and transfer only the
 new config and launcher. Per the reduced-validation policy, omit a separate
 smoke and hashes; formal e1i100 proves two-rank GPU0/1 execution with finite
 total, DN, encoder losses and gradient (`21.3921/120.7811`).
+
+At 00:23 CST on August 13, the 197 WSD line closes e68 at cls/det HOTA
+`54.864/62.205`, sum `117.069`, with DetA/AssA `45.395/68.314` and
+`54.367/73.508`. Pair mAP/AP50 is `0.3141/0.5274` and both-independent is
+`0.3534/0.5640`; 5,416/50 detection and asynchronous TrackEval are complete.
+Compared with e64, HOTA improves `0.406/0.105`, sum `0.511`. It remains short
+of the target by `0.399/0.394/0.793`, but the decay trajectory is still rising,
+so continue the same formal run through e72.
 
 The fresh schedules also close e12: 99 floor-cosine is `47.454/54.307`, sum
 `101.761`, with DetA/AssA `39.416/59.620` and `48.608/62.752`; 178 smooth-WSD

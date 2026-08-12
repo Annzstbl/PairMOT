@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 23:43 CST
+更新时间：2026-08-13 00:23 CST
 
 ## 当前研究原则
 
@@ -29,10 +29,16 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E12_COMPLETE/TO_MATURE_E72` | e12 `47.454/54.307`、sum `101.761`，AP、DetA/AssA和TrackEval完整；非零floor的核心作用在尾段，继续成熟节点。GPU1保持空闲。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E12_COMPLETE/TO_MATURE_E72` | e12 `51.141/56.894`、sum `108.035`，同点明显领先99；继续中后期与e72。GPU1外部任务未触碰。 |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E64_COMPLETE/STRICT_FAIL/TO_E68_E72` | e64 `54.458/62.100`、sum `116.558`，较e60提升`0.558`；AP、DetA/AssA、5416/50检测和TrackEval同步改善。继续e68/e72。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E68_COMPLETE/STRICT_FAIL/TO_E72` | e68 `54.864/62.205`、sum `117.069`，较e64提升`0.406/0.105/0.511`；AP、DetA/AssA、5416/50检测和TrackEval完整。距目标`0.399/0.394/0.793`，继续e72。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E1I100/TO_E12_E72` | 新增固定GPU0/1资源；复现178成熟调度但采用双卡2x4，全局batch仍为8。无独立smoke，formal e1i100的总损失、DN、encoder与梯度有限。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-13 00:23 CST：197 WSD e68继续上升但尚未达标
+
+- e68同一checkpoint为cls HOTA/DetA/AssA `54.864/45.395/68.314`，det为`62.205/54.367/73.508`，sum `117.069`；较e64提高`0.406/0.105/0.511`。
+- pair mAP/AP50 `0.3141/0.5274`，both-independent `0.3534/0.5640`，与e64基本持平；5416/50检测及108个TrackEval产物完整，异步评测338.8秒自然完成。
+- 当前距目标仍有`0.399/0.394/0.793`，但连续e60→e64→e68的sum为`116.000→116.558→117.069`，双HOTA仍同步改善，训练继续e72而不提前否决。
 
 ## 2026-08-12 23:43 CST：新增252 GPU0/1并启动smooth-WSD复现线
 

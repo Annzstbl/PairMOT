@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 23:43 CST。
+更新时间：2026-08-13 00:23 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -25,6 +25,12 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E12_COMPLETE/TO_MATURE_E72 | e12 `51.141/56.894`、sum `108.035`完整；继续中后期与e72，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
+
+## 2026-08-13 00:23 CST：197 e68成熟节点闭环
+
+- `0812_01` e68 cls/det HOTA为`54.864/62.205`，DetA/AssA分别为`45.395/68.314`与`54.367/73.508`，sum `117.069`。
+- pair mAP/AP50为`0.3141/0.5274`，both-independent为`0.3534/0.5640`；5416条/50序列检测和异步TrackEval完整。
+- 相较e64合计再提高`0.511`，但距严格e72目标仍低`0.793`；正式训练已进入e69，继续到e72。
 
 ## 2026-08-12 23:43 CST：252 GPU0/1新增资源正式运行
 
