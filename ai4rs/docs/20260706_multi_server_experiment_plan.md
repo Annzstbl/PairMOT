@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 15:38 CST.
+Last updated: 2026-08-12 15:48 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -73,6 +73,16 @@ TrackEval artifacts are complete. Because AP and DetA decline together from
 e56, record a localization/detection retreat rather than association-only
 noise. Continue the paid lane through e64 and required e72; do not reject a
 decoder at this non-terminal mature node.
+
+At 15:48 CST, prepare but do not launch `0812_02`, a standard warmup4 plus
+cosine68 fallback with a 50% terminal LR floor. Its peak/floor are
+`1.8113207547e-4/9.0566037736e-5`, preserving nominal integral `0.0096` while
+addressing the low-tail DetA/AP retreat seen from e56 to e60. An isolated 197
+CPU checkout at `6f48593` passes config deepcopy, full Runner/model build,
+physical batch 8, 72 epochs, 22,771,111 parameters and 711 states. It remains
+`STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` and consumes no GPU; launch only if the
+current AutoDL cosine and 197 WSD e72 closures both fail and their evidence
+still supports avoiding an excessively low cosine tail.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and

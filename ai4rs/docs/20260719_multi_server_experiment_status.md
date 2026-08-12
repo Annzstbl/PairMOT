@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 15:38 CST。
+更新时间：2026-08-12 15:48 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,10 +20,22 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E37I300/FORMAL_GATES_PASS/TO_E40_E72 | 从252 e36的`36/37368`严格恢复；e37 iter50–300稳定段LR `1.5e-4`，总/DN/encoder loss和grad均有限，GPU4/5各约19.4 GiB；旧warmup12+cosine e72已严格失败并释放 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E39I250/FORMAL_GATES_PASS/TO_E40_E72 | 从252 e36的`36/37368`严格恢复；稳定段LR `1.5e-4`，总/DN/encoder loss和grad均有限，GPU4/5各约19.4 GiB；等待e40闭环 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E61I250/E60_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72 | e60 `54.574/62.387`、sum `116.961`完整闭环，距目标`0.689/0.212/0.901`；AP与DetA同步回撤但e60不是终点，继续e64/e72 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
+
+## 2026-08-12 15:48 CST：非零floor标准cosine后备静态就绪
+
+- `0812_02`只把标准CosineAnnealingLR的末端floor设为峰值的50%，并把峰值降为
+  `1.8113207547e-4`，末端`9.0566037736e-5`；`4e warmup + 68e cosine`的名义积分仍为
+  `0.0096`，与e96更新预算一致。模型、EMA、loss、数据、batch和推理不变，非class-aware、
+  无reweight。
+- 独立checkout `6f48593`在197 CPU环境通过配置deepcopy、完整Runner/模型构建、batch8、
+  72 epoch、22,771,111参数和711 states审计。未运行smoke、未创建正式workdir、未占GPU，
+  严格登记`STATIC_VALIDATED`；仅当AutoDL cosine与197 WSD的e72均失败后再决定是否启动。
+- 实时主线仍健康：AutoDL约e61i450；197 WSD约e39i250，GPU4/5各约19.37 GiB。
 
 ## 2026-08-12 15:38 CST：AutoDL e60完整闭环，继续目标e72
 
