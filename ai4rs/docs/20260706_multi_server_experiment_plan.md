@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 14:44 CST.
+Last updated: 2026-08-12 15:07 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -39,9 +39,13 @@ SHA-256 `a8ae64d2810f3872c22d95ec563291d66a4fee96d151ceec8ec11aa97aaf54d1`,
 with 711/712 states and all 2,776 recursive floating tensors finite. Detection
 is 5,416/50; TrackEval is 28 CSV, 108 nonempty files and 50 predictions.
 Training and async processes exit naturally and all six GPUs return to 1 MiB.
-The next 197 candidate is an exact resume of the standard WSD trajectory from
-the shared 252 epoch-36 checkpoint, using preferred GPU4/5 after the formal
-dynamic gates; it does not repeat the failed long-warmup cosine tail.
+At 15:04 CST, 197 starts the exact standard-WSD resume from that shared e36
+checkpoint in a clean isolated checkout and fresh `v2` workdir on GPU4/5.
+The log proves resume epoch/iter `36/37368`; epoch 37 iter 50/100 both use the
+stable LR `1.5e-4`, with finite total, DN, encoder losses and grad norms
+`54.5817/66.3785`. The session, two ranks, formal log and both GPU allocations
+remain live, so all formal-start gates pass. Collect e40 first and continue to
+the required e72 closure; this does not repeat the failed long-warmup tail.
 
 AutoDL e56 simultaneously closes at `54.762/62.565`, sum `117.327`, short by
 `0.501/0.034/0.535`. DetA/AssA are `44.456/70.298` and `54.755/73.914`;

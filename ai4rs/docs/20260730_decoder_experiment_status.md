@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 14:44 CST
+更新时间：2026-08-12 15:07 CST
 
 ## 当前研究原则
 
@@ -20,13 +20,14 @@
 - 本地服务器故障后，当前目标迁移到 AutoDL 实例 `c12c46bdd8-77ce297d` 的单张 RTX 5090；
   使用物理 `1x8` 保持全局 batch 8，不运行独立训练 smoke，formal 本身承担动态验证。
 - 99/178/252 保留故障前只读状态但不再作为当前计算资源；用户于2026-08-12 13:08重新
-  开放197双卡，优先GPU4/5。197当前仅用于补齐中断的标准warmup12+cosine e68→e72
-  独立对照，不重复AutoDL主线的fresh实验。
+  开放197双卡，优先GPU4/5。warmup12+cosine独立对照失败后，197承接共享252的标准
+  WSD e36完整状态并续训到e72，与AutoDL的fresh warmup4+cosine形成正交成熟调度对照。
 
 ## 当前实验状态
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E37I100/FORMAL_GATES_PASS/TO_E40_E72` | 从252 e36 checkpoint严格恢复到epoch/iter `36/37368`；全新v2 workdir、screen与双rank存活，e37 iter50/100 LR均为`1.5e-4`，loss `9.0961/10.1237`、grad `54.5817/66.3785`，总/DN/encoder项有限，GPU4/5各约19.4 GiB。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E57/E56_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e56同点cls/det `54.762/62.565`、sum `117.327`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.501/0.034/0.535`，不以e56单点否决，继续e60/e72。 |
 | 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `COMPLETED/E72/STRICT_FAIL/GPU_RELEASED` | e72 `54.164/62.142`、sum `116.306`；checkpoint、AP、5416/50检测、28/108/50 TrackEval和有限性完整，训练/异步进程自然退出且GPU4/5归零。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
