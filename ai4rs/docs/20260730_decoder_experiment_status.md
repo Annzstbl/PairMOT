@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 15:48 CST
+更新时间：2026-08-12 16:13 CST
 
 ## 当前研究原则
 
@@ -27,9 +27,15 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E39I250/FORMAL_GATES_PASS/TO_E40_E72` | 从252 e36 checkpoint严格恢复到epoch/iter `36/37368`；全新v2 workdir、screen与双rank存活，稳定段LR为`1.5e-4`，总/DN/encoder项及grad有限，GPU4/5各约19.4 GiB，等待e40闭环。 |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E61I250/E60_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e60同点cls/det `54.574/62.387`、sum `116.961`；DetA/AssA、AP、5416/50检测、28/108/50 TrackEval、checkpoint哈希与有限性闭环，距目标`0.689/0.212/0.901`。不以e60否决，继续e64/e72。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E40_DET_COMPLETE/TRACKEVAL_RUNNING/TO_E72` | 从252 e36严格恢复；e40 checkpoint与5416/50检测完成，pair mAP/AP50 `0.2992/0.5055`、both-independent `0.3407/0.5482`，异步TrackEval已启动；本目标优先且实际使用GPU4/5。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E63I500/E60_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e60同点cls/det `54.574/62.387`、sum `116.961`完整闭环；当前e63训练值有限，约2小时到e72，继续e64/e72。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 16:13 CST：197新增双卡在GPU4/5落实，e40检测完成
+
+- `0812_01`真实占用197 GPU4/5，双rank、正式日志和数值均健康；e40 checkpoint已生成，5416条/50序列检测完成。
+- e40 pair mAP/AP50为`0.2992/0.5055`，both-independent为`0.3407/0.5482`；异步TrackEval已启动但尚未完成，因此暂不填写HOTA或宣称e40闭环。
+- AutoDL同期到e63 iter500，LR约`1.4003e-5`且训练有限，继续收费主线至e64/e72；197则继续标准WSD至e72。
 
 ## 2026-08-12 15:38 CST：AutoDL e60完整闭环并继续e64/e72
 

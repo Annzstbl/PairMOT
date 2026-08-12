@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 15:48 CST.
+Last updated: 2026-08-12 16:13 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -83,6 +83,16 @@ physical batch 8, 72 epochs, 22,771,111 parameters and 711 states. It remains
 `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` and consumes no GPU; launch only if the
 current AutoDL cosine and 197 WSD e72 closures both fail and their evidence
 still supports avoiding an excessively low cosine tail.
+
+At 16:13 CST, the newly enabled 197 dual-GPU lane is actively using the
+preferred GPU4/5 for `0812_01`; the other four GPUs remain outside this goal.
+The exact WSD resume has produced `epoch_40.pth` and completed 5,416-record,
+50-sequence detection for that checkpoint. Pair mAP/AP50 is
+`0.2992/0.5055`, and both-independent mAP/AP50 is `0.3407/0.5482`.
+The run launched asynchronous TrackEval in `val_track_eval/val_track_0001`;
+do not call e40 complete until cls/det HOTA, DetA/AssA, checkpoint finiteness,
+and artifact counts are closed. AutoDL remains healthy at e63 and continues
+to e64/e72 under its finalizer.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and
