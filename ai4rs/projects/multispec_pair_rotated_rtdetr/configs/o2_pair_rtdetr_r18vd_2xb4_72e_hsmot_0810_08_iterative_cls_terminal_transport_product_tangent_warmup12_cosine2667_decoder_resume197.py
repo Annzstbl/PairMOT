@@ -18,7 +18,7 @@ test_dataloader = val_dataloader
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_197/'
     '0810_08_final_product_tangent_warmup12_cosine2667_72e_2xb4_'
-    'resume_e68_to_e72_197')
+    'resume_e68_to_e72_197_v2')
 val_evaluator['metrics'].update(
     track_eval_out_dir=f'{work_dir}/val_track_eval',
     trackeval_root='/data/users/litianhao/PairMOT/TrackEval',
