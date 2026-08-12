@@ -7,7 +7,6 @@ with read_base():
 
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_197/'
-    '0812_01_final_product_tangent_wsd4_56_cos12_72e_2xb4_resume_e36_to_e72')
+    '0812_01_final_product_tangent_wsd4_56_cos12_72e_2xb4_resume_e36_to_e72_v2')
 val_evaluator['metrics']['track_eval_out_dir'] = f'{work_dir}/val_track_eval'
 test_evaluator = val_evaluator
-

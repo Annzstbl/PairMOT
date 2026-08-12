@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO=${PAIRMOT_REPO:-/data/users/litianhao/PairMOT_0812_01_wsd_resume197/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0812_01_iterative_cls_terminal_transport_product_tangent_wsd4_56_cos12_decoder_resume197.py
-WORK_DIR=/data4/litianhao/PairMmot/workdir_197/0812_01_final_product_tangent_wsd4_56_cos12_72e_2xb4_resume_e36_to_e72
+WORK_DIR=/data4/litianhao/PairMmot/workdir_197/0812_01_final_product_tangent_wsd4_56_cos12_72e_2xb4_resume_e36_to_e72_v2
 RESUME=/data4/litianhao/PairMmot/workdir_252/0810_09_final_product_tangent_wsd4_56_cos12_72e_2xb4_fresh/epoch_36.pth
 
 set +u
