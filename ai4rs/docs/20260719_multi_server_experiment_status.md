@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 11:47 CST。
+更新时间：2026-08-12 12:45 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,20 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E45I300/E44_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e44 `54.412/62.150`、sum `116.562`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e48 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E49I250/E48_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e48 `54.833/62.278`、sum `117.111`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e52 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 12:45 CST：AutoDL e48完整闭环，双HOTA恢复并首次同点双超warmup12
+
+- e48同一checkpoint的cls HOTA/DetA/AssA为`54.833/44.783/69.907`，det为
+  `62.278/54.658/73.407`，sum `117.111`；pair mAP/AP50为`0.3153/0.5230`，
+  both-independent为`0.3532/0.5576`。5416条、50序列检测与50/50轨迹完整，
+  28个CSV、108个非空评测文件，`track/async_done=1.0`，TrackEval自然耗时166.7秒。
+- 430,449,716-byte checkpoint SHA-256为
+  `f3b097eea376e6e2fcf796710273c9c991cad1905caae8f898427a57dc1c507f`，meta为
+  `epoch=48/iter=49824`；model/EMA为711/712 states，全部2,776个浮点checkpoint
+  tensor有限。
+- 相对e44，cls/det HOTA双升`0.421/0.128`、联合升`0.549`；相对warmup12同点双升
+  `0.017/0.302`、联合高`0.319`。训练已进入e49 iter250，继续e52成熟节点。
 
 ## 2026-08-12 11:47 CST：AutoDL e44完整闭环，det继续提升而cls与AP小幅波动
 

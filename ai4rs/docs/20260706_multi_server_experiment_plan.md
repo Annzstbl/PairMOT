@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 11:47 CST.
+Last updated: 2026-08-12 12:45 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -29,6 +29,22 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 12:45 CST, e48 is fully closed. The same checkpoint gives cls
+HOTA/DetA/AssA `54.833/44.783/69.907` and det `62.278/54.658/73.407`,
+with pair mAP/AP50 `0.3153/0.5230` and both-independent `0.3532/0.5576`.
+All 5,416 records, 50 detection files, 50 trajectory files, 28 CSV files,
+108 nonempty evaluation files, and `track/async_done=1.0` are complete;
+TrackEval finishes naturally in 166.7 seconds. The 430,449,716-byte
+checkpoint has SHA-256
+`f3b097eea376e6e2fcf796710273c9c991cad1905caae8f898427a57dc1c507f`,
+meta `epoch=48/iter=49824`, 711/712 model/EMA states, and 2,776 finite
+floating tensors. Against e44, cls/det HOTA improve by `0.421/0.128` and
+the sum gains `0.549`. Against warmup12-cosine e48, both improve by
+`0.017/0.302`, retaining a `0.319` sum advantage. The remaining goal gaps
+are `0.430/0.321/0.751`; training resumes naturally at e49 iteration 250
+and continues to e52 and later mature checkpoints. Data-disk headroom is
+about 7.0 GiB and will be checked at each node.
 
 At 11:47 CST, e44 is fully closed. The same checkpoint gives cls
 HOTA/DetA/AssA `54.412/44.631/68.943` and det `62.150/54.387/73.501`,
