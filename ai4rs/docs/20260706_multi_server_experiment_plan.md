@@ -4,12 +4,21 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 02:43 CST.
+Last updated: 2026-08-13 02:59 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 02:59 CST on August 13, 99 floor-cosine closes e24 at cls
+HOTA/DetA/AssA `52.748/44.199/64.972` and det `59.179/52.068/69.589`, sum
+`111.927`. Pair mAP/AP50 is `0.2926/0.5016`, both-independent is
+`0.3363/0.5498`; the 397,531,126-byte checkpoint, 5,416/50 detection,
+28/108/50 TrackEval artifacts, and async completion flag are present. The run
+has resumed at e25i300 and continues to the actual floor-cosine mature tail.
+Concurrently, 178 is at e24i800, 197 has produced its e4 checkpoint, and fixed
+252 is at e10i500.
 
 At 02:43 CST on August 13, all four mature-scheduler formal lines remain
 healthy: 99 is at e24i600 on GPU0/2, 178 at e24i50 on GPU0, the fresh 197
