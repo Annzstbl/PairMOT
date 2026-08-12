@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 15:07 CST.
+Last updated: 2026-08-12 15:16 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -56,6 +56,12 @@ with all 2,776 recursive floating tensors finite. The complete 5,416/50,
 28/108/50 TrackEval closure is present. Because e56 is not the requested e72
 endpoint and det is only 0.034 below target, the paid lane continues under its
 active finalizer instead of being rejected at this single mature node.
+
+At 15:16 CST, the paid AutoDL lane is healthy at epoch 60 iter 50 with cosine
+LR `2.3358e-5`, finite loss/grad `7.7169/33.9332`, and about 2h50 remaining to
+e72. Epoch 60 is still in training, so no e60 checkpoint or evaluation is
+claimed yet. The 197 WSD resume is independently healthy at epoch 37 iter 300
+on preferred GPU4/5, with stable LR `1.5e-4`; its first closure remains e40.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and

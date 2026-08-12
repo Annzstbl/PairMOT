@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 15:07 CST
+更新时间：2026-08-12 15:16 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E37I100/FORMAL_GATES_PASS/TO_E40_E72` | 从252 e36 checkpoint严格恢复到epoch/iter `36/37368`；全新v2 workdir、screen与双rank存活，e37 iter50/100 LR均为`1.5e-4`，loss `9.0961/10.1237`、grad `54.5817/66.3785`，总/DN/encoder项有限，GPU4/5各约19.4 GiB。 |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E57/E56_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e56同点cls/det `54.762/62.565`、sum `117.327`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.501/0.034/0.535`，不以e56单点否决，继续e60/e72。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E37I300/FORMAL_GATES_PASS/TO_E40_E72` | 从252 e36 checkpoint严格恢复到epoch/iter `36/37368`；全新v2 workdir、screen与双rank存活，e37 iter50–300 LR均为`1.5e-4`，总/DN/encoder项及grad有限，GPU4/5各约19.4 GiB。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E60I50/E56_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e56同点cls/det `54.762/62.565`、sum `117.327`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.501/0.034/0.535`。当前正在训练e60，尚未生成e60 checkpoint，不误报闭环。 |
 | 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `COMPLETED/E72/STRICT_FAIL/GPU_RELEASED` | e72 `54.164/62.142`、sum `116.306`；checkpoint、AP、5416/50检测、28/108/50 TrackEval和有限性完整，训练/异步进程自然退出且GPU4/5归零。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
