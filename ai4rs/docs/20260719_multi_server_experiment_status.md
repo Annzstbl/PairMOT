@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 07:14 CST。
+更新时间：2026-08-13 07:42 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72 | e36 `53.630/61.153`、sum `114.783`完整，较e32双升`0.291/0.637`且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E20I100/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E20_COMPLETE/E21I400/TO_E72 | e20 `50.549/57.962`、sum `108.511`完整，较e16双升`2.075/1.116`；DetA/AssA与AP同步提高，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72 | e36 `53.708/60.559`、sum `114.267`完整；cls/AP较99同点高而det/sum低`0.594/0.516`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -62,6 +62,16 @@ batch 8 不变，只比较成熟标准学习率调度。
 - Versus 99 e36, 178 cls is `0.078` higher and AP is higher, but det is `0.594` lower and sum is `0.516` lower.
   The DetA gap is only `0.018`, while 178 leads cls AssA and 99 leads det AssA. Keep both complementary schedules
   through their actual tails to e72; do not select on the pre-tail e36 point.
+
+## 2026-08-13 07:42 CST: 197 e20 complete and compared with 252
+
+- 197 `0813_01` e20 cls HOTA/DetA/AssA is `50.549/42.128/62.547`; det is
+  `57.962/50.517/68.936`, sum `108.511`, and pair mAP/AP50 is `0.2773/0.4765`.
+- The 391,937,447-byte checkpoint, detection export for all 50 sequences, 108 TrackEval files and
+  343.3-second asynchronous evaluation are complete; training resumed at e21i400 on GPU4/5.
+- Relative to e16, HOTA rises by `2.075/1.116`. Relative to 252 e20, 197 leads by `0.768/0.344`
+  and `1.112` in sum, with all DetA/AssA and AP values also higher. The floor itself does not act until
+  after e60, so this is a healthy fresh-run check rather than evidence to stop or select the schedule early.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

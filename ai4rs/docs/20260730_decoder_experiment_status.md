@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 07:14 CST
+更新时间：2026-08-13 07:42 CST
 
 ## 当前研究原则
 
@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E20I100/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E20_COMPLETE/E21I400/TO_E72` | e20 `50.549/57.962`、sum `108.511`，较e16双升`2.075/1.116`；DetA/AssA为`42.128/62.547`与`50.517/68.936`，pair mAP/AP50 `0.2773/0.4765`，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -76,6 +76,17 @@
 - At e36, 178 has `0.078` higher cls and `0.0020/0.0072` higher pair mAP/AP50 than 99, while 99 has `0.594`
   higher det and `0.516` higher HOTA sum. 178 cls AssA is `0.703` higher, while 99 det AssA is `1.445` higher;
   det DetA differs by only `0.018`. The evidence remains complementary, so keep both through their actual tails.
+
+## 2026-08-13 07:42 CST: 197 floor-25 WSD e20 complete
+
+- 197 `0813_01` e20 same-checkpoint cls HOTA/DetA/AssA is `50.549/42.128/62.547`; det is
+  `57.962/50.517/68.936`, sum `108.511`, and pair mAP/AP50 is `0.2773/0.4765`.
+- Relative to e16, cls/det HOTA rise by `2.075/1.116`, sum by `3.191`, and AP also rises. The
+  391,937,447-byte checkpoint, 51-file detection export across 50 sequences, 108 TrackEval files and
+  343.3-second asynchronous evaluation are complete; training resumed at e21i400 on GPU4/5.
+- Versus fixed-252 e20, 197 leads cls/det HOTA by `0.768/0.344`, sum by `1.112`, and all four
+  DetA/AssA values plus pair AP are higher. This confirms a healthy fresh trajectory, not a floor effect:
+  the 25% floor only diverges from the zero-floor schedule after e60, so retain it through e72.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 

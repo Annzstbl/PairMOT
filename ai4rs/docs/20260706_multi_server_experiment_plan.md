@@ -155,6 +155,15 @@ is at e22i1000 on fixed GPU0/1. GPU1 on 99, GPU1 external work on 178, and
 GPU2/3 on 252 remain untouched. Continue the existing 252 line rather than
 launching a duplicate; collect 197/e20 first, then 252/e24 and 99/178/e40.
 
+At 07:42 CST, 197 floor-25 WSD closes e20 at cls HOTA/DetA/AssA
+`50.549/42.128/62.547` and det `57.962/50.517/68.936`, sum `108.511`.
+Pair mAP/AP50 is `0.2773/0.4765`; checkpoint, all 50 detection sequences,
+108 TrackEval files and the 343.3-second asynchronous completion are present.
+It improves over e16 by `2.075/1.116` and leads fixed-252 e20 by
+`0.768/0.344`, with DetA/AssA/AP also higher. Since the 25% floor only changes
+the LR after e60, keep 197 through e72 and do not interpret this stable-segment
+comparison as the floor ablation result. Next close 252/e24 and 99/178/e40.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains
