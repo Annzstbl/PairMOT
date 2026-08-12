@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 15:16 CST.
+Last updated: 2026-08-12 15:38 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -62,6 +62,17 @@ LR `2.3358e-5`, finite loss/grad `7.7169/33.9332`, and about 2h50 remaining to
 e72. Epoch 60 is still in training, so no e60 checkpoint or evaluation is
 claimed yet. The 197 WSD resume is independently healthy at epoch 37 iter 300
 on preferred GPU4/5, with stable LR `1.5e-4`; its first closure remains e40.
+
+At 15:38 CST, AutoDL e60 closes at cls/det HOTA `54.574/62.387`, sum
+`116.961`, short by `0.689/0.212/0.901`. DetA/AssA are `44.138/70.416` and
+`54.595/73.734`; pair mAP/AP50 is `0.3141/0.5179`, both-independent is
+`0.3507/0.5508`. The 446,956,340-byte checkpoint SHA-256 is
+`7054d214b9f08d6d3299368676754aadb759ec0373b40cc3ddbfd4d6c88f834f`;
+642 floating tensors are finite, and 5,416/50 detection plus 28/108/50
+TrackEval artifacts are complete. Because AP and DetA decline together from
+e56, record a localization/detection retreat rather than association-only
+noise. Continue the paid lane through e64 and required e72; do not reject a
+decoder at this non-terminal mature node.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and
