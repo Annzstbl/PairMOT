@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 13:30 CST.
+Last updated: 2026-08-12 13:41 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -29,6 +29,18 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
+`54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and
+det DetA/AssA `54.712/73.802`. Pair mAP/AP50 is `0.316115/0.523328`,
+and both-independent is `0.353151/0.556579`. The 435,952,628-byte
+checkpoint has SHA-256
+`25add0e1bb9be1a99fdee1caa62ab4c3dd73968a94dd5c4df7ba77680c68c1f8`,
+meta `52/53976`, 711/712 model/EMA states, and all 1,284 model/EMA floating
+tensors are finite. All 5,416 records, 50 sequences, 50 tracks, 28 CSVs,
+108 evaluation files, and async completion are closed. Remaining gaps are
+`0.410/0.110/0.520`; continue to e56. Server 197 is simultaneously healthy
+on GPU4/5 at e69 iteration 950, with the other four GPUs untouched.
 
 At 13:30 CST, server 197 is re-enabled with two GPUs, preferring GPU4/5.
 All six RTX 3090 cards are idle, and shared storage, py310, HSMOT, GMC, and

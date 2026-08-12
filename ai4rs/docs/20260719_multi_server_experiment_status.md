@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 13:30 CST。
+更新时间：2026-08-12 13:41 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,10 +20,21 @@ batch 8。99/178/252 只保留故障前状态。用户于13:08重新开放197双
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0810_08 warmup12+cosine exact e68→e72 resume`（GPU4/5） | RUNNING/E69I50/TO_E72 | e68 checkpoint完整有限；隔离checkout `0dd39c8b`；正式e69i50、双卡各约19.36 GiB，有限loss/grad，无致命错误 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0810_08 warmup12+cosine exact e68→e72 resume`（GPU4/5） | RUNNING/E69I950/TO_E72 | e68 checkpoint完整有限；隔离checkout `0dd39c8b`；正式日志持续更新，双卡各约19.36 GiB，有限loss/grad，无致命错误 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E49I250/E48_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e48 `54.833/62.278`、sum `117.111`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e52 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E53/E52_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e52 `54.853/62.489`、sum `117.342`；checkpoint、5416/50检测、50/50轨迹、TrackEval、AP与有限性完整闭环；继续e56 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 13:41 CST：AutoDL e52完整闭环，197继续补齐独立e72对照
+
+- AutoDL e52同一checkpoint为cls/det HOTA `54.853/62.489`、sum `117.342`；
+  cls DetA/AssA `44.653/70.155`，det `54.712/73.802`；pair mAP/AP50
+  `0.316115/0.523328`，both-independent `0.353151/0.556579`。
+- checkpoint为435,952,628字节，SHA-256
+  `25add0e1bb9be1a99fdee1caa62ab4c3dd73968a94dd5c4df7ba77680c68c1f8`，meta
+  `52/53976`、711/712 states、1,284个model/EMA浮点tensor全部有限；5416条、50序列、
+  50/50轨迹、28 CSV、108文件和异步完成标志完整。距目标`0.410/0.110/0.520`，继续e56。
+- 197 GPU4/5正式resume持续到e69 iter950，另四卡保持空闲；训练值有限、无致命错误。
 
 ## 2026-08-12 13:30 CST：197双卡恢复并补齐warmup12-cosine e72独立对照
 

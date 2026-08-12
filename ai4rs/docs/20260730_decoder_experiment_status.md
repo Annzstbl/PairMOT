@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 13:30 CST
+更新时间：2026-08-12 13:41 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E49I250/E48_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e48同点cls/det `54.833/62.278`、sum `117.111`；完整性全闭环。较warmup12同点双升`0.017/0.302`、联合升`0.319`；较e44双升`0.421/0.128`，继续e52。 |
-| 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `RUNNING/E69I50/TO_E72` | 共享e68 checkpoint `epoch=68/iter=70584`、711/712 states、2,776浮点tensor全有限；隔离checkout `0dd39c8b`，正式resume e69i50、双卡各约19.36 GiB，总/DN/encoder loss与grad均有限。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E53/E52_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e52同点cls/det `54.853/62.489`、sum `117.342`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.410/0.110/0.520`，继续e56。 |
+| 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `RUNNING/E69I950/TO_E72` | 共享e68 checkpoint完整有限；隔离checkout `0dd39c8b`，GPU4/5各约19.36 GiB，正式日志持续到e69i950，总/DN/encoder loss与grad均有限。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
@@ -57,6 +57,19 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-12 13:41 CST：AutoDL e52完整闭环，距离e72目标缩至0.520
+
+- e52同一checkpoint的cls HOTA/DetA/AssA为`54.853/44.653/70.155`，det为
+  `62.489/54.712/73.802`，sum `117.342`；pair mAP/AP50为`0.316115/0.523328`，
+  both-independent为`0.353151/0.556579`。5,416条、50序列检测，50/50轨迹、28个CSV、
+  108个评测文件及`track/async_done=1.0`完整，TrackEval耗时164.3秒。
+- `epoch_52.pth`为435,952,628字节，SHA-256
+  `25add0e1bb9be1a99fdee1caa62ab4c3dd73968a94dd5c4df7ba77680c68c1f8`，meta
+  `epoch=52/iter=53976`，model/EMA为711/712 states，1,284个model/EMA浮点tensor全部有限。
+  相对e48，cls/det/sum提高`0.020/0.211/0.231`；距目标分别`0.410/0.110/0.520`。
+  训练已进入e53，继续e56及后续成熟节点。
+- 197对照同期推进到e69 iter950，GPU4/5持续真实占用，其它卡未触碰；预计约一小时闭环e72。
 
 ## 2026-08-12 13:30 CST：197双卡恢复，低成本补齐warmup12-cosine e72独立对照
 
