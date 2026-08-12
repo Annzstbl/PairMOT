@@ -4,14 +4,14 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 12:45 CST.
+Last updated: 2026-08-12 13:30 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
 
-Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. By user decision on 2026-08-12, server 197 is excluded from the current objective and must not receive smoke or formal experiments.
+Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. At 13:08 CST on August 12, the user re-enabled server 197 for two GPUs with preference for GPU4/5; if those are unavailable, select another genuinely idle pair without preempting external work.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established
@@ -29,6 +29,22 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 13:30 CST, server 197 is re-enabled with two GPUs, preferring GPU4/5.
+All six RTX 3090 cards are idle, and shared storage, py310, HSMOT, GMC, and
+pretrain paths are available. The dirty historical repository is untouched;
+a bundle creates isolated checkout
+`/data/users/litianhao/PairMOT_0810_08_warmup12_cosine_resume197` at
+`0dd39c8b`. Rather than duplicate the AutoDL fresh trajectory, 197 resumes
+the interrupted 99 standard warmup12-cosine control from epoch 68. The
+457,870,070-byte source checkpoint has SHA-256
+`d55951a2fcc804a43f25e2e8c31c3c51bf789f904fc27e4399ebb500bc90f22b`,
+meta `epoch=68/iter=70584`, 711/712 model/EMA states, and 2,776 finite
+floating tensors. Config deepcopy and full Runner construction pass. Formal
+resume loads epoch 68 and reaches epoch 69 iteration 50 at `1.1593 s/iter`,
+LR `2.94e-6`, loss `8.4838`, and grad norm `59.6636`; GPU4/5 each use about
+19.36 GiB, all total/DN/encoder losses are finite, and no fatal signature is
+present. Register `RUNNING/TO_E72` after all five formal gates pass.
 
 At 12:45 CST, e48 is fully closed. The same checkpoint gives cls
 HOTA/DetA/AssA `54.833/44.783/69.907` and det `62.278/54.658/73.407`,

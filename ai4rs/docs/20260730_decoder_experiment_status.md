@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 12:45 CST
+更新时间：2026-08-12 13:30 CST
 
 ## 当前研究原则
 
@@ -19,13 +19,16 @@
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
 - 本地服务器故障后，当前目标迁移到 AutoDL 实例 `c12c46bdd8-77ce297d` 的单张 RTX 5090；
   使用物理 `1x8` 保持全局 batch 8，不运行独立训练 smoke，formal 本身承担动态验证。
-- 99/178/252 保留故障前只读状态但不再作为当前计算资源；197 仍按用户决定排除。
+- 99/178/252 保留故障前只读状态但不再作为当前计算资源；用户于2026-08-12 13:08重新
+  开放197双卡，优先GPU4/5。197当前仅用于补齐中断的标准warmup12+cosine e68→e72
+  独立对照，不重复AutoDL主线的fresh实验。
 
 ## 当前实验状态
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E49I250/E48_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e48同点cls/det `54.833/62.278`、sum `117.111`；完整性全闭环。较warmup12同点双升`0.017/0.302`、联合升`0.319`；较e44双升`0.421/0.128`，继续e52。 |
+| 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `RUNNING/E69I50/TO_E72` | 共享e68 checkpoint `epoch=68/iter=70584`、711/712 states、2,776浮点tensor全有限；隔离checkout `0dd39c8b`，正式resume e69i50、双卡各约19.36 GiB，总/DN/encoder loss与grad均有限。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
@@ -54,6 +57,24 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-12 13:30 CST：197双卡恢复，低成本补齐warmup12-cosine e72独立对照
+
+- 用户重新开放197双卡并指定优先GPU4/5。13:08只读审计确认6张RTX 3090全空闲，
+  GPU4/5各1 MiB，`/data4`、py310、HSMOT、GMC与pretrain均可用。197脏主仓库未触碰；
+  通过完整bundle建立隔离checkout
+  `/data/users/litianhao/PairMOT_0810_08_warmup12_cosine_resume197`，提交`0dd39c8b`。
+- 选择补齐99因主机故障中断的`0810_08`标准12e LinearLR warmup+60e cosine，而非重复
+  AutoDL的fresh短warmup主线。共享`epoch_68.pth`为457,870,070字节，SHA-256
+  `d55951a2fcc804a43f25e2e8c31c3c51bf789f904fc27e4399ebb500bc90f22b`，meta
+  `epoch=68/iter=70584`，model/EMA 711/712 states，2,776个浮点tensor全有限。
+- 配置deepcopy、完整Runner构建、两个真实scheduler、路径与checkpoint语义均通过。
+  197旧构建后端不支持PEP660，故用既有`setup.py develop`将py310的mmrotate editable
+  精确指向隔离checkout，不安装依赖、不替换PyTorch。首次完整构建仅生成静态快照，正式
+  workdir因此改用独立v2保留审计痕迹。
+- 正式resume于13:25从e68/iter70584加载，GPU4/5各约19.36 GiB；e69 iter50为
+  `1.1593 s/iter`、lr `2.94e-6`、loss `8.4838`、grad norm `59.6636`，总、DN、encoder
+  loss全部有限，无Traceback/OOM/NCCL/非有限错误。五项门槛通过，登记RUNNING/TO_E72。
 
 ## 2026-08-12 12:45 CST：AutoDL e48完整闭环，双HOTA恢复并首次同点双超warmup12
 
