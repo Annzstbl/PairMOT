@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 01:52 CST.
+Last updated: 2026-08-13 02:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -91,6 +91,13 @@ training because it inherited the 252 data path; v2 uses the established 197
 HSMOT/GMC/TrackEval paths and a new workdir. Deepcopy, full 22,771,111-parameter
 build and launcher syntax pass; formal e1i50 on GPU4/5 has finite total, DN,
 encoder losses and gradient, so register it RUNNING.
+
+At 02:05 CST, 99 floor-cosine e20 closes at `51.991/58.832`, sum `110.823`,
+while 178 smooth-WSD e20 closes at `52.145/57.823`, sum `109.968`. The 178
+node has higher DetA and pair/both AP (`0.2958/0.5126`, `0.3392/0.5601`),
+whereas 99 has higher AssA, especially det AssA by `2.525`. Both schedules
+therefore retain complementary evidence and continue through e24 and their
+actual late-decay windows.
 
 The fresh schedules also close e12: 99 floor-cosine is `47.454/54.307`, sum
 `101.761`, with DetA/AssA `39.416/59.620` and `48.608/62.752`; 178 smooth-WSD
