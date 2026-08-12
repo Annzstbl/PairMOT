@@ -100,6 +100,21 @@ AutoDL epoch 68 closed at cls/det HOTA `54.169/62.219` (sum `116.388`),
 with pair mAP/AP50 `0.3104/0.5121`. This is another decline from epoch 64,
 confirming the low-LR zero-floor cosine tail retreat, but the formal run must
 still close epoch 72 before final rejection and archival shutdown.
+At 18:32 CST, AutoDL epoch 72 closed with all 18 TrackEval outputs. Its
+cls/det HOTA was `54.139/62.081` (sum `116.220`), missing the target by
+`1.124/0.518/1.642`; pair mAP/AP50 was `0.3093/0.5102`. The final checkpoint
+had 642 finite floating tensors and SHA-256
+`0fd1a023309851314aa188a1f63ba486350f96fcd4de631aa56c60e43b5a21a3`.
+The finalizer observed 18/18 results and SSH then closed in the expected
+shutdown window. Re-audit the shared-FS status when the instance is next
+reachable, but do not keep or restart paid GPU time solely for that audit.
+
+The 197 WSD epoch 48 closure reached `53.805/61.498` (sum `115.303`), with
+pair mAP/AP50 `0.3056/0.5174`. Relative to epoch 44 it changed
+`-0.022/+0.191/+0.169`; both detection accuracies and AP improved while cls
+association fluctuated slightly. Continue the stable segment through epoch 52
+and ultimately epoch 72 before deciding whether to launch the non-zero-floor
+cosine candidate.
 The exact WSD resume has produced `epoch_40.pth` and completed 5,416-record,
 50-sequence detection for that checkpoint. Pair mAP/AP50 is
 `0.2992/0.5055`, and both-independent mAP/AP50 is `0.3407/0.5482`.
