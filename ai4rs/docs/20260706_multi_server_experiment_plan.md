@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 00:23 CST.
+Last updated: 2026-08-13 01:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -79,6 +79,18 @@ At 00:23 CST on August 13, the 197 WSD line closes e68 at cls/det HOTA
 Compared with e64, HOTA improves `0.406/0.105`, sum `0.511`. It remains short
 of the target by `0.399/0.394/0.793`, but the decay trajectory is still rising,
 so continue the same formal run through e72.
+
+At 01:52 CST, `0812_01` closes e72 at cls/det HOTA `54.768/62.411`, sum
+`117.179`, with DetA/AssA `45.460/67.856` and `54.483/73.825`. Pair
+mAP/AP50 is `0.3150/0.5269`, both-independent `0.3536/0.5623`; checkpoint,
+5,416/50 detection, TrackEval and GPU release are complete. It strictly fails
+by `0.495/0.188/0.683`. Since e68-to-e72 changes cls/det by `-0.096/+0.206`,
+start `0813_01`, changing only the standard cosine eta-min ratio to 25% while
+retaining warmup4+stable56+cosine12. The first fresh workdir fails before
+training because it inherited the 252 data path; v2 uses the established 197
+HSMOT/GMC/TrackEval paths and a new workdir. Deepcopy, full 22,771,111-parameter
+build and launcher syntax pass; formal e1i50 on GPU4/5 has finite total, DN,
+encoder losses and gradient, so register it RUNNING.
 
 The fresh schedules also close e12: 99 floor-cosine is `47.454/54.307`, sum
 `101.761`, with DetA/AssA `39.416/59.620` and `48.608/62.752`; 178 smooth-WSD
