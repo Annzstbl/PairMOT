@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 16:46 CST
+更新时间：2026-08-12 17:34 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E43I150/E40_COMPLETE/STRICT_FAIL/TO_E44_E72` | 用户新增的197双卡资源已按优先级落实在GPU4/5；e43i150正式日志、双rank和两卡占用健康，GPU0–3保持空闲。e40同点cls/det `53.109/60.938`、sum `114.047`且完整闭环；不以e40否决，继续e44/e72。 |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E65I300/E64_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e64同点cls/det `54.395/62.339`、sum `116.734`完整闭环；较e60再降`0.179/0.048/0.227`，但仍继续要求的e72。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E45+/E44_COMPLETE/STRICT_FAIL/TO_E48_E72` | e44同点cls/det `53.827/61.307`、sum `115.134`完整闭环；较e40提升`0.718/0.369/1.087`，DetA/AssA与AP总体同步恢复。GPU4/5继续e48/e72，GPU0–3保持空闲。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E69I200/E68_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e68同点cls/det `54.169/62.219`、sum `116.388`完整闭环；较e64再降`0.226/0.120/0.346`，连续成熟节点证明零floor低LR尾段回撤，但仍继续要求的e72。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
 
 ## 2026-08-12 16:37 CST：AutoDL e64完整闭环，尾部低LR回撤重复出现

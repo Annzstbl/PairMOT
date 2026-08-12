@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 16:46 CST。
+更新时间：2026-08-12 17:34 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E43I150/E40_COMPLETE/STRICT_FAIL/TO_E44_E72 | 新增双卡额度已按用户优先级实际使用GPU4/5：两卡各约21.6 GiB、双rank及e43i150正式日志健康，GPU0–3空闲；e40完整闭环，不以早期节点否决，继续e44/e72 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E45+/E44_COMPLETE/STRICT_FAIL/TO_E48_E72 | e44同点cls/det `53.827/61.307`、sum `115.134`完整闭环；较e40双升且AP/DetA/AssA总体恢复，GPU4/5继续e48/e72，GPU0–3空闲 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E65I300/E64_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72 | e64 `54.395/62.339`、sum `116.734`完整闭环，较e60再降`0.179/0.048/0.227`；低LR尾段连续回撤但仍继续要求的e72 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |

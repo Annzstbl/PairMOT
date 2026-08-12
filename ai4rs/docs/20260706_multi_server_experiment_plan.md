@@ -90,6 +90,16 @@ At 16:46 CST, live re-audit confirmed both ranks at epoch 43 iteration 150,
 about 21.6 GiB on each of GPU4/5, finite formal losses and gradients, and
 GPU0--3 still idle. The added 197 allocation is therefore fully occupied by
 the existing WSD mainline; do not launch a duplicate job.
+At 17:34 CST, the second WSD closure at epoch 44 reached cls/det HOTA
+`53.827/61.307` (sum `115.134`), improving `0.718/0.369/1.087` over epoch 40.
+Pair mAP/AP50 rose to `0.3039/0.5138`; cls DetA/AssA were `44.288/67.233`
+and det DetA/AssA were `53.411/72.805`. The checkpoint and full evaluation
+closure are valid, so keep WSD on GPU4/5 through epoch 48 and epoch 72.
+
+AutoDL epoch 68 closed at cls/det HOTA `54.169/62.219` (sum `116.388`),
+with pair mAP/AP50 `0.3104/0.5121`. This is another decline from epoch 64,
+confirming the low-LR zero-floor cosine tail retreat, but the formal run must
+still close epoch 72 before final rejection and archival shutdown.
 The exact WSD resume has produced `epoch_40.pth` and completed 5,416-record,
 50-sequence detection for that checkpoint. Pair mAP/AP50 is
 `0.2992/0.5055`, and both-independent mAP/AP50 is `0.3407/0.5482`.
