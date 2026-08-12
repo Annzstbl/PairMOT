@@ -4,12 +4,20 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 05:44 CST.
+Last updated: 2026-08-13 06:31 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 06:31 CST on August 13, 197 floor-25 WSD closes e16 at cls/det
+`48.474/56.846` (sum `105.320`) with pair mAP/AP50 `0.2635/0.4566`.
+Both HOTA and AP improve over e12, so retain it toward the post-e60 floor
+window. 252 has produced its e20 checkpoint and completed 677/677 validation,
+with detection export still in progress; do not restart it. 99 is in e36 and
+178 is in late e35. Close 252/e20 and then both e36 nodes, while keeping all
+four mature schedules headed to e72.
 
 At 05:44 CST on August 13, 178 smooth-WSD closes e32 at cls
 HOTA/DetA/AssA `53.289/44.648/65.947` and det `59.880/53.223/69.738`, sum

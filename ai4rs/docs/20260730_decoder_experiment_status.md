@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 05:44 CST
+更新时间：2026-08-13 06:31 CST
 
 ## 当前研究原则
 
@@ -29,10 +29,24 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72` | e32 `53.339/60.516`、sum `113.855`，较e28双升`0.700/0.476`；DetA/AssA/AP同步提高，继续到floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72` | e32 `53.289/59.880`、sum `113.169`，较e28双升`0.583/0.793`；DetA/AP较强，继续到真实退火段。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E12_COMPLETE/E13I250/TO_E72` | e12 `46.128/53.493`、sum `99.621`，较e8双升`3.901/6.066`；DetA/AssA与AP同步增长，继续到floor核心尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E16_COMPLETE/E17I200/TO_MATURE_E72` | e16 `48.584/56.750`、sum `105.334`，较e12双升`1.379/3.581`；DetA/AssA为`39.790/61.347`与`49.267/67.676`，pair mAP/AP50 `0.2561/0.4444`，继续e20。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E17/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_CKPT/VAL_POSTPROCESS/TO_MATURE_E72` | e20 checkpoint `392,031,030` bytes已生成，677/677验证完成后正在检测导出；e16完整结果仍为`48.584/56.750`。固定GPU0/1，GPU2/3不占用。 |
+
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-13 06:31 CST: 197 floor-25 WSD e16 complete; 252 e20 post-processing
+
+- 197 `0813_01` e16 same-checkpoint cls HOTA/DetA/AssA is `48.474/40.843/59.602`; det is
+  `56.846/49.781/67.306`, sum `105.320`. Versus e12, HOTA rises by `2.346/3.353`, while pair
+  mAP/AP50 rises from `0.2384/0.4156` to `0.2635/0.4566`.
+- The 386,463,015-byte checkpoint, 5,416/50 detection and 348.7-second asynchronous TrackEval are complete.
+  Training resumed at e17 on GPU4/5. The 25% floor only differs after e60, so this node confirms healthy
+  convergence but does not decide the schedule outcome.
+- 252 `0812_05` produced its 392,031,030-byte e20 checkpoint and finished 677/677 validation; detection export
+  is in progress. The formal process and fixed GPU0/1 remain alive with no traceback/OOM/NCCL error. Do not restart.
+- 99 has entered e36 and 178 is in late e35. Next close 252/e20 and both e36 nodes, then retain all four mature
+  schedules toward e72.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 
