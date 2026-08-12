@@ -11,8 +11,21 @@ with read_base():
 
 param_scheduler[1]['eta_min_ratio'] = 0.25
 
+_hsmot_root = '/data/users/litianhao/PairMOT/data/hsmot'
+_gmc_root = '/data/users/litianhao/PairMOT/workdir/aux/gmc_cache'
+train_dataloader['dataset'].update(
+    data_root=f'{_hsmot_root}/train',
+    gmc_cache_dir=f'{_gmc_root}/hsmot_train_gap1')
+val_dataloader['dataset'].update(
+    data_root=f'{_hsmot_root}/test',
+    gmc_cache_dir=f'{_gmc_root}/hsmot_test_gap1')
+test_dataloader = val_dataloader
+
 work_dir = (
     '/data4/litianhao/PairMmot/workdir_197/'
-    '0813_01_final_product_tangent_wsd4_56_cos12_floor25_72e_2xb4_fresh')
-val_evaluator['metrics']['track_eval_out_dir'] = f'{work_dir}/val_track_eval'
+    '0813_01_final_product_tangent_wsd4_56_cos12_floor25_72e_2xb4_fresh_v2')
+val_evaluator['metrics'].update(
+    track_eval_out_dir=f'{work_dir}/val_track_eval',
+    trackeval_root='/data/users/litianhao/PairMmot/TrackEval',
+    track_data_root=f'{_hsmot_root}/test')
 test_evaluator = val_evaluator

@@ -3,7 +3,7 @@ set -Eeuo pipefail
 
 REPO=${PAIRMOT_REPO:-/data/users/litianhao/PairMOT_0813_01_wsd_floor25_197/ai4rs}
 CONFIG=projects/multispec_pair_rotated_rtdetr/configs/o2_pair_rtdetr_r18vd_2xb4_72e_hsmot_0813_01_iterative_cls_terminal_transport_product_tangent_wsd4_56_cos12_floor25_decoder_197.py
-WORK_DIR=/data4/litianhao/PairMmot/workdir_197/0813_01_final_product_tangent_wsd4_56_cos12_floor25_72e_2xb4_fresh
+WORK_DIR=/data4/litianhao/PairMmot/workdir_197/0813_01_final_product_tangent_wsd4_56_cos12_floor25_72e_2xb4_fresh_v2
 
 set +u
 source /data/users/litianhao/anaconda3/etc/profile.d/conda.sh
