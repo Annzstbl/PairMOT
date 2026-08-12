@@ -86,6 +86,10 @@ still supports avoiding an excessively low cosine tail.
 
 At 16:13 CST, the newly enabled 197 dual-GPU lane is actively using the
 preferred GPU4/5 for `0812_01`; the other four GPUs remain outside this goal.
+At 16:46 CST, live re-audit confirmed both ranks at epoch 43 iteration 150,
+about 21.6 GiB on each of GPU4/5, finite formal losses and gradients, and
+GPU0--3 still idle. The added 197 allocation is therefore fully occupied by
+the existing WSD mainline; do not launch a duplicate job.
 The exact WSD resume has produced `epoch_40.pth` and completed 5,416-record,
 50-sequence detection for that checkpoint. Pair mAP/AP50 is
 `0.2992/0.5055`, and both-independent mAP/AP50 is `0.3407/0.5482`.
