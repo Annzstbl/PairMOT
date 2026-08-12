@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 06:31 CST。
+更新时间：2026-08-13 06:39 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -21,7 +21,7 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72 | e32 `53.339/60.516`、sum `113.855`完整，较e28双升且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E17/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_CKPT/VAL_POSTPROCESS/TO_MATURE_E72 | e20 checkpoint `392,031,030` bytes，677/677验证已完成并进入检测导出；等待TrackEval闭环，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72 | e32 `53.289/59.880`、sum `113.169`完整；DetA/AP较强而总和低99同点`0.686`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
@@ -35,6 +35,15 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 - 252 `0812_05` has a 392,031,030-byte e20 checkpoint and completed 677/677 validation. Detection export is
   still running on fixed GPU0/1, GPU2/3 remain unused, and the process must not be restarted. 99 is in e36 and
   178 in late e35; all four schedules continue toward e72.
+
+## 2026-08-13 06:39 CST: 252 e20 complete
+
+- 252 `0812_05` e20 cls HOTA/DetA/AssA is `49.781/41.113/62.132`; det is
+  `57.618/50.157/68.584`, sum `107.399`, and pair mAP/AP50 is `0.2665/0.4628`. The 392,031,030-byte
+  checkpoint, 5,416/50 detection and 383.3-second TrackEval are complete; training resumed at e21i350 on
+  fixed GPU0/1. Relative to e16, HOTA rises by `1.197/0.868`, so retain this pre-decay line toward e48+.
+- 99 has produced e36 and entered validation; 178 is finishing e36 training. Neither node is reported complete
+  until detection and TrackEval close on the same checkpoint.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 
