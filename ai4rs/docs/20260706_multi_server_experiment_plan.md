@@ -4,12 +4,20 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 06:39 CST.
+Last updated: 2026-08-13 06:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 06:52 CST on August 13, 99 floor-cosine closes e36 at cls/det HOTA
+`53.630/61.153` (sum `114.783`), DetA/AssA `44.796/66.173` and
+`53.405/72.519`, with pair mAP/AP50 `0.3035/0.5148`. Relative to e32, both
+HOTA values, DetA, AssA and AP improve. The 413,995,766-byte checkpoint,
+5,416/50 detection and 282.3-second TrackEval are complete; training resumes
+at e37i300 on GPU0/2. Keep it through the low-LR floor tail to e72. 178 e36
+validation is at 1250/1354; close its detection and TrackEval next.
 
 At 06:39 CST on August 13, fixed-252 closes e20 at cls/det HOTA
 `49.781/57.618` (sum `107.399`) with DetA/AssA `41.113/62.132` and

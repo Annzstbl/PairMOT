@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 06:39 CST。
+更新时间：2026-08-13 06:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,7 +19,7 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72 | e32 `53.339/60.516`、sum `113.855`完整，较e28双升且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72 | e36 `53.630/61.153`、sum `114.783`完整，较e32双升`0.291/0.637`且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E17/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
@@ -44,6 +44,15 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
   fixed GPU0/1. Relative to e16, HOTA rises by `1.197/0.868`, so retain this pre-decay line toward e48+.
 - 99 has produced e36 and entered validation; 178 is finishing e36 training. Neither node is reported complete
   until detection and TrackEval close on the same checkpoint.
+
+## 2026-08-13 06:52 CST: 99 e36 complete
+
+- 99 `0812_03` e36 cls HOTA/DetA/AssA is `53.630/44.796/66.173`; det is
+  `61.153/53.405/72.519`, sum `114.783`, and pair mAP/AP50 is `0.3035/0.5148`. The 413,995,766-byte
+  checkpoint, 5,416/50 detection and 282.3-second TrackEval are complete; training resumed at e37i300 on
+  GPU0/2 while GPU1 remains unused. Relative to e32, HOTA rises by `0.291/0.637`, so retain it to e72.
+- 178 e36 validation has reached 1250/1354 on GPU0. Wait for its detection and TrackEval before comparison;
+  197 e18 and 252 e21 continue normally.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

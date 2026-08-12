@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 06:39 CST
+更新时间：2026-08-13 06:52 CST
 
 ## 当前研究原则
 
@@ -27,7 +27,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72` | e32 `53.339/60.516`、sum `113.855`，较e28双升`0.700/0.476`；DetA/AssA/AP同步提高，继续到floor余弦成熟尾段。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72` | e32 `53.289/59.880`、sum `113.169`，较e28双升`0.583/0.793`；DetA/AP较强，继续到真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E17/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
@@ -57,6 +57,16 @@
   at e21i350 with finite total/DN/encoder losses and gradient on fixed GPU0/1. GPU2/3 remain unused.
 - The same schedule only begins cosine decay after e48, so e20 is not a mature stop point. Keep the slow 2x4
   replication toward the decay window. 99 has produced e36 and is validating; 178 is finishing e36 training.
+
+## 2026-08-13 06:52 CST: 99 floor-cosine e36 complete
+
+- 99 `0812_03` e36 same-checkpoint cls HOTA/DetA/AssA is `53.630/44.796/66.173`; det is
+  `61.153/53.405/72.519`, sum `114.783`, and pair mAP/AP50 is `0.3035/0.5148`.
+- Relative to e32, cls/det HOTA rise by `0.291/0.637`, sum by `0.928`; DetA, AssA and AP improve together.
+  The 413,995,766-byte checkpoint, 5,416/50 detection and 282.3-second TrackEval are complete; training resumed
+  at e37i300 on GPU0/2 with finite total/DN/encoder losses and gradient. GPU1 remains unused.
+- This schedule is still before its low-LR floor tail. Retain it to e72. 178 e36 single-GPU validation has reached
+  1250/1354 and must complete detection/TrackEval before the same-point comparison.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 
