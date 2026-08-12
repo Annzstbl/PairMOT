@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 16:13 CST。
+更新时间：2026-08-12 16:21 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,11 +20,17 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E40_DET_COMPLETE/TRACKEVAL_RUNNING/TO_E72 | 从252 e36的`36/37368`严格恢复；e40 checkpoint与5416/50检测完成，pair mAP/AP50 `0.2992/0.5055`、both-independent `0.3407/0.5482`，异步TrackEval已启动；GPU4/5为本目标优先双卡 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E41I500/E40_COMPLETE/STRICT_FAIL/TO_E44_E72 | e40同点cls/det `53.109/60.938`、sum `114.047`，AP、DetA/AssA、5416/50检测、28/108/50 TrackEval、checkpoint语义/哈希/有限性完整；不以e40否决，GPU4/5继续e44/e72 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E61I250/E60_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72 | e60 `54.574/62.387`、sum `116.961`完整闭环，距目标`0.689/0.212/0.901`；AP与DetA同步回撤但e60不是终点，继续e64/e72 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
+
+## 2026-08-12 16:21 CST：197 WSD e40完整闭环，继续e44/e72
+
+- e40同一checkpoint的cls HOTA/DetA/AssA为`53.109/43.911/65.935`，det为`60.938/52.981/72.528`，sum `114.047`；pair mAP/AP50 `0.2992/0.5055`，both-independent `0.3407/0.5482`。
+- 5416条/50序列检测、28 CSV、108非空评测文件、50个非空预测与`async_done=1.0`完整。419,229,735-byte checkpoint meta为`40/41520`，model/EMA 711/712 states，SHA-256为`24e20316824769497a9bcb592f794f5db784028e723d846a5e2495e579ea2835`，642个浮点tensor全有限。
+- e40未达最终阈值但不是decoder否决点；GPU4/5训练已恢复到e41i500，稳定LR `1.5e-4`，继续e44及最终e72。AutoDL同期正在训练e64，作为下一闭环节点。
 
 ## 2026-08-12 16:13 CST：197 GPU4/5 e40检测完成并启动TrackEval
 
