@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 19:44 CST
+更新时间：2026-08-12 21:02 CST
 
 ## 当前研究原则
 
@@ -27,11 +27,17 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E1I250/TO_E4_E72` | 针对零floor cosine e56→e72连续回撤，仅加入标准50% LR floor，并把峰值降至`1.81132e-4`保持积分`0.0096`；formal e1i250有限，GPU1保持空闲。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E1I300/TO_E4_E72` | 相对197 WSD仅把余弦退火提前并延长，峰值`1.65517e-4`保持积分`0.0096`；formal e1i300有限，GPU1外部任务未触碰。 |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E53I350/E52_COMPLETE/STRICT_FAIL/TO_E56_E72` | e52同点`54.063/61.746`、sum `115.809`，较e48净增`0.506`；AP、检测和TrackEval均完整。GPU4/5继续e56/e60/e72，GPU0–3保持空闲。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E5I600/E4_COMPLETE/DIAGNOSTIC_ONLY/TO_E12_E72` | e4 `32.411/39.594`完整闭环；该点仅确认标准warmup轨迹和异步评测健康，不作停线依据。GPU1保持空闲。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E5I700/E4_COMPLETE/DIAGNOSTIC_ONLY/TO_E12_E72` | e4 `35.363/42.179`完整闭环；高于99同点但仅属warmup诊断，不外推e72。GPU1外部任务未触碰。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E57I850/E56_COMPLETE/STRICT_FAIL/TO_E60_E72` | e56 `53.993/61.814`、sum `115.807`，与e52基本持平；AP、DetA/AssA、5416/50检测和TrackEval完整。继续到退火后的e60/e64及e72。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 21:02 CST：197 WSD e56进入平台，99/178跨过warmup
+
+- 197 e56同一checkpoint为cls HOTA/DetA/AssA `53.993/44.659/66.949`，det为`61.814/53.922/73.136`，sum `115.807`；pair mAP/AP50 `0.3110/0.5241`，both-independent `0.3469/0.5564`。
+- e52→e56的sum仅`-0.002`。cls DetA下降`0.274`而AssA上升`0.122`，det DetA/AssA分别上升`0.033/0.038`，说明平台主要来自cls定位回落，不是关联崩坏。5416/50检测、28 CSV、108非空评测文件、50预测和`async_done=1.0`齐全；训练已恢复e57i850，继续e60及退火后的e64/e72。
+- 99 e4为`32.411/39.594`，178 e4为`35.363/42.179`，两者均完成checkpoint、5416/50检测和异步TrackEval并已进入e5。e4仅验证warmup和运行链路，不用于否决任何decoder或调度，继续e12及成熟节点。
 
 ## 2026-08-12 19:44 CST：197 WSD e52完整闭环并继续恢复
 
