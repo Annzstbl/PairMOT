@@ -4,12 +4,20 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 06:52 CST.
+Last updated: 2026-08-13 07:00 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 07:00 CST on August 13, 178 smooth-WSD closes e36 at cls/det HOTA
+`53.708/60.559` (sum `114.267`), DetA/AssA `44.696/66.876` and
+`53.387/71.074`, with pair mAP/AP50 `0.3055/0.5220`. Relative to e32, both
+HOTA values rise by `0.419/0.679`. The 414,213,556-byte checkpoint, 5,416/50
+detection and 250.5-second TrackEval are complete; training resumes at e37i300
+on GPU0. At e36, it leads 99 in cls and AP but trails by `0.594` det and
+`0.516` sum; keep both complementary lines through their actual tails to e72.
 
 At 06:52 CST on August 13, 99 floor-cosine closes e36 at cls/det HOTA
 `53.630/61.153` (sum `114.783`), DetA/AssA `44.796/66.173` and

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 06:52 CST
+更新时间：2026-08-13 07:00 CST
 
 ## 当前研究原则
 
@@ -28,7 +28,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72` | e32 `53.289/59.880`、sum `113.169`，较e28双升`0.583/0.793`；DetA/AP较强，继续到真实退火段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E17/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
 
@@ -67,6 +67,17 @@
   at e37i300 on GPU0/2 with finite total/DN/encoder losses and gradient. GPU1 remains unused.
 - This schedule is still before its low-LR floor tail. Retain it to e72. 178 e36 single-GPU validation has reached
   1250/1354 and must complete detection/TrackEval before the same-point comparison.
+
+## 2026-08-13 07:00 CST: 178 smooth-WSD e36 complete and same-point comparison
+
+- 178 `0812_04` e36 same-checkpoint cls HOTA/DetA/AssA is `53.708/44.696/66.876`; det is
+  `60.559/53.387/71.074`, sum `114.267`, and pair mAP/AP50 is `0.3055/0.5220`.
+- Relative to e32, cls/det HOTA rise by `0.419/0.679`, sum by `1.098`; the 414,213,556-byte checkpoint,
+  5,416/50 detection and 250.5-second TrackEval are complete. Training resumed at e37i300 on GPU0 with finite
+  total/DN/encoder losses and gradient; GPU1 remains an external task and was not touched.
+- At e36, 178 has `0.078` higher cls and `0.0020/0.0072` higher pair mAP/AP50 than 99, while 99 has `0.594`
+  higher det and `0.516` higher HOTA sum. 178 cls AssA is `0.703` higher, while 99 det AssA is `1.445` higher;
+  det DetA differs by only `0.018`. The evidence remains complementary, so keep both through their actual tails.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 

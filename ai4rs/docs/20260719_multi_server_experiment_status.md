@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 06:52 CST。
+更新时间：2026-08-13 07:00 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -23,7 +23,7 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E17/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72 | e32 `53.289/59.880`、sum `113.169`完整；DetA/AP较强而总和低99同点`0.686`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72 | e36 `53.708/60.559`、sum `114.267`完整；cls/AP较99同点高而det/sum低`0.594/0.516`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -53,6 +53,15 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
   GPU0/2 while GPU1 remains unused. Relative to e32, HOTA rises by `0.291/0.637`, so retain it to e72.
 - 178 e36 validation has reached 1250/1354 on GPU0. Wait for its detection and TrackEval before comparison;
   197 e18 and 252 e21 continue normally.
+
+## 2026-08-13 07:00 CST: 178 e36 complete and compared with 99
+
+- 178 `0812_04` e36 cls HOTA/DetA/AssA is `53.708/44.696/66.876`; det is
+  `60.559/53.387/71.074`, sum `114.267`, and pair mAP/AP50 is `0.3055/0.5220`. The 414,213,556-byte
+  checkpoint, 5,416/50 detection and 250.5-second TrackEval are complete; training resumed at e37i300 on GPU0.
+- Versus 99 e36, 178 cls is `0.078` higher and AP is higher, but det is `0.594` lower and sum is `0.516` lower.
+  The DetA gap is only `0.018`, while 178 leads cls AssA and 99 leads det AssA. Keep both complementary schedules
+  through their actual tails to e72; do not select on the pre-tail e36 point.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 
