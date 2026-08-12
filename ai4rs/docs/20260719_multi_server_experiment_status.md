@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 13:41 CST。
+更新时间：2026-08-12 14:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,10 +20,10 @@ batch 8。99/178/252 只保留故障前状态。用户于13:08重新开放197双
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0810_08 warmup12+cosine exact e68→e72 resume`（GPU4/5） | RUNNING/E69I950/TO_E72 | e68 checkpoint完整有限；隔离checkout `0dd39c8b`；正式日志持续更新，双卡各约19.36 GiB，有限loss/grad，无致命错误 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0810_08 warmup12+cosine exact e68→e72 resume`（GPU4/5） | COMPLETED/E72/STRICT_FAIL/GPU_RELEASED | e72 `54.164/62.142`、sum `116.306`；checkpoint、AP、检测、TrackEval、有限性与GPU释放完整；下一条WSD e36→e72正在准备 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E53/E52_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e52 `54.853/62.489`、sum `117.342`；checkpoint、5416/50检测、50/50轨迹、TrackEval、AP与有限性完整闭环；继续e56 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E57/E56_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72 | e56 `54.762/62.565`、sum `117.327`；checkpoint、5416/50检测、50/50轨迹、TrackEval、AP与有限性完整闭环；继续e60/e72 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 
 ## 2026-08-12 13:41 CST：AutoDL e52完整闭环，197继续补齐独立e72对照
 

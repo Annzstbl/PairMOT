@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 13:41 CST.
+Last updated: 2026-08-12 14:44 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -29,6 +29,29 @@ logged interval: LR is `3.75e-8`, because source `0811_02` describes the
 Stop its finalizer first, then its exact formal screen; both process sets reach
 zero and GPU0 returns to 0 MiB. Preserve that workdir as
 `INVALID_MISSING_PEAK_LR` and do not compare it.
+
+At 14:44 CST, server 197 closes the exact warmup12-cosine e68-to-e72 resume
+at cls/det HOTA `54.164/62.142`, sum `116.306`, a strict failure by
+`1.099/0.457/1.556`. Its cls DetA/AssA are `44.882/67.296` and det values are
+`54.056/73.855`; pair mAP/AP50 is `0.309113/0.524911`, and both-independent is
+`0.348108/0.561814`. The 463,332,391-byte checkpoint is epoch/iter `72/74736`,
+SHA-256 `a8ae64d2810f3872c22d95ec563291d66a4fee96d151ceec8ec11aa97aaf54d1`,
+with 711/712 states and all 2,776 recursive floating tensors finite. Detection
+is 5,416/50; TrackEval is 28 CSV, 108 nonempty files and 50 predictions.
+Training and async processes exit naturally and all six GPUs return to 1 MiB.
+The next 197 candidate is an exact resume of the standard WSD trajectory from
+the shared 252 epoch-36 checkpoint, using preferred GPU4/5 after the formal
+dynamic gates; it does not repeat the failed long-warmup cosine tail.
+
+AutoDL e56 simultaneously closes at `54.762/62.565`, sum `117.327`, short by
+`0.501/0.034/0.535`. DetA/AssA are `44.456/70.298` and `54.755/73.914`;
+pair mAP/AP50 is `0.3157/0.5213` and both-independent is `0.3525/0.5545`.
+The 441,453,556-byte checkpoint is epoch/iter `56/58128`, SHA-256
+`b4aa9b3407df0871adc8545f07ccb6ed04d75841cfecb5255c05048daff49b57`,
+with all 2,776 recursive floating tensors finite. The complete 5,416/50,
+28/108/50 TrackEval closure is present. Because e56 is not the requested e72
+endpoint and det is only 0.034 below target, the paid lane continues under its
+active finalizer instead of being rejected at this single mature node.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and

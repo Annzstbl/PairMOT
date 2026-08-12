@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 13:41 CST
+更新时间：2026-08-12 14:44 CST
 
 ## 当前研究原则
 
@@ -27,14 +27,14 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E53/E52_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e52同点cls/det `54.853/62.489`、sum `117.342`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.410/0.110/0.520`，继续e56。 |
-| 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `RUNNING/E69I950/TO_E72` | 共享e68 checkpoint完整有限；隔离checkout `0dd39c8b`，GPU4/5各约19.36 GiB，正式日志持续到e69i950，总/DN/encoder loss与grad均有限。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E57/E56_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e56同点cls/det `54.762/62.565`、sum `117.327`；checkpoint、AP、检测、TrackEval和有限性全闭环；距目标`0.501/0.034/0.535`，不以e56单点否决，继续e60/e72。 |
+| 197 GPU4/5 | `0810_08 standard warmup12 + cosine60 exact e68→e72 resume` | `COMPLETED/E72/STRICT_FAIL/GPU_RELEASED` | e72 `54.164/62.142`、sum `116.306`；checkpoint、AP、5416/50检测、28/108/50 TrackEval和有限性完整，训练/异步进程自然退出且GPU4/5归零。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
 | 99 后备（不占 GPU） | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与真实 scheduler 序列审计；等待合法双卡资源，五项动态门槛前不得登记 RUNNING。 |
 | 99 后备（不占 GPU） | `0811_01 final product-tangent standard warmup4 + cosine68 peak×8/3` | `REMOTE_STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | commit `e47298f`；相对 `0810_08` 只缩短标准 warmup，峰值与 96-parent-epoch 名义积分不变。独立 clean checkout 已通过 deepcopy、完整父/候选构建、497 组倍率与 72 点真实 scheduler 序列审计；不抢占当前训练。 |
-| 197 已排除 | `0810_09 same WSD host adaptation` | `EXCLUDED_BY_USER/NO_SMOKE/NO_FORMAL/GPU_FREE` | 2026-08-12 只读审计确认 SSH、`/data4`、代码与Conda路径存在且6卡空闲，但 `import torch` 60秒未完成；测试进程组已精确终止且GPU归零。按用户决定不在197运行实验。 |
+| 197 后备 | `0810_09 standard WSD e36→e72 exact resume` | `PREPARING/GPU4_5_PREFERRED` | warmup12-cosine完整失败后，拟从共享252 e36 checkpoint继续仍在稳定段上升的标准WSD；复用既有host-only配置并使用独立checkout/workdir，动态门槛通过前不登记RUNNING。 |
 | 252 已释放 | `0810_07 final product-tangent ratio-preserving standard One-Cycle peak×2.0 fresh` | `STOPPED/E25I1000/E24_COMPLETE/MATURE_DOMINATED` | e24 `48.913/55.278`、sum `104.191`，HOTA、DetA、AssA 与 AP 均被 178 同点支配；在峰后成熟闭环后精确停止并释放固定 GPU0/1，非 e4/e8 否决。 |
 | 178 已释放 | `0810_04 scalar eta_max One-Cycle maxLR=2.5e-4 fresh` | `STOPPED/E1I150/INVALID_SCALAR_ETA_MAX` | 事后强制参数组审计发现标量 `eta_max` 将 497 个组的 `[1e-5,1e-4,2e-4,2e-3]` 初始 LR 全压为 `1e-5`，破坏原 `lr_mult`；PGID `2396834` 精确停止，产物保留且不参与比较。 |
 | 252 已释放 | `0810_05 scalar eta_max One-Cycle maxLR=2.0e-4 fresh` | `STOPPED/E1I100/INVALID_SCALAR_ETA_MAX` | 同一协议缺陷；PGID `2520675` 精确停止，GPU0/1 归零，旧 smoke/formal 产物保留但不登记有效候选。 |
