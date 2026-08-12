@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 18:44 CST.
+Last updated: 2026-08-12 19:37 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -12,6 +12,16 @@ Current per-server status dashboard:
 ## Server Status
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. At 13:08 CST on August 12, the user re-enabled server 197 for two GPUs with preference for GPU4/5; if those are unavailable, select another genuinely idle pair without preempting external work.
+
+At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
+resources with their previous placement. Live audit found all 99 GPUs idle, so
+`0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains
+untouched. To accelerate execution, these launches omit a separate smoke and
+use one exact-config deepcopy/full build followed by formal iter50 evidence.
+Both formal runs reached epoch 1 iteration 100 with finite total, DN, encoder
+losses and gradients. `0812_03` is standard cosine with a 50% floor;
+`0812_04` is standard WSD warmup4+stable44+cosine24. Both preserve the model,
+data, losses, EMA, global batch, inference graph, and nominal LR integral.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 18:42 CST。
+更新时间：2026-08-12 19:37 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,10 +19,10 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0810_08 product-tangent standard 12e warmup + 60e cosine peak×8/3` | NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:24，双采样无增长；e72未生成，不能再登记RUNNING | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E49I750/E48_COMPLETE/STRICT_FAIL/TO_E52_E72 | e48同点cls/det `53.805/61.498`、sum `115.303`完整闭环；较e44总和与AP/DetA继续提高，GPU4/5继续e52/e72，GPU0–3空闲 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E1I100/TO_E4_E72 | 用户重新开放99双卡；三卡空闲后沿用GPU0/2，完整构建与formal e1i100有限，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E52_TRAIN_COMPLETE/E48_COMPLETE/E52_EVAL_PENDING/TO_E72 | e52 checkpoint已落盘但检测/TrackEval尚未形成；最近完整e48为`53.805/61.498`、sum `115.303`，GPU4/5继续e72 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E1I100/TO_E4_E72 | 用户重新开放178单卡；沿用GPU0，完整构建与formal e1i100有限，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 

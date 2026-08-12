@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 18:42 CST
+更新时间：2026-08-12 19:37 CST
 
 ## 当前研究原则
 
@@ -27,7 +27,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E49I750/E48_COMPLETE/STRICT_FAIL/TO_E52_E72` | e48同点cls/det `53.805/61.498`、sum `115.303`完整闭环；较e44为`-0.022/+0.191/+0.169`，AP与DetA继续提高。GPU4/5继续e52/e72，GPU0–3保持空闲。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E1I100/TO_E4_E72` | 针对零floor cosine e56→e72连续回撤，仅加入标准50% LR floor，并把峰值降至`1.81132e-4`保持积分`0.0096`；formal e1i100有限，GPU1保持空闲。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E1I100/TO_E4_E72` | 相对197 WSD仅把余弦退火提前并延长，峰值`1.65517e-4`保持积分`0.0096`；formal e1i100有限，GPU1外部任务未触碰。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E52_TRAIN_COMPLETE/E48_COMPLETE/E52_EVAL_PENDING/TO_E72` | e52 checkpoint已落盘、训练本轮完成，但检测/TrackEval尚未形成；最近完整e48为`53.805/61.498`、sum `115.303`。GPU4/5继续e72，GPU0–3保持空闲。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
 
