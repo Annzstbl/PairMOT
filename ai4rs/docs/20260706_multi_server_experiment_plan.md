@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 22:06 CST.
+Last updated: 2026-08-12 23:14 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -53,6 +53,15 @@ recovers `0.193` from e56, driven mainly by cls AssA, but remains `1.862`
 below the final target. Continue e64/e68/e72 because these are the actual
 cosine-decay response nodes. Both 99 and 178 complete e8 training and remain
 active; e4/e8 are not rejection points.
+
+At 23:14 CST, the first mature cosine-decay response at 197/e64 closes at
+cls HOTA/DetA/AssA `54.458/45.112/67.542` and det
+`62.100/54.115/73.559`, sum `116.558`. Pair mAP/AP50 is `0.3141/0.5274`
+and both-independent is `0.3534/0.5646`; detection and asynchronous TrackEval
+are complete. Compared with e60, HOTA improves `0.350/0.208` and the sum
+improves `0.558`, with AP and DetA/AssA moving consistently. The node remains
+short of the final target by `0.805/0.499/1.304`, so continue e68/e72 rather
+than rejecting the schedule at its first decay response.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established

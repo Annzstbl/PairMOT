@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 22:06 CST。
+更新时间：2026-08-12 23:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,11 +20,16 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72 | e8训练完成并继续；e4/e8均不作停线依据，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E61I400/E60_COMPLETE/STRICT_FAIL/TO_E64_E72 | e60 `54.108/61.892`、sum `116.000`，较e56回升`0.193`；完整闭环后继续e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E64_COMPLETE/STRICT_FAIL/TO_E68_E72 | e64 `54.458/62.100`、sum `116.558`，较e60提升`0.558`；AP、DetA/AssA与TrackEval完整，继续e68/e72 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72 | e8训练完成并继续；e4/e8均不作停线依据，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
+
+## 2026-08-12 23:14 CST：197 e64退火响应完整闭环
+
+- e64 cls HOTA/DetA/AssA `54.458/45.112/67.542`，det `62.100/54.115/73.559`，sum `116.558`；pair mAP/AP50 `0.3141/0.5274`，both-independent `0.3534/0.5646`。
+- 相对e60双HOTA提高`0.350/0.208`、sum提高`0.558`，AP与DetA/AssA同步改善。5416/50检测和异步TrackEval完整；仍低最终目标但首个退火成熟节点有效，继续e68/e72。
 
 ## 2026-08-12 22:06 CST：197 e60完整闭环并进入退火窗口
 

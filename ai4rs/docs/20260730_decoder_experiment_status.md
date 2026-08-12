@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 22:06 CST
+更新时间：2026-08-12 23:14 CST
 
 ## 当前研究原则
 
@@ -29,9 +29,15 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72` | e4 `32.411/39.594`完整闭环；e8训练完成，继续成熟节点，不用e4/e8停线。GPU1保持空闲。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72` | e4 `35.363/42.179`完整闭环；e8训练完成，继续成熟节点，不用e4/e8停线。GPU1外部任务未触碰。 |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E61I400/E60_COMPLETE/STRICT_FAIL/TO_E64_E72` | e60 `54.108/61.892`、sum `116.000`，较e56回升`0.193`；AP、DetA/AssA、5416/50检测和TrackEval完整。继续首个退火成熟节点e64及e72。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E64_COMPLETE/STRICT_FAIL/TO_E68_E72` | e64 `54.458/62.100`、sum `116.558`，较e60提升`0.558`；AP、DetA/AssA、5416/50检测和TrackEval同步改善。继续e68/e72。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 23:14 CST：197 WSD e64首个退火成熟节点显著提升
+
+- e64同一checkpoint为cls HOTA/DetA/AssA `54.458/45.112/67.542`，det为`62.100/54.115/73.559`，sum `116.558`；pair mAP/AP50 `0.3141/0.5274`，both-independent `0.3534/0.5646`。
+- 相对e60，cls/det HOTA提高`0.350/0.208`，sum提高`0.558`；双DetA、det AssA和四项AP同步上升，表明标准余弦退火带来综合改善而非单一关联波动。5416/50检测和异步TrackEval完整。
+- 当前仍低目标`0.805/0.499/1.304`，但首个退火节点趋势积极，继续e68/e72，不提前否决。
 
 ## 2026-08-12 22:06 CST：197 WSD e60稳定段终点回升
 
