@@ -4,12 +4,21 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 03:19 CST.
+Last updated: 2026-08-13 03:54 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 03:54 CST on August 13, fixed-252 closes e12 at cls HOTA/DetA/AssA
+`47.205/38.979/59.572` and det `53.169/47.407/61.634`, sum `100.374`;
+pair mAP/AP50 is `0.2460/0.4297`. The 381,041,846-byte checkpoint,
+5,416/50 detection and asynchronous TrackEval completion are present. Relative
+to e8, cls/det improve by `3.321/3.580`, so the lower absolute early result is
+still an active convergence-speed difference rather than mature domination.
+Training resumes at e13i350 and continues to e20 and the actual cosine-decay
+window; do not reject this decoder/schedule at e12.
 
 At 03:19 CST on August 13, 178 closes e24 at cls HOTA/DetA/AssA
 `52.382/44.246/64.405` and det `58.353/52.333/67.401`, sum `110.735`;

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 03:19 CST
+更新时间：2026-08-13 03:54 CST
 
 ## 当前研究原则
 
@@ -30,7 +30,7 @@
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E24_COMPLETE/E26I250/TO_MATURE_E72` | e24 `52.748/59.179`、sum `111.927`；较e20双升`0.757/0.347`，DetA/AssA `44.199/64.972`与`52.068/69.589`，继续到floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E24_COMPLETE/E25I250/TO_MATURE_E72` | e24 `52.382/58.353`、sum `110.735`；DetA/AssA为`44.246/64.405`与`52.333/67.401`，pair mAP/AP50 `0.2991/0.5174`，继续到真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E4_COMPLETE/E6I300/TO_E72` | e4 `31.389/39.584`、sum `70.973`，DetA/AssA为`24.058/43.687`与`31.046/51.698`，pair mAP/AP50 `0.1290/0.2476`；评测路径大小写已修复，不用e4否决。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E8_COMPLETE/E11I700/TO_E12_E72` | e8 `43.884/49.589`、sum `93.473`，DetA/AssA与AP均低于178同调度同点；只作早期拓扑诊断，不以e8否决，继续e12及成熟节点。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E12_COMPLETE/E13I350/TO_MATURE_E72` | e12 `47.205/53.169`、sum `100.374`，较e8双升`3.321/3.580`；DetA/AssA为`38.979/59.572`与`47.407/61.634`，pair mAP/AP50 `0.2460/0.4297`，继续成熟节点。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
 
