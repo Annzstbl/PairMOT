@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 05:21 CST
+更新时间：2026-08-13 05:29 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E28_COMPLETE/E32_EVALUATING/TO_MATURE_E72` | e32 checkpoint已生成并完成正式验证推理，等待异步TrackEval；继续到floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E28_COMPLETE/E32_TRAINING/TO_MATURE_E72` | e28 `52.706/59.087`、sum `111.793`；当前e32训练中，继续到真实退火段。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72` | e32 `53.339/60.516`、sum `113.855`，较e28双升`0.700/0.476`；DetA/AssA/AP同步提高，继续到floor余弦成熟尾段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E28_COMPLETE/E32_EVALUATING/TO_MATURE_E72` | e32 checkpoint已生成，单卡正式验证运行中；继续到真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E12_COMPLETE/E13I250/TO_E72` | e12 `46.128/53.493`、sum `99.621`，较e8双升`3.901/6.066`；DetA/AssA与AP同步增长，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E16_COMPLETE/E17I200/TO_MATURE_E72` | e16 `48.584/56.750`、sum `105.334`，较e12双升`1.379/3.581`；DetA/AssA为`39.790/61.347`与`49.267/67.676`，pair mAP/AP50 `0.2561/0.4444`，继续e20。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -56,6 +56,17 @@
   产生核心差异，因此e12仅证明健康收敛，继续成熟而不作策略胜负判定。
 - 99已生成e32 checkpoint并完成677/677正式验证推理，异步评测即将启动；178仍在e32训练，
   252在e17继续。当前不增加新的训练或测试占用。
+
+## 2026-08-13 05:29 CST：99 floor-cosine e32完整闭环并保持领先
+
+- 99 `0812_03` e32同一checkpoint的cls HOTA/DetA/AssA为`53.339/44.762/65.416`，det为
+  `60.516/53.094/71.387`，sum `113.855`；相对e28双HOTA提高`0.700/0.476`、sum提高
+  `1.176`，pair mAP/AP50由`0.2971/0.5059`升至`0.3016/0.5127`。
+- e32 checkpoint `408,511,606` bytes、5416/50检测和278.4秒异步TrackEval完整；训练已
+  恢复e33i250，正式数值有限。HOTA、DetA、AssA和AP同步增长，且floor-cosine尚未进入真正
+  低LR尾段，因此继续到e36及成熟尾段，不在中期换线。
+- 178已生成e32 checkpoint并开始单卡1354-iteration正式验证；该线仍需同点TrackEval后再与
+  99比较。197 e13与252 e17继续，四台资源无冲突。
 
 ## 2026-08-13 00:23 CST：197 WSD e68继续上升但尚未达标
 
