@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 19:37 CST.
+Last updated: 2026-08-12 19:44 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -22,6 +22,16 @@ Both formal runs reached epoch 1 iteration 100 with finite total, DN, encoder
 losses and gradients. `0812_03` is standard cosine with a 50% floor;
 `0812_04` is standard WSD warmup4+stable44+cosine24. Both preserve the model,
 data, losses, EMA, global batch, inference graph, and nominal LR integral.
+
+At 19:44 CST, the 197 WSD line closes epoch 52 at cls/det HOTA
+`54.063/61.746`, sum `115.809`, improving over epoch 48 by `0.258/0.248`
+and `0.506` in the sum. Its cls DetA/AssA are `44.933/66.827`, det values
+are `53.889/73.098`; pair mAP/AP50 is `0.3106/0.5232` and both-independent
+is `0.3508/0.5626`. Detection has 5,416 records across 50 sequences and
+TrackEval is complete. The run remains healthy at epoch 53 iteration 350 on
+GPU4/5 and continues through e56/e60/e72. Treat 99 and 197 as established
+experiment hosts: do not repeat host qualification, hashes, or separate smoke;
+retain only formal-iteration health and scheduled result closure checks.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established

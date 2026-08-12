@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 19:37 CST
+更新时间：2026-08-12 19:44 CST
 
 ## 当前研究原则
 
@@ -27,11 +27,17 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E1I100/TO_E4_E72` | 针对零floor cosine e56→e72连续回撤，仅加入标准50% LR floor，并把峰值降至`1.81132e-4`保持积分`0.0096`；formal e1i100有限，GPU1保持空闲。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E1I100/TO_E4_E72` | 相对197 WSD仅把余弦退火提前并延长，峰值`1.65517e-4`保持积分`0.0096`；formal e1i100有限，GPU1外部任务未触碰。 |
-| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E52_TRAIN_COMPLETE/E48_COMPLETE/E52_EVAL_PENDING/TO_E72` | e52 checkpoint已落盘、训练本轮完成，但检测/TrackEval尚未形成；最近完整e48为`53.805/61.498`、sum `115.303`。GPU4/5继续e72，GPU0–3保持空闲。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E1I250/TO_E4_E72` | 针对零floor cosine e56→e72连续回撤，仅加入标准50% LR floor，并把峰值降至`1.81132e-4`保持积分`0.0096`；formal e1i250有限，GPU1保持空闲。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E1I300/TO_E4_E72` | 相对197 WSD仅把余弦退火提前并延长，峰值`1.65517e-4`保持积分`0.0096`；formal e1i300有限，GPU1外部任务未触碰。 |
+| 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E53I350/E52_COMPLETE/STRICT_FAIL/TO_E56_E72` | e52同点`54.063/61.746`、sum `115.809`，较e48净增`0.506`；AP、检测和TrackEval均完整。GPU4/5继续e56/e60/e72，GPU0–3保持空闲。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 19:44 CST：197 WSD e52完整闭环并继续恢复
+
+- e52同一checkpoint的cls HOTA/DetA/AssA为`54.063/44.933/66.827`，det为`61.746/53.889/73.098`，sum `115.809`；相对e48双HOTA为`+0.258/+0.248`，合计增加`0.506`。
+- pair mAP/AP50为`0.3106/0.5232`，both-independent为`0.3508/0.5626`；5416条、50序列检测及异步TrackEval完成标志齐全。HOTA和AP同步上升，表明稳定段仍在有效恢复，但当前点距e72目标仍有`1.200/0.853/2.053`。
+- 训练已继续至e53 iter350，稳定LR `1.5e-4`且正式日志有限。按用户要求不重复SHA、独立smoke或冗余环境检查；继续收集e56/e60和最终e72。
 
 ## 2026-08-12 16:37 CST：AutoDL e64完整闭环，尾部低LR回撤重复出现
 
