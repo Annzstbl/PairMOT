@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 04:15 CST
+更新时间：2026-08-13 04:29 CST
 
 ## 当前研究原则
 
@@ -28,7 +28,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E28_COMPLETE/E29I450/TO_MATURE_E72` | e28 `52.639/60.040`、sum `112.679`；较e24 cls波动`-0.109`、det提升`0.861`，det DetA/AssA `52.634/70.871`，继续到floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E24_COMPLETE/E25I250/TO_MATURE_E72` | e24 `52.382/58.353`、sum `110.735`；DetA/AssA为`44.246/64.405`与`52.333/67.401`，pair mAP/AP50 `0.2991/0.5174`，继续到真实退火段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E28_COMPLETE/E29I300/TO_MATURE_E72` | e28 `52.706/59.087`、sum `111.793`，较e24双升`0.324/0.734`；det DetA/AssA `52.860/68.317`，pair mAP/AP50 `0.3013/0.5187`，继续到真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E8_COMPLETE/E9I400/TO_E72` | e8 `42.227/47.427`、sum `89.654`，较e4双升`10.838/7.843`；DetA/AssA为`35.362/52.968`与`42.646/54.760`，仍属快速早期收敛，不用e8否决。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E12_COMPLETE/E13I350/TO_MATURE_E72` | e12 `47.205/53.169`、sum `100.374`，较e8双升`3.321/3.580`；DetA/AssA为`38.979/59.572`与`47.407/61.634`，pair mAP/AP50 `0.2460/0.4297`，继续成熟节点。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
