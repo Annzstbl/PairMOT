@@ -4,12 +4,22 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 02:05 CST.
+Last updated: 2026-08-13 02:43 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 02:43 CST on August 13, all four mature-scheduler formal lines remain
+healthy: 99 is at e24i600 on GPU0/2, 178 at e24i50 on GPU0, the fresh 197
+25%-floor WSD line at e4i250 on GPU4/5, and fixed-252 at e9i850 on GPU0/1.
+The 252 e8 closure is `43.884/49.589` (sum `93.473`), with cls DetA/AssA
+`35.883/56.462`, det `43.648/58.374`, pair mAP/AP50 `0.2181/0.3852`, and
+both-independent `0.2613/0.4439`. It trails the same-schedule 178 e8 by
+`4.146/4.650`, but remains active through e12 and mature nodes because e8 is
+diagnostic rather than a decoder rejection gate. Collect 99/178 e24 and 252
+e12 next; keep AutoDL shut down to avoid paid idle time.
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. At 13:08 CST on August 12, the user re-enabled server 197 for two GPUs with preference for GPU4/5; if those are unavailable, select another genuinely idle pair without preempting external work.
 

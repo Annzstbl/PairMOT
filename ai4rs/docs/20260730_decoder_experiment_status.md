@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 02:05 CST
+更新时间：2026-08-13 02:43 CST
 
 ## 当前研究原则
 
@@ -27,10 +27,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E20_COMPLETE/TO_MATURE_E72` | e20 `51.991/58.832`、sum `110.823`；DetA/AssA `43.455/64.323`与`51.811/69.180`，关联领先178同点。继续退火成熟段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E20_COMPLETE/TO_MATURE_E72` | e20 `52.145/57.823`、sum `109.968`；pair/both AP明显高于99，但双AssA偏低。定位与关联证据互补，继续成熟段。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E1I50/TO_E72` | 仅把标准cosine尾部floor由近0改为峰值25%，针对旧线e68→e72 cls回撤；模型与其余协议不变。formal e1i50双卡及关键数值有限。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E1I100/TO_E12_E72` | 新增固定GPU0/1资源；复现178成熟调度但采用双卡2x4，全局batch仍为8。无独立smoke，formal e1i100的总损失、DN、encoder与梯度有限。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E20_COMPLETE/E24I600/TO_MATURE_E72` | e20 `51.991/58.832`、sum `110.823`；DetA/AssA `43.455/64.323`与`51.811/69.180`，关联领先178同点。e24正式训练有限，继续退火成熟段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E20_COMPLETE/E24I50/TO_MATURE_E72` | e20 `52.145/57.823`、sum `109.968`；pair/both AP明显高于99，但双AssA偏低。e24正式训练有限，定位与关联证据互补。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E4I250/TO_E72` | 仅把标准cosine尾部floor由近0改为峰值25%，针对旧线e68→e72 cls回撤；模型与其余协议不变。formal已到e4i250且关键数值有限。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E8_COMPLETE/E9I850/TO_E12_E72` | e8 `43.884/49.589`、sum `93.473`，DetA/AssA与AP均低于178同调度同点；只作早期拓扑诊断，不以e8否决，继续e12及成熟节点。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
 
@@ -51,6 +51,16 @@
 - 99 floor-cosine e20为cls/det `51.991/58.832`、sum `110.823`，DetA/AssA为`43.455/64.323`与`51.811/69.180`；pair mAP/AP50 `0.2868/0.4912`，both-independent `0.3307/0.5407`。
 - 178 smooth-WSD e20为`52.145/57.823`、sum `109.968`，DetA/AssA为`44.030/63.973`与`51.969/66.655`；pair `0.2958/0.5126`，both-independent `0.3392/0.5601`。
 - 178双DetA与四项AP更高，但99双AssA更高，尤其det AssA高`2.525`，因此99总和领先`0.855`。两方案尚未进入核心尾段，均继续e24及成熟退火窗口。
+
+## 2026-08-13 02:43 CST：四条成熟调度线持续运行，252 e8闭环
+
+- 252 `0812_05` e8同点cls/det HOTA为`43.884/49.589`、sum `93.473`；cls DetA/AssA
+  `35.883/56.462`，det `43.648/58.374`，pair mAP/AP50 `0.2181/0.3852`，
+  both-independent `0.2613/0.4439`。相对178相同WSD同点低`4.146/4.650`，DetA、AssA与AP
+  也均低；这是2x4物理拓扑的早期差异证据，不以e8停止，固定GPU0/1已到e9i850。
+- 99 floor-cosine到e24i600，178 smooth-WSD到e24i50，197 25% floor新线到e4i250；
+  四条正式日志的总损失、DN、encoder proposal与梯度均有限，GPU分配保持99 GPU0/2、
+  178 GPU0、197 GPU4/5、252 GPU0/1。继续等待99/178 e24和252 e12完整异步评测。
 
 ## 2026-08-12 23:43 CST：新增252 GPU0/1并启动smooth-WSD复现线
 
