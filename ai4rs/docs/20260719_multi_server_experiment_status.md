@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 05:29 CST。
+更新时间：2026-08-13 05:44 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,7 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72 | e32 `53.339/60.516`、sum `113.855`完整，较e28双升且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E12_COMPLETE/E13I250/TO_E72 | e12 `46.128/53.493`、sum `99.621`完整，较e8双升`3.901/6.066`；继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E16_COMPLETE/E17I200/TO_MATURE_E72 | e16 `48.584/56.750`、sum `105.334`完整，较e12双升`1.379/3.581`；继续e20，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E28_COMPLETE/E32_EVALUATING/TO_MATURE_E72 | e32 checkpoint已生成，1354-iteration单卡验证运行中；GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72 | e32 `53.289/59.880`、sum `113.169`完整；DetA/AP较强而总和低99同点`0.686`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -49,6 +49,14 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
   `60.516/53.094/71.387`，sum `113.855`，pair mAP/AP50 `0.3016/0.5127`。
   相对e28双HOTA提高`0.700/0.476`；checkpoint、5416/50与278.4秒TrackEval完整，训练
   恢复e33i250。178的e32 checkpoint已生成且正式验证运行中。
+
+## 2026-08-13 05:44 CST：178 e32闭环与同点比较
+
+- 178 smooth-WSD e32为cls HOTA/DetA/AssA `53.289/44.648/65.947`，det
+  `59.880/53.223/69.738`，sum `113.169`，pair mAP/AP50 `0.3040/0.5202`；checkpoint、
+  5416/50检测与258.1秒TrackEval完整，训练恢复e33i300。
+- 99同点总和领先`0.686`且det AssA领先`1.649`；178的cls AssA、det DetA与AP较高。
+  两线互补，均继续到e36及各自真实退火窗口，178仍只使用GPU0。
 
 ## 2026-08-13 00:23 CST：197 e68成熟节点闭环
 

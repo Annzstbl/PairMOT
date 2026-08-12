@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 05:29 CST
+更新时间：2026-08-13 05:44 CST
 
 ## 当前研究原则
 
@@ -28,7 +28,7 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E32_COMPLETE/E33I250/TO_MATURE_E72` | e32 `53.339/60.516`、sum `113.855`，较e28双升`0.700/0.476`；DetA/AssA/AP同步提高，继续到floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E28_COMPLETE/E32_EVALUATING/TO_MATURE_E72` | e32 checkpoint已生成，单卡正式验证运行中；继续到真实退火段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E32_COMPLETE/E33I300/TO_MATURE_E72` | e32 `53.289/59.880`、sum `113.169`，较e28双升`0.583/0.793`；DetA/AP较强，继续到真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E12_COMPLETE/E13I250/TO_E72` | e12 `46.128/53.493`、sum `99.621`，较e8双升`3.901/6.066`；DetA/AssA与AP同步增长，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E16_COMPLETE/E17I200/TO_MATURE_E72` | e16 `48.584/56.750`、sum `105.334`，较e12双升`1.379/3.581`；DetA/AssA为`39.790/61.347`与`49.267/67.676`，pair mAP/AP50 `0.2561/0.4444`，继续e20。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -67,6 +67,17 @@
   低LR尾段，因此继续到e36及成熟尾段，不在中期换线。
 - 178已生成e32 checkpoint并开始单卡1354-iteration正式验证；该线仍需同点TrackEval后再与
   99比较。197 e13与252 e17继续，四台资源无冲突。
+
+## 2026-08-13 05:44 CST：178 smooth-WSD e32完整闭环
+
+- 178 `0812_04` e32同一checkpoint的cls HOTA/DetA/AssA为`53.289/44.648/65.947`，det为
+  `59.880/53.223/69.738`，sum `113.169`；相对e28双HOTA提高`0.583/0.793`，pair
+  mAP/AP50由`0.3013/0.5187`升至`0.3040/0.5202`。
+- e32 checkpoint `408,697,844` bytes、5416/50检测和258.1秒异步TrackEval完整；训练恢复
+  e33i300且关键数值有限，只使用GPU0，未触碰GPU1外部任务。
+- 与99 e32相比，178 cls/det HOTA低`0.050/0.636`、sum低`0.686`；但cls AssA高
+  `0.531`、det DetA高`0.129`且AP更高，99则det AssA高`1.649`。两条证据互补且都未进入
+  核心尾段，因此保留99 floor-cosine与178 smooth-WSD继续e36及真实退火窗口。
 
 ## 2026-08-13 00:23 CST：197 WSD e68继续上升但尚未达标
 
