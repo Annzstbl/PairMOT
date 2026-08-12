@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 02:59 CST。
+更新时间：2026-08-13 03:19 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,10 +19,10 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E12_COMPLETE/TO_MATURE_E72 | e12 `47.454/54.307`、sum `101.761`完整；继续验证尾段floor，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0812_01 WSD warmup4+stable56+cosine12 exact e36→e72 resume v2`（GPU4/5） | RUNNING/E64_COMPLETE/STRICT_FAIL/TO_E68_E72 | e64 `54.458/62.100`、sum `116.558`，较e60提升`0.558`；AP、DetA/AssA与TrackEval完整，继续e68/e72 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E1I100/TO_E12_E72 | 新增资源后GPU0/1正式2x4 fresh；无独立smoke，formal e1i100总、DN、encoder与梯度有限 | `/data4/litianhao/PairMmot/workdir_252` |
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E12_COMPLETE/TO_MATURE_E72 | e12 `51.141/56.894`、sum `108.035`完整；继续中后期与e72，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E24_COMPLETE/E26I250/TO_MATURE_E72 | e24 `52.748/59.179`、sum `111.927`完整；继续验证尾段floor，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E4_COMPLETE/E6I300/TO_E72 | e4 `31.389/39.584`、sum `70.973`完整；TrackEval根目录大小写故障已修复，继续成熟节点且不以e4否决 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E8_COMPLETE/E11I700/TO_E12_E72 | e8 `43.884/49.589`、sum `93.473`完整；早期低于178同调度但继续e12与成熟节点 | `/data4/litianhao/PairMmot/workdir_252` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E24_COMPLETE/E25I250/TO_MATURE_E72 | e24 `52.382/58.353`、sum `110.735`完整；DetA/AP较强而AssA低于99，继续实际退火段，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 

@@ -4,12 +4,27 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 02:59 CST.
+Last updated: 2026-08-13 03:19 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 03:19 CST on August 13, 178 closes e24 at cls HOTA/DetA/AssA
+`52.382/44.246/64.405` and det `58.353/52.333/67.401`, sum `110.735`;
+pair mAP/AP50 is `0.2991/0.5174`. It improves the e20 sum by `0.767`, while
+99 e24 remains ahead in association and total HOTA, so both schedules continue
+to their actual decay windows. The fresh 197 floor-25 WSD e4 closure is
+`31.389/39.584`, sum `70.973`, with pair mAP/AP50 `0.1290/0.2476`; this is
+diagnostic only and is not a decoder rejection point. Its first two async
+TrackEval attempts failed because the configured root used nonexistent
+`/data/users/litianhao/PairMmot/TrackEval` instead of case-correct
+`/data/users/litianhao/PairMOT/TrackEval`. Detection was retained, the payload
+was corrected, TrackEval then completed normally, and a compatibility symlink
+prevents the same evaluation-only failure at later scheduled nodes without
+changing the live training checkout. Current finite formal progress is 99
+e26i250, 178 e25i250, 197 e6i300, and fixed-252 e11i700.
 
 At 02:59 CST on August 13, 99 floor-cosine closes e24 at cls
 HOTA/DetA/AssA `52.748/44.199/64.972` and det `59.179/52.068/69.589`, sum
