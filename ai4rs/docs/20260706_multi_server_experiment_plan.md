@@ -4,12 +4,22 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 05:16 CST.
+Last updated: 2026-08-13 05:21 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 05:21 CST on August 13, 197 floor-25 WSD closes e12 at cls
+HOTA/DetA/AssA `46.128/37.797/59.120` and det `53.493/47.492/62.448`, sum
+`99.621`; pair mAP/AP50 is `0.2384/0.4156`. Relative to e8, both HOTA values
+rise by `3.901/6.066`, and the complete checkpoint, 5,416/50 detection, and
+339.7-second TrackEval confirm healthy convergence. Because the 25% floor only
+diverges from the zero-floor WSD during the post-e60 cosine tail, this early
+node does not decide the strategy; formal training continues at e13. The 99
+line has produced its e32 checkpoint and completed 677/677 validation inference,
+with asynchronous TrackEval next; 178 and 252 continue e32/e17 respectively.
 
 At 05:16 CST on August 13, 252 smooth-WSD closes e16 at cls HOTA/DetA/AssA
 `48.584/39.790/61.347` and det `56.750/49.267/67.676`, sum `105.334`;

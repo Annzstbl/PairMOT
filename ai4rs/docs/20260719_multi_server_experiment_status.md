@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 05:16 CST。
+更新时间：2026-08-13 05:21 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,8 +19,8 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E28_COMPLETE/E32I700/TO_MATURE_E72 | e32训练中；e28 `52.639/60.040`、sum `112.679`仍为最新闭环点，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E8_COMPLETE/E12_EVALUATING/E13I50/TO_E72 | e12 checkpoint和5416/50检测完成，TrackEval运行中；训练已恢复e13且有限 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E28_COMPLETE/E32_EVALUATING/TO_MATURE_E72 | e32 checkpoint与677/677正式验证推理完成，等待异步TrackEval；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E12_COMPLETE/E13I250/TO_E72 | e12 `46.128/53.493`、sum `99.621`完整，较e8双升`3.901/6.066`；继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E16_COMPLETE/E17I200/TO_MATURE_E72 | e16 `48.584/56.750`、sum `105.334`完整，较e12双升`1.379/3.581`；继续e20，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E28_COMPLETE/E32_TRAINING/TO_MATURE_E72 | e28 `52.706/59.087`、sum `111.793`完整；e32训练中，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
@@ -34,6 +34,14 @@ warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72�
 - 99 GPU0/2与178 GPU0均正在e32训练；197 GPU4/5的e12已完成
   checkpoint与5416/50检测、TrackEval运行中并恢复e13。所有正式训练日志当前有限，未占用
   252 GPU2/3或178外部GPU1。
+
+## 2026-08-13 05:21 CST：197 e12闭环
+
+- 197 floor-25 WSD e12为cls HOTA/DetA/AssA `46.128/37.797/59.120`，det
+  `53.493/47.492/62.448`，sum `99.621`，pair mAP/AP50 `0.2384/0.4156`。
+  checkpoint、5416/50检测与339.7秒异步TrackEval完整，训练恢复e13i250。
+- 99 e32 checkpoint与677/677验证推理已经完成，等待异步TrackEval；178 e32和252 e17继续
+  训练，所有授权GPU边界不变。
 
 ## 2026-08-13 00:23 CST：197 e68成熟节点闭环
 
