@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 16:21 CST.
+Last updated: 2026-08-12 16:37 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -106,6 +106,18 @@ and all 642 floating checkpoint tensors are finite. This early WSD point is
 strictly below the endpoint target but is not a decoder rejection; training
 has resumed at e41 with stable LR `1.5e-4`, and continues through e44/e72.
 AutoDL is simultaneously healthy in e64 and remains the next closure.
+
+At 16:37 CST, AutoDL e64 is fully closed at cls HOTA/DetA/AssA
+`54.395/43.934/70.295` and det `62.339/54.482/73.780`, sum `116.734`.
+Pair mAP/AP50 is `0.3119/0.5146` and both-independent is
+`0.3486/0.5477`; detection and TrackEval close at 5,416/50 and 28/108/50
+with `async_done=1.0`. The 452,472,564-byte checkpoint SHA-256 is
+`786d721052aeef01e7655e7c97b339ed1697b1b47a5b07f978a83e9cfbe9851f`,
+and all 642 floating checkpoint tensors are finite. Relative to e60,
+cls/det/sum HOTA fall `0.179/0.048/0.227`; e56 -> e60 -> e64 therefore
+forms a repeated low-LR-tail retreat, not a single-node fluctuation. Continue
+the requested endpoint to e72, but retain this evidence for the prepared
+integral-preserving nonzero-floor cosine if both active e72 lines fail.
 
 At 13:41 CST, AutoDL e52 is fully closed at cls/det HOTA
 `54.853/62.489`, sum `117.342`, with cls DetA/AssA `44.653/70.155` and

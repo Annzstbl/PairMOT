@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 16:21 CST
+更新时间：2026-08-12 16:37 CST
 
 ## 当前研究原则
 
@@ -28,8 +28,14 @@
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
 | 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E41I500/E40_COMPLETE/STRICT_FAIL/TO_E44_E72` | e40同点cls/det `53.109/60.938`、sum `114.047`；DetA/AssA、AP、5416/50检测、28/108/50 TrackEval、checkpoint语义/哈希/有限性闭环。不以e40否决，继续e44/e72。 |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E64I250/E60_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E64_E72` | e60同点cls/det `54.574/62.387`、sum `116.961`完整闭环；当前正训练e64，数值有限，完成后立即闭环e64并继续e72。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E65I300/E64_COMPLETE/STRICT_FAIL/AUTO_FINALIZER_ACTIVE/TO_E72` | e64同点cls/det `54.395/62.339`、sum `116.734`完整闭环；较e60再降`0.179/0.048/0.227`，但仍继续要求的e72。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 16:37 CST：AutoDL e64完整闭环，尾部低LR回撤重复出现
+
+- e64同点cls HOTA/DetA/AssA `54.395/43.934/70.295`，det `62.339/54.482/73.780`，sum `116.734`；距目标`0.868/0.260/1.128`。
+- pair mAP/AP50 `0.3119/0.5146`，both-independent `0.3486/0.5477`；5416/50检测、28 CSV、108非空评测文件、50预测和`async_done=1.0`齐全。
+- checkpoint为452,472,564字节，SHA-256 `786d721052aeef01e7655e7c97b339ed1697b1b47a5b07f978a83e9cfbe9851f`，642个浮点tensor全有限。e56→e60→e64的HOTA与AP/DetA证据表明标准零floor cosine尾段持续退化；不提前终止，继续e72，同时保留非零floor后备的设计依据。
 
 ## 2026-08-12 16:21 CST：197 WSD e40完整闭环，不以早期节点否决
 
