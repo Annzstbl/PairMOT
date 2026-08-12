@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 07:00 CST
+更新时间：2026-08-12 08:05 CST
 
 ## 当前研究原则
 
@@ -25,7 +25,7 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E25I450/E24_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e24同点cls/det `52.115/60.061`、sum `112.176`；完整性全闭环。较warmup12同点升`0.265/1.062`，较原始父线为`-0.363/+1.290`、联合`+0.927`，继续e28及成熟节点。 |
+| AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `RUNNING/E29I900/E28_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72` | e28同点cls/det `52.385/60.607`、sum `112.992`；完整性全闭环。较warmup12同点升`0.411/0.889`、联合升`1.300`，较原始父线为`-0.256/+1.621`、联合`+1.365`，继续e32及成熟节点。 |
 | 178 动态单卡 | `0811_02 source warmup4 + cosine68` | `NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE` | `/data4` 日志最后为 2026-08-11 16:05:43；源配置审计确认遗漏 `optim_wrapper` peak LR 赋值，实际不等于声明的 peak×8/3，故其未成熟产物不参与目标比较。 |
 | 252 固定 GPU0/1 | `0810_09 final product-tangent standard WSD: warmup4 + stable56 + cosine12 fresh` | `NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE` | e36 `52.478/60.531`、sum `113.009` 完整闭环；正式日志最后为 16:05:22，双采样无增长，e40 未生成。 |
 | 99 动态双卡 | `0810_08 final product-tangent standard 12e warmup + 60e cosine peak×8/3 fresh` | `NO_PROGRESS/E71I150/E68_COMPLETE/CONTROL_UNREACHABLE` | e68 `54.387/62.298`、sum `116.685` 完整闭环；正式日志最后为 16:05:24，双采样无增长，e72 未生成。 |
@@ -54,6 +54,25 @@
 | 99 已释放 | `0806_07 ... stratified product-tangent ... fresh` | `STOPPED/E4I350/GOAL_ACHIEVED_NOT_REJECTED` | formal 五门槛通过并健康运行到 e4 iter350；因 252 e96 已严格达标而精确停止 PGID `2037143`，成员 `7→0`，不是以 e4 结果否决；全部 smoke/formal 产物保留，GPU2 外部作业未触碰。 |
 | 99 已释放 | `0804_17 ... quotient-anisotropy product-tangent ... fresh` | `STOPPED/E24/MATURE_STRICT_FAIL` | e24 完整 `49.794/57.460`，虽较 e20 双升，但低直接 product-tangent 父线 e24 `2.684/1.311`，距严格三门槛 `4.643/4.933/9.076`；六个完整节点后精确停止，产物保留。 |
 | 197 动态 GPU 0,1 | `0804_09 ... norm-preserving Householder product-tangent ... fresh` | `STOPPED/HOST_CPU_THROTTLED/MIGRATED_TO_178` | e8 完整 `42.596/47.448`；CPU 降频后精确停止，e8 已由 178 的 `0806_03` 以同模型、同全局 batch 恢复到 e12。 |
+
+## 2026-08-12 08:05 CST：AutoDL e28完整闭环，标准短warmup保持联合成熟优势
+
+- e28同一checkpoint的cls HOTA/DetA/AssA为`52.385/43.178/66.550`，det为
+  `60.607/53.180/71.563`，sum `112.992`；cls/det MOTA分别`44.985/59.198`，
+  IDF1分别`60.609/70.704`。pair mAP/AP50为`0.304872/0.510172`，
+  both-independent为`0.344541/0.550450`。5416条、50序列检测与50/50轨迹完整，
+  28个CSV、108个非空评测文件、`track/async_done=1.0`，TrackEval自然耗时168.1秒。
+- `epoch_28.pth`为402,998,260字节，SHA-256
+  `2fcf004ca507577a6f577227613b21aef6b1072f65c9d4bbb0a51bef5b8ba2af`，meta为
+  `epoch=28/iter=29064`；model/EMA为711/712 states，递归审计到的2,776个浮点
+  checkpoint tensor全部有限。
+- 相对`0810_08`标准warmup12+cosine同点，cls/det HOTA提高`0.411/0.889`、联合
+  提高`1.300`；cls DetA下降`0.694`但AssA提高`3.015`，det DetA/AssA提高
+  `1.062/0.671`。pair mAP提高`0.008708`而AP50下降`0.007289`，both-independent
+  mAP提高`0.005615`而AP50下降`0.012918`。相对原始product-tangent父线e28
+  `52.641/58.986`为`-0.256/+1.621`、联合高`1.365`。训练已自然恢复到e29 iter900；
+  GPU0约占31.4 GiB，数据盘仍余约11 GiB，明确错误签名与非有限训练数值扫描均为0，
+  继续e32及后续成熟节点。
 
 ## 2026-08-12 07:00 CST：AutoDL e24完整闭环，标准短warmup在成熟节点保持联合优势
 
