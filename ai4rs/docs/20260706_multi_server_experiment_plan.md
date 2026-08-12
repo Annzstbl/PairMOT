@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 23:14 CST.
+Last updated: 2026-08-12 23:43 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -62,6 +62,21 @@ are complete. Compared with e60, HOTA improves `0.350/0.208` and the sum
 improves `0.558`, with AP and DetA/AssA moving consistently. The node remains
 short of the final target by `0.805/0.499/1.304`, so continue e68/e72 rather
 than rejecting the schedule at its first decay response.
+
+At 23:43 CST, the user adds fixed 252 GPU0/1. Both cards are idle and no
+training process exists, so start `0812_05`, the 2x4 realization of the
+already active standard warmup4+stable44+cosine24 schedule. Global batch 8,
+model, data, loss, EMA, optimizer groups and inference remain unchanged. Use
+an isolated local clone of the existing 252 WSD checkout and transfer only the
+new config and launcher. Per the reduced-validation policy, omit a separate
+smoke and hashes; formal e1i100 proves two-rank GPU0/1 execution with finite
+total, DN, encoder losses and gradient (`21.3921/120.7811`).
+
+The fresh schedules also close e12: 99 floor-cosine is `47.454/54.307`, sum
+`101.761`, with DetA/AssA `39.416/59.620` and `48.608/62.752`; 178 smooth-WSD
+is `51.141/56.894`, sum `108.035`, with `43.386/62.301` and
+`50.576/66.552`. Keep both active: 178 leads at e12, while 99's nonzero floor
+cannot be judged before the late decay window.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established

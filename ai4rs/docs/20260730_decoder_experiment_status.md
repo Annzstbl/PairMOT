@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-12 23:14 CST
+更新时间：2026-08-12 23:43 CST
 
 ## 当前研究原则
 
@@ -27,11 +27,18 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72` | e4 `32.411/39.594`完整闭环；e8训练完成，继续成熟节点，不用e4/e8停线。GPU1保持空闲。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E8_TRAIN_COMPLETE/E4_COMPLETE/TO_E12_E72` | e4 `35.363/42.179`完整闭环；e8训练完成，继续成熟节点，不用e4/e8停线。GPU1外部任务未触碰。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E12_COMPLETE/TO_MATURE_E72` | e12 `47.454/54.307`、sum `101.761`，AP、DetA/AssA和TrackEval完整；非零floor的核心作用在尾段，继续成熟节点。GPU1保持空闲。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E12_COMPLETE/TO_MATURE_E72` | e12 `51.141/56.894`、sum `108.035`，同点明显领先99；继续中后期与e72。GPU1外部任务未触碰。 |
 | 197 GPU4/5 | `0812_01 standard WSD warmup4 + stable56 + cosine12 exact e36→e72 resume v2` | `RUNNING/E64_COMPLETE/STRICT_FAIL/TO_E68_E72` | e64 `54.458/62.100`、sum `116.558`，较e60提升`0.558`；AP、DetA/AssA、5416/50检测和TrackEval同步改善。继续e68/e72。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E1I100/TO_E12_E72` | 新增固定GPU0/1资源；复现178成熟调度但采用双卡2x4，全局batch仍为8。无独立smoke，formal e1i100的总损失、DN、encoder与梯度有限。 |
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-12 23:43 CST：新增252 GPU0/1并启动smooth-WSD复现线
+
+- 用户补充252固定GPU0/1；实时确认两卡均`1 MiB/0%`且无其他训练进程。`0812_05`复现178的标准`warmup4+stable44+cosine24`，仅把物理实现改为2x4，全局batch、模型、loss、EMA、优化器组和推理不变。
+- 不运行独立smoke或SHA检查；基于252既有WSD checkout做本机隔离克隆，只同步新增配置/launcher。formal固定GPU0/1到e1i100：LR `1e-7`、loss/grad `21.3921/120.7811`，总、DN和encoder项有限，双卡约19.2 GiB，登记RUNNING。
+- 99 e12为cls/det `47.454/54.307`、DetA/AssA `39.416/59.620`与`48.608/62.752`；178 e12为`51.141/56.894`、`43.386/62.301`与`50.576/66.552`。178当前明显领先，但两线均继续，99的floor需尾段验证。
 
 ## 2026-08-12 23:14 CST：197 WSD e64首个退火成熟节点显著提升
 
