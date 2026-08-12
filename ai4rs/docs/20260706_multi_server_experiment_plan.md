@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-12 21:02 CST.
+Last updated: 2026-08-12 22:06 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -43,6 +43,16 @@ Do not stop at this plateau because WSD decay begins after e60; continue e60,
 e64 and e72. The 99/178 fresh schedules also close e4 at
 `32.411/39.594` and `35.363/42.179`; both continue through e12 and mature
 nodes because e4 is diagnostic only.
+
+At 22:06 CST, the 197 WSD line closes its stable-segment endpoint e60 at
+cls HOTA/DetA/AssA `54.108/44.464/67.776` and det
+`61.892/53.968/73.237`, sum `116.000`. Pair mAP/AP50 is `0.3110/0.5243`
+and both-independent is `0.3499/0.5614`; 5,416/50 detection, 28 CSV,
+108 nonempty files, 50 predictions and async completion are present. The sum
+recovers `0.193` from e56, driven mainly by cls AssA, but remains `1.862`
+below the final target. Continue e64/e68/e72 because these are the actual
+cosine-decay response nodes. Both 99 and 178 complete e8 training and remain
+active; e4/e8 are not rejection points.
 
 At 01:15 CST on August 12, local-server failures move the active e72 objective
 to AutoDL instance `c12c46bdd8-77ce297d`, GPU0, with the already established
