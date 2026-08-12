@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-12 09:55 CST。
+更新时间：2026-08-12 10:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -22,7 +22,20 @@ batch 8。99/178/252 只保留故障前状态，不再登记为当前运行资�
 | 197 | 无本轮实验 | EXCLUDED_BY_USER/GPU_FREE/NO_TEST_PROCESS | SSH和`/data4`可用，但py310 `import torch` 60秒未完成；诊断PGID已终止且6卡归零，不再部署WSD | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0810_09 product-tangent standard WSD warmup4 + stable56 + cosine12`（固定 GPU0/1） | NO_PROGRESS/E39I850/E36_COMPLETE/CONTROL_UNREACHABLE | `/data4` 日志最后16:05:22，双采样无增长；e40未生成 | `/data4/litianhao/PairMmot/workdir_252` |
 | 178 | `0811_02 source warmup4 + cosine68` | NO_PROGRESS/E2I100/INVALID_DECLARED_PEAK/CONTROL_UNREACHABLE | 源配置遗漏peak LR赋值，未成熟结果不参与比较 | `/data4/litianhao/PairMmot/workdir_178` |
-| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E37I550/E36_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e36 `52.655/61.636`、sum `114.291`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e40及成熟节点 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+| AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | RUNNING/E41/E40_COMPLETE/AUTO_FINALIZER_ACTIVE/TO_E72 | e40 `54.506/61.996`、sum `116.502`；checkpoint、5416/50检测、50/50轨迹、TrackEval与AP完整闭环；继续e44及成熟节点 | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
+
+## 2026-08-12 10:50 CST：AutoDL e40完整闭环，cls跃升且标准短warmup继续领先
+
+- e40同一checkpoint的cls HOTA/DetA/AssA为`54.506/44.894/68.723`，det为
+  `61.996/54.467/73.065`，sum `116.502`；pair mAP/AP50为`0.3153/0.5269`，
+  both-independent为`0.3543/0.5643`。5416条、50序列检测与50/50轨迹完整，
+  28个CSV、108个非空评测文件，`track/async_done=1.0`，TrackEval自然耗时166.3秒。
+- 419,474,932-byte checkpoint SHA-256为
+  `ebe35f2c4634049e64f08f864daa2d896104aba9765aa6ac8fbe4c770f22ccf3`，meta为
+  `epoch=40/iter=41520`；model/EMA为711/712 states，全部2,776个浮点checkpoint
+  tensor有限。
+- 相对e36，cls/det HOTA升`1.851/0.360`、联合升`2.211`，四项AP均升；相对
+  warmup12同点为`-0.035/+0.285`、联合高`0.250`。训练已自然恢复到e41，继续e44。
 
 ## 2026-08-12 09:55 CST：AutoDL e36完整闭环，e32回撤恢复且联合优势保持
 
