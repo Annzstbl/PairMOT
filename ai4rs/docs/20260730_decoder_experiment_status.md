@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 07:00 CST
+更新时间：2026-08-13 07:14 CST
 
 ## 当前研究原则
 
@@ -17,20 +17,18 @@
   checkpoint 同时达到 cls `>=55.263`、det `>=62.599`、sum `>=117.862`；模型、EMA、
   loss、数据、全局 batch 和推理保持不变。
 - 不再进行 class-specific reweight、long-tail reweight 或大规模 residual-scale 扫描；优先验证有明确时序归纳偏置的模型结构。
-- 本地服务器故障后，当前目标迁移到 AutoDL 实例 `c12c46bdd8-77ce297d` 的单张 RTX 5090；
-  使用物理 `1x8` 保持全局 batch 8，不运行独立训练 smoke，formal 本身承担动态验证。
-- 99/178/252 保留故障前只读状态但不再作为当前计算资源；用户于2026-08-12 13:08重新
-  开放197双卡，优先GPU4/5。warmup12+cosine独立对照失败后，197承接共享252的标准
-  WSD e36完整状态并续训到e72，与AutoDL的fresh warmup4+cosine形成正交成熟调度对照。
+- AutoDL `0811_02` 已完成并由 finalizer 关机，避免收费空转。当前恢复使用本地四台资源：
+  99 双卡、197 双卡、178 单卡，以及最慢的 252 固定 GPU0/1；不运行独立训练 smoke，
+  以 formal 日志和计划节点闭环作为动态验证。
 
 ## 当前实验状态
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E17/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E16_COMPLETE/E20I100/TO_E72` | e16 `48.474/56.846`、sum `105.320`，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |

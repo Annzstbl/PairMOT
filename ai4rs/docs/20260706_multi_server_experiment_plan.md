@@ -148,6 +148,13 @@ e12 next; keep AutoDL shut down to avoid paid idle time.
 
 Only server 252 has fixed GPU indices: GPU0/1. Servers 99 and 178 have count-only caps of 2 and 1 GPUs respectively; their indices may be selected from currently free cards without preempting external work. Server 252 is the slowest lane and is reserved for one mature or confirmation trajectory at a time. At 13:08 CST on August 12, the user re-enabled server 197 for two GPUs with preference for GPU4/5; if those are unavailable, select another genuinely idle pair without preempting external work.
 
+At 07:14 CST on August 13, the four restored local formal lines are live and
+finite: 99 floor-cosine is at e38i350 on GPU0/2, 178 smooth-WSD is at e37i950
+on GPU0, 197 floor-25 WSD is at e20i100 on GPU4/5, and the slow 252 replication
+is at e22i1000 on fixed GPU0/1. GPU1 on 99, GPU1 external work on 178, and
+GPU2/3 on 252 remain untouched. Continue the existing 252 line rather than
+launching a duplicate; collect 197/e20 first, then 252/e24 and 99/178/e40.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains

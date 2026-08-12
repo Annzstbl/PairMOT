@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 07:00 CST。
+更新时间：2026-08-13 07:14 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -13,17 +13,17 @@
 
 ## 当前资源总览
 
-本地服务器故障后，当前目标迁移到 AutoDL 单张 RTX 5090 GPU0，以物理 `1x8` 保持全局
-batch 8。99/178/252 只保留故障前状态。用户于13:08重新开放197双卡，优先GPU4/5；
-warmup12+cosine对照失败后，197正在续跑共享252的标准WSD e36→e72。
+AutoDL 正式线已经完整结束并自动关机，避免收费空转。当前恢复使用四台本地资源：99 双卡、
+197 双卡优先 GPU4/5、178 单卡，以及最慢的 252 固定 GPU0/1。所有现线保持模型与全局
+batch 8 不变，只比较成熟标准学习率调度。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72 | e36 `53.630/61.153`、sum `114.783`完整，较e32双升`0.291/0.637`且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E17/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E21I350/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72 | e36 `53.630/61.153`、sum `114.783`完整，较e32双升`0.291/0.637`且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E16_COMPLETE/E20I100/TO_E72 | e16 `48.474/56.846`、sum `105.320`完整，较e12双升`2.346/3.353`；pair mAP/AP50 `0.2635/0.4566`，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E36_COMPLETE/E37I300/TO_MATURE_E72 | e36 `53.708/60.559`、sum `114.267`完整；cls/AP较99同点高而det/sum低`0.594/0.516`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72 | e36 `53.708/60.559`、sum `114.267`完整；cls/AP较99同点高而det/sum低`0.594/0.516`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
