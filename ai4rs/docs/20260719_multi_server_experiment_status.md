@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 19:35 CST。
+更新时间：2026-08-13 21:06 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.175/62.519=117.694`，距目标`0.088/0.080/0.168`；checkpoint、检测、TrackEval与资源释放完整 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E60_COMPLETE/CLOSEOUT_TO_E72 | e60 `54.954/61.966=116.920`，较e56双升；只收尾e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E56_COMPLETE/CLOSEOUT_TO_E72 | e56 `55.587/62.392=117.979`；cls/sum达标、det差`0.207`，只收尾后续节点 | `/data4/litianhao/PairMmot/workdir_252` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E64_COMPLETE/CLOSEOUT_TO_E72 | e64 `55.480/62.190=117.670`；cls达标，det/sum未达，只收尾e68/e72 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E60_COMPLETE/CLOSEOUT_TO_E72 | e60 `55.415/62.405=117.820`；cls达标，det/sum差`0.194/0.042`，只收尾e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
 | 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | STOPPED/E2/USER_CLOSEOUT | 用户要求停止新实验；精确停止并释放GPU0/2，不作为结果，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
@@ -109,6 +109,12 @@ batch 8 不变，只比较成熟标准学习率调度。
 - 197/e60 is `54.954/61.966=116.920`; cls/det DetA/AssA are `45.176/68.986` and `53.889/73.614`, pair mAP/AP50 is `0.3162/0.5320`. It improves `0.441/0.207` over e56; 51 detection files and 28 CSV/108 TrackEval files are complete.
 - Fixed 252/e56 is `55.587/62.392=117.979`; cls/det DetA/AssA are `46.075/68.760` and `54.452/73.792`, pair mAP/AP50 is `0.3225/0.5340`. Classification and sum pass, while the detection gap shrinks from `0.259` to `0.207`; artifact counts are complete.
 - Per user decision, derive no new runs. Continue only e64/e68/e72 and final closure for these two lines.
+
+## 2026-08-13 21:06 CST: 197/e64 and 252/e60 closeout nodes
+
+- 197/e64 is `55.480/62.190=117.670`; cls/det DetA/AssA are `45.495/69.724` and `54.013/73.954`, pair mAP/AP50 is `0.3181/0.5352`. Classification passes, detection and sum do not; artifact counts are complete.
+- Fixed 252/e60 is `55.415/62.405=117.820`; cls/det DetA/AssA are `45.882/68.734` and `54.474/73.832`, pair mAP/AP50 is `0.3234/0.5343`. It misses detection/sum by `0.194/0.042`; 51 detection files and 28 CSV/108 TrackEval files are complete after a normal 19-minute shared-storage evaluation.
+- Continue only the predetermined e68/e72 endpoints; launch nothing new.
 - The 458,360,244-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 264.6-second evaluation are complete. Finite training continues in e69 on GPU0 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
