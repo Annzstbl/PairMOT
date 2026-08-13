@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 12:07 CST。
+更新时间：2026-08-13 12:12 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -21,11 +21,17 @@ batch 8 不变，只比较成熟标准学习率调度。
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E52_COMPLETE/TO_MATURE_E72 | e52 `55.178/62.080`、sum `117.258`完整，较e48双升`0.314/0.310`；距目标sum `0.604`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E32_COMPLETE/TO_E72 | e32 `51.923/59.132`、sum `111.055`完整，较e28双升`0.813/0.326`；e32成为当前最佳，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E32_COMPLETE/E36_EVALUATING/TO_MATURE_E72 | e36 checkpoint已产生，TrackEval运行且训练恢复e37；GPU0/1各约21.4 GiB，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E36_COMPLETE/TO_MATURE_E72 | e36 `52.584/60.302`、sum `112.886`完整，较e32双升`0.074/0.129`；继续到e48后的退火窗口，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E52_COMPLETE/DECAY_EFFECT_POSITIVE | e52 `55.252/61.783`、sum `117.035`完整，较e48双升`0.424/0.205`；标准退火有效，继续e56/e60 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
+
+## 2026-08-13 12:12 CST: fixed-252 smooth-WSD e36 complete
+
+- Fixed-252 `0812_05` e36 cls HOTA/DetA/AssA is `52.584/44.219/64.082`; det is `60.302/52.201/72.158`, sum `112.886`, and pair mAP/AP50 is `0.2949/0.5004`.
+- Relative to e32, cls/det HOTA rise by `0.074/0.129`, sum by `0.203`. The 414,020,342-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 379.6-second asynchronous evaluation are complete; finite formal training resumed at e37 on fixed GPU0/1.
+- Cosine decay begins only after e48, so retain the line through its actual decay window despite the smaller pre-decay increment.
 
 ## 2026-08-13 12:07 CST: fixed-252 GPU0/1 resource reconfirmed
 

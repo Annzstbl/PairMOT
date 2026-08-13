@@ -4,12 +4,21 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 12:07 CST.
+Last updated: 2026-08-13 12:12 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 12:12 CST on August 13, fixed-252 smooth-WSD closes e36 at cls/det HOTA
+`52.584/60.302` (sum `112.886`), DetA/AssA `44.219/64.082` and
+`52.201/72.158`, with pair mAP/AP50 `0.2949/0.5004`. Relative to e32,
+both HOTA values rise by `0.074/0.129`. The 414,020,342-byte checkpoint,
+5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and
+379.6-second asynchronous closure are complete; training resumes at e37 on
+fixed GPU0/1. Decay begins only after e48, so retain this slower line through
+its actual decay nodes rather than selecting on the smaller e32-e36 gain.
 
 At 12:07 CST on August 13, the user reconfirms the slowest 252 host as an
 added dual-GPU resource fixed to GPU0/1. It is already correctly occupied by
