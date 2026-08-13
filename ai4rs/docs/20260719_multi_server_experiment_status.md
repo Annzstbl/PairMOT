@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 18:32 CST。
+更新时间：2026-08-13 18:52 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -24,6 +24,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `55.344/61.928`、sum `117.272`完整，较e44双升`0.265/0.236`；cls过目标`0.081`，继续退火，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | RUNNING/FORMAL_ITER50_PASSED | fresh v2已越过e1i900，正式进程、GPU与有限日志正常；GPU1外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 178 | `0813_03 WSD warmup4+stable44+cosine24 floor25`（GPU0） | RUNNING/FORMAL_ITER50_PASSED | fresh v2已越过e1i900，正式进程、GPU与有限日志正常；GPU1外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -86,6 +88,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 - 99 `0812_03` closes at `55.175/62.519=117.694`; cls/det DetA/AssA are `45.525/68.888` and `54.441/74.197`, pair mAP/AP50 is `0.3124/0.5307`. It misses the three strict thresholds by only `0.088/0.080/0.168`.
 - 178 `0812_04` closes at `55.574/62.034=117.608`; cls/det DetA/AssA are `45.744/70.320` and `54.501/72.986`, pair mAP/AP50 is `0.3171/0.5321`. Classification passes, while detection and sum miss by `0.565/0.254`.
 - Both have finite 2,915-tensor e72 checkpoints, 51 detection files, 28 CSV/108 TrackEval files, no live formal/evaluation process, and released assigned GPUs. Continue 197/252; use 99's near-miss as the strongest mature nonzero-tail evidence if another schedule is required.
+
+## 2026-08-13 18:52 CST: next mature nonzero-tail schedules running
+
+- 99 `0813_02` raises only the standard cosine floor from 50% to 65%, reducing peak to `1.65232358e-4` to preserve the nominal LR integral. 178 `0813_03` adds only a 25% floor to the standard WSD cosine tail, reducing peak to `1.57377049e-4`.
+- The first launchers exited before training at `cd` because the recorded repository roots had one extra `ai4rs` component; their empty workdirs remain audit-only. Corrected fresh-v2 runs have passed e1i900 on 99 GPU0/2 and 178 GPU0 with live formal processes, expected memory, finite total/DN/encoder losses and grad norms, and no traceback/OOM. Per user direction, no separate smoke was run.
 - The 458,360,244-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 264.6-second evaluation are complete. Finite training continues in e69 on GPU0 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete

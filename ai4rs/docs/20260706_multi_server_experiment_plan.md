@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 18:32 CST.
+Last updated: 2026-08-13 18:52 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -5549,3 +5549,5 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 保留 197 的 25% floor WSD 和固定 252 的标准 WSD 到 e72。若两者仍失败，下一条只采用由
   99 近失结果支持的成熟非零尾部调度；模型、loss、EMA、全局 batch、数据和推理保持不变，
   不引入 class-aware 或 reweight。
+- 已在释放的99 GPU0/2启动`0813_02` cosine floor65，在178 GPU0启动`0813_03` WSD floor25；
+  两者都保持名义LR积分并通过正式iter50门槛，不运行独立smoke。与197/252并行推进成熟节点到e72。
