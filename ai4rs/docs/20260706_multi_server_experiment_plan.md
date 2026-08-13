@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 17:12 CST.
+Last updated: 2026-08-13 18:32 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -5540,3 +5540,12 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
 - 若 e16 仍在全组指标上被 178 局部延迟 LR 或直接父线支配，则完整审计后精确释放 252；
   252 是最慢资源，释放后只用于成熟路线复验，不用于无证据的新结构搜索。近期优先顺序仍为
   197 e36 → 178 e12/e16 → 99 EMA e4/e8/e12，所有 e4/e8 只作诊断。
+
+## 2026-08-13 18:32 CST：成熟调度 e72 终点决策
+
+- 99 `0812_03` 完成于 `55.175/62.519=117.694`，严格目标仅差 `0.088/0.080/0.168`；178
+  `0812_04` 完成于 `55.574/62.034=117.608`，仅分类达标。两条均完成 e72 checkpoint、检测、
+  TrackEval、AP/DetA/AssA、有限性、进程退出与分配 GPU 释放闭环。
+- 保留 197 的 25% floor WSD 和固定 252 的标准 WSD 到 e72。若两者仍失败，下一条只采用由
+  99 近失结果支持的成熟非零尾部调度；模型、loss、EMA、全局 batch、数据和推理保持不变，
+  不引入 class-aware 或 reweight。

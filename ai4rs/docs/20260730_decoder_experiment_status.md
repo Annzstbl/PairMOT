@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 17:12 CST
+更新时间：2026-08-13 18:32 CST
 
 ## 当前研究原则
 
@@ -25,8 +25,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E68_COMPLETE/E64_BEST/TO_E72` | e68 `54.946/62.240`、sum `117.186`，较e64回落`0.336/0.063`；DetA/AssA为`45.607/68.196`与`54.464/73.523`，pair mAP/AP50 `0.3120/0.5299`。继续e72终判。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E68_COMPLETE/E60_BEST/TO_E72` | e68 `55.557/61.850`、sum `117.407`，较e64为`+0.054/-0.147`；DetA/AssA为`45.932/69.940`与`54.507/72.548`，pair mAP/AP50 `0.3174/0.5344`。cls过目标`0.294`，det/sum差`0.749/0.455`，继续e72终判。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.175/62.519`、sum `117.694`，距严格目标`0.088/0.080/0.168`；DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50 `0.3124/0.5307`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0/2已释放。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.574/62.034`、sum `117.608`；cls过目标`0.311`，det/sum差`0.565/0.254`。DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50 `0.3171/0.5321`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0已释放。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E52_COMPLETE/TO_E72` | e52 `54.327/61.639`、sum `115.966`；DetA/AssA为`45.524/66.526`与`53.738/73.072`，pair mAP/AP50 `0.3121/0.5249`。较e48为`-0.128/+0.272`，继续到e60后floor尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `55.344/61.928`、sum `117.272`，较e44双升`0.265/0.236`；DetA/AssA为`45.955/68.392`与`54.170/73.138`，pair mAP/AP50 `0.3179/0.5315`。cls过目标`0.081`，det/sum差`0.671/0.590`，固定GPU0/1继续退火。 |
 
@@ -86,6 +86,12 @@
 ## 2026-08-13 17:12 CST：178 standard WSD e68完整闭环
 
 - 178 `0812_04` e68同一checkpoint cls HOTA/DetA/AssA为`55.557/45.932/69.940`，det为`61.850/54.507/72.548`，sum `117.407`，pair mAP/AP50为`0.3174/0.5344`。相对e64为`+0.054/-0.147`；cls超过目标`0.294`，det与sum仍差`0.749/0.455`。e60仍是本线局部最强点，但目标限定e72，继续终判。
+
+## 2026-08-13 18:32 CST：99/178 e72严格终判
+
+- 99 `0812_03` e72同点为`55.175/62.519=117.694`，cls/det DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50为`0.3124/0.5307`。三项距目标仅`0.088/0.080/0.168`但仍严格失败。
+- 178 `0812_04` e72同点为`55.574/62.034=117.608`，cls/det DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50为`0.3171/0.5321`。cls达标，det和sum未达标。
+- 两线e72 checkpoint均为2,915个有限张量；51检测文件、28 CSV/108 TrackEval文件齐全，训练与异步评测进程退出，分配GPU释放。继续197/252正式线；99的50%非零floor终点已将缺口压到`0.168`，是后续成熟尾部调度的首要证据。
 - `epoch_68.pth`为`458,360,244` bytes，检测`5,416/50`、51文件，TrackEval 28 CSV/108文件，异步评测264.6秒完整。训练已在GPU0继续e69，正式日志数值有限且无traceback/OOM/NCCL异常。
 
 ## 2026-08-13 12:22 CST：197 floor-25 WSD e36完整闭环
