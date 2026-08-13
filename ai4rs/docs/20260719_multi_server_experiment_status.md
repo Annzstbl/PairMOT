@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 10:50 CST。
+更新时间：2026-08-13 11:11 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `54.864/61.770`、sum `116.634`完整，较e44 sum `+0.077`；距目标sum `1.228`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E28_COMPLETE/TO_E72 | e28 `51.110/58.806`、sum `109.916`完整，较e24为`-0.286/+0.252`；当前最佳仍为e24，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E32_COMPLETE/TO_E72 | e32 `51.923/59.132`、sum `111.055`完整，较e28双升`0.813/0.326`；e32成为当前最佳，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E32_COMPLETE/TO_MATURE_E72 | e32 `52.510/60.173`、sum `112.683`完整，较e28双升`1.240/0.924`；pair `0.2946/0.5007`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52 | e48 `54.828/61.578`、sum `116.406`完整，较e44双升`0.459/0.233`；e52首个直接反映退火 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -137,6 +137,15 @@ batch 8 不变，只比较成熟标准学习率调度。
   `0.2946/0.5007`. It gains `1.240/0.924` over e28; checkpoint, detection and 395.8-second TrackEval close.
 - The WSD schedule begins decay only after e48, so e52 is its first direct decay-effect checkpoint. Continue
   all lines without early selection; fixed-252 remains GPU0/1 only.
+
+## 2026-08-13 11:11 CST: 197 e32 complete
+
+- 197 e32 cls HOTA/DetA/AssA is `51.923/42.661/65.542`; det is
+  `59.132/51.197/70.677`, sum `111.055`, and pair mAP/AP50 is `0.2837/0.4827`.
+- It improves e28 by `0.813/0.326`, sum `1.139`, confirming e28 was a fluctuation. The 408,378,855-byte
+  checkpoint, all 50 detection sequences, 108 TrackEval files and 344.3-second async completion are present.
+- Fixed-252 leads the same e32 by `0.587/1.041/1.628` in cls/det/sum, but neither comparison reflects the
+  scheduled late intervention. Keep 197 through its post-e60 floor and 252 through post-e48 decay.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

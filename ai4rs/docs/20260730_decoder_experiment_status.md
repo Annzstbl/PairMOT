@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 10:50 CST
+更新时间：2026-08-13 11:11 CST
 
 ## 当前研究原则
 
@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `54.864/61.770`、sum `116.634`，较e44为`-0.038/+0.115`、sum `+0.077`；DetA/AssA为`45.826/67.524`与`54.139/72.882`，pair mAP/AP50 `0.3113/0.5288`，距目标sum `1.228`。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52` | e48 `54.828/61.578`、sum `116.406`，较e44双升`0.459/0.233`；DetA/AssA为`45.461/68.582`与`54.056/72.578`，pair mAP/AP50 `0.3147/0.5285`。e52是首个含4轮真实退火的节点。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E28_COMPLETE/TO_E72` | e28 `51.110/58.806`、sum `109.916`；较e24为`-0.286/+0.252`、sum `-0.034`，DetA/AssA为`42.258/63.856`与`50.669/70.675`，pair mAP/AP50 `0.2784/0.4761`。当前最佳仍为e24，恒定LR段的单点波动不作早停，继续到e60后floor尾段。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E32_COMPLETE/TO_E72` | e32 `51.923/59.132`、sum `111.055`，较e28双升`0.813/0.326`；DetA/AssA为`42.661/65.542`与`51.197/70.677`，pair mAP/AP50 `0.2837/0.4827`。确认e28仅为波动，继续到e60后floor尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E32_COMPLETE/TO_MATURE_E72` | e32 `52.510/60.173`、sum `112.683`，较e28双升`1.240/0.924`；DetA/AssA为`44.649/63.174`与`52.186/71.833`，pair mAP/AP50 `0.2946/0.5007`。固定GPU0/1，继续到e48后退火窗口。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -161,6 +161,15 @@
   detection and 395.8-second TrackEval are complete. Continue the slow confirmation line.
 - WSD remains stable through e48; e52 is the first scheduled checkpoint containing four epochs of cosine
   decay. Retain 99 and 178 to that direct comparison, and do not infer decay quality from the e48 boundary.
+
+## 2026-08-13 11:11 CST: 197 floor-25 WSD e32 complete
+
+- 197 e32 cls HOTA/DetA/AssA is `51.923/42.661/65.542`; det is
+  `59.132/51.197/70.677`, sum `111.055`, and pair mAP/AP50 is `0.2837/0.4827`.
+- Relative to e28, cls/det HOTA rise `0.813/0.326`, sum `1.139`; e32 becomes the unique best evaluated
+  checkpoint. The 408,378,855-byte checkpoint, 51-file detection and 108-file, 344.3-second TrackEval close.
+- Versus fixed-252 e32, 197 trails cls/det/sum by `0.587/1.041/1.628`. Both remain pre-intervention seed
+  trajectories: 197 floor acts only after e60 and 252 WSD decay after e48, so retain both toward e72.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 

@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 10:50 CST.
+Last updated: 2026-08-13 11:11 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -222,6 +222,16 @@ first checkpoint containing four epochs of WSD cosine decay. Fixed-252 e32
 also closes at `52.510/60.173`, sum `112.683`, pair `0.2946/0.5007`, gaining
 `2.164` in sum since e28. Its 408,522,166-byte checkpoint, detection and
 395.8-second TrackEval are complete; keep fixed GPU0/1 toward the same decay window.
+
+At 11:11 CST, 197 floor-25 WSD e32 closes at `51.923/59.132`, sum `111.055`,
+with DetA/AssA `42.661/65.542` and `51.197/70.677`, pair mAP/AP50
+`0.2837/0.4827`. It gains `0.813/0.326` over e28 and becomes the line's
+unique best evaluated checkpoint, proving the e28 sum dip was a fluctuation.
+The 408,378,855-byte checkpoint, 50-sequence detection and 344.3-second,
+108-file TrackEval are complete. Fixed-252 leads this same e32 by `1.628` in
+sum, but both are still before their scheduled late interventions; keep 197
+to post-e60 floor evidence and fixed-252 to post-e48 decay. The next decisive
+near-term closure remains 99/178 e52.
 
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
