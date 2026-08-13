@@ -4,12 +4,24 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 15:17 CST.
+Last updated: 2026-08-13 15:57 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 15:57 CST on August 13, both leading lines close e64. The 99 floor-cosine
+line reaches cls/det HOTA `55.282/62.303` (sum `117.585`), DetA/AssA
+`45.881/68.496` and `54.435/73.729`, and pair mAP/AP50 `0.3115/0.5289`;
+it rises `0.220/0.192` from e60, clears cls by `0.019`, and is short on
+det/sum by `0.296/0.277`. The 178 WSD line scores `55.503/61.997`
+(sum `117.500`), DetA/AssA `45.932/69.572` and `54.480/72.926`, and pair
+mAP/AP50 `0.3183/0.5364`; it falls `0.304/0.293` from its local-best e60.
+Both checkpoints, detection exports, 28 CSV/108 TrackEval files and roughly
+301-second evaluations are complete, with finite training continuing in e65.
+Retain both to e68/e72; neither the e64 dip nor the e60 local peak replaces
+the required same e72 checkpoint.
 
 At 15:17 CST on August 13, fixed-252 closes e44 at cls/det HOTA
 `55.079/61.692` (sum `116.771`), DetA/AssA `46.021/67.586` and
