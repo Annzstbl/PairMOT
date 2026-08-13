@@ -174,6 +174,15 @@ association, both DetA and AP are lower. Preserve both replications through
 post-e48 decay nodes. The 99 and 178 e40 checkpoints have also landed and are
 the next evaluation closures.
 
+At 08:19 CST, 99 floor-cosine e40 closes at `54.482/61.506`, sum `115.988`,
+with cls DetA/AssA `45.585/66.825`, det `53.885/72.709`, and pair mAP/AP50
+`0.3101/0.5251`. The 178 smooth-WSD e40 point is `54.237/61.232`, sum
+`115.469`, with cls `45.062/67.608`, det `53.711/72.242`, and pair
+`0.3088/0.5242`. Both checkpoints, 50-sequence detections, 108 TrackEval
+files and async completions are present. Their e36-to-e40 sum gains are almost
+identical (`1.205/1.202`); 99 leads the e40 sum by `0.519`, while 178 retains
+higher cls AssA. Continue both into the actual low-LR/decay tails.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains

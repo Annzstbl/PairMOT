@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 08:03 CST
+更新时间：2026-08-13 08:19 CST
 
 ## 当前研究原则
 
@@ -25,8 +25,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E40_COMPLETE/TO_MATURE_E72` | e40 `54.482/61.506`、sum `115.988`，较e36双升`0.852/0.353`；DetA/AssA为`45.585/66.825`与`53.885/72.709`，pair mAP/AP50 `0.3101/0.5251`，继续floor余弦成熟尾段。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E40_COMPLETE/TO_MATURE_E72` | e40 `54.237/61.232`、sum `115.469`，较e36双升`0.529/0.673`；DetA/AssA为`45.062/67.608`与`53.711/72.242`，pair mAP/AP50 `0.3088/0.5242`，继续真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E20_COMPLETE/E21I400/TO_E72` | e20 `50.549/57.962`、sum `108.511`，较e16双升`2.075/1.116`；DetA/AssA为`42.128/62.547`与`50.517/68.936`，pair mAP/AP50 `0.2773/0.4765`，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E24_COMPLETE/TO_MATURE_E72` | e24 `50.706/58.493`、sum `109.199`，较e20双升`0.925/0.875`；DetA/AssA为`42.604/61.842`与`50.762/69.809`，pair mAP/AP50 `0.2768/0.4772`。固定GPU0/1，GPU2/3不占用。 |
 
@@ -99,6 +99,19 @@
   lower in sum. Its det AssA is `2.408` higher, but cls association, both DetA values and AP are lower.
   This cross-host variation supports retaining both replications until mature decay nodes rather than
   selecting on one pre-decay checkpoint. GPU2/3 remain unused.
+
+## 2026-08-13 08:19 CST: 99/178 e40 complete and compared
+
+- 99 floor-cosine e40 cls HOTA/DetA/AssA is `54.482/45.585/66.825`; det is
+  `61.506/53.885/72.709`, sum `115.988`, and pair mAP/AP50 is `0.3101/0.5251`.
+  Relative to e36, HOTA rises by `0.852/0.353`, sum by `1.205`.
+- 178 smooth-WSD e40 cls HOTA/DetA/AssA is `54.237/45.062/67.608`; det is
+  `61.232/53.711/72.242`, sum `115.469`, and pair mAP/AP50 is `0.3088/0.5242`.
+  Relative to e36, HOTA rises by `0.529/0.673`, sum by `1.202`.
+- Both 419-MB checkpoints, 51-file detection exports, 108-file TrackEval outputs and asynchronous
+  completions (277.2/251.2 seconds) are present. At e40, 99 leads cls/det/sum by
+  `0.245/0.274/0.519`, with higher DetA and AP; 178 retains `0.783` higher cls AssA. The nearly
+  identical sum gains and complementary association evidence support continuing both through their actual tails.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 
