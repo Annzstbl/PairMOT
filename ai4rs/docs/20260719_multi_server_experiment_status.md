@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 15:57 CST。
+更新时间：2026-08-13 16:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E64_COMPLETE/TO_MATURE_E72 | e64 `55.282/62.303`、sum `117.585`完整，较e60双升`0.220/0.192`；det/sum差`0.296/0.277`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E44_COMPLETE/TO_E72 | e44 `54.747/61.259`、sum `116.006`完整，较e40提升`0.505/0.586`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E48_COMPLETE/TO_E72 | e48 `54.455/61.367`、sum `115.822`完整，较e44为`-0.292/+0.108`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `55.079/61.692`、sum `116.771`完整，较e40双升`0.626/0.622`；训练继续e45，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E64_COMPLETE/E60_BEST/TO_E72 | e64 `55.503/61.997`、sum `117.500`完整，较e60回落`0.304/0.293`；继续e68/e72终判 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -60,6 +60,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 - 99 `0812_03` e64 cls HOTA/DetA/AssA is `55.282/45.881/68.496`; det is `62.303/54.435/73.729`, sum `117.585`, and pair mAP/AP50 is `0.3115/0.5289`. Versus e60 HOTA rises by `0.220/0.192`; cls clears target by `0.019`, while det/sum remain short by `0.296/0.277`. The e64 checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 301.0-second evaluation are complete. Finite training continues in e65 on GPU0/2.
 - 178 `0812_04` e64 cls HOTA/DetA/AssA is `55.503/45.932/69.572`; det is `61.997/54.480/72.926`, sum `117.500`, and pair mAP/AP50 is `0.3183/0.5364`. Versus e60 HOTA falls by `0.304/0.293`; cls remains above target, while det/sum are short by `0.602/0.362`. The e64 checkpoint, detection and 28 CSV/108 TrackEval files close in 301.5 seconds; finite training continues in e65.
 - 178/e60 remains the strongest local point, while 99/e64 is rising and has a slightly smaller det gap. Retain both through e68/e72; only e72 is terminal evidence.
+
+## 2026-08-13 16:03 CST: 197 floor-25 WSD e48 complete
+
+- 197 `0813_01` e48 cls HOTA/DetA/AssA is `54.455/45.898/66.111`; det is `61.367/53.718/72.463`, sum `115.822`, and pair mAP/AP50 is `0.3111/0.5230`. Versus e44, cls falls `0.292` while det rises `0.108`. This is still the stable high-LR phase; the 25% floor differs only after e60, so retain the line through e72.
+- The 430,238,183-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 356.9-second asynchronous evaluation are complete. Finite formal training continues in e49 on GPU4/5 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
 
