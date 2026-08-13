@@ -4,12 +4,23 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 14:40 CST.
+Last updated: 2026-08-13 15:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 15:05 CST on August 13, 197 closes e44 at cls/det HOTA
+`54.747/61.259` (sum `116.006`), DetA/AssA `45.764/67.014` and
+`53.440/72.577`, and pair mAP/AP50 `0.3085/0.5221`. Both HOTA values
+improve over e40 by `0.505/0.586`; the checkpoint, 5,416/50 detection,
+28 CSV/108 TrackEval files and 433.5-second evaluation are complete, and
+finite training continues in e45 on GPU4/5. Fixed-252 has its e44 checkpoint
+and complete detection; its live asynchronous trajectory process is still
+reading the large `/data4` detection files, so wait for TrackEval rather than
+restarting or reporting partial metrics. Training continues in e45 on fixed
+GPU0/1. The leading 178 line continues toward e64.
 
 At 14:40 CST on August 13, the leading lines close e60. The 99 floor-cosine
 line scores cls/det HOTA `55.062/62.111` (sum `117.173`), DetA/AssA
