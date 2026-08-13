@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 10:02 CST
+更新时间：2026-08-13 10:50 CST
 
 ## 当前研究原则
 
@@ -25,10 +25,10 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E44_COMPLETE/TO_MATURE_E72` | e44 `54.902/61.655`、sum `116.557`，较e40双升`0.420/0.149`；DetA/AssA为`45.841/67.584`与`54.134/72.639`，pair mAP/AP50 `0.3113/0.5288`，继续floor余弦成熟尾段。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E44_COMPLETE/TO_MATURE_E72` | e44 `54.369/61.345`、sum `115.714`，较e40双升`0.132/0.113`；DetA/AssA为`45.100/68.013`与`53.841/72.353`，pair mAP/AP50 `0.3114/0.5256`，继续真实退火段。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `54.864/61.770`、sum `116.634`，较e44为`-0.038/+0.115`、sum `+0.077`；DetA/AssA为`45.826/67.524`与`54.139/72.882`，pair mAP/AP50 `0.3113/0.5288`，距目标sum `1.228`。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52` | e48 `54.828/61.578`、sum `116.406`，较e44双升`0.459/0.233`；DetA/AssA为`45.461/68.582`与`54.056/72.578`，pair mAP/AP50 `0.3147/0.5285`。e52是首个含4轮真实退火的节点。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E28_COMPLETE/TO_E72` | e28 `51.110/58.806`、sum `109.916`；较e24为`-0.286/+0.252`、sum `-0.034`，DetA/AssA为`42.258/63.856`与`50.669/70.675`，pair mAP/AP50 `0.2784/0.4761`。当前最佳仍为e24，恒定LR段的单点波动不作早停，继续到e60后floor尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E28_COMPLETE/TO_MATURE_E72` | e28 `51.270/59.249`、sum `110.519`，较e24双升`0.564/0.756`；DetA/AssA为`43.535/61.823`与`51.414/70.672`，pair mAP/AP50 `0.2857/0.4901`。固定GPU0/1，GPU2/3不占用。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E32_COMPLETE/TO_MATURE_E72` | e32 `52.510/60.173`、sum `112.683`，较e28双升`1.240/0.924`；DetA/AssA为`44.649/63.174`与`52.186/71.833`，pair mAP/AP50 `0.2946/0.5007`。固定GPU0/1，继续到e48后退火窗口。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
@@ -147,6 +147,20 @@
   108-file, 346.4-second TrackEval are complete; training resumed at e29i400 on GPU4/5 with finite losses.
 - The 25% floor still has no effect before the post-e60 cosine tail, so e28 is a seed-trajectory fluctuation,
   not evidence about the floor intervention. Retain the line through e72; its unique best remains e24 for now.
+
+## 2026-08-13 10:50 CST: 99/178 e48 and fixed-252 e32 complete
+
+- 99 floor-cosine e48 cls HOTA/DetA/AssA is `54.864/45.826/67.524`; det is
+  `61.770/54.139/72.882`, sum `116.634`, pair mAP/AP50 `0.3113/0.5288`. Versus e44, cls/det
+  changes `-0.038/+0.115`, sum rises `0.077`; its target gaps are `0.399/0.829/1.228`.
+- 178 smooth-WSD e48 is `54.828/45.461/68.582` and `61.578/54.056/72.578`, sum `116.406`,
+  pair `0.3147/0.5285`. It improves e44 by `0.459/0.233`, sum `0.692`; 99 leads the e48 sum
+  by only `0.228`. Both checkpoints, 50-sequence detections and 108-file TrackEval closures are complete.
+- Fixed-252 e32 is `52.510/44.649/63.174` and `60.173/52.186/71.833`, sum `112.683`, pair
+  `0.2946/0.5007`. It improves e28 by `1.240/0.924`, sum `2.164`; the 408,522,166-byte checkpoint,
+  detection and 395.8-second TrackEval are complete. Continue the slow confirmation line.
+- WSD remains stable through e48; e52 is the first scheduled checkpoint containing four epochs of cosine
+  decay. Retain 99 and 178 to that direct comparison, and do not infer decay quality from the e48 boundary.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 

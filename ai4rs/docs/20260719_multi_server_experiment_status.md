@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 10:02 CST。
+更新时间：2026-08-13 10:50 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,11 +19,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `54.902/61.655`、sum `116.557`完整，较e40双升`0.420/0.149`；距目标sum `1.305`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `54.864/61.770`、sum `116.634`完整，较e44 sum `+0.077`；距目标sum `1.228`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E28_COMPLETE/TO_E72 | e28 `51.110/58.806`、sum `109.916`完整，较e24为`-0.286/+0.252`；当前最佳仍为e24，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E28_COMPLETE/TO_MATURE_E72 | e28 `51.270/59.249`、sum `110.519`完整，较e24双升`0.564/0.756`；pair mAP/AP50 `0.2857/0.4901`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E32_COMPLETE/TO_MATURE_E72 | e32 `52.510/60.173`、sum `112.683`完整，较e28双升`1.240/0.924`；pair `0.2946/0.5007`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `54.369/61.345`、sum `115.714`完整，较e40双升`0.132/0.113`；99同点sum领先`0.843`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52 | e48 `54.828/61.578`、sum `116.406`完整，较e44双升`0.459/0.233`；e52首个直接反映退火 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -125,6 +125,18 @@ batch 8 不变，只比较成熟标准学习率调度。
   Training resumed at e29i400 on GPU4/5 with finite formal losses.
 - The schedule remains in its unchanged stable segment and does not expose the 25% floor until after e60.
   Keep it through e72; e24 remains the unique best evaluated checkpoint at this point.
+
+## 2026-08-13 10:50 CST: 99/178 e48 and 252 e32 complete
+
+- 99 e48 is cls `54.864/45.826/67.524`, det `61.770/54.139/72.882`, sum `116.634`, and pair
+  mAP/AP50 `0.3113/0.5288`. Relative to e44, cls/det changes `-0.038/+0.115`; sum rises `0.077`.
+- 178 e48 is cls `54.828/45.461/68.582`, det `61.578/54.056/72.578`, sum `116.406`, pair
+  `0.3147/0.5285`. Relative to e44, both HOTA values rise `0.459/0.233`; 99 leads the sum by `0.228`.
+  Both e48 checkpoints, all 50 detection sequences and 108 TrackEval files are complete.
+- Fixed-252 e32 is cls `52.510/44.649/63.174`, det `60.173/52.186/71.833`, sum `112.683`, pair
+  `0.2946/0.5007`. It gains `1.240/0.924` over e28; checkpoint, detection and 395.8-second TrackEval close.
+- The WSD schedule begins decay only after e48, so e52 is its first direct decay-effect checkpoint. Continue
+  all lines without early selection; fixed-252 remains GPU0/1 only.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

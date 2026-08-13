@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 10:02 CST.
+Last updated: 2026-08-13 10:50 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -210,6 +210,18 @@ e24. The 402,899,495-byte checkpoint, 50-sequence detection and 346.4-second,
 Because the floor does not act until after e60, retain this line to e72 rather
 than treating a stable-segment fluctuation as a schedule decision. Next close
 99/178 e48 and 197/252 e32 as they mature.
+
+At 10:50 CST, 99 floor-cosine e48 closes at `54.864/61.770`, sum `116.634`,
+while 178 smooth-WSD e48 closes at `54.828/61.578`, sum `116.406`. Their
+DetA/AssA values are `45.826/67.524`, `54.139/72.882` and
+`45.461/68.582`, `54.056/72.578`; pair mAP/AP50 is `0.3113/0.5288` and
+`0.3147/0.5285`. Both checkpoint/detection/TrackEval closures are complete.
+99 leads the same-point sum by only `0.228`, while 178 gained `0.692` since
+e44. Since e48 is the stable-segment boundary, retain both through e52, the
+first checkpoint containing four epochs of WSD cosine decay. Fixed-252 e32
+also closes at `52.510/60.173`, sum `112.683`, pair `0.2946/0.5007`, gaining
+`2.164` in sum since e28. Its 408,522,166-byte checkpoint, detection and
+395.8-second TrackEval are complete; keep fixed GPU0/1 toward the same decay window.
 
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
