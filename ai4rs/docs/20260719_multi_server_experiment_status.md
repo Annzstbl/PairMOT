@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 13:35 CST。
+更新时间：2026-08-13 14:40 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,11 +19,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E56_COMPLETE/TO_MATURE_E72 | e56 `55.068/62.034`、sum `117.102`完整，较e52回落`0.110/0.046`；距目标sum `0.760`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E60_COMPLETE/TO_MATURE_E72 | e60 `55.062/62.111`、sum `117.173`完整，较e56为`-0.006/+0.077`；距目标sum `0.689`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E40_COMPLETE/TO_E72 | e40 `54.242/60.673`、sum `114.915`完整，较e36提升`1.519/1.074`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E40_COMPLETE/TO_MATURE_E72 | e40 `54.453/61.070`、sum `115.523`完整，较e36提升`1.869/0.768`；继续到e48后的退火窗口，GPU2外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_252` |
 
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E56_COMPLETE/DECAY_EFFECT_POSITIVE | e56 `55.485/61.952`、sum `117.437`完整，较e52双升`0.233/0.169`；cls过目标、det差`0.647`，继续e60/e64 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E60_COMPLETE/CURRENT_STRONGEST | e60 `55.807/62.290`、sum `118.097`完整，较e56双升`0.322/0.338`；cls/sum过目标，det仅差`0.309`，继续e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -38,6 +38,12 @@ batch 8 不变，只比较成熟标准学习率调度。
 - 197 `0813_01` e40 cls HOTA/DetA/AssA is `54.242/45.369/66.364`; det is `60.673/52.850/71.969`, sum `114.915`, and pair mAP/AP50 is `0.3046/0.5173`. Versus e36, HOTA rises by `1.519/1.074`, sum by `2.593`. The 419,316,519-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 345.2-second evaluation are complete; finite training continues in e41 on GPU4/5.
 - Fixed-252 `0812_05` e40 cls HOTA/DetA/AssA is `54.453/46.218/65.614`; det is `61.070/53.534/72.106`, sum `115.523`, and pair mAP/AP50 is `0.3105/0.5258`. Versus e36, HOTA rises by `1.869/0.768`, sum by `2.637`. The 419,504,118-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 451.7-second evaluation are complete; training remains on fixed GPU0/1. An external task now uses GPU2 and is not touched.
 - Both remain before their decisive tails: 197 diverges at e60 and 252 begins decay after e48. Continue rather than selecting from e40.
+
+## 2026-08-13 14:40 CST: 99 and 178 e60 complete
+
+- 99 `0812_03` e60 cls HOTA/DetA/AssA is `55.062/46.040/67.707`; det is `62.111/54.362/73.394`, sum `117.173`, and pair mAP/AP50 is `0.3108/0.5281`. Versus e56 it changes by `-0.006/+0.077`; the strict gaps are `0.201/0.488/0.689`. The e60 checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 308.8-second evaluation are complete. Finite training continues in e61 on GPU0/2.
+- 178 `0812_04` e60 cls HOTA/DetA/AssA is `55.807/46.222/69.746`; det is `62.290/54.610/73.447`, sum `118.097`, and pair mAP/AP50 is `0.3210/0.5390`. Versus e56 HOTA rises by `0.322/0.338`; cls and sum clear target by `0.544/0.235`, while det is only `0.309` short. The e60 checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 310.2-second evaluation are complete. Finite training continues in e61 on GPU0.
+- 178 is now the strongest mature standard schedule and has improved across every decay node from e48 through e60. Continue to e64/e68/e72; only e72 can close the active goal.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
 
