@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 16:40 CST
+更新时间：2026-08-13 17:02 CST
 
 ## 当前研究原则
 
@@ -25,9 +25,9 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E64_COMPLETE/TO_MATURE_E72` | e64 `55.282/62.303`、sum `117.585`，较e60双升`0.220/0.192`；DetA/AssA为`45.881/68.496`与`54.435/73.729`，pair mAP/AP50 `0.3115/0.5289`。cls过目标`0.019`，det/sum差`0.296/0.277`，继续e68/e72。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E68_COMPLETE/E64_BEST/TO_E72` | e68 `54.946/62.240`、sum `117.186`，较e64回落`0.336/0.063`；DetA/AssA为`45.607/68.196`与`54.464/73.523`，pair mAP/AP50 `0.3120/0.5299`。继续e72终判。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E64_COMPLETE/E60_BEST/TO_E72` | e64 `55.503/61.997`、sum `117.500`，较e60回落`0.304/0.293`；DetA/AssA为`45.932/69.572`与`54.480/72.926`，pair mAP/AP50 `0.3183/0.5364`。e60仍为本线最强，继续e68/e72终判。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E48_COMPLETE/TO_E72` | e48 `54.455/61.367`、sum `115.822`；DetA/AssA为`45.898/66.111`与`53.718/72.463`，pair mAP/AP50 `0.3111/0.5230`。较e44为`-0.292/+0.108`，继续到e60后floor尾段，不以中间波动否决。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E52_COMPLETE/TO_E72` | e52 `54.327/61.639`、sum `115.966`；DetA/AssA为`45.524/66.526`与`53.738/73.072`，pair mAP/AP50 `0.3121/0.5249`。较e48为`-0.128/+0.272`，继续到e60后floor尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `55.344/61.928`、sum `117.272`，较e44双升`0.265/0.236`；DetA/AssA为`45.955/68.392`与`54.170/73.138`，pair mAP/AP50 `0.3179/0.5315`。cls过目标`0.081`，det/sum差`0.671/0.590`，固定GPU0/1继续退火。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -76,6 +76,12 @@
 
 - 固定252 `0812_05` e48同一checkpoint cls HOTA/DetA/AssA为`55.344/45.955/68.392`，det为`61.928/54.170/73.138`，sum `117.272`，pair mAP/AP50为`0.3179/0.5315`。相对e44双升`0.265/0.236`；cls超过严格目标`0.081`，det与sum仍差`0.671/0.590`。e48是退火边界而非终点，继续到e52/e56/e60/e64/e68/e72。
 - `epoch_48.pth`为`430,482,422` bytes，检测`5,416/50`、51文件，TrackEval 28 CSV/108文件完整。共享盘预处理与顺序轨迹写出约20分钟后完成；训练未被阻塞，已在固定GPU0/1继续e49，日志数值有限且无traceback/OOM/NCCL异常。
+
+## 2026-08-13 17:02 CST：99 e68与197 e52完整闭环
+
+- 99 `0812_03` e68同一checkpoint cls HOTA/DetA/AssA为`54.946/45.607/68.196`，det为`62.240/54.464/73.523`，sum `117.186`，pair mAP/AP50为`0.3120/0.5299`。较e64回落`0.336/0.063`，严格目标差`0.317/0.359/0.676`；非零floor减缓det回落但未稳定cls，仍须完成e72终判。
+- 197 `0813_01` e52同一checkpoint cls HOTA/DetA/AssA为`54.327/45.524/66.526`，det为`61.639/53.738/73.072`，sum `115.966`，pair mAP/AP50为`0.3121/0.5249`。较e48为`-0.128/+0.272`；floor在e60后才分叉，继续到e72。
+- 两点checkpoint分别为`457,886,518/435,698,023` bytes，均有`5,416/50`检测、51检测文件、28 CSV/108 TrackEval文件；异步评测分别291.4/344.8秒。99已继续e69、197已继续e53，正式日志数值有限且无traceback/OOM/NCCL异常。
 
 ## 2026-08-13 12:22 CST：197 floor-25 WSD e36完整闭环
 

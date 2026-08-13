@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 16:40 CST。
+更新时间：2026-08-13 17:02 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,8 +19,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E64_COMPLETE/TO_MATURE_E72 | e64 `55.282/62.303`、sum `117.585`完整，较e60双升`0.220/0.192`；det/sum差`0.296/0.277`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E48_COMPLETE/TO_E72 | e48 `54.455/61.367`、sum `115.822`完整，较e44为`-0.292/+0.108`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E68_COMPLETE/E64_BEST/TO_E72 | e68 `54.946/62.240`、sum `117.186`完整，较e64回落`0.336/0.063`；继续e72，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E52_COMPLETE/TO_E72 | e52 `54.327/61.639`、sum `115.966`完整，较e48为`-0.128/+0.272`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `55.344/61.928`、sum `117.272`完整，较e44双升`0.265/0.236`；cls过目标`0.081`，继续退火，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E64_COMPLETE/E60_BEST/TO_E72 | e64 `55.503/61.997`、sum `117.500`完整，较e60回落`0.304/0.293`；继续e68/e72终判 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -70,6 +70,12 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 - Fixed-252 `0812_05` e48 cls HOTA/DetA/AssA is `55.344/45.955/68.392`; det is `61.928/54.170/73.138`, sum `117.272`, and pair mAP/AP50 is `0.3179/0.5315`. Versus e44, both HOTA values rise by `0.265/0.236`; cls clears the strict target by `0.081`, while det/sum remain short by `0.671/0.590`. This is the decay boundary, so continue through e72.
 - The 430,482,422-byte checkpoint, 5,416/50 detection, 51 detection files and 28 CSV/108 TrackEval files are complete. Shared-storage preprocessing and sequential trajectory writes took about 20 minutes without blocking training; finite e49 training continues on fixed GPU0/1 with no traceback/OOM/NCCL error.
+
+## 2026-08-13 17:02 CST: 99 e68 and 197 e52 complete
+
+- 99 `0812_03` e68 cls HOTA/DetA/AssA is `54.946/45.607/68.196`; det is `62.240/54.464/73.523`, sum `117.186`, and pair mAP/AP50 is `0.3120/0.5299`. Versus e64 it falls `0.336/0.063`; retain to e72 despite the cls regression.
+- 197 `0813_01` e52 cls HOTA/DetA/AssA is `54.327/45.524/66.526`; det is `61.639/53.738/73.072`, sum `115.966`, and pair mAP/AP50 is `0.3121/0.5249`. Versus e48 it changes `-0.128/+0.272`; its floor differs only after e60.
+- The 457,886,518/435,698,023-byte checkpoints, 5,416/50 detection, 51 detection files and 28 CSV/108 TrackEval files are complete. Evaluations took 291.4/344.8 seconds; finite training continues in e69/e53 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
 

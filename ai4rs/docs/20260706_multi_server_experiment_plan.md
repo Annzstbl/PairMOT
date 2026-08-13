@@ -4,12 +4,22 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 16:40 CST.
+Last updated: 2026-08-13 17:02 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 17:02 CST on August 13, 99 closes e68 at `54.946/62.240` (sum
+`117.186`), down `0.336/0.063` from e64; DetA/AssA is `45.607/68.196`
+and `54.464/73.523`, with pair mAP/AP50 `0.3120/0.5299`. The floor
+reduces late det regression but does not stabilize cls, so retain through the
+required e72. 197 closes e52 at `54.327/61.639` (sum `115.966`), changing
+`-0.128/+0.272` from e48; DetA/AssA is `45.524/66.526` and
+`53.738/73.072`, with pair mAP/AP50 `0.3121/0.5249`. Its 25% floor only
+diverges after e60. Both checkpoints, 51 detection files and 28 CSV/108
+TrackEval files are complete; finite training continues in e69/e53.
 
 At 16:40 CST on August 13, fixed-252 closes the e48 decay boundary at
 cls/det HOTA `55.344/61.928` (sum `117.272`), DetA/AssA
