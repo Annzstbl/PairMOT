@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 18:52 CST
+更新时间：2026-08-13 18:58 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.175/62.519`、sum `117.694`，距严格目标`0.088/0.080/0.168`；DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50 `0.3124/0.5307`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0/2已释放。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.574/62.034`、sum `117.608`；cls过目标`0.311`，det/sum差`0.565/0.254`。DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50 `0.3171/0.5321`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0已释放。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E52_COMPLETE/TO_E72` | e52 `54.327/61.639`、sum `115.966`；DetA/AssA为`45.524/66.526`与`53.738/73.072`，pair mAP/AP50 `0.3121/0.5249`。较e48为`-0.128/+0.272`，继续到e60后floor尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `55.344/61.928`、sum `117.272`，较e44双升`0.265/0.236`；DetA/AssA为`45.955/68.392`与`54.170/73.138`，pair mAP/AP50 `0.3179/0.5315`。cls过目标`0.081`，det/sum差`0.671/0.590`，固定GPU0/1继续退火。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E56_COMPLETE/TO_E72` | e56 `54.513/61.759`、sum `116.272`；DetA/AssA为`45.222/67.604`与`53.877/73.163`，pair mAP/AP50 `0.3129/0.5267`。floor在e60后才实质分叉，继续成熟尾段。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E52_COMPLETE/TO_MATURE_E72` | e52 `55.587/62.340`、sum `117.927`；DetA/AssA为`46.052/68.795`与`54.400/73.776`，pair mAP/AP50 `0.3224/0.5360`。cls/sum过目标`0.324/0.065`，det仍差`0.259`，固定GPU0/1继续退火。 |
 | 99 GPU0/2 | `0813_02 standard warmup4 + cosine68 floor65 integral-preserving` | `RUNNING/FORMAL_ITER50_PASSED` | 由99/e72仅差`0.168`的50% floor单因素提高到65%，同步降低peak保持名义LR积分；正式fresh v2已越过e1i900，总/DN/encoder loss与grad norm有限。 |
 | 178 GPU0 | `0813_03 standard WSD warmup4+stable44+cosine24 floor25` | `RUNNING/FORMAL_ITER50_PASSED` | 只给178标准WSD的cosine尾段加入25% floor并降低peak保持名义LR积分；正式fresh v2已越过e1i900，数值有限。 |
 
@@ -99,6 +99,11 @@
 
 - 99 `0813_02` 将标准cosine floor从50%单因素提高至65%，peak降为`1.65232358e-4`以保持名义LR积分；178 `0813_03`只给标准WSD退火加入25% floor，peak降为`1.57377049e-4`。两条均不改变模型、loss、EMA、数据、全局batch或推理。
 - 首次launcher因旧记录多写一层仓库目录而在`cd`处训练前退出；空目录保留审计。修复后使用全新`fresh_v2`目录启动，99 GPU0/2和178 GPU0均已越过e1i900，正式进程、GPU、日志正常，总/DN/encoder loss与grad norm有限，无OOM/traceback；不另跑smoke。
+
+## 2026-08-13 18:58 CST：197/e56与252/e52完整闭环
+
+- 197 `0813_01` e56为`54.513/61.759=116.272`，cls/det DetA/AssA为`45.222/67.604`与`53.877/73.163`，pair mAP/AP50为`0.3129/0.5267`。51检测文件和28 CSV/108 TrackEval文件完整；25% floor到e60后才与前段实质分叉，继续成熟尾段。
+- 固定252 `0812_05` e52为`55.587/62.340=117.927`，cls/det DetA/AssA为`46.052/68.795`与`54.400/73.776`，pair mAP/AP50为`0.3224/0.5360`。cls和sum分别超过目标`0.324/0.065`，det仍差`0.259`；51检测文件和28 CSV/108 TrackEval文件完整，继续e56及以后。
 - `epoch_68.pth`为`458,360,244` bytes，检测`5,416/50`、51文件，TrackEval 28 CSV/108文件，异步评测264.6秒完整。训练已在GPU0继续e69，正式日志数值有限且无traceback/OOM/NCCL异常。
 
 ## 2026-08-13 12:22 CST：197 floor-25 WSD e36完整闭环

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 18:52 CST。
+更新时间：2026-08-13 18:58 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.175/62.519=117.694`，距目标`0.088/0.080/0.168`；checkpoint、检测、TrackEval与资源释放完整 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E52_COMPLETE/TO_E72 | e52 `54.327/61.639`、sum `115.966`完整，较e48为`-0.128/+0.272`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `55.344/61.928`、sum `117.272`完整，较e44双升`0.265/0.236`；cls过目标`0.081`，继续退火，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E56_COMPLETE/TO_E72 | e56 `54.513/61.759=116.272`完整；e60后进入25% floor实质尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E52_COMPLETE/TO_MATURE_E72 | e52 `55.587/62.340=117.927`；cls/sum达标、det差`0.259`，继续退火，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
 | 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | RUNNING/FORMAL_ITER50_PASSED | fresh v2已越过e1i900，正式进程、GPU与有限日志正常；GPU1外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_99` |
@@ -93,6 +93,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 - 99 `0813_02` raises only the standard cosine floor from 50% to 65%, reducing peak to `1.65232358e-4` to preserve the nominal LR integral. 178 `0813_03` adds only a 25% floor to the standard WSD cosine tail, reducing peak to `1.57377049e-4`.
 - The first launchers exited before training at `cd` because the recorded repository roots had one extra `ai4rs` component; their empty workdirs remain audit-only. Corrected fresh-v2 runs have passed e1i900 on 99 GPU0/2 and 178 GPU0 with live formal processes, expected memory, finite total/DN/encoder losses and grad norms, and no traceback/OOM. Per user direction, no separate smoke was run.
+
+## 2026-08-13 18:58 CST: 197/e56 and 252/e52 closed
+
+- 197 `0813_01` e56 is `54.513/61.759=116.272`; cls/det DetA/AssA are `45.222/67.604` and `53.877/73.163`, pair mAP/AP50 is `0.3129/0.5267`. Detection and 28 CSV/108 TrackEval files are complete; continue past the e60 floor divergence.
+- Fixed 252 `0812_05` e52 is `55.587/62.340=117.927`; cls/det DetA/AssA are `46.052/68.795` and `54.400/73.776`, pair mAP/AP50 is `0.3224/0.5360`. Classification and sum pass by `0.324/0.065`, while detection misses by `0.259`; continue e56+.
 - The 458,360,244-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 264.6-second evaluation are complete. Finite training continues in e69 on GPU0 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
