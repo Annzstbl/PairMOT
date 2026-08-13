@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 12:05 CST
+更新时间：2026-08-13 12:07 CST
 
 ## 当前研究原则
 
@@ -28,10 +28,15 @@
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E52_COMPLETE/TO_MATURE_E72` | e52 `55.178/62.080`、sum `117.258`，较e48双升`0.314/0.310`；DetA/AssA为`46.051/67.944`与`54.286/73.423`，pair mAP/AP50 `0.3115/0.5282`，距目标`0.085/0.519/0.604`。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E52_COMPLETE/DECAY_EFFECT_POSITIVE` | e52 `55.252/61.783`、sum `117.035`，较e48双升`0.424/0.205`；DetA/AssA为`45.775/69.180`与`54.225/72.838`，pair mAP/AP50 `0.3168/0.5322`。前4轮标准退火带来正增益，继续e56/e60。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E32_COMPLETE/TO_E72` | e32 `51.923/59.132`、sum `111.055`，较e28双升`0.813/0.326`；DetA/AssA为`42.661/65.542`与`51.197/70.677`，pair mAP/AP50 `0.2837/0.4827`。确认e28仅为波动，继续到e60后floor尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E32_COMPLETE/TO_MATURE_E72` | e32 `52.510/60.173`、sum `112.683`，较e28双升`1.240/0.924`；DetA/AssA为`44.649/63.174`与`52.186/71.833`，pair mAP/AP50 `0.2946/0.5007`。固定GPU0/1，继续到e48后退火窗口。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E32_COMPLETE/E36_EVALUATING/TO_MATURE_E72` | e32 `52.510/60.173`、sum `112.683`完整；e36 checkpoint 已产生且异步 TrackEval 在跑，训练已恢复至 e37。固定GPU0/1，继续到e48后退火窗口。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
+
+## 2026-08-13 12:07 CST：确认补充252固定GPU0/1资源
+
+- 用户再次确认补充最慢的252双卡资源，GPU序号仍固定为0/1。实时审计显示`0812_05`正式训练占用两卡各约21.4 GiB，e36 checkpoint为414,020,342 bytes，异步TrackEval正在运行，训练已恢复到e37i150。
+- 正式日志中的总loss、DN、encoder loss及grad norm均有限，无traceback/OOM/NCCL异常；GPU2/3空闲。252已有健康正式线，故不叠加或重启实验，继续按e36闭环及e40/e44/e48后的成熟节点推进。
 
 ## 2026-08-13 06:31 CST: 197 floor-25 WSD e16 complete; 252 e20 post-processing
 
