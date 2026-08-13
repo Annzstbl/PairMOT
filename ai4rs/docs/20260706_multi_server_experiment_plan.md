@@ -4,12 +4,23 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 13:22 CST.
+Last updated: 2026-08-13 13:35 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 13:35 CST on August 13, 197 and fixed-252 close e40. The 197 floor-WSD
+line reaches cls/det HOTA `54.242/60.673` (sum `114.915`), DetA/AssA
+`45.369/66.364` and `52.850/71.969`, and pair mAP/AP50 `0.3046/0.5173`;
+this is a `1.519/1.074` HOTA rise from e36. Fixed-252 reaches
+`54.453/61.070` (sum `115.523`), DetA/AssA `46.218/65.614` and
+`53.534/72.106`, and pair mAP/AP50 `0.3105/0.5258`, a `1.869/0.768`
+rise from e36. Both checkpoints, detection exports, 28 CSV/108 TrackEval
+files and 345.2/451.7-second asynchronous evaluations are complete. Training
+continues in e41 on 197 GPU4/5 and fixed-252 GPU0/1. Do not touch the external
+task observed on 252 GPU2. Retain both until their actual e48+/e60+ tails.
 
 At 13:22 CST on August 13, both leading mature lines close e56. On 99, the
 floor-cosine line scores cls/det HOTA `55.068/62.034` (sum `117.102`), with

@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 13:22 CST。
+更新时间：2026-08-13 13:35 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,8 +20,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E56_COMPLETE/TO_MATURE_E72 | e56 `55.068/62.034`、sum `117.102`完整，较e52回落`0.110/0.046`；距目标sum `0.760`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E36_COMPLETE/TO_E72 | e36 `52.723/59.599`、sum `112.322`完整，较e32双升`0.800/0.467`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E36_COMPLETE/TO_MATURE_E72 | e36 `52.584/60.302`、sum `112.886`完整，较e32双升`0.074/0.129`；继续到e48后的退火窗口，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E40_COMPLETE/TO_E72 | e40 `54.242/60.673`、sum `114.915`完整，较e36提升`1.519/1.074`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E40_COMPLETE/TO_MATURE_E72 | e40 `54.453/61.070`、sum `115.523`完整，较e36提升`1.869/0.768`；继续到e48后的退火窗口，GPU2外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E56_COMPLETE/DECAY_EFFECT_POSITIVE | e56 `55.485/61.952`、sum `117.437`完整，较e52双升`0.233/0.169`；cls过目标、det差`0.647`，继续e60/e64 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
@@ -32,6 +32,12 @@ batch 8 不变，只比较成熟标准学习率调度。
 - 99 `0812_03` e56 cls HOTA/DetA/AssA is `55.068/46.007/67.709`; det is `62.034/54.306/73.291`, sum `117.102`, and pair mAP/AP50 is `0.3115/0.5276`. Versus e52, HOTA falls by `0.110/0.046`; the strict gaps are `0.195/0.565/0.760`. The e56 checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 282.9-second asynchronous evaluation are complete. Finite training continues in e57 on GPU0/2; retain through e72 rather than judging the floor schedule here.
 - 178 `0812_04` e56 cls HOTA/DetA/AssA is `55.485/45.823/69.695`; det is `61.952/54.293/73.078`, sum `117.437`, and pair mAP/AP50 is `0.3191/0.5337`. Versus e52, HOTA rises by `0.233/0.169`; cls clears target by `0.222`, while det and sum remain short by `0.647/0.425`. The e56 checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 253.8-second evaluation are complete. Finite training continues in e57 on GPU0.
 - Continue both to e60/e64/e68/e72. The strict objective is an e72 same-checkpoint result, so neither e56 outcome is a terminal decision.
+
+## 2026-08-13 13:35 CST: 197 and fixed-252 e40 complete
+
+- 197 `0813_01` e40 cls HOTA/DetA/AssA is `54.242/45.369/66.364`; det is `60.673/52.850/71.969`, sum `114.915`, and pair mAP/AP50 is `0.3046/0.5173`. Versus e36, HOTA rises by `1.519/1.074`, sum by `2.593`. The 419,316,519-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 345.2-second evaluation are complete; finite training continues in e41 on GPU4/5.
+- Fixed-252 `0812_05` e40 cls HOTA/DetA/AssA is `54.453/46.218/65.614`; det is `61.070/53.534/72.106`, sum `115.523`, and pair mAP/AP50 is `0.3105/0.5258`. Versus e36, HOTA rises by `1.869/0.768`, sum by `2.637`. The 419,504,118-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 451.7-second evaluation are complete; training remains on fixed GPU0/1. An external task now uses GPU2 and is not touched.
+- Both remain before their decisive tails: 197 diverges at e60 and 252 begins decay after e48. Continue rather than selecting from e40.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
 

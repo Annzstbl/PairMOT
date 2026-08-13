@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 13:22 CST
+更新时间：2026-08-13 13:35 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E56_COMPLETE/TO_MATURE_E72` | e56 `55.068/62.034`、sum `117.102`，较e52回落`0.110/0.046`；DetA/AssA为`46.007/67.709`与`54.306/73.291`，pair mAP/AP50 `0.3115/0.5276`，距目标`0.195/0.565/0.760`。保留至e72验证非零floor尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E56_COMPLETE/DECAY_EFFECT_POSITIVE` | e56 `55.485/61.952`、sum `117.437`，较e52提高`0.233/0.169`；DetA/AssA为`45.823/69.695`与`54.293/73.078`，pair mAP/AP50 `0.3191/0.5337`。cls已过目标，det仍差`0.647`，继续e60/e64。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E36_COMPLETE/TO_E72` | e36 `52.723/59.599`、sum `112.322`，较e32双升`0.800/0.467`；DetA/AssA为`43.544/66.080`与`51.691/71.081`，pair mAP/AP50 `0.2889/0.4900`。继续到e60后floor尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E36_COMPLETE/TO_MATURE_E72` | e36 `52.584/60.302`、sum `112.886`，较e32双升`0.074/0.129`；DetA/AssA为`44.219/64.082`与`52.201/72.158`，pair mAP/AP50 `0.2949/0.5004`。固定GPU0/1，继续到e48后退火窗口。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E40_COMPLETE/TO_E72` | e40 `54.242/60.673`、sum `114.915`，较e36提升`1.519/1.074`；DetA/AssA为`45.369/66.364`与`52.850/71.969`，pair mAP/AP50 `0.3046/0.5173`。继续到e60后floor尾段。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E40_COMPLETE/TO_MATURE_E72` | e40 `54.453/61.070`、sum `115.523`，较e36提升`1.869/0.768`；DetA/AssA为`46.218/65.614`与`53.534/72.106`，pair mAP/AP50 `0.3105/0.5258`。固定GPU0/1，继续到e48后退火窗口。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
@@ -38,6 +38,12 @@
 - 99 `0812_03` e56同一checkpoint cls HOTA/DetA/AssA为`55.068/46.007/67.709`，det为`62.034/54.306/73.291`，sum `117.102`，pair mAP/AP50为`0.3115/0.5276`。相对e52两项HOTA回落`0.110/0.046`；距严格目标分别`0.195/0.565/0.760`。435,939,382-byte之前的e52之后，e56 checkpoint约421 MiB，5416/50检测、51个检测文件、28 CSV/108 TrackEval文件和282.9秒异步评测完整；训练已继续e57且日志有限。该节点不提前否决非零floor方案，保留至e72。
 - 178 `0812_04` e56同一checkpoint cls HOTA/DetA/AssA为`55.485/45.823/69.695`，det为`61.952/54.293/73.078`，sum `117.437`，pair mAP/AP50为`0.3191/0.5337`。相对e52提高`0.233/0.169`，cls已超过目标`0.222`，但det和sum仍差`0.647/0.425`。e56 checkpoint约422 MiB，5416/50检测、51个检测文件、28 CSV/108 TrackEval文件和253.8秒异步评测完整；训练已继续e57且日志有限。
 - 两条成熟线出现互补趋势：178的标准WSD退火继续提高分类与检测，而99 floor-cosine在e52后轻微回落。仍需按原协议观察e60/e64/e68/e72；目标要求同一e72 checkpoint，故中间节点不构成成功或失败终判。
+
+## 2026-08-13 13:35 CST：197/252 e40完整闭环
+
+- 197 `0813_01` e40同一checkpoint cls HOTA/DetA/AssA为`54.242/45.369/66.364`，det为`60.673/52.850/71.969`，sum `114.915`，pair mAP/AP50为`0.3046/0.5173`。相对e36提升`1.519/1.074`，sum提高`2.593`。419,316,519-byte checkpoint、5416/50检测、51个检测文件、28 CSV/108 TrackEval文件和345.2秒异步评测完整；训练在GPU4/5继续e41且日志有限。
+- 固定252 `0812_05` e40同一checkpoint cls HOTA/DetA/AssA为`54.453/46.218/65.614`，det为`61.070/53.534/72.106`，sum `115.523`，pair mAP/AP50为`0.3105/0.5258`。相对e36提升`1.869/0.768`，sum提高`2.637`。419,504,118-byte checkpoint、5416/50检测、51个检测文件、28 CSV/108 TrackEval文件和451.7秒异步评测完整；训练仍固定GPU0/1继续e41，GPU2的外部任务未触碰。
+- 两条尚处于稳定高LR阶段：197的25% floor到e60后才分叉，252的cosine退火到e48后才开始。e40的共同上升否定了按e36平台提前筛掉252的做法，继续闭环后续成熟节点。
 
 ## 2026-08-13 12:22 CST：197 floor-25 WSD e36完整闭环
 
