@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 18:58 CST。
+更新时间：2026-08-13 19:04 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -24,8 +24,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E52_COMPLETE/TO_MATURE_E72 | e52 `55.587/62.340=117.927`；cls/sum达标、det差`0.259`，继续退火，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
-| 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | RUNNING/FORMAL_ITER50_PASSED | fresh v2已越过e1i900，正式进程、GPU与有限日志正常；GPU1外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_99` |
-| 178 | `0813_03 WSD warmup4+stable44+cosine24 floor25`（GPU0） | RUNNING/FORMAL_ITER50_PASSED | fresh v2已越过e1i900，正式进程、GPU与有限日志正常；GPU1外部任务不触碰 | `/data4/litianhao/PairMmot/workdir_178` |
+| 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | STOPPED/E2/USER_CLOSEOUT | 用户要求停止新实验；精确停止并释放GPU0/2，不作为结果，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
+| 178 | `0813_03 WSD warmup4+stable44+cosine24 floor25`（GPU0） | STOPPED/E2/USER_CLOSEOUT | 用户要求停止新实验；精确停止并释放GPU0，不作为结果，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -98,6 +98,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 - 197 `0813_01` e56 is `54.513/61.759=116.272`; cls/det DetA/AssA are `45.222/67.604` and `53.877/73.163`, pair mAP/AP50 is `0.3129/0.5267`. Detection and 28 CSV/108 TrackEval files are complete; continue past the e60 floor divergence.
 - Fixed 252 `0812_05` e52 is `55.587/62.340=117.927`; cls/det DetA/AssA are `46.052/68.795` and `54.400/73.776`, pair mAP/AP50 is `0.3224/0.5360`. Classification and sum pass by `0.324/0.065`, while detection misses by `0.259`; continue e56+.
+
+## 2026-08-13 19:04 CST: stop expanding search and close existing runs only
+
+- The user judged the available evidence sufficient and requested no new experiments. 99 `0813_02` and 178 `0813_03` were precisely terminated in e2; assigned processes exited and 99 GPU0/2 plus 178 GPU0 were released without touching external GPU1 jobs. They are not performance results.
+- Do not launch or restart candidates. Only finish the already mature 197 `0813_01` and fixed 252 `0812_05` through e72, including checkpoint, detection, TrackEval, AP/DetA/AssA, finiteness and resource-release closure.
 - The 458,360,244-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 264.6-second evaluation are complete. Finite training continues in e69 on GPU0 with no traceback/OOM/NCCL error.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
