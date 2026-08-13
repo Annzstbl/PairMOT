@@ -183,6 +183,14 @@ files and async completions are present. Their e36-to-e40 sum gains are almost
 identical (`1.205/1.202`); 99 leads the e40 sum by `0.519`, while 178 retains
 higher cls AssA. Continue both into the actual low-LR/decay tails.
 
+At 08:52 CST, 197 floor-25 WSD closes e24 at cls HOTA/DetA/AssA
+`51.396/42.837/63.465` and det `58.554/50.871/69.779`, sum `109.950`.
+Pair mAP/AP50 is `0.2810/0.4822`; its 397,418,087-byte checkpoint,
+50-sequence detection, 108 TrackEval files and 344.6-second async completion
+are present. It improves e20 by `0.847/0.592` and leads fixed-252 e24 by
+`0.690/0.061`. Continue both pre-intervention trajectories; next scheduled
+closures are 252/e28 and 99/178/e44.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 08:19 CST
+更新时间：2026-08-13 08:52 CST
 
 ## 当前研究原则
 
@@ -27,7 +27,7 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E40_COMPLETE/TO_MATURE_E72` | e40 `54.482/61.506`、sum `115.988`，较e36双升`0.852/0.353`；DetA/AssA为`45.585/66.825`与`53.885/72.709`，pair mAP/AP50 `0.3101/0.5251`，继续floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E40_COMPLETE/TO_MATURE_E72` | e40 `54.237/61.232`、sum `115.469`，较e36双升`0.529/0.673`；DetA/AssA为`45.062/67.608`与`53.711/72.242`，pair mAP/AP50 `0.3088/0.5242`，继续真实退火段。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E20_COMPLETE/E21I400/TO_E72` | e20 `50.549/57.962`、sum `108.511`，较e16双升`2.075/1.116`；DetA/AssA为`42.128/62.547`与`50.517/68.936`，pair mAP/AP50 `0.2773/0.4765`，继续到floor核心尾段。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E24_COMPLETE/TO_E72` | e24 `51.396/58.554`、sum `109.950`，较e20双升`0.847/0.592`；DetA/AssA为`42.837/63.465`与`50.871/69.779`，pair mAP/AP50 `0.2810/0.4822`，继续到floor核心尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E24_COMPLETE/TO_MATURE_E72` | e24 `50.706/58.493`、sum `109.199`，较e20双升`0.925/0.875`；DetA/AssA为`42.604/61.842`与`50.762/69.809`，pair mAP/AP50 `0.2768/0.4772`。固定GPU0/1，GPU2/3不占用。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
@@ -112,6 +112,16 @@
   completions (277.2/251.2 seconds) are present. At e40, 99 leads cls/det/sum by
   `0.245/0.274/0.519`, with higher DetA and AP; 178 retains `0.783` higher cls AssA. The nearly
   identical sum gains and complementary association evidence support continuing both through their actual tails.
+
+## 2026-08-13 08:52 CST: 197 floor-25 WSD e24 complete
+
+- 197 `0813_01` e24 same-checkpoint cls HOTA/DetA/AssA is `51.396/42.837/63.465`; det is
+  `58.554/50.871/69.779`, sum `109.950`, and pair mAP/AP50 is `0.2810/0.4822`.
+- Relative to e20, cls/det HOTA rise by `0.847/0.592`, sum by `1.439`; DetA, AssA and AP all rise.
+  The 397,418,087-byte checkpoint, 51-file detection export, 108 TrackEval files and 344.6-second
+  asynchronous evaluation are complete; training continues on GPU4/5.
+- Versus fixed-252 e24, 197 leads cls/det/sum by `0.690/0.061/0.751` and pair mAP/AP50 by
+  `0.0042/0.0050`. Both remain pre-intervention stable-segment evidence, so continue rather than select early.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 
