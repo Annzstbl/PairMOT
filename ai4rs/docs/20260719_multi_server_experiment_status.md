@@ -1,6 +1,10 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-14 01:28 CST。
+更新时间：2026-08-14 01:42 CST。
+
+## 2026-08-14 01:42 CST: residual process audit
+
+- Live-state audit confirms no PairMOT training or evaluation process on 197 or 252 and all GPUs idle. One orphaned 197 shell from an older `0812_01` audit was still polling a missing `val_track_0005/async_done.json`; it used no GPU and was precisely terminated as PID `63474`. No experiment artifact or unrelated process was touched.
 
 ## 2026-08-14 01:28 CST: 252/e72 final and user-scoped closeout complete
 
