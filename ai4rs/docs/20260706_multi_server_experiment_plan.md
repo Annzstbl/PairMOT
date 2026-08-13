@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 19:04 CST.
+Last updated: 2026-08-13 19:35 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -5555,3 +5555,5 @@ checkpoint 证明 6 组 attention 权重严格共享、18 组 sampling/value/out
   197/e56仍为`54.513/61.759=116.272`，但floor在e60后才分叉，继续到完整成熟尾段。
 - 用户已决定停止扩展搜索。99 `0813_02`和178 `0813_03`在e2停止并释放资源，不作为结果；
   不再新增或重启实验，只收尾197 `0813_01`与固定252 `0812_05`到e72及完整评测闭环。
+- 收尾节点197/e60为`54.954/61.966=116.920`；252/e56为`55.587/62.392=117.979`，后者仅det
+  差`0.207`。继续既定e64/e68/e72，不新增候选。

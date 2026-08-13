@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 19:04 CST
+更新时间：2026-08-13 19:35 CST
 
 ## 当前研究原则
 
@@ -27,8 +27,8 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.175/62.519`、sum `117.694`，距严格目标`0.088/0.080/0.168`；DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50 `0.3124/0.5307`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0/2已释放。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.574/62.034`、sum `117.608`；cls过目标`0.311`，det/sum差`0.565/0.254`。DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50 `0.3171/0.5321`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0已释放。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E56_COMPLETE/TO_E72` | e56 `54.513/61.759`、sum `116.272`；DetA/AssA为`45.222/67.604`与`53.877/73.163`，pair mAP/AP50 `0.3129/0.5267`。floor在e60后才实质分叉，继续成熟尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E52_COMPLETE/TO_MATURE_E72` | e52 `55.587/62.340`、sum `117.927`；DetA/AssA为`46.052/68.795`与`54.400/73.776`，pair mAP/AP50 `0.3224/0.5360`。cls/sum过目标`0.324/0.065`，det仍差`0.259`，固定GPU0/1继续退火。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E60_COMPLETE/CLOSEOUT_TO_E72` | e60 `54.954/61.966`、sum `116.920`；DetA/AssA为`45.176/68.986`与`53.889/73.614`，pair mAP/AP50 `0.3162/0.5320`。较e56提高`0.441/0.207`，只收尾e64/e68/e72。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E56_COMPLETE/CLOSEOUT_TO_E72` | e56 `55.587/62.392`、sum `117.979`；DetA/AssA为`46.075/68.760`与`54.452/73.792`，pair mAP/AP50 `0.3225/0.5340`。cls/sum达标，det差`0.207`，固定GPU0/1只收尾后续节点。 |
 | 99 GPU0/2 | `0813_02 standard warmup4 + cosine68 floor65 integral-preserving` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；用户判断现有证据充分，要求不再跑新实验，故精确停止并释放GPU0/2，不作为结果。 |
 | 178 GPU0 | `0813_03 standard WSD warmup4+stable44+cosine24 floor25` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；按用户收尾决定精确停止并释放GPU0，不作为结果。 |
 
@@ -109,6 +109,12 @@
 
 - 用户确认现有证据已经足够，要求不再运行新实验。99 `0813_02` 与178 `0813_03`均在e2精确停止；对应训练进程退出，99 GPU0/2与178 GPU0释放，GPU1外部任务未触碰。这两条不作为性能结果。
 - 不再新增或重启实验。只保留已进入成熟后段的197 `0813_01`和固定252 `0812_05`运行到e72，并完成既定checkpoint、检测、TrackEval、AP/DetA/AssA、有限性和资源释放收尾。
+
+## 2026-08-13 19:35 CST：197/e60与252/e56收尾节点
+
+- 197/e60为`54.954/61.966=116.920`，cls/det DetA/AssA为`45.176/68.986`与`53.889/73.614`，pair mAP/AP50为`0.3162/0.5320`；较e56提高`0.441/0.207`。51检测文件、28 CSV/108 TrackEval文件完整。
+- 固定252/e56为`55.587/62.392=117.979`，cls/det DetA/AssA为`46.075/68.760`与`54.452/73.792`，pair mAP/AP50为`0.3225/0.5340`；cls/sum达标，det目标差距由e52的`0.259`缩至`0.207`。51检测文件、28 CSV/108 TrackEval文件完整。
+- 按用户决定不派生任何新实验，两线仅继续e64/e68/e72及最终完整闭环。
 - `epoch_68.pth`为`458,360,244` bytes，检测`5,416/50`、51文件，TrackEval 28 CSV/108文件，异步评测264.6秒完整。训练已在GPU0继续e69，正式日志数值有限且无traceback/OOM/NCCL异常。
 
 ## 2026-08-13 12:22 CST：197 floor-25 WSD e36完整闭环
