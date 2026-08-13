@@ -1,6 +1,11 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 21:38 CST。
+更新时间：2026-08-13 22:50 CST。
+
+## 2026-08-13 22:50 CST: 197/e72 final and 252/e64 closeout
+
+- 197/e72 closes at `55.379/62.180=117.559`; classification passes by `0.116`, while detection/sum miss by `0.419/0.303`. DetA/AssA are `45.576/68.983` and `54.068/73.850`, pair mAP/AP50 is `0.3190/0.5343`. All 2915 checkpoint tensors are finite, 51 detection files and 28 CSV/108 TrackEval files are complete, the formal process exited, and GPU4/5 are released. Strict failure.
+- 252/e64 closes at `55.211/62.599=117.810`; detection exactly meets target while classification/sum each miss by `0.052`. DetA/AssA are `45.600/68.650` and `54.623/74.123`, pair mAP/AP50 is `0.3207/0.5306`. Continue only e68/e72.
 
 ## 2026-08-13 21:38 CST: 197/e68 closeout node
 
@@ -25,8 +30,8 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.175/62.519=117.694`，距目标`0.088/0.080/0.168`；checkpoint、检测、TrackEval与资源释放完整 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E68_COMPLETE/CLOSEOUT_TO_E72 | e68 `55.238/62.217=117.455`；严格三项未达，只收尾e72 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E60_COMPLETE/CLOSEOUT_TO_E72 | e60 `55.415/62.405=117.820`；cls达标，det/sum差`0.194/0.042`，只收尾e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_252` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.379/62.180=117.559`；完整闭环并释放GPU4/5 | `/data4/litianhao/PairMmot/workdir_197` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E64_COMPLETE/CLOSEOUT_TO_E72 | e64 `55.211/62.599=117.810`；det达标，cls/sum均差`0.052`，只收尾e68/e72 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
 | 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | STOPPED/E2/USER_CLOSEOUT | 用户要求停止新实验；精确停止并释放GPU0/2，不作为结果，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |
