@@ -1,6 +1,11 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 22:50 CST。
+更新时间：2026-08-14 01:28 CST。
+
+## 2026-08-14 01:28 CST: 252/e72 final and user-scoped closeout complete
+
+- 252/e72 closes at `54.962/62.566=117.528`, missing the strict thresholds by `0.301/0.033/0.334`. DetA/AssA are `45.299/68.620` and `54.703/73.941`, pair mAP/AP50 is `0.3168/0.5250`. All 2915 checkpoint tensors are finite; `5,416/50` detection records, 51 detection files, and 28 CSV/108 TrackEval files are complete. The formal process exited and fixed GPU0/1 are released.
+- All retained mature-scheduler lines are now completed or user-stopped, and no PairMOT training remains active. Per the explicit user decision, no new experiment is launched. The strict mature-scheduler numeric objective remains unmet.
 
 ## 2026-08-13 22:50 CST: 197/e72 final and 252/e64 closeout
 
@@ -31,7 +36,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.175/62.519=117.694`，距目标`0.088/0.080/0.168`；checkpoint、检测、TrackEval与资源释放完整 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.379/62.180=117.559`；完整闭环并释放GPU4/5 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E64_COMPLETE/CLOSEOUT_TO_E72 | e64 `55.211/62.599=117.810`；det达标，cls/sum均差`0.052`，只收尾e68/e72 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `54.962/62.566=117.528`；完整闭环并释放GPU0/1 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | COMPLETED/E72/STRICT_FAIL/18_OF_18 | e72 `55.574/62.034=117.608`；cls达标，det/sum差`0.565/0.254`，完整闭环并释放GPU0 | `/data4/litianhao/PairMmot/workdir_178` |
 | 99 | `0813_02 warmup4+cosine68 floor65 integral-preserving`（GPU0/2） | STOPPED/E2/USER_CLOSEOUT | 用户要求停止新实验；精确停止并释放GPU0/2，不作为结果，GPU1外部任务未触碰 | `/data4/litianhao/PairMmot/workdir_99` |

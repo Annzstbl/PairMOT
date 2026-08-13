@@ -1,6 +1,11 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 22:50 CST
+更新时间：2026-08-14 01:28 CST
+
+## 2026-08-14 01:28 CST：252/e72终点与用户限定收尾完成
+
+- 252/e72最终为`54.962/62.566=117.528`，距严格目标`0.301/0.033/0.334`；DetA/AssA为`45.299/68.620`与`54.703/73.941`，pair mAP/AP50为`0.3168/0.5250`。2915个checkpoint张量全有限，`5,416/50`检测、51检测文件、28 CSV/108 TrackEval文件完整，正式进程退出且固定GPU0/1释放，严格失败。
+- 99、178、197、252和AutoDL的既定成熟标准调度均已完成或按用户要求停止；当前无训练运行。用户明确要求不再启动新实验，因此本轮实验工作已收尾，但活动目标的三项数值门槛没有由成熟标准调度达到。
 
 ## 2026-08-13 22:50 CST：197/e72终点与252/e64收尾节点
 
@@ -38,7 +43,7 @@
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.175/62.519`、sum `117.694`，距严格目标`0.088/0.080/0.168`；DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50 `0.3124/0.5307`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0/2已释放。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.574/62.034`、sum `117.608`；cls过目标`0.311`，det/sum差`0.565/0.254`。DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50 `0.3171/0.5321`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0已释放。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.379/62.180`、sum `117.559`；cls达标，det/sum差`0.419/0.303`，全套产物与有限性闭环且GPU4/5释放。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E64_COMPLETE/CLOSEOUT_TO_E72` | e64 `55.211/62.599`、sum `117.810`；det恰好达标，cls/sum均差`0.052`，只收尾e68/e72。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `54.962/62.566`、sum `117.528`；距目标`0.301/0.033/0.334`，全套产物与有限性闭环且GPU0/1释放。 |
 | 99 GPU0/2 | `0813_02 standard warmup4 + cosine68 floor65 integral-preserving` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；用户判断现有证据充分，要求不再跑新实验，故精确停止并释放GPU0/2，不作为结果。 |
 | 178 GPU0 | `0813_03 standard WSD warmup4+stable44+cosine24 floor25` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；按用户收尾决定精确停止并释放GPU0，不作为结果。 |
 
