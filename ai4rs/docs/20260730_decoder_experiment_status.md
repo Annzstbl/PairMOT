@@ -1,6 +1,11 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 21:06 CST
+更新时间：2026-08-13 21:38 CST
+
+## 2026-08-13 21:38 CST：197/e68收尾节点
+
+- 197/e68同一checkpoint为`55.238/62.217=117.455`；cls/det DetA/AssA为`45.258/69.292`与`54.006/74.041`，pair mAP/AP50为`0.3186/0.5350`。距严格目标分别为`0.025/0.382/0.407`。
+- `epoch_68.pth`、`5,416/50`检测、51检测文件、28 CSV/108 TrackEval文件完整；正式训练已继续e69，日志中的total/DN/encoder loss和grad norm有限。按用户收尾决定不新增候选，只继续既定e72。
 
 ## 当前研究原则
 
@@ -27,7 +32,7 @@
 | --- | --- | --- | --- |
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.175/62.519`、sum `117.694`，距严格目标`0.088/0.080/0.168`；DetA/AssA为`45.525/68.888`与`54.441/74.197`，pair mAP/AP50 `0.3124/0.5307`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0/2已释放。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `COMPLETED/E72/STRICT_FAIL/18_OF_18` | e72 `55.574/62.034`、sum `117.608`；cls过目标`0.311`，det/sum差`0.565/0.254`。DetA/AssA为`45.744/70.320`与`54.501/72.986`，pair mAP/AP50 `0.3171/0.5321`。checkpoint有限，51检测文件、28 CSV/108 TrackEval文件完整，正式进程与GPU0已释放。 |
-| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E64_COMPLETE/CLOSEOUT_TO_E72` | e64 `55.480/62.190`、sum `117.670`；DetA/AssA为`45.495/69.724`与`54.013/73.954`，pair mAP/AP50 `0.3181/0.5352`。cls达标，det/sum未达，只收尾e68/e72。 |
+| 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E68_COMPLETE/CLOSEOUT_TO_E72` | e68 `55.238/62.217`、sum `117.455`；DetA/AssA为`45.258/69.292`与`54.006/74.041`，pair mAP/AP50 `0.3186/0.5350`。三项均未达严格目标，只收尾e72。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E60_COMPLETE/CLOSEOUT_TO_E72` | e60 `55.415/62.405`、sum `117.820`；DetA/AssA为`45.882/68.734`与`54.474/73.832`，pair mAP/AP50 `0.3234/0.5343`。cls达标，det/sum差`0.194/0.042`，只收尾e64/e68/e72。 |
 | 99 GPU0/2 | `0813_02 standard warmup4 + cosine68 floor65 integral-preserving` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；用户判断现有证据充分，要求不再跑新实验，故精确停止并释放GPU0/2，不作为结果。 |
 | 178 GPU0 | `0813_03 standard WSD warmup4+stable44+cosine24 floor25` | `STOPPED/E2/USER_CLOSEOUT` | 正式线已通过iter50并进入e2；按用户收尾决定精确停止并释放GPU0，不作为结果。 |
