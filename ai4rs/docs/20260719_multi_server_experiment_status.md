@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 07:42 CST。
+更新时间：2026-08-13 08:03 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -21,7 +21,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72 | e36 `53.630/61.153`、sum `114.783`完整，较e32双升`0.291/0.637`且DetA/AssA/AP同步提高；GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E20_COMPLETE/E21I400/TO_E72 | e20 `50.549/57.962`、sum `108.511`完整，较e16双升`2.075/1.116`；DetA/AssA与AP同步提高，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72 | e20 `49.781/57.618`、sum `107.399`完整，较e16双升`1.197/0.868`；pair mAP/AP50 `0.2665/0.4628`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E24_COMPLETE/TO_MATURE_E72 | e24 `50.706/58.493`、sum `109.199`完整，较e20双升`0.925/0.875`；pair mAP/AP50 `0.2768/0.4772`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72 | e36 `53.708/60.559`、sum `114.267`完整；cls/AP较99同点高而det/sum低`0.594/0.516`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
@@ -72,6 +72,16 @@ batch 8 不变，只比较成熟标准学习率调度。
 - Relative to e16, HOTA rises by `2.075/1.116`. Relative to 252 e20, 197 leads by `0.768/0.344`
   and `1.112` in sum, with all DetA/AssA and AP values also higher. The floor itself does not act until
   after e60, so this is a healthy fresh-run check rather than evidence to stop or select the schedule early.
+
+## 2026-08-13 08:03 CST: 252 e24 complete
+
+- Fixed-252 `0812_05` e24 cls HOTA/DetA/AssA is `50.706/42.604/61.842`; det is
+  `58.493/50.762/69.809`, sum `109.199`, and pair mAP/AP50 is `0.2768/0.4772`.
+- The 397,525,622-byte checkpoint, detection export for 50 sequences, 108 TrackEval files and
+  386.7-second asynchronous evaluation are complete. Relative to e20, HOTA rises by `0.925/0.875`.
+- Versus same-schedule 178 e24, 252 has cls/det differences `-1.676/+0.140`, sum `-1.536`; its det
+  AssA is higher while cls association, both DetA values and AP are lower. Both replications remain active
+  through the actual post-e48 decay window; fixed GPU0/1 remain the only 252 cards used.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

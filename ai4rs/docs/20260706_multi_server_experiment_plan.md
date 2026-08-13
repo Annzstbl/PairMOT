@@ -164,6 +164,16 @@ It improves over e16 by `2.075/1.116` and leads fixed-252 e20 by
 the LR after e60, keep 197 through e72 and do not interpret this stable-segment
 comparison as the floor ablation result. Next close 252/e24 and 99/178/e40.
 
+At 08:03 CST, fixed-252 closes e24 at cls HOTA/DetA/AssA
+`50.706/42.604/61.842` and det `58.493/50.762/69.809`, sum `109.199`.
+Pair mAP/AP50 is `0.2768/0.4772`; the 397,525,622-byte checkpoint, all
+50 detection sequences, 108 TrackEval files and 386.7-second async completion
+are present. It improves e20 by `0.925/0.875`. Against same-schedule 178/e24,
+its cls/det differences are `-1.676/+0.140`; det AssA is higher, while cls
+association, both DetA and AP are lower. Preserve both replications through
+post-e48 decay nodes. The 99 and 178 e40 checkpoints have also landed and are
+the next evaluation closures.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains

@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 07:42 CST
+更新时间：2026-08-13 08:03 CST
 
 ## 当前研究原则
 
@@ -28,7 +28,7 @@
 | 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E36_COMPLETE/E38I350/TO_MATURE_E72` | e36 `53.630/61.153`、sum `114.783`，较e32双升`0.291/0.637`；DetA/AssA为`44.796/66.173`与`53.405/72.519`，pair mAP/AP50 `0.3035/0.5148`，继续floor余弦成熟尾段。 |
 | 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E36_COMPLETE/E37I950/TO_MATURE_E72` | e36 `53.708/60.559`、sum `114.267`，较e32双升`0.419/0.679`；DetA/AssA为`44.696/66.876`与`53.387/71.074`，pair mAP/AP50 `0.3055/0.5220`，继续真实退火段。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E20_COMPLETE/E21I400/TO_E72` | e20 `50.549/57.962`、sum `108.511`，较e16双升`2.075/1.116`；DetA/AssA为`42.128/62.547`与`50.517/68.936`，pair mAP/AP50 `0.2773/0.4765`，继续到floor核心尾段。 |
-| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E20_COMPLETE/E22I1000/TO_MATURE_E72` | e20 `49.781/57.618`、sum `107.399`，较e16双升`1.197/0.868`；DetA/AssA为`41.113/62.132`与`50.157/68.584`，pair mAP/AP50 `0.2665/0.4628`。固定GPU0/1，GPU2/3不占用。 |
+| 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E24_COMPLETE/TO_MATURE_E72` | e24 `50.706/58.493`、sum `109.199`，较e20双升`0.925/0.875`；DetA/AssA为`42.604/61.842`与`50.762/69.809`，pair mAP/AP50 `0.2768/0.4772`。固定GPU0/1，GPU2/3不占用。 |
 
 | AutoDL GPU0 | `0811_02 final product-tangent standard warmup4 + cosine68 peak×8/3 corrected fresh v2 1x8` | `COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN` | e72同点cls/det `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval、AP/DetA/AssA、checkpoint有限性齐全。finalizer确认18/18后SSH关闭，符合自动关机时序；共享盘最终状态待下次实例可达时复核。 |
 | 后备（不占GPU） | `0812_02 standard warmup4 + cosine68 floor50 integral-preserving` | `STATIC_VALIDATED/NO_SMOKE/NO_FORMAL` | 仅把标准cosine尾部floor设为峰值50%，峰值降至`1.8113207547e-4`以保持名义积分`0.0096`；deepcopy、完整Runner/模型构建、batch8/72e、22,771,111参数/711 states通过。仅在现有两条e72失败后按证据考虑。 |
@@ -87,6 +87,18 @@
 - Versus fixed-252 e20, 197 leads cls/det HOTA by `0.768/0.344`, sum by `1.112`, and all four
   DetA/AssA values plus pair AP are higher. This confirms a healthy fresh trajectory, not a floor effect:
   the 25% floor only diverges from the zero-floor schedule after e60, so retain it through e72.
+
+## 2026-08-13 08:03 CST: fixed-252 smooth-WSD e24 complete
+
+- 252 `0812_05` e24 same-checkpoint cls HOTA/DetA/AssA is `50.706/42.604/61.842`; det is
+  `58.493/50.762/69.809`, sum `109.199`, and pair mAP/AP50 is `0.2768/0.4772`.
+- Relative to e20, cls/det HOTA rise by `0.925/0.875`, sum by `1.800`. The 397,525,622-byte
+  checkpoint, 51-file detection export, 108 TrackEval files and 386.7-second asynchronous evaluation
+  are complete; the fixed GPU0/1 line continues toward its post-e48 decay window.
+- Against the same-schedule 178 e24, 252 is `1.676` lower in cls, `0.140` higher in det and `1.536`
+  lower in sum. Its det AssA is `2.408` higher, but cls association, both DetA values and AP are lower.
+  This cross-host variation supports retaining both replications until mature decay nodes rather than
+  selecting on one pre-decay checkpoint. GPU2/3 remain unused.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 
