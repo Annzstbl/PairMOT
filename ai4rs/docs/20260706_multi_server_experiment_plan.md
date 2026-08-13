@@ -191,6 +191,16 @@ are present. It improves e20 by `0.847/0.592` and leads fixed-252 e24 by
 `0.690/0.061`. Continue both pre-intervention trajectories; next scheduled
 closures are 252/e28 and 99/178/e44.
 
+At 09:33 CST, fixed-252 e28 closes at `51.270/59.249`, sum `110.519`,
+with DetA/AssA `43.535/61.823` and `51.414/70.672`, pair mAP/AP50
+`0.2857/0.4901`; checkpoint, detection and 388.8-second TrackEval are complete.
+The 99 floor-cosine e44 point is `54.902/61.655`, sum `116.557`, while 178
+smooth-WSD e44 is `54.369/61.345`, sum `115.714`; both have complete
+checkpoint/detection/TrackEval closure. 99 leads e44 by `0.533/0.310`, but 178
+still has higher cls AssA and has not begun post-e48 decay. Keep all three
+trajectories; next decisive WSD nodes begin after e48, while 99 continues its
+floor-cosine tail toward e72.
+
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
 `0812_03` uses GPU0/2; 178 uses GPU0 while an external job on GPU1 remains
