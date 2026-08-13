@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 07:00 CST.
+Last updated: 2026-08-13 10:02 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -200,6 +200,16 @@ checkpoint/detection/TrackEval closure. 99 leads e44 by `0.533/0.310`, but 178
 still has higher cls AssA and has not begun post-e48 decay. Keep all three
 trajectories; next decisive WSD nodes begin after e48, while 99 continues its
 floor-cosine tail toward e72.
+
+At 10:02 CST, 197 floor-25 WSD e28 closes at cls/det HOTA
+`51.110/58.806`, sum `109.916`, with DetA/AssA `42.258/63.856` and
+`50.669/70.675`, and pair mAP/AP50 `0.2784/0.4761`. Compared with e24,
+cls changes `-0.286`, det `+0.252`, and sum `-0.034`; the unique best remains
+e24. The 402,899,495-byte checkpoint, 50-sequence detection and 346.4-second,
+108-file TrackEval are complete, and training resumes at e29i400 on GPU4/5.
+Because the floor does not act until after e60, retain this line to e72 rather
+than treating a stable-segment fluctuation as a schedule decision. Next close
+99/178 e48 and 197/252 e32 as they mature.
 
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so

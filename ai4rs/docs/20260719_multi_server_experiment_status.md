@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 09:33 CST。
+更新时间：2026-08-13 10:02 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -20,7 +20,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `54.902/61.655`、sum `116.557`完整，较e40双升`0.420/0.149`；距目标sum `1.305`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
-| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E24_COMPLETE/TO_E72 | e24 `51.396/58.554`、sum `109.950`完整，较e20双升`0.847/0.592`；DetA/AssA与AP同步提高，继续到floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
+| 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E28_COMPLETE/TO_E72 | e28 `51.110/58.806`、sum `109.916`完整，较e24为`-0.286/+0.252`；当前最佳仍为e24，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E28_COMPLETE/TO_MATURE_E72 | e28 `51.270/59.249`、sum `110.519`完整，较e24双升`0.564/0.756`；pair mAP/AP50 `0.2857/0.4901`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `54.369/61.345`、sum `115.714`完整，较e40双升`0.132/0.113`；99同点sum领先`0.843`，继续退火窗口 | `/data4/litianhao/PairMmot/workdir_178` |
@@ -115,6 +115,16 @@ batch 8 不变，只比较成熟标准学习率调度。
 - Both e44 checkpoints, all 50 detection sequences and 108 TrackEval files are complete. 99 leads
   cls/det/sum by `0.533/0.310/0.843`, while 178 cls AssA remains higher. Continue both through
   the WSD post-e48 decay and floor-cosine tail; do not select at this pre-decay point.
+
+## 2026-08-13 10:02 CST: 197 e28 complete
+
+- 197 e28 cls HOTA/DetA/AssA is `51.110/42.258/63.856`; det is
+  `58.806/50.669/70.675`, sum `109.916`, and pair mAP/AP50 is `0.2784/0.4761`.
+- Versus e24, cls/det HOTA changes by `-0.286/+0.252` and sum by `-0.034`; the 402,899,495-byte
+  checkpoint, all 50 detection sequences, 108 TrackEval files and 346.4-second async completion are present.
+  Training resumed at e29i400 on GPU4/5 with finite formal losses.
+- The schedule remains in its unchanged stable segment and does not expose the 25% floor until after e60.
+  Keep it through e72; e24 remains the unique best evaluated checkpoint at this point.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 
