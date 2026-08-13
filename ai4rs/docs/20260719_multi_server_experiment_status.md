@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 11:11 CST。
+更新时间：2026-08-13 12:05 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -19,11 +19,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 | 服务器 | 当前实验 | 当前进度 | 排队实验 | 工作目录根路径 |
 | --- | --- | --- | --- | --- |
-| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E48_COMPLETE/TO_MATURE_E72 | e48 `54.864/61.770`、sum `116.634`完整，较e44 sum `+0.077`；距目标sum `1.228`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
+| 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E52_COMPLETE/TO_MATURE_E72 | e52 `55.178/62.080`、sum `117.258`完整，较e48双升`0.314/0.310`；距目标sum `0.604`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E32_COMPLETE/TO_E72 | e32 `51.923/59.132`、sum `111.055`完整，较e28双升`0.813/0.326`；e32成为当前最佳，继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
 | 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E32_COMPLETE/TO_MATURE_E72 | e32 `52.510/60.173`、sum `112.683`完整，较e28双升`1.240/0.924`；pair `0.2946/0.5007`，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
-| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52 | e48 `54.828/61.578`、sum `116.406`完整，较e44双升`0.459/0.233`；e52首个直接反映退火 | `/data4/litianhao/PairMmot/workdir_178` |
+| 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E52_COMPLETE/DECAY_EFFECT_POSITIVE | e52 `55.252/61.783`、sum `117.035`完整，较e48双升`0.424/0.205`；标准退火有效，继续e56/e60 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
 | 后备（不占GPU） | `0812_02 warmup4+cosine68 floor50, integral-preserving` | STATIC_VALIDATED/NO_SMOKE/NO_FORMAL | 单因素标准cosine非零floor；peak/floor `1.8113e-4/9.0566e-5`且积分`0.0096`，deepcopy、完整Runner/模型、batch8/72e、22,771,111参数/711 states通过；等待现有e72证据 | 无正式workdir |
 
@@ -146,6 +146,16 @@ batch 8 不变，只比较成熟标准学习率调度。
   checkpoint, all 50 detection sequences, 108 TrackEval files and 344.3-second async completion are present.
 - Fixed-252 leads the same e32 by `0.587/1.041/1.628` in cls/det/sum, but neither comparison reflects the
   scheduled late intervention. Keep 197 through its post-e60 floor and 252 through post-e48 decay.
+
+## 2026-08-13 12:05 CST: 99 and 178 e52 complete
+
+- 99 e52 cls HOTA/DetA/AssA is `55.178/46.051/67.944`; det is
+  `62.080/54.286/73.423`, sum `117.258`, pair mAP/AP50 `0.3115/0.5282`.
+  It gains `0.314/0.310` over e48 and is short of the strict target by `0.085/0.519/0.604`.
+- 178 e52 cls is `55.252/45.775/69.180`; det is `61.783/54.225/72.838`, sum `117.035`, pair
+  `0.3168/0.5322`. Four epochs of real WSD decay improve e48 by `0.424/0.205`, sum `0.629`.
+- Both checkpoints, all 50 detection sequences and 108 TrackEval files are complete. 99 leads e52 det/sum
+  by `0.297/0.223`, while 178 leads cls and AP. Keep both through e56/e60; neither is yet strict e72 success.
 
 ## 2026-08-13 05:16 CST：252 e16与四服务器现场状态
 

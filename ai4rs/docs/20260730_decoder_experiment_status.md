@@ -1,6 +1,6 @@
 # PairMOT decoder 实验状态（2026-07-30）
 
-更新时间：2026-08-13 11:11 CST
+更新时间：2026-08-13 12:05 CST
 
 ## 当前研究原则
 
@@ -25,8 +25,8 @@
 
 | 服务器 | 实验 | 状态 | 结构与判定方式 |
 | --- | --- | --- | --- |
-| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E48_COMPLETE/TO_MATURE_E72` | e48 `54.864/61.770`、sum `116.634`，较e44为`-0.038/+0.115`、sum `+0.077`；DetA/AssA为`45.826/67.524`与`54.139/72.882`，pair mAP/AP50 `0.3113/0.5288`，距目标sum `1.228`。 |
-| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E48_COMPLETE/TO_FIRST_DECAY_E52` | e48 `54.828/61.578`、sum `116.406`，较e44双升`0.459/0.233`；DetA/AssA为`45.461/68.582`与`54.056/72.578`，pair mAP/AP50 `0.3147/0.5285`。e52是首个含4轮真实退火的节点。 |
+| 99 GPU0/2 | `0812_03 standard warmup4 + cosine68 floor50 integral-preserving` | `RUNNING/E52_COMPLETE/TO_MATURE_E72` | e52 `55.178/62.080`、sum `117.258`，较e48双升`0.314/0.310`；DetA/AssA为`46.051/67.944`与`54.286/73.423`，pair mAP/AP50 `0.3115/0.5282`，距目标`0.085/0.519/0.604`。 |
+| 178 GPU0 | `0812_04 standard WSD warmup4 + stable44 + cosine24` | `RUNNING/E52_COMPLETE/DECAY_EFFECT_POSITIVE` | e52 `55.252/61.783`、sum `117.035`，较e48双升`0.424/0.205`；DetA/AssA为`45.775/69.180`与`54.225/72.838`，pair mAP/AP50 `0.3168/0.5322`。前4轮标准退火带来正增益，继续e56/e60。 |
 | 197 GPU4/5 | `0813_01 standard WSD warmup4 + stable56 + cosine12 floor25 fresh v2` | `RUNNING/E32_COMPLETE/TO_E72` | e32 `51.923/59.132`、sum `111.055`，较e28双升`0.813/0.326`；DetA/AssA为`42.661/65.542`与`51.197/70.677`，pair mAP/AP50 `0.2837/0.4827`。确认e28仅为波动，继续到e60后floor尾段。 |
 | 252 GPU0/1 | `0812_05 standard WSD warmup4 + stable44 + cosine24 2x4 fresh` | `RUNNING/E32_COMPLETE/TO_MATURE_E72` | e32 `52.510/60.173`、sum `112.683`，较e28双升`1.240/0.924`；DetA/AssA为`44.649/63.174`与`52.186/71.833`，pair mAP/AP50 `0.2946/0.5007`。固定GPU0/1，继续到e48后退火窗口。 |
 
@@ -170,6 +170,18 @@
   checkpoint. The 408,378,855-byte checkpoint, 51-file detection and 108-file, 344.3-second TrackEval close.
 - Versus fixed-252 e32, 197 trails cls/det/sum by `0.587/1.041/1.628`. Both remain pre-intervention seed
   trajectories: 197 floor acts only after e60 and 252 WSD decay after e48, so retain both toward e72.
+
+## 2026-08-13 12:05 CST: 99/178 e52 mature decay nodes complete
+
+- 99 floor-cosine e52 cls HOTA/DetA/AssA is `55.178/46.051/67.944`; det is
+  `62.080/54.286/73.423`, sum `117.258`, and pair mAP/AP50 is `0.3115/0.5282`.
+  It improves e48 by `0.314/0.310`, sum `0.624`; target gaps shrink to `0.085/0.519/0.604`.
+- 178 standard WSD e52 is `55.252/45.775/69.180` and `61.783/54.225/72.838`, sum `117.035`,
+  pair `0.3168/0.5322`. Its first four real cosine-decay epochs improve e48 by `0.424/0.205`, sum `0.629`.
+- Both 435,939,382/436,266,612-byte checkpoints, 51-file detection exports and 108-file TrackEval closures
+  are complete. At e52, 99 leads det/sum by `0.297/0.223`; 178 leads cls by `0.074` and AP.
+- Neither meets the strict final e72 target yet. Both show nearly identical positive mature gains, so retain
+  both through e56/e60 rather than selecting on one decay point.
 
 ## 2026-08-13 05:16 CST：252 e16完整闭环，四线继续成熟
 

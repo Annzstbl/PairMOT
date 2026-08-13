@@ -4,7 +4,7 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 11:11 CST.
+Last updated: 2026-08-13 12:05 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
@@ -232,6 +232,17 @@ The 408,378,855-byte checkpoint, 50-sequence detection and 344.3-second,
 sum, but both are still before their scheduled late interventions; keep 197
 to post-e60 floor evidence and fixed-252 to post-e48 decay. The next decisive
 near-term closure remains 99/178 e52.
+
+At 12:05 CST, 99 floor-cosine e52 closes at `55.178/62.080`, sum `117.258`,
+with DetA/AssA `46.051/67.944` and `54.286/73.423`, pair mAP/AP50
+`0.3115/0.5282`. It gains `0.624` in sum since e48 and now misses the final
+target by only `0.085/0.519/0.604`. Standard WSD on 178 closes e52 at
+`55.252/61.783`, sum `117.035`, with DetA/AssA `45.775/69.180` and
+`54.225/72.838`, pair `0.3168/0.5322`; its first four decay epochs add `0.629`
+in sum since e48. Both checkpoints, detection exports and TrackEval closures
+are complete. Since their mature gains are nearly equal and neither reaches
+all strict gates, continue both to e56/e60. 99 currently leads det/sum while
+178 leads cls/AP; do not release either line yet.
 
 At 19:22 CST on August 12, the user re-enabled 99 dual-GPU and 178 single-GPU
 resources with their previous placement. Live audit found all 99 GPUs idle, so
