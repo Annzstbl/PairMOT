@@ -4,12 +4,21 @@ This file is the living multi-server state record for PairMOT experiments.
 Update the status tables here whenever code is synced, a job is launched, or a
 server path/credential convention changes.
 
-Last updated: 2026-08-13 15:05 CST.
+Last updated: 2026-08-13 15:17 CST.
 
 Current per-server status dashboard:
 [`20260719_multi_server_experiment_status.md`](20260719_multi_server_experiment_status.md).
 
 ## Server Status
+
+At 15:17 CST on August 13, fixed-252 closes e44 at cls/det HOTA
+`55.079/61.692` (sum `116.771`), DetA/AssA `46.021/67.586` and
+`53.958/72.967`, and pair mAP/AP50 `0.3146/0.5285`. Versus e40, both
+HOTA values rise by `0.626/0.622`. The checkpoint, 5,416/50 detection,
+28 CSV/108 TrackEval files are complete. Shared `/data4` reads and NFS writes
+made asynchronous closure take 1294.5 seconds, but it completed normally;
+training continues in e45 on fixed GPU0/1. Retain this line through its
+post-e48 decay window while prioritizing 178 e64.
 
 At 15:05 CST on August 13, 197 closes e44 at cls/det HOTA
 `54.747/61.259` (sum `116.006`), DetA/AssA `45.764/67.014` and

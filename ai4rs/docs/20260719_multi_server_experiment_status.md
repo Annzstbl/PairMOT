@@ -1,6 +1,6 @@
 # PairMOT 多服务器实验状态总表
 
-更新时间：2026-08-13 15:05 CST。
+更新时间：2026-08-13 15:17 CST。
 
 本文档记录当前论文相关正式实验在各服务器上的分布和状态。状态由实际训练进程、共享
 存储中的 checkpoint/日志及已有报告交叉确认。`smoke_*`、`tmp_*`、`profile_*` 和
@@ -21,7 +21,7 @@ batch 8 不变，只比较成熟标准学习率调度。
 | --- | --- | --- | --- | --- |
 | 99 | `0812_03 warmup4+cosine68 floor50 integral-preserving`（GPU0/2） | RUNNING/E60_COMPLETE/TO_MATURE_E72 | e60 `55.062/62.111`、sum `117.173`完整，较e56为`-0.006/+0.077`；距目标sum `0.689`，GPU1不占用 | `/data4/litianhao/PairMmot/workdir_99` |
 | 197 | `0813_01 WSD warmup4+stable56+cosine12 floor25 fresh v2`（GPU4/5） | RUNNING/E44_COMPLETE/TO_E72 | e44 `54.747/61.259`、sum `116.006`完整，较e40提升`0.505/0.586`；继续到e60后floor核心尾段 | `/data4/litianhao/PairMmot/workdir_197` |
-| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E44_DETECTION_COMPLETE/TRACK_PENDING | e44 checkpoint与5416/50检测完整；异步轨迹生成正在顺序读取/data4，训练已继续e45，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
+| 252 | `0812_05 product-tangent standard WSD warmup4 + stable44 + cosine24`（固定 GPU0/1） | RUNNING/E44_COMPLETE/TO_MATURE_E72 | e44 `55.079/61.692`、sum `116.771`完整，较e40双升`0.626/0.622`；训练继续e45，GPU2/3不占用 | `/data4/litianhao/PairMmot/workdir_252` |
 
 | 178 | `0812_04 WSD warmup4+stable44+cosine24`（GPU0） | RUNNING/E60_COMPLETE/CURRENT_STRONGEST | e60 `55.807/62.290`、sum `118.097`完整，较e56双升`0.322/0.338`；cls/sum过目标，det仅差`0.309`，继续e64/e68/e72 | `/data4/litianhao/PairMmot/workdir_178` |
 | AutoDL `c12c46bdd8-77ce297d` GPU0 | `0811_02 warmup4 + cosine68 corrected peak fresh v2 1x8` | COMPLETED/E72/STRICT_FAIL/18_OF_18/AUTO_FINALIZER_SHUTDOWN | e72 `54.139/62.081`、sum `116.220`完整闭环，低目标`1.124/0.518/1.642`；18/18 TrackEval及checkpoint/AP/DetA/AssA/有限性齐全，finalizer随后关闭SSH | `/root/autodl-tmp/work_dirs/0811_02_final_product_tangent_warmup4_cosine2667_72e_1xb8_autodl_fresh_v2` |
@@ -49,6 +49,11 @@ batch 8 不变，只比较成熟标准学习率调度。
 
 - 197 `0813_01` e44 cls HOTA/DetA/AssA is `54.747/45.764/67.014`; det is `61.259/53.440/72.577`, sum `116.006`, and pair mAP/AP50 is `0.3085/0.5221`. Versus e40 HOTA rises by `0.505/0.586`. The 424,780,071-byte checkpoint, 5,416/50 detection, 51 detection files, 28 CSV/108 TrackEval files and 433.5-second evaluation are complete; finite training continues in e45 on GPU4/5.
 - Fixed-252 has produced its e44 checkpoint and complete 5,416/50 detection. The asynchronous trajectory process remains alive and is sequentially reading detection files from `/data4`; it has read over 139 MB, but TrackEval is not yet complete. Do not restart or report e44 metrics early. Training already continues in e45 on fixed GPU0/1.
+
+## 2026-08-13 15:17 CST: fixed-252 e44 complete
+
+- Fixed-252 `0812_05` e44 cls HOTA/DetA/AssA is `55.079/46.021/67.586`; det is `61.692/53.958/72.967`, sum `116.771`, and pair mAP/AP50 is `0.3146/0.5285`. Versus e40, HOTA rises by `0.626/0.622`, sum by `1.248`.
+- The e44 checkpoint, 5,416/50 detection, 51 detection files and 28 CSV/108 TrackEval files are complete. Shared `/data4` reads and NFS writes made the asynchronous closure take 1294.5 seconds, but it remained live and completed normally. Training continues in e45 on fixed GPU0/1; retain through the post-e48 decay window.
 
 ## 2026-08-13 12:22 CST: 197 floor-25 WSD e36 complete
 
